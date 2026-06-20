@@ -2,8 +2,9 @@ import asyncio
 import os
 import sys
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 import torch
 import numpy as np
 
@@ -21,6 +22,8 @@ _EMBEDDING_SRC = (
     / "qwen3_vl_embedding"
     / "src"
 )
+
+EmbedMode = Literal["text", "video"]
 
 _EMBEDDERS: dict[str, Any] = {}
 _EMBEDDING_FUNCS: dict[str, EmbeddingFunc] = {}
@@ -49,7 +52,6 @@ def _resolve_torch_dtype(name: str):
 class VLEmbeddingSpec:
     model_path: Path
     embedding_dim: int
-    max_token_size: int = 8192
     default_instruction: str = "Represent the user's input."
     video_hyperparams: VideoHyperparams = field(default_factory=VideoHyperparams)
 
@@ -70,22 +72,22 @@ def list_embedding_keys() -> list[str]:
     return sorted(VLEMBEDDING_REGISTRY)
 
 
-def get_embedding_spec(key: str) -> VLEmbeddingSpec:
-    if key not in VLEMBEDDING_REGISTRY:
+def get_embedding_spec(model_key: str) -> VLEmbeddingSpec:
+    if model_key not in VLEMBEDDING_REGISTRY:
         known = ", ".join(list_embedding_keys())
-        raise KeyError(f"Unknown VL embedding key {key!r}. Known keys: {known}")
-    return VLEMBEDDING_REGISTRY[key]
+        raise KeyError(f"Unknown VL embedding key {model_key!r}. Known keys: {known}")
+    return VLEMBEDDING_REGISTRY[model_key]
 
 
-def get_embedder(key: str):
+def get_embedder(model_key: str):
     """Lazy-loaded singleton Qwen3VLEmbedder per registry key."""
-    if key in _EMBEDDERS:
-        return _EMBEDDERS[key]
+    if model_key in _EMBEDDERS:
+        return _EMBEDDERS[model_key]
 
-    spec = get_embedding_spec(key)
+    spec = get_embedding_spec(model_key)
     if not spec.model_path.exists():
         raise FileNotFoundError(
-            f"Embedding model for {key!r} not found at {spec.model_path}. "
+            f"Embedding model for {model_key!r} not found at {spec.model_path}. "
             f"Download the checkpoint or set MORPH_GRAPH_MODEL_ROOT."
         )
 
@@ -95,9 +97,10 @@ def get_embedder(key: str):
     from models.qwen3_vl_embedding import Qwen3VLEmbedder
 
     hp = spec.video_hyperparams
-    logger.info(f"Loading VL embedder {key} from {spec.model_path}")
-    _EMBEDDERS[key] = Qwen3VLEmbedder(
+    logger.info(f"Loading VL embedder {model_key} from {spec.model_path}")
+    _EMBEDDERS[model_key] = Qwen3VLEmbedder(
         str(spec.model_path),
+        max_length=None, # ensure no max length truncation 
         default_instruction=spec.default_instruction,
         min_pixels=hp.min_pixels,
         max_pixels=hp.max_pixels,
@@ -107,11 +110,12 @@ def get_embedder(key: str):
         torch_dtype=_resolve_torch_dtype(hp.torch_dtype),
         attn_implementation=hp.attn_implementation,
     )
-    return _EMBEDDERS[key]
+    return _EMBEDDERS[model_key]
 
 
 def _to_embedder_input(
     content: Any,
+    embed_mode: EmbedMode,
     video_hp: VideoHyperparams | None = None,
 ) -> dict[str, Any]:
     if isinstance(content, str):
@@ -122,63 +126,121 @@ def _to_embedder_input(
             "expected str or dict."
         )
 
-    item: dict[str, Any] = {}
-    text = content.get("text") or content.get("caption") or content.get("key_text")
-    video = content.get("video") or content.get("clip_path") or content.get("video_path")
-    if text:
-        item["text"] = text
-    if video:
-        item["video"] = video
+    if embed_mode == "text":
+        text = content.get("text_key") or content.get("caption")
+        if not text:
+            raise ValueError(
+                "Text embedding dicts require `text_key` or `caption`."
+            )
+        return {"text": text}
+
+    video = content.get("video")
+    video_path = content.get("video_path")
+    if video is None:
+        if not video_path:
+            raise ValueError("Video embedding dicts require `video` (decoded frames) or `video_path`")
+        video = video_path
+
+    item: dict[str, Any] = {"video": video}
+    if "video_metadata" in content:
+        item["video_metadata"] = content["video_metadata"]
+    if isinstance(video, str):
         if video_hp is not None:
             item.setdefault("fps", video_hp.fps)
             item.setdefault("max_frames", video_hp.max_frames)
     for key in ("instruction", "fps", "max_frames"):
         if key in content:
             item[key] = content[key]
-
-    if not item:
-        raise ValueError(
-            "Embedding dicts need text (`text`/`caption`/`key_text`) "
-            "and/or video (`video`/`clip_path`/`video_path`)."
-        )
     return item
 
 
-def _embed_sync(key: str, contents: list[Any]) -> np.ndarray:
-    video_hp = get_embedding_spec(key).video_hyperparams
-    inputs = [_to_embedder_input(content, video_hp) for content in contents]
-    embeddings = get_embedder(key).process(inputs, normalize=True)
+def _embed_video_tensors(embedder, items: list[dict[str, Any]]):
+    """Embed pre-decoded segment tensors via processor (vsi_poc caption_video_tensor path)."""
+    import torch.nn.functional as F
+    import ipdb; ipdb.set_trace()
+    messages = [
+        {
+            "role": "system",
+            "content": [{"type": "text", "text": embedder.default_instruction}],
+        },
+        {"role": "user", "content": [{"type": "video"}]},
+    ]
+    text = embedder.processor.apply_chat_template(
+        messages, tokenize=False, add_generation_prompt=True
+    )
+    processor_kwargs: dict[str, Any] = {
+        "text": [text] * len(items),
+        "videos": [item["video"] for item in items],
+        "video_metadata": [item["video_metadata"] for item in items],
+        "padding": True,
+        "do_resize": False,
+        "return_tensors": "pt",
+    }
+    if embedder.max_length is None:
+        processor_kwargs["truncation"] = False
+    else:
+        processor_kwargs["truncation"] = True
+        processor_kwargs["max_length"] = embedder.max_length
+
+    inputs = embedder.processor(**processor_kwargs)
+    inputs = {k: v.to(embedder.model.device) for k, v in inputs.items()}
+    outputs = embedder.forward(inputs)
+    embeddings = embedder._pooling_last(
+        outputs["last_hidden_state"], outputs["attention_mask"]
+    )
+    return F.normalize(embeddings, p=2, dim=-1)
+
+
+def _embed_sync(model_key: str, contents: list[Any], embed_mode: EmbedMode) -> np.ndarray:
+    video_hp = get_embedding_spec(model_key).video_hyperparams
+    embedder = get_embedder(model_key)
+    items = [
+        _to_embedder_input(content, embed_mode, video_hp) for content in contents
+    ]
+    if embed_mode == "video" and items and "video_metadata" in items[0]:
+        embeddings = _embed_video_tensors(embedder, items)
+    else:
+        embeddings = embedder.process(items, normalize=True)
     if hasattr(embeddings, "detach"):
-        embeddings = embeddings.detach().cpu().numpy()
+        embeddings = embeddings.detach().cpu().float().numpy()
     return np.asarray(embeddings, dtype=np.float32)
 
 
-def get_embedding_func(key: str) -> EmbeddingFunc:
-    """Cached EmbeddingFunc wrapper per registry key."""
-    if key in _EMBEDDING_FUNCS:
-        return _EMBEDDING_FUNCS[key]
+def get_embedding_func(model_key: str) -> EmbeddingFunc:
+    """Cached EmbeddingFunc wrapper per registry model key."""
+    if model_key in _EMBEDDING_FUNCS:
+        return _EMBEDDING_FUNCS[model_key]
 
-    spec = get_embedding_spec(key)
+    spec = get_embedding_spec(model_key)
 
     @wrap_embedding_func_with_attrs(
         embedding_dim=spec.embedding_dim,
-        max_token_size=spec.max_token_size,
+        max_token_size=0,
     )
-    async def embedding_func(contents: list[Any]) -> np.ndarray:
+    async def embedding_func(
+        contents: list[Any], embed_mode: EmbedMode = "text"
+    ) -> np.ndarray:
         if not contents:
             return np.array([])
-        return await asyncio.to_thread(_embed_sync, key, contents)
+        return await asyncio.to_thread(_embed_sync, model_key, contents, embed_mode)
 
-    _EMBEDDING_FUNCS[key] = embedding_func
+    _EMBEDDING_FUNCS[model_key] = embedding_func
     return embedding_func
 
 
+def bind_embed_mode(embedding_func: EmbeddingFunc, embed_mode: EmbedMode):
+    """Bind embed_mode for VDB calls; preserve attrs needed by vector storage."""
+    bound = partial(embedding_func, embed_mode=embed_mode)
+    bound.embedding_dim = embedding_func.embedding_dim
+    return bound
+
+
 def resolve_embedding_func(
-    embedding_key: str | None,
+    embedding_model_key: str | None,
     embedding_func: EmbeddingFunc | None,
 ) -> EmbeddingFunc:
     if embedding_func is not None:
         return embedding_func
-    if embedding_key is None:
-        raise ValueError("Provide embedding_func or embedding_key.")
-    return get_embedding_func(embedding_key)
+    if embedding_model_key is None:
+        raise ValueError("Provide embedding_func or embedding_model_key.")
+    return get_embedding_func(embedding_model_key)

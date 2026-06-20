@@ -3,10 +3,10 @@
 No VLM question-answering — just indexing and retrieval smoke test.
 
 Examples:
-  python3.11 morph_graph/inference/eval_debug.py
-  python3.11 morph_graph/inference/eval_debug.py --query "where is the kitchen"
-  python3.11 morph_graph/inference/eval_debug.py --video_path vsi_output/vsi_constructed/Cat/0000.mp4
-  python3.11 morph_graph/inference/eval_debug.py --retrieval_mode local --top_k 5
+  python3.11 morph_graph/eval/eval_debug.py
+  python3.11 morph_graph/eval/eval_debug.py --query "where is the kitchen"
+  python3.11 morph_graph/eval/eval_debug.py --plot_graph
+  python3.11 morph_graph/eval/plot_segment_graph.py outputs/vl_graphrag_cache_debug/Cat__0000/graph_segment_relation.graphml
 """
 
 from __future__ import annotations
@@ -15,11 +15,14 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from ezcolorlog import root_logger as logger
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO_ROOT))
+REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT.parent))
 
+from morph_graph.eval.plot_segment_graph import plot_from_graphml  # noqa: E402
 from morph_graph.graphrag.vl_graphrag.vl_base import VLQueryParam  # noqa: E402
+from morph_graph.graphrag.vl_graphrag.vl_segments import _video_id_from_path  # noqa: E402
 from morph_graph.inference.benchmarks.vsi_morph import (  # noqa: E402
     DEFAULT_CAPTIONS,
     _vision_segments,
@@ -27,8 +30,10 @@ from morph_graph.inference.benchmarks.vsi_morph import (  # noqa: E402
 from morph_graph.inference.framework.base import IndexInputs  # noqa: E402
 from morph_graph.inference.framework.rag import index_rag, resolve_embedding_key  # noqa: E402
 
-DEFAULT_VIDEO = REPO_ROOT / "vsi_output" / "vsi_constructed" / "Cat" / "0000.mp4"
-DEFAULT_QUERY = ""
+DEFAULT_VIDEO = REPO_ROOT / "data" / "vsi_morph" / "vsi_constructed" / "Cat" / "0000.mp4"
+DEFAULT_QUERY = "In what order was the Cat first seen across the Office, the Bedroom/Toy Room, and the Industrial Room?"
+
+logger.info(f"Starting eval_debug: QUERY: {DEFAULT_QUERY}")
 
 
 def _load_caption_rows(path: Path) -> list[dict]:
@@ -66,7 +71,7 @@ def _print_segments(retrieval: dict) -> None:
         label = seg.get("scene_label") or "unknown"
         score = seg.get("retrieval_score")
         score_str = f" score={score:.4f}" if isinstance(score, (int, float)) else ""
-        caption = (seg.get("caption") or seg.get("content") or "").strip()
+        caption = (seg.get("caption") or "").strip()
         if len(caption) > 200:
             caption = caption[:200] + "..."
         print(f"{i}. [{label}, {frames}]{score_str}")
@@ -74,8 +79,8 @@ def _print_segments(retrieval: dict) -> None:
     print("-" * 72)
     context = retrieval.get("caption_context", "")
     if context:
-        print("\nCaption context:\n")
-        print(context)
+        logger.info("\nCaption context:\n")
+        logger.info(context)
 
 
 def main() -> None:
@@ -88,12 +93,42 @@ def main() -> None:
     parser.add_argument("--key_source", default="caption", choices=["caption", "video"])
     parser.add_argument("--retrieval_mode", default="naive", choices=["naive", "local"])
     parser.add_argument("--top_k", type=int, default=3)
+    parser.add_argument("--semantic_similarity_threshold", type=float, default=0.4)
     parser.add_argument("--max_segments_for_qa", type=int, default=5)
     parser.add_argument("--reindex", action="store_true")
     parser.add_argument("--save", type=str, default=None, help="Optional path to write retrieval JSON")
+    parser.add_argument("--plot_graph", action="store_true", help="Save segment graph PNG after query")
+    parser.add_argument("--plot_graph_out", type=str, default=None, help="Output path for graph PNG")
+    parser.add_argument(
+        "--plot_only",
+        action="store_true",
+        help="Skip indexing/query; plot existing graph_segment_relation.graphml in cache dir",
+    )
     args = parser.parse_args()
 
+    args.rag_cache_dir = f"{args.rag_cache_dir}_{args.key_source}"
+
+    cache_root = Path(args.rag_cache_dir)
     video_path = Path(args.video_path).resolve()
+    working_dir = cache_root / _video_id_from_path(str(video_path)).replace("/", "__")
+    graphml_path = working_dir / "graph_segment_relation.graphml"
+
+    if args.plot_only:
+        if not graphml_path.exists():
+            raise FileNotFoundError(f"No graph at {graphml_path}; run without --plot_only first")
+        out = args.plot_graph_out or graphml_path.with_suffix(".png")
+        plot_from_graphml(
+            graphml_path,
+            out,
+            title=str(video_path.name),
+            question=args.query.strip() or None,
+        )
+        logger.info(f"Wrote graph plot to {out}")
+        return
+
+    if not args.query.strip():
+        parser.error("--query must be non-empty (unless --plot_only)")
+
     if not video_path.exists():
         raise FileNotFoundError(f"Video not found: {video_path}")
 
@@ -114,23 +149,25 @@ def main() -> None:
         raise ValueError(f"No {args.key_source} index data available for {video_path}")
 
     embedding_key = resolve_embedding_key(args.embedding_key)
-    cache_root = Path(args.rag_cache_dir)
     cache_root.mkdir(parents=True, exist_ok=True)
+    
 
-    print(f"Video:          {video_path}")
-    print(f"Embedding:      {embedding_key}")
-    print(f"Key source:     {args.key_source}")
-    print(f"Retrieval mode: {args.retrieval_mode}")
-    print(f"Query:          {args.query!r}")
-    print(f"Cache dir:      {cache_root}")
+    logger.info(f"Video:          {video_path}")
+    logger.info(f"Embedding:      {embedding_key}")
+    logger.info(f"Key source:     {args.key_source}")
+    logger.info(f"Retrieval mode: {args.retrieval_mode}")
+    logger.info(f"Query:          {args.query!r}")
+    logger.info(f"Cache dir:      {cache_root}")
 
     rag = index_rag(
         str(video_path),
         cache_root,
         embedding_key,
+        args.key_source,
         args.reindex,
         {},
         inputs,
+        semantic_similarity_threshold=args.semantic_similarity_threshold,
     )
 
     retrieval = rag.query(
@@ -143,7 +180,24 @@ def main() -> None:
             only_need_context=False,
         ),
     )
+
     _print_segments(retrieval)
+
+    if args.plot_graph:
+        if not graphml_path.exists():
+            raise FileNotFoundError(f"Expected graph at {graphml_path}")
+        highlight = set(retrieval.get("selected_node_ids", []))
+        out = args.plot_graph_out or graphml_path.with_suffix(".png")
+        plot_from_graphml(
+            graphml_path,
+            out,
+            highlight_nodes=highlight,
+            title=str(video_path.name),
+            question=args.query,
+            retrieved_segments=retrieval.get("segments", []),
+            retrieval_scores=retrieval.get("scores_by_id", {}),
+        )
+        print(f"Wrote graph plot to {out}")
 
     if args.save:
         out_path = Path(args.save)

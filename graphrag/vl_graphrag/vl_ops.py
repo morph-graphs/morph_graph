@@ -9,6 +9,8 @@ from ..base import BaseGraphStorage, BaseKVStorage, BaseVectorStorage
 from .vl_base import VLQueryParam
 from .vl_segments import normalize_text_segments, normalize_vision_segments
 
+from torchcodec.decoders import VideoDecoder
+
 _DEFAULT_SEMANTIC_TOP_K = 32
 
 
@@ -46,7 +48,7 @@ async def upsert_segment_values_and_graph(
                     "video_id": segment["video_id"],
                     "segment_idx": segment["segment_idx"],
                     "scene_label": segment.get("scene_label"),
-                    "description": segment.get("key_text")
+                    "description": segment.get("text_key")
                     or segment.get("description")
                     or segment["node_id"],
                 }.items()
@@ -123,8 +125,7 @@ def format_caption_context(segments: list[dict]) -> str:
     for segment in ordered_segments:
         caption = str(
             segment.get("caption")
-            or segment.get("content")
-            or segment.get("key_text")
+            or segment.get("text_key")
             or ""
         ).strip()
         if not caption:
@@ -178,6 +179,7 @@ async def vl_query(
         "seed_node_ids": seed_node_ids,
         "selected_node_ids": [segment["node_id"] for segment in segments],
         "segments": segments,
+        "scores_by_id": scores_by_id,
         "caption_context": caption_context,
     }
     if param.only_need_context:
@@ -422,14 +424,15 @@ async def insert_text_nodes(
     logger.info("Insert caption segment embeddings")
     caption_key_data = {}
     for segment in segments:
-        metadata = {
-            "content": segment["key_text"],
+        # "content" is the nano-graphrag VDB field passed to the embedding func.
+        vdb_row = {
+            "content": segment["text_key"],
             "video_id": segment["video_id"],
             "segment_idx": segment["segment_idx"],
         }
         if "scene_label" in segment:
-            metadata["scene_label"] = segment["scene_label"]
-        caption_key_data[segment["node_id"]] = metadata
+            vdb_row["scene_label"] = segment["scene_label"]
+        caption_key_data[segment["node_id"]] = vdb_row
     await upsert_segment_embeddings_with_semantic_edges(
         caption_segments_vdb,
         caption_key_data,
@@ -439,6 +442,20 @@ async def insert_text_nodes(
         embedding_source="caption",
     )
 
+def get_video_frames(decoder, frame_indices):
+    """Return video frames at the given frame indices."""
+    if not frame_indices:
+        return []
+    frames = decoder.get_frames_at(frame_indices)
+    return frames.data if hasattr(frames, "data") else frames
+
+
+def sample_frame_indices(frame_range):
+    """Get all frame indices in the given half-open frame range [start, end)."""
+    start, end = map(int, frame_range)
+    if end <= start:
+        return []
+    return list(range(start, end))
 
 async def insert_vision_nodes(
     video_clip_or_clips,
@@ -458,13 +475,16 @@ async def insert_vision_nodes(
         5. Upsert semantic similarity edges to graph database (NetworkXStorage) - no 
            new nodes are added to the graph. 
     """ 
-
+    import ipdb; ipdb.set_trace()
     segments = normalize_vision_segments(video_clip_or_clips)
     if not segments:
         logger.warning("No vision segments found for VLGraphRAG insertion")
         return
 
     logger.info(f"[VLGraphRAG] inserting {len(segments)} video-key segments")
+    segments_by_video: dict[str, list[dict]] = defaultdict(list)
+    for segment in segments:
+        segments_by_video[str(segment["video_path"])].append(segment)
 
     # upsert segment values to key-value database (JsonKVStorage)
     # upsert temporal edges within batch to graph database (NetworkXStorage)
@@ -472,7 +492,7 @@ async def insert_vision_nodes(
         segments,
         segments_kv,
         segments_relation_graph,
-        exclude_value_fields={"vision_key", "content"},
+        exclude_value_fields={"vision_key"},
     )
 
     # insert temporal edges across batch to graph database (NetworkXStorage)
@@ -480,15 +500,40 @@ async def insert_vision_nodes(
 
     logger.info("Insert video segment embeddings")
     video_key_data = {}
-    for segment in segments:
-        metadata = {
-            "content": segment["vision_key"],
-            "video_id": segment["video_id"],
-            "segment_idx": segment["segment_idx"],
-        }
-        if "scene_label" in segment:
-            metadata["scene_label"] = segment["scene_label"]
-        video_key_data[segment["node_id"]] = metadata
+    for video_path, video_segments in segments_by_video.items():
+        logger.info(f"Decoding video frames from {video_path}")
+        decoder = VideoDecoder(video_path)
+        for segment in video_segments:
+            frame_indices = sample_frame_indices(segment["frame_range"])
+
+            if not frame_indices:
+                raise ValueError(f"No frame indices found for segment {segment.get('node_id')}")
+            frames = get_video_frames(decoder, frame_indices)
+            if frames is None or (hasattr(frames, "numel") and frames.numel() == 0):
+                raise ValueError(f"No frames decoded for segment {segment.get('node_id')}")
+
+            time_range = segment["time_range_sec"]
+            sample_fps = len(frame_indices) / max(
+                time_range[1] - time_range[0], 1e-6
+            )
+            video_metadata = {
+                "fps": sample_fps,
+                "frames_indices": list(range(len(frame_indices))),
+                "total_num_frames": len(frame_indices),
+            }
+            embed_input = {"video": frames, "video_metadata": video_metadata}
+            vdb_row = {
+                "content": embed_input,
+                "video_id": segment["video_id"],
+                "segment_idx": segment["segment_idx"],
+            }
+            if "scene_label" in segment:
+                vdb_row["scene_label"] = segment["scene_label"]
+            video_key_data[segment["node_id"]] = vdb_row
+
+    if not video_key_data:
+        logger.warning("No video segments with decodable frames for VLGraphRAG insertion")
+        return
 
     # upsert semantic similarity edges to graph database (NetworkXStorage)
     await upsert_segment_embeddings_with_semantic_edges(

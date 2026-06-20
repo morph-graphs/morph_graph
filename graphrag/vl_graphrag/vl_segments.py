@@ -19,11 +19,13 @@ def _node_id(video_id: str, segment_idx: int) -> str:
     return f"{video_id}::seg_{segment_idx:04d}"
 
 
-def _build_key_text(segment: dict[str, Any]) -> str:
+def _build_text_key(segment: dict[str, Any]) -> str:
     key_parts = []
     scene_label = segment.get("scene_label")
     frame_range = segment.get("frame_range")
-    content = str(segment.get("content", "")).strip()
+
+    # get text key from text_key or caption field
+    text_key = str(segment.get("text_key", segment.get("caption", ""))).strip() 
 
     if scene_label is not None:
         key_parts.append(str(scene_label))
@@ -31,7 +33,7 @@ def _build_key_text(segment: dict[str, Any]) -> str:
         key_parts.append(f"frames {frame_range[0]}-{frame_range[1]}")
 
     prefix = f"[{', '.join(key_parts)}] " if key_parts else ""
-    return f"{prefix}{content}".strip()
+    return f"{prefix}{text_key}".strip()
 
 
 def parse_caption_row(row: dict[str, Any]) -> list[dict[str, Any]]:
@@ -60,9 +62,8 @@ def parse_caption_row(row: dict[str, Any]) -> list[dict[str, Any]]:
             "scene_label": scene_label,
             "frame_range": [start_frame, end_frame],
             "caption": caption,
-            "content": caption,
         }
-        segment["key_text"] = _build_key_text(segment)
+        segment["text_key"] = _build_text_key(segment)
         segments.append(segment)
     return segments
 
@@ -84,10 +85,10 @@ def normalize_text_segments(data: Any) -> list[dict[str, Any]]:
         video_id = str(segment.get("video_id") or _video_id_from_path(str(segment.get("video_path", ""))))
         segment_idx = int(segment.get("segment_idx", 0))
         node_id = str(segment.get("node_id") or _node_id(video_id, segment_idx))
-        key_text = str(segment.get("key_text") or _build_key_text(segment))
-        if not key_text:
+        text_key = str(segment.get("text_key") or _build_text_key(segment))
+        if not text_key:
             raise ValueError(
-                "Text segment records need `key_text` or `content` for caption-key indexing"
+                "Text segment records need `text_key` for caption-key indexing"
             )
         segment.update(
             {
@@ -95,7 +96,7 @@ def normalize_text_segments(data: Any) -> list[dict[str, Any]]:
                 "source_id": str(segment.get("source_id", node_id)),
                 "video_id": video_id,
                 "segment_idx": segment_idx,
-                "key_text": key_text,
+                "text_key": text_key,
             }
         )
         if "frame_range" in segment and segment["frame_range"] is not None:
@@ -114,12 +115,10 @@ def normalize_text_segments(data: Any) -> list[dict[str, Any]]:
 def _build_vision_key(segment: dict[str, Any]) -> Any:
     if "vision_key" in segment:
         return segment["vision_key"]
-    if "content" in segment:
-        return segment["content"]
 
     key = {
         k: segment[k]
-        for k in ["video_path", "clip_path", "frame_range", "sampled_frames"]
+        for k in ["video_path", "frame_range"]
         if k in segment
     }
     return key or None
@@ -133,20 +132,14 @@ def normalize_vision_segments(data: Any) -> list[dict[str, Any]]:
     injected embedding function to load/embed the clip.
     """
     if isinstance(data, dict):
-        if "caption" in data:
-            segments = parse_caption_row(data)
-            for segment in segments:
-                segment["vision_key"] = _build_vision_key(segment)
-            return segments
-
-        segment = dict(data)
+        segment = dict[Any, Any](data)
         video_id = str(segment.get("video_id") or _video_id_from_path(str(segment.get("video_path", ""))))
         segment_idx = int(segment.get("segment_idx", 0))
         node_id = str(segment.get("node_id") or _node_id(video_id, segment_idx))
         vision_key = _build_vision_key(segment)
         if vision_key is None:
             raise ValueError(
-                "Vision segment records need `vision_key`, `content`, `video_path`, or `clip_path` for video-key indexing"
+                "Vision segment records need `vision_key`, `video_path` for video-key indexing"
             )
         segment.update(
             {

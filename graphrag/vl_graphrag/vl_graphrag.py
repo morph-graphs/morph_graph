@@ -25,7 +25,7 @@ from ..base import (
 )
 
 from .vl_base import VLQueryParam
-from ._vlm_embed import resolve_embedding_func
+from ._vlm_embed import bind_embed_mode, resolve_embedding_func
 from .vl_ops import insert_text_nodes, insert_vision_nodes, vl_query
 
 
@@ -35,6 +35,9 @@ class VLGraphRAG:
     # vision-language embedding: pass embedding_key (registry) and/or embedding_func
     embedding_key: Optional[str] = "qwen3_vl_embedding_8b"
     embedding_func: Optional[EmbeddingFunc] = None
+
+    # key source: caption or video
+    key_source: str = "caption"
 
     working_dir: str = field(
         default_factory=lambda: f"./vl_graphrag_cache_{datetime.now().strftime('%Y-%m-%d-%H:%M:%S')}"
@@ -51,7 +54,7 @@ class VLGraphRAG:
     embedding_batch_num: int = 32
     embedding_func_max_async: int = 16
     query_better_than_threshold: float = 0.2
-    semantic_similarity_threshold: float = 0.75
+    semantic_similarity_threshold: float = 0.5
     semantic_similarity_top_k: int | None = None
 
     # storage
@@ -69,15 +72,21 @@ class VLGraphRAG:
             logger.info(f"Creating working directory {self.working_dir}")
             os.makedirs(self.working_dir)
 
-        resolved_embedding_func = resolve_embedding_func(
-            self.embedding_key, self.embedding_func
+        registry_embedding_func = resolve_embedding_func(self.embedding_key, None)
+        text_base = self.embedding_func or registry_embedding_func
+        limit_embedding = limit_async_func_call(self.embedding_func_max_async)
+
+        def _limit(func: EmbeddingFunc) -> EmbeddingFunc:
+            limited = limit_embedding(func)
+            limited.embedding_dim = func.embedding_dim
+            limited.max_token_size = func.max_token_size
+            return cast(EmbeddingFunc, limited)
+
+        text_embedding_func = bind_embed_mode(_limit(text_base), "text")
+        video_embedding_func = bind_embed_mode(
+            _limit(registry_embedding_func), "video"
         )
-        self.embedding_func = cast(
-            EmbeddingFunc,
-            limit_async_func_call(self.embedding_func_max_async)(
-                resolved_embedding_func
-            ),
-        )
+        self.embedding_func = cast(EmbeddingFunc, text_embedding_func)
 
         # initialize graph for inter-segment relations (i.e., semantic similarity and temporal proximity)
         self.segments_relation_graph = self.graph_storage_cls(
@@ -92,19 +101,19 @@ class VLGraphRAG:
             global_config=asdict(self),
         )
 
-        # Caption-key Vector Database: content is caption/key text.
+        # Caption-key Vector Database: embeds text_key strings.
         self.caption_segments_vdb = self.vector_db_storage_cls(
             namespace="caption_segments",
             global_config=asdict(self),
-            embedding_func=self.embedding_func,
+            embedding_func=text_embedding_func,
             meta_fields={"video_id", "segment_idx", "scene_label"},
         )
 
-        # Video Clip-key Vector Database: content is video clip embedding
+        # Video-key Vector Database: embeds vision_key dicts; queries stay text.
         self.video_clip_segments_vdb = self.vector_db_storage_cls(
             namespace="video_clip_segments",
             global_config=asdict(self),
-            embedding_func=self.embedding_func,
+            embedding_func=video_embedding_func,
             meta_fields={"video_id", "segment_idx"},
         )
 

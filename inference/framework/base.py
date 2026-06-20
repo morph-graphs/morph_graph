@@ -26,6 +26,7 @@ class IndexInputs:
 
     caption: input for insert_text_nodes (caption-key VDB)
     vision: segment list for insert_vision_nodes (video-key VDB)
+        - requires both `video_path` and `frame_range` for each segment
     """
 
     caption: Any | None = None  # insert_text_nodes

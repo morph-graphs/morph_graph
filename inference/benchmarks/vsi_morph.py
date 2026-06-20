@@ -71,7 +71,6 @@ def _vision_segments(video_path: str, caption_row: dict | None) -> list[dict]:
                 "time_range_sec": [start / fps, end / fps],
                 "video_path": video_path,
                 "caption": caption,
-                "content": caption,
             }
         )
         start = end

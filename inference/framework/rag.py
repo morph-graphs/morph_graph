@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 from pathlib import Path
+from typing import Any
 
 from ezcolorlog import root_logger as logger
 
@@ -43,22 +44,23 @@ def _working_dir(cache_root: Path, video_path: str) -> Path:
 
 
 def _needs_index(working_dir: Path, kind: str) -> bool:
-    """Return True if this index kind is missing or kv_store_segments is empty."""
-    vdb = working_dir / _VDB_BY_KIND[kind]
-    kv = working_dir / "kv_store_segments.json"
-    if not vdb.exists() or not kv.exists():
+    """Return True if this index kind's vector DB is missing or empty."""
+    vdb_path = working_dir / _VDB_BY_KIND[kind]
+    if not vdb_path.exists():
         return True
-    with open(kv) as f:
-        return not json.load(f)
+    with open(vdb_path) as f:
+        return not json.load(f).get("data")
 
 
 def index_rag(
     video_path: str,
     cache_root: Path,
     embedding_key: str,
+    key_source: str,
     reindex: bool,
     rag_cache: dict[str, VLGraphRAG],
     inputs: IndexInputs,
+    **graphrag_kwargs: Any,
 ) -> VLGraphRAG:
     """Return a cached VLGraphRAG for video_path, indexing caption/vision as needed."""
     working_dir = _working_dir(cache_root, video_path)
@@ -69,13 +71,19 @@ def index_rag(
     if reindex and working_dir.exists():
         shutil.rmtree(working_dir)
 
-    rag = VLGraphRAG(working_dir=str(working_dir), embedding_key=embedding_key)
+    rag = VLGraphRAG(working_dir=str(working_dir), 
+        embedding_key=embedding_key,
+        key_source=key_source,
+        **graphrag_kwargs,
+    )  
 
-    if inputs.caption is not None:
+    if key_source == "caption":
+        assert inputs.caption is not None, "Caption index inputs are required for caption key source"
         if _needs_index(working_dir, "caption"):
             logger.info(f"Indexing caption nodes: {video_path}")
             rag.insert_text_nodes(inputs.caption)
-    if inputs.vision is not None:
+    elif key_source == "video":
+        assert inputs.vision is not None, "Video index inputs are required for video key source"
         if _needs_index(working_dir, "vision"):
             logger.info(f"Indexing vision nodes: {video_path}")
             rag.insert_vision_nodes(inputs.vision)

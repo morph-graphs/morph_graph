@@ -1,10 +1,10 @@
 """VL-GraphRAG eval: index → retrieve → optional VLM answer.
 
-Entry point: morph_graph/inference/eval_qwen3_vl_rag.py
+Entry point: morph_graph/eval/eval_qwen3_vl_rag.py
 
 Examples:
-  python morph_graph/inference/eval_qwen3_vl_rag.py --benchmark vsi_morph --retrieval_only
-  python morph_graph/inference/eval_qwen3_vl_rag.py --key_source caption --retrieval_mode local
+  python3.11 morph_graph/eval/eval_qwen3_vl_rag.py --benchmark vsi_morph --retrieval_only
+  python3.11 morph_graph/eval/eval_qwen3_vl_rag.py --key_source caption --retrieval_mode local
 """
 
 from __future__ import annotations
@@ -13,8 +13,8 @@ import argparse
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO_ROOT))
+REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT.parent))
 
 from morph_graph.inference.benchmarks import add_benchmark_argument, get_benchmark  # noqa: E402
 from morph_graph.inference.framework.base import EvalConfig  # noqa: E402
