@@ -40,6 +40,7 @@ class VideoHyperparams:
     max_frames: int = 2048
     torch_dtype: str = "auto"
     attn_implementation: str = "flash_attention_2"
+    device_map: str | None = "auto"
 
 
 def _resolve_torch_dtype(name: str):
@@ -109,6 +110,7 @@ def get_embedder(model_key: str):
         max_frames=hp.max_frames,
         torch_dtype=_resolve_torch_dtype(hp.torch_dtype),
         attn_implementation=hp.attn_implementation,
+        device_map=hp.device_map if torch.cuda.is_available() else None,
     )
     return _EMBEDDERS[model_key]
 
@@ -157,7 +159,7 @@ def _to_embedder_input(
 def _embed_video_tensors(embedder, items: list[dict[str, Any]]):
     """Embed pre-decoded segment tensors via processor (vsi_poc caption_video_tensor path)."""
     import torch.nn.functional as F
-    import ipdb; ipdb.set_trace()
+
     messages = [
         {
             "role": "system",

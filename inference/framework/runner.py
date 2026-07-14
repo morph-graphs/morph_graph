@@ -11,13 +11,16 @@ from ezcolorlog import root_logger as logger
 from tqdm import tqdm
 
 from morph_graph.graphrag.vl_graphrag.vl_base import VLQueryParam
+from morph_graph.graphrag.vl_graphrag.vl_ops import stitch_retrieved_segments_video
 from morph_graph.inference.framework.base import EvalConfig, VLGraphRAGBenchmark
-from morph_graph.inference.framework.rag import index_rag, resolve_embedding_key
+from morph_graph.inference.framework.rag import index_rag, resolve_embedding_model
 from morph_graph.inference.framework.vlm import (
     build_messages_from_caption_context,
+    build_messages_video_tensor,
     load_model,
     model_path_to_key,
     run_inference,
+    run_inference_on_video_tensor,
 )
 
 
@@ -26,7 +29,7 @@ def run_benchmark(benchmark: VLGraphRAGBenchmark, config: EvalConfig, args: Name
     if config.max_samples is not None:
         samples = samples[: config.max_samples]
 
-    embedding_key = resolve_embedding_key(config.embedding_key)
+    embedding_model = resolve_embedding_model(config.embedding_model)
     os.makedirs(config.output_dir, exist_ok=True)
     os.makedirs(config.rag_cache_dir, exist_ok=True)
 
@@ -48,6 +51,7 @@ def run_benchmark(benchmark: VLGraphRAGBenchmark, config: EvalConfig, args: Name
         key_source=config.key_source,
         top_k=config.top_k,
         max_segments_for_qa=config.max_segments_for_qa,
+        max_frames_for_video_unit=config.max_frames_for_video_unit,
         only_need_context=False,
     )
     desc = f"{benchmark.name}[{config.retrieval_mode}/{config.key_source}]"
@@ -63,10 +67,13 @@ def run_benchmark(benchmark: VLGraphRAGBenchmark, config: EvalConfig, args: Name
         rag = index_rag(
             video_path,
             config.rag_cache_dir,
-            embedding_key,
+            embedding_model,
+            config.key_source,
             config.reindex,
             rag_cache,
             inputs,
+            semantic_similarity_threshold=config.semantic_similarity_threshold,
+            embedding_batch_num=config.embedding_batch_num,
         )
         retrieval = rag.query(sample.question, query_param)
         row = benchmark.build_result_row(sample, video_path, retrieval, config)
@@ -75,19 +82,47 @@ def run_benchmark(benchmark: VLGraphRAGBenchmark, config: EvalConfig, args: Name
             results.append(row)
             continue
 
-        # Caption-context QA: retrieved segment captions → Qwen3-VL text prompt.
-        caption_context = str(row.get("caption_context", ""))
-        if not caption_context.strip():
-            row.update(pred="", parsed_pred="", correct=False)
-            results.append(row)
-            continue
+        if config.qa_mode == "video":
+            segments = row.get("segments", [])
+            try:
+                video_tensor, video_metadata = stitch_retrieved_segments_video(
+                    segments,
+                    default_video_path=video_path,
+                    max_frames=config.max_frames_for_video_unit,
+                )
+            except (ValueError, OSError) as exc:
+                logger.warning(f"Video QA stitch failed for {sample.sample_id}: {exc}")
+                row.update(pred="", parsed_pred="", correct=False, qa_error=str(exc))
+                results.append(row)
+                continue
 
-        messages = build_messages_from_caption_context(
-            caption_context,
-            sample.question,
-            benchmark.format_options(sample),
-        )
-        pred = run_inference(model, processor, messages, max_new_tokens=config.max_new_tokens)
+            messages = build_messages_video_tensor(
+                sample.question,
+                benchmark.format_options(sample),
+            )
+            pred = run_inference_on_video_tensor(
+                model,
+                processor,
+                video_tensor,
+                messages,
+                video_metadata=video_metadata,
+                max_new_tokens=config.max_new_tokens,
+            )
+            row["stitched_num_frames"] = video_metadata.get("total_num_frames")
+        else:
+            # Caption-context QA: retrieved segment captions → Qwen3-VL text prompt.
+            caption_context = str(row.get("caption_context", ""))
+            if not caption_context.strip():
+                row.update(pred="", parsed_pred="", correct=False)
+                results.append(row)
+                continue
+
+            messages = build_messages_from_caption_context(
+                caption_context,
+                sample.question,
+                benchmark.format_options(sample),
+            )
+            pred = run_inference(model, processor, messages, max_new_tokens=config.max_new_tokens)
         parsed = benchmark.parse_prediction(pred)
         row.update(pred=pred, parsed_pred=parsed, correct=(parsed == sample.ground_truth))
         n_correct += int(row["correct"])
@@ -97,15 +132,19 @@ def run_benchmark(benchmark: VLGraphRAGBenchmark, config: EvalConfig, args: Name
     if acc is not None:
         logger.info(f"Accuracy: {n_correct}/{len(results)} = {acc:.3f}")
 
-    out_path = config.output_dir / benchmark.results_filename(config, embedding_key, model_key)
+    out_path = config.output_dir / benchmark.results_filename(config, embedding_model, model_key)
     output = {
         "benchmark": benchmark.name,
-        "embedding_key": embedding_key,
+        "embedding_model": embedding_model,
         "retrieval_mode": config.retrieval_mode,
         "key_source": config.key_source,
         "retrieval_only": config.retrieval_only,
         "top_k": config.top_k,
         "max_segments_for_qa": config.max_segments_for_qa,
+        "max_frames_for_video_unit": config.max_frames_for_video_unit,
+        "semantic_similarity_threshold": config.semantic_similarity_threshold,
+        "embedding_batch_num": config.embedding_batch_num,
+        "qa_mode": config.qa_mode,
         "accuracy": acc,
         "category_breakdown": benchmark.compute_breakdown(results) if not config.retrieval_only else {},
         "retrieval_metrics": benchmark.aggregate_retrieval_metrics(results),

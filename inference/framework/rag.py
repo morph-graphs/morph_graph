@@ -1,4 +1,4 @@
-"""Per-video VLGraphRAG index cache and embedding key resolution."""
+"""Per-video VLGraphRAG index cache and embedding model registry resolution."""
 
 from __future__ import annotations
 
@@ -24,8 +24,8 @@ _VDB_BY_KIND = {
 }
 
 
-def resolve_embedding_key(requested: str | None) -> str:
-    """Pick an embedding checkpoint: explicit key or first available on disk."""
+def resolve_embedding_model(requested: str | None) -> str:
+    """Resolve a VL embedding registry key (e.g. qwen3_vl_embedding_2b), not a checkpoint path."""
     if requested:
         return requested
     for key in ("qwen3_vl_embedding_8b", "qwen3_vl_embedding_2b"):
@@ -55,14 +55,17 @@ def _needs_index(working_dir: Path, kind: str) -> bool:
 def index_rag(
     video_path: str,
     cache_root: Path,
-    embedding_key: str,
+    embedding_model: str,
     key_source: str,
     reindex: bool,
     rag_cache: dict[str, VLGraphRAG],
     inputs: IndexInputs,
     **graphrag_kwargs: Any,
 ) -> VLGraphRAG:
-    """Return a cached VLGraphRAG for video_path, indexing caption/vision as needed."""
+    """Return a cached VLGraphRAG for video_path, indexing caption/vision as needed.
+
+    embedding_model: registry key from VLEMBEDDING_REGISTRY (not a checkpoint path).
+    """
     working_dir = _working_dir(cache_root, video_path)
     key = str(working_dir)
     if key in rag_cache:
@@ -72,7 +75,7 @@ def index_rag(
         shutil.rmtree(working_dir)
 
     rag = VLGraphRAG(working_dir=str(working_dir), 
-        embedding_key=embedding_key,
+        embedding_model=embedding_model,
         key_source=key_source,
         **graphrag_kwargs,
     )  

@@ -1,11 +1,11 @@
-"""Debug script: index one video + captions, query GraphRAG, print retrieved segments.
+"""Retrieval debug: index one video, query GraphRAG, print retrieved segments.
 
-No VLM question-answering — just indexing and retrieval smoke test.
+No VLM question-answering — use eval_qwen3_vl_rag.py for MCQ answers.
 
 Examples:
-  python3.11 morph_graph/eval/eval_debug.py
-  python3.11 morph_graph/eval/eval_debug.py --query "where is the kitchen"
-  python3.11 morph_graph/eval/eval_debug.py --plot_graph
+  python3.11 morph_graph/eval/eval_retrieval_debug.py
+  python3.11 morph_graph/eval/eval_retrieval_debug.py --query "where is the kitchen"
+  python3.11 morph_graph/eval/eval_retrieval_debug.py --plot_graph
   python3.11 morph_graph/eval/plot_segment_graph.py outputs/vl_graphrag_cache_debug/Cat__0000/graph_segment_relation.graphml
 """
 
@@ -28,12 +28,12 @@ from morph_graph.inference.benchmarks.vsi_morph import (  # noqa: E402
     _vision_segments,
 )
 from morph_graph.inference.framework.base import IndexInputs  # noqa: E402
-from morph_graph.inference.framework.rag import index_rag, resolve_embedding_key  # noqa: E402
+from morph_graph.inference.framework.rag import index_rag, resolve_embedding_model  # noqa: E402
 
 DEFAULT_VIDEO = REPO_ROOT / "data" / "vsi_morph" / "vsi_constructed" / "Cat" / "0000.mp4"
 DEFAULT_QUERY = "In what order was the Cat first seen across the Office, the Bedroom/Toy Room, and the Industrial Room?"
 
-logger.info(f"Starting eval_debug: QUERY: {DEFAULT_QUERY}")
+logger.info(f"Starting eval_retrieval_debug: QUERY: {DEFAULT_QUERY}")
 
 
 def _load_caption_rows(path: Path) -> list[dict]:
@@ -84,16 +84,19 @@ def _print_segments(retrieval: dict) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Debug VL-GraphRAG indexing + retrieval for one video")
+    parser = argparse.ArgumentParser(
+        description="Debug VL-GraphRAG indexing + retrieval for one video (no QA)"
+    )
     parser.add_argument("--video_path", type=str, default=str(DEFAULT_VIDEO))
     parser.add_argument("--captions_path", type=str, default=str(DEFAULT_CAPTIONS))
     parser.add_argument("--query", type=str, default=DEFAULT_QUERY)
     parser.add_argument("--rag_cache_dir", type=str, default=str(REPO_ROOT / "outputs" / "vl_graphrag_cache_debug"))
-    parser.add_argument("--embedding_key", default=None)
+    parser.add_argument("--embedding_model", default="qwen3_vl_embedding_2b", choices=["qwen3_vl_embedding_2b", "qwen3_vl_embedding_8b"])
     parser.add_argument("--key_source", default="caption", choices=["caption", "video"])
     parser.add_argument("--retrieval_mode", default="naive", choices=["naive", "local"])
     parser.add_argument("--top_k", type=int, default=3)
     parser.add_argument("--semantic_similarity_threshold", type=float, default=0.4)
+    parser.add_argument("--embedding_batch_num", type=int, default=32)
     parser.add_argument("--max_segments_for_qa", type=int, default=5)
     parser.add_argument("--reindex", action="store_true")
     parser.add_argument("--save", type=str, default=None, help="Optional path to write retrieval JSON")
@@ -148,26 +151,27 @@ def main() -> None:
     if not inputs.required_for(args.key_source):
         raise ValueError(f"No {args.key_source} index data available for {video_path}")
 
-    embedding_key = resolve_embedding_key(args.embedding_key)
+    embedding_model = resolve_embedding_model(args.embedding_model)
     cache_root.mkdir(parents=True, exist_ok=True)
-    
 
-    logger.info(f"Video:          {video_path}")
-    logger.info(f"Embedding:      {embedding_key}")
+    logger.info(f"Video:           {video_path}")
+    logger.info(f"Embedding model: {embedding_model}")
     logger.info(f"Key source:     {args.key_source}")
     logger.info(f"Retrieval mode: {args.retrieval_mode}")
+    logger.info(f"Embedding batch: {args.embedding_batch_num}")
     logger.info(f"Query:          {args.query!r}")
     logger.info(f"Cache dir:      {cache_root}")
 
     rag = index_rag(
         str(video_path),
         cache_root,
-        embedding_key,
+        embedding_model,
         args.key_source,
         args.reindex,
         {},
         inputs,
         semantic_similarity_threshold=args.semantic_similarity_threshold,
+        embedding_batch_num=args.embedding_batch_num,
     )
 
     retrieval = rag.query(

@@ -9,9 +9,13 @@ from ..base import BaseGraphStorage, BaseKVStorage, BaseVectorStorage
 from .vl_base import VLQueryParam
 from .vl_segments import normalize_text_segments, normalize_vision_segments
 
-from torchcodec.decoders import VideoDecoder
-
 _DEFAULT_SEMANTIC_TOP_K = 32
+
+
+def _video_decoder(video_path: str):
+    from torchcodec.decoders import VideoDecoder
+
+    return VideoDecoder(video_path)
 
 
 def segment_value(segment: dict, exclude_fields: set[str] | None = None) -> dict:
@@ -450,12 +454,114 @@ def get_video_frames(decoder, frame_indices):
     return frames.data if hasattr(frames, "data") else frames
 
 
-def sample_frame_indices(frame_range):
-    """Get all frame indices in the given half-open frame range [start, end)."""
+def sample_frame_indices(frame_range, max_frames: int | None = None):
+    """Get frame indices in the half-open range [start, end), optionally subsampled."""
     start, end = map(int, frame_range)
     if end <= start:
         return []
-    return list(range(start, end))
+    if max_frames is None:
+        return list(range(start, end))
+    n = min(max_frames, end - start)
+    if n <= 0:
+        return []
+    if n == 1:
+        return [start]
+    return sorted(
+        {start + round(i * (end - start - 1) / (n - 1)) for i in range(n)}
+    )
+
+
+def _allocate_frame_budgets(segments: list[dict], max_frames: int) -> list[int]:
+    """Split a global frame budget across segments proportional to span length."""
+    spans = [
+        max(0, int(seg["frame_range"][1]) - int(seg["frame_range"][0]))
+        for seg in segments
+        if seg.get("frame_range") is not None
+    ]
+    if not spans or max_frames <= 0:
+        return [0] * len(segments)
+
+    total_span = sum(spans)
+    budgets: list[int] = []
+    remaining = max_frames
+    for i, span in enumerate(spans):
+        if i == len(spans) - 1:
+            budgets.append(max(0, remaining))
+            continue
+        n = max(1, round(max_frames * span / total_span)) if span > 0 else 0
+        n = min(n, remaining)
+        budgets.append(n)
+        remaining -= n
+    return budgets
+
+
+def stitch_retrieved_segments_video(
+    segments: list[dict],
+    *,
+    default_video_path: str | None = None,
+    max_frames: int = 128,
+) -> tuple[Any, dict]:
+    """Decode retrieved segments via torchcodec and concatenate for VLM QA."""
+    import torch
+
+    if not segments:
+        raise ValueError("No segments to stitch")
+
+    ordered = sorted(
+        segments,
+        key=lambda segment: (
+            str(segment.get("video_id", "")),
+            int(segment.get("segment_idx", 0)),
+        ),
+    )
+    segments_with_frames = [
+        segment for segment in ordered if segment.get("frame_range") is not None
+    ]
+    if not segments_with_frames:
+        raise ValueError("Retrieved segments have no frame_range metadata")
+
+    budgets = _allocate_frame_budgets(segments_with_frames, max_frames)
+    decoders: dict[str, Any] = {}
+    frame_chunks = []
+    total_duration_sec = 0.0
+
+    for segment, budget in zip(segments_with_frames, budgets):
+        if budget <= 0:
+            continue
+        video_path = str(segment.get("video_path") or default_video_path or "")
+        if not video_path:
+            raise ValueError(f"Segment {segment.get('node_id')} missing video_path")
+        if video_path not in decoders:
+            decoders[video_path] = _video_decoder(video_path)
+
+        frame_indices = sample_frame_indices(segment["frame_range"], max_frames=budget)
+        if not frame_indices:
+            continue
+        frames = get_video_frames(decoders[video_path], frame_indices)
+        if frames is None or (hasattr(frames, "numel") and frames.numel() == 0):
+            continue
+        frame_chunks.append(frames)
+
+        time_range = segment.get("time_range_sec")
+        if time_range is not None and len(time_range) == 2:
+            total_duration_sec += max(float(time_range[1]) - float(time_range[0]), 0.0)
+        else:
+            start, end = map(int, segment["frame_range"])
+            total_duration_sec += max(end - start, 0.0)
+
+    if not frame_chunks:
+        raise ValueError("Failed to decode any frames from retrieved segments")
+
+    video_tensor = (
+        torch.cat(frame_chunks, dim=0) if len(frame_chunks) > 1 else frame_chunks[0]
+    )
+    n_frames = int(video_tensor.shape[0])
+    video_metadata = {
+        "fps": n_frames / max(total_duration_sec, 1e-6),
+        "frames_indices": list(range(n_frames)),
+        "total_num_frames": n_frames,
+    }
+    return video_tensor, video_metadata
 
 async def insert_vision_nodes(
     video_clip_or_clips,
@@ -475,7 +581,6 @@ async def insert_vision_nodes(
         5. Upsert semantic similarity edges to graph database (NetworkXStorage) - no 
            new nodes are added to the graph. 
     """ 
-    import ipdb; ipdb.set_trace()
     segments = normalize_vision_segments(video_clip_or_clips)
     if not segments:
         logger.warning("No vision segments found for VLGraphRAG insertion")
@@ -502,7 +607,7 @@ async def insert_vision_nodes(
     video_key_data = {}
     for video_path, video_segments in segments_by_video.items():
         logger.info(f"Decoding video frames from {video_path}")
-        decoder = VideoDecoder(video_path)
+        decoder = _video_decoder(video_path)
         for segment in video_segments:
             frame_indices = sample_frame_indices(segment["frame_range"])
 
@@ -535,7 +640,6 @@ async def insert_vision_nodes(
         logger.warning("No video segments with decodable frames for VLGraphRAG insertion")
         return
 
-    # upsert semantic similarity edges to graph database (NetworkXStorage)
     await upsert_segment_embeddings_with_semantic_edges(
         video_clip_segments_vdb,
         video_key_data,

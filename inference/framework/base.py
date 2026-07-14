@@ -48,7 +48,11 @@ class EvalConfig:
     key_source: Literal["caption", "video"] = "caption"
     top_k: int = 3
     max_segments_for_qa: int = 5
-    embedding_key: str | None = None
+    max_frames_for_video_unit: int = 128
+    qa_mode: Literal["caption", "video"] = "caption"
+    semantic_similarity_threshold: float = 0.5
+    embedding_batch_num: int = 32
+    embedding_model: str | None = None  # registry key, not a checkpoint path
     retrieval_only: bool = False
     reindex: bool = False
     model_path: str | None = None
@@ -65,7 +69,11 @@ class EvalConfig:
             key_source=args.key_source,
             top_k=args.top_k,
             max_segments_for_qa=args.max_segments_for_qa,
-            embedding_key=args.embedding_key,
+            max_frames_for_video_unit=args.max_frames_for_video_unit,
+            qa_mode=args.qa_mode,
+            semantic_similarity_threshold=args.semantic_similarity_threshold,
+            embedding_batch_num=args.embedding_batch_num,
+            embedding_model=args.embedding_model,
             retrieval_only=args.retrieval_only,
             reindex=args.reindex,
             model_path=args.model_path,
@@ -175,10 +183,10 @@ class VLGraphRAGBenchmark(ABC):
     def results_filename(
         self,
         config: EvalConfig,
-        embedding_key: str,
+        embedding_model: str,
         model_key: str | None,
     ) -> str:
-        stem = f"results_{self.name}_graph_rag_{config.retrieval_mode}_{embedding_key}"
+        stem = f"results_{self.name}_graph_rag_{config.retrieval_mode}_{embedding_model}"
         if config.retrieval_only:
             stem += "_retrieval"
         elif model_key:

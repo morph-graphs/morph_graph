@@ -32,8 +32,8 @@ from .vl_ops import insert_text_nodes, insert_vision_nodes, vl_query
 @dataclass
 class VLGraphRAG:
 
-    # vision-language embedding: pass embedding_key (registry) and/or embedding_func
-    embedding_key: Optional[str] = "qwen3_vl_embedding_8b"
+    # Registry key for VL embedding checkpoint (e.g. qwen3_vl_embedding_2b), or embedding_func.
+    embedding_model: Optional[str] = "qwen3_vl_embedding_2b"
     embedding_func: Optional[EmbeddingFunc] = None
 
     # key source: caption or video
@@ -72,7 +72,7 @@ class VLGraphRAG:
             logger.info(f"Creating working directory {self.working_dir}")
             os.makedirs(self.working_dir)
 
-        registry_embedding_func = resolve_embedding_func(self.embedding_key, None)
+        registry_embedding_func = resolve_embedding_func(self.embedding_model, None)
         text_base = self.embedding_func or registry_embedding_func
         limit_embedding = limit_async_func_call(self.embedding_func_max_async)
 

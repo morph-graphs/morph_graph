@@ -66,7 +66,7 @@ def build_messages_video(
     min_pixels: int = 256 * 32 * 32,
     n_frames: int | None = None,
 ) -> list[dict]:
-    """Path-based video MCQ messages (Qwen3-VL chat format). Not wired into runner yet."""
+    """Chat messages for a pre-decoded video tensor passed via `run_inference_on_video_tensor`."""
     video: dict = {"type": "video", "video": video_path, "min_pixels": min_pixels}
     if n_frames is not None:
         video["nframes"] = n_frames
