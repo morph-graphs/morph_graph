@@ -8,6 +8,57 @@ step E (text-aligned query retrieval).
 
 ---
 
+## Evaluation scripts
+
+Run on a GPU node with the `morph_graphs_qwen3_cu126` env, from the repo root.
+
+### Feature extraction (step A)
+
+```bash
+python -m morph_graph.tests.debug_extract \
+    --video morph_graph/data/wearable-ai/egolongqa/val/00cdb8ca10c069f8.mp4 \
+    --tokens-per-frame 256 --fps 1.0
+```
+
+### Event segmentation (step B)
+
+```bash
+python -m morph_graph.tests.debug_events \
+    --video morph_graph/data/wearable-ai/egolongqa/val/00cdb8ca10c069f8.mp4 \
+    --tokens-per-frame 256 --fps 1.0 --kernel-width 6 --peak-height 1.0 \
+    --plot morph_graph/tests/out/seg_00cdb8ca10c069f8.png
+```
+
+### Graph + QA (steps C–G)
+
+VSI Cat (ordering question):
+
+```bash
+python -m morph_graph.tests.debug_event_graph \
+    --video morph_graph/data/vsi_morph/vsi_constructed/Cat/0000.mp4 \
+    --tokens-per-frame 256 --fps 1.0 --sim-threshold 0.9 \
+    --aligned-model pe_core_vit_l \
+    --query "In what order was the Cat first seen across the Office, the Bedroom/Toy Room, and the Industrial Room?" \
+    --qa \
+    --working-dir morph_graph/tests/out/vsi_cat_0000 \
+    --plot-graph morph_graph/tests/out/vsi_cat_0000/graph.png
+```
+
+EgoLongQA walk (egocentric QA):
+
+```bash
+python -m morph_graph.tests.debug_event_graph \
+    --video morph_graph/data/wearable-ai/egolongqa/val/00cdb8ca10c069f8.mp4 \
+    --tokens-per-frame 256 --fps 1.0 --sim-threshold 0.9 \
+    --aligned-model pe_core_vit_l \
+    --query "After I left the grassy trail that ran alongside the flooded marsh, what was the first man-made structure I encountered on the paved section of my walk?" \
+    --qa \
+    --working-dir morph_graph/tests/out/eg_00cdb8ca \
+    --plot-graph morph_graph/tests/out/eg_00cdb8ca/graph.png
+```
+
+---
+
 # A: Model-Agnostic Visual Feature Extraction (Qwen3-VL)
 
 ## Scope of step A
