@@ -84,6 +84,19 @@ def build_messages_video(
     ]
 
 
+def build_messages_open_qa(question: str) -> list[dict]:
+    """Chat messages for open-ended QA on a stitched video tensor."""
+    return [
+        {
+            "role": "user",
+            "content": [
+                {"type": "video"},
+                {"type": "text", "text": question.strip()},
+            ],
+        }
+    ]
+
+
 def build_messages_video_tensor(
     question: str,
     options: list[str],

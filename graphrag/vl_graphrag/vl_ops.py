@@ -1,3 +1,4 @@
+import re
 from collections import defaultdict
 from typing import Any
 
@@ -10,6 +11,25 @@ from .vl_base import VLQueryParam
 from .vl_segments import normalize_text_segments, normalize_vision_segments
 
 _DEFAULT_SEMANTIC_TOP_K = 32
+
+# Node ids follow the "{video_id}::seg_{idx:04d}" scheme; used to detect
+# temporal adjacency so semantic edges don't clobber the temporal spine
+# (an undirected nx.Graph keeps only one edge per node pair).
+_SEG_ID_RE = re.compile(r"^(?P<video>.*)::seg_(?P<idx>\d+)$")
+
+
+def _seg_key(node_id: str) -> tuple[str, int] | None:
+    match = _SEG_ID_RE.match(node_id)
+    if match is None:
+        return None
+    return match.group("video"), int(match.group("idx"))
+
+
+def _are_temporally_adjacent(src_id: str, tgt_id: str) -> bool:
+    a, b = _seg_key(src_id), _seg_key(tgt_id)
+    if a is None or b is None:
+        return False
+    return a[0] == b[0] and abs(a[1] - b[1]) == 1
 
 
 def _video_decoder(video_path: str):
@@ -194,30 +214,25 @@ def _temporal_edge(
     src_id: str,
     tgt_id: str,
     weight: float,
-) -> tuple[tuple[str, str, dict[str, Any]]]:
-    """ 
-    Build bidirectional temporal edges between two video segments. 
-    """  
-    edges = ((
-        src_id,
-        tgt_id,
-        {
-            "edge_type": "temporal_next",
-            "weight": weight,
-            "description": "Forward temporal adjacency between consecutive video segments.",
-            "source_id": src_id,
-        },
-    ), 
-    (
-        tgt_id,
-        src_id,
-        {
-            "edge_type": "temporal_prev",
-            "weight": weight,
-            "description": "Backward temporal adjacency between consecutive video segments.",
-            "source_id": tgt_id,
-        },
-    ))
+) -> tuple[tuple[str, str, dict[str, Any]], ...]:
+    """Single undirected temporal-adjacency edge between consecutive segments.
+
+    NetworkXStorage is undirected, so a forward/backward pair collapses to one
+    edge (last write wins); we emit a single `temporal_adjacent` edge instead.
+    Ordering/direction is recoverable from `segment_idx` on the nodes.
+    """
+    edges = (
+        (
+            src_id,
+            tgt_id,
+            {
+                "edge_type": "temporal_adjacent",
+                "weight": weight,
+                "description": "Temporal adjacency between consecutive video segments.",
+                "source_id": src_id,
+            },
+        ),
+    )
     return edges
 
 def _add_bidirectional_temporal_edge(
@@ -226,17 +241,12 @@ def _add_bidirectional_temporal_edge(
     tgt_id: str,
     weight: float,
 ):
-    forward_key = (src_id, tgt_id)
-    backward_key = (tgt_id, src_id)
+    # Undirected: dedupe on the unordered pair.
+    key = tuple(sorted((src_id, tgt_id)))
+    if key not in edges:
+        (edge,) = _temporal_edge(src_id, tgt_id, weight)
+        edges[key] = edge
 
-    existing_forward_edge = edges.get(forward_key)
-    existing_backward_edge = edges.get(backward_key)
-
-    if existing_forward_edge is None or existing_backward_edge is None: 
-        forward_edge, backward_edge = _temporal_edge(src_id, tgt_id, weight)
-        edges[forward_key] = forward_edge
-        edges[backward_key] = backward_edge
-    
     return edges
 
 
@@ -327,6 +337,10 @@ async def build_semantic_similarity_edges(
             tgt_id = neighbor["id"]
             if tgt_id == node_id or tgt_id in new_ids:
                 continue
+            # temporally-adjacent pairs already share the (single) undirected edge
+            # slot as a temporal_adjacent edge; skip to preserve the temporal spine.
+            if _are_temporally_adjacent(node_id, tgt_id):
+                continue
             score = float(neighbor.get("distance", 0.0))
             _add_bidirectional_semantic_edge(
                 edges, node_id, tgt_id, score, embedding_source
@@ -342,6 +356,8 @@ async def build_semantic_similarity_edges(
             candidates = []
             for tgt_idx, tgt_item in enumerate(list_data):
                 if src_idx == tgt_idx:
+                    continue
+                if _are_temporally_adjacent(src_item["__id__"], tgt_item["__id__"]):
                     continue
                 score = float(similarity_matrix[src_idx, tgt_idx])
                 if score >= similarity_threshold:
