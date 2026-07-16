@@ -229,6 +229,7 @@ def answer_from_retrieval(
     model=None,
     processor=None,
     model_path: str | None = None,
+    vlm_question: str | None = None,
 ) -> dict[str, Any]:
     """End-to-end E→F→G: query graph, load values, stitch pixels, VLM answer."""
     from morph_graph.inference.framework.vlm import (
@@ -263,7 +264,7 @@ def answer_from_retrieval(
         logger.info(f"[qa][llm] loading VLM from {model_path}")
         model, processor = load_model(model_path)
 
-    messages = build_messages_open_qa(question)
+    messages = build_messages_open_qa(vlm_question if vlm_question is not None else question)
     logger.info(f"[qa][llm] running inference on stitched video_tensor {tuple(video_tensor.shape)}")
     answer = run_inference_on_video_tensor(
         model,

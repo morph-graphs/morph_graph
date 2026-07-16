@@ -105,7 +105,46 @@ class Qwen3VLFeatureExtractor(VisualFeatureExtractor):
         return self._temporal_patch_size
 
     @torch.inference_mode()
-    def encode_frames(self, frames: torch.Tensor) -> VisualFeatures:
+    def encode_frames(self, frames: torch.Tensor, chunk_size: int = 128) -> VisualFeatures:
+        if frames.shape[0] > chunk_size:
+            all_pooled = []
+            all_patch_tokens = []
+            grid_hw = None
+            dim = None
+            model_name = None
+            
+            for i in range(0, frames.shape[0], chunk_size):
+                chunk = frames[i : i + chunk_size]
+                n_real_frames = chunk.shape[0]
+                
+                # Pad chunk to chunk_size to guarantee identical spatial grid from the processor
+                if n_real_frames < chunk_size:
+                    pad_len = chunk_size - n_real_frames
+                    pad_frames = chunk[-1:].repeat(pad_len, 1, 1, 1)
+                    chunk = torch.cat([chunk, pad_frames], dim=0)
+                    
+                feat = self.encode_frames(chunk, chunk_size=chunk_size)
+                
+                # Keep metadata from first chunk
+                if grid_hw is None:
+                    grid_hw = feat.grid_hw
+                    dim = feat.dim
+                    model_name = feat.model_name
+                
+                # Slice off padding temporal units
+                n_real_units = n_real_frames // self._temporal_patch_size
+                all_pooled.append(feat.pooled[:n_real_units])
+                if feat.patch_tokens is not None:
+                    all_patch_tokens.append(feat.patch_tokens[:n_real_units])
+            
+            return VisualFeatures(
+                pooled=torch.cat(all_pooled, dim=0),
+                patch_tokens=torch.cat(all_patch_tokens, dim=0) if all_patch_tokens else None,
+                grid_hw=grid_hw,
+                dim=dim,
+                model_name=model_name,
+            )
+            
         # Preprocess our torchcodec frames directly; do_sample_frames=False so
         # the processor keeps exactly the frames we sampled.
         proc = self.processor.video_processor.preprocess(

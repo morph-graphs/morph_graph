@@ -58,7 +58,7 @@ class EventGraph:
 
     semantic_similarity_threshold: float = 0.5
     semantic_similarity_top_k: int | None = None
-    query_better_than_threshold: float = 0.2
+    query_better_than_threshold: float = -1.0
     embedding_batch_num: int = 32
 
     # Persist full patch-token grids as values (large); off by default.
@@ -206,6 +206,7 @@ class EventGraph:
         model=None,
         processor=None,
         model_path: str | None = None,
+        vlm_question: str | None = None,
     ) -> dict:
         """Retrieve events, stitch decoded frames from values, run VLM QA."""
         return answer_from_retrieval(
@@ -218,6 +219,7 @@ class EventGraph:
             model=model,
             processor=processor,
             model_path=model_path,
+            vlm_question=vlm_question,
         )
 
     # --- introspection ------------------------------------------------------
