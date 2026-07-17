@@ -25,6 +25,9 @@ class VisualFeatures:
     grid_hw: tuple[int, int]
     dim: int
     model_name: str
+    # Qwen3-VL's intermediate visual streams injected into early LLM layers.
+    # Kept token-aligned with ``patch_tokens`` when available.
+    deepstack_features: list[torch.Tensor] | None = None
 
     @property
     def n_units(self) -> int:
@@ -80,6 +83,38 @@ class VisualFeatureExtractor(ABC):
         return self.encode_frames(frames)
 
 
+class VideoLLM(ABC):
+    """Answer questions from retrieved model-specific event values.
+
+    Implementations own their stored-value schema and any prompt/model-specific
+    generation details. Retrieval code passes plain question text plus ordered
+    event values and never depends on a particular VLM's token format.
+    """
+
+    @property
+    @abstractmethod
+    def visual_extractor(self) -> VisualFeatureExtractor:
+        """The extractor that defines this model's persisted event-value schema."""
+
+    @property
+    def name(self) -> str:
+        return self.visual_extractor.name
+
+    def encode_frames(self, frames: torch.Tensor, **kwargs) -> VisualFeatures:
+        """Extract values through the model-owned visual extractor."""
+        return self.visual_extractor.encode_frames(frames, **kwargs)
+
+    @abstractmethod
+    def answer_from_event_values(
+        self,
+        question: str,
+        event_values: list[dict],
+        *,
+        max_new_tokens: int = 128,
+    ) -> tuple[str, dict]:
+        """Return ``(answer, qa_metadata)`` for retrieved event values."""
+
+
 class AlignedFeatureExtractor(VisualFeatureExtractor):
     """A CLIP-family extractor whose `pooled` embeddings live in a joint,
     contrastively-aligned image/text space (SigLIP2, PE-Core).
@@ -106,6 +141,7 @@ class AlignedFeatureExtractor(VisualFeatureExtractor):
 # --- registry: any MLLM plugs in under a string key ---------------------------
 
 _EXTRACTORS: dict[str, Callable[..., VisualFeatureExtractor]] = {}
+_VIDEO_LLMS: dict[str, Callable[..., VideoLLM]] = {}
 
 
 def register_extractor(name: str, factory: Callable[..., VisualFeatureExtractor]) -> None:
@@ -116,3 +152,13 @@ def get_extractor(name: str, **kwargs) -> VisualFeatureExtractor:
     if name not in _EXTRACTORS:
         raise KeyError(f"Unknown extractor {name!r}. Registered: {sorted(_EXTRACTORS)}")
     return _EXTRACTORS[name](**kwargs)
+
+
+def register_video_llm(name: str, factory: Callable[..., VideoLLM]) -> None:
+    _VIDEO_LLMS[name] = factory
+
+
+def get_video_llm(name: str, **kwargs) -> VideoLLM:
+    if name not in _VIDEO_LLMS:
+        raise KeyError(f"Unknown VideoLLM {name!r}. Registered: {sorted(_VIDEO_LLMS)}")
+    return _VIDEO_LLMS[name](**kwargs)

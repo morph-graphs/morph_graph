@@ -567,8 +567,8 @@ def write_graph_html(
     return out_path
 
 
-def plot_event_graph(
-    event_graph,
+def plot_graph(
+    source,
     out_path: str | Path,
     *,
     html: bool = False,
@@ -581,10 +581,14 @@ def plot_event_graph(
     max_semantic_edges: int | None = 100,
     min_semantic_weight: float = 0.0,
 ) -> Path:
-    """Plot a live `EventGraph`'s in-memory relation graph."""
-    graph = event_graph.segments_relation_graph._graph
+    """Plot a live graph object or a persisted GraphML file."""
+    graph = (
+        load_graph(Path(source))
+        if isinstance(source, (str, Path))
+        else source.segments_relation_graph._graph
+    )
     if graph.number_of_nodes() == 0:
-        raise ValueError("Event graph is empty; insert events before plotting.")
+        raise ValueError("Graph is empty; index video segments before plotting.")
     if html:
         return write_graph_html(
             graph, out_path, highlight_nodes=highlight_nodes, title=title, question=question
@@ -603,6 +607,15 @@ def plot_event_graph(
     )
 
 
+def plot_event_graph(
+    event_graph,
+    out_path: str | Path,
+    **kwargs,
+) -> Path:
+    """Backward-compatible alias for :func:`plot_graph`."""
+    return plot_graph(event_graph, out_path, **kwargs)
+
+
 def plot_from_graphml(
     graphml_path: str | Path,
     out_path: str | Path | None = None,
@@ -618,17 +631,13 @@ def plot_from_graphml(
     min_semantic_weight: float = 0.0,
 ) -> Path:
     graphml_path = Path(graphml_path)
-    graph = load_graph(graphml_path)
     if out_path is None:
         suffix = ".html" if html else ".png"
         out_path = graphml_path.with_name(graphml_path.stem + suffix)
-    if html:
-        return write_graph_html(
-            graph, out_path, highlight_nodes=highlight_nodes, title=title, question=question
-        )
-    return plot_segment_graph(
-        graph,
+    return plot_graph(
+        graphml_path,
         out_path,
+        html=html,
         highlight_nodes=highlight_nodes,
         title=title,
         question=question,

@@ -5,7 +5,7 @@ Runs A -> B end-to-end on a GPU node in the `morph_graphs_qwen3_cu126` env:
     python -m morph_graph.tests.debug_events \
         --video morph_graph/data/wearable-ai/egolongqa/val/00cdb8ca10c069f8.mp4 \
         --tokens-per-frame 256 --fps 1.0 --kernel-width 6 --peak-height 1.0 \
-        --plot morph_graph/tests/out/seg_00cdb8ca10c069f8.png
+    --plot outputs/debug/seg_00cdb8ca10c069f8.png
 
 Extracts pooled per-unit embeddings, runs the checkerboard-novelty segmenter,
 and logs boundaries + event spans so you can eyeball the cuts before wiring the
@@ -20,7 +20,7 @@ from pathlib import Path
 from ezcolorlog import root_logger as logger
 
 from morph_graph.events import TSMEventSegmenter
-from morph_graph.features import get_extractor
+from morph_graph.video_models import get_extractor
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _DEFAULT_VIDEO = _REPO_ROOT / "data" / "wearable-ai" / "egolongqa" / "val" / "00cdb8ca10c069f8.mp4"

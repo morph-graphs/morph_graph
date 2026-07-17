@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local data, outputs, and model weights
+data/
+outputs/
+model_zoo
+*.pt

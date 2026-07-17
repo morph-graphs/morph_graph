@@ -61,8 +61,8 @@ class EventGraph:
     query_better_than_threshold: float = 0.2
     embedding_batch_num: int = 32
 
-    # Persist full patch-token grids as values (large); off by default.
-    store_patch_tokens: bool = False
+    # Persist full Qwen token grids plus DeepStack streams for no-reencode QA.
+    store_patch_tokens: bool = True
     always_create_working_dir: bool = True
     # Wipe `working_dir` before init so re-runs don't merge stale graph/VDB/KV state.
     clear_working_dir: bool = False
@@ -98,7 +98,7 @@ class EventGraph:
             embedding_func=self.embedding_func,
             meta_fields={"video_id", "segment_idx"},
         )
-        self.value_store = EventValueStore(self.working_dir)
+        self.value_store = EventValueStore()
 
     # --- insert -------------------------------------------------------------
 
@@ -139,7 +139,7 @@ class EventGraph:
         for seg in segments:
             value = seg.pop("_value")
             key_vec = seg.pop("_key")
-            seg["value_path"] = self.value_store.save(seg["node_id"], value)
+            self.value_store.save(seg["node_id"], value)
             key_data[seg["node_id"]] = {
                 "content": key_vec,
                 "video_id": seg["video_id"],
@@ -200,24 +200,18 @@ class EventGraph:
         question: str,
         *,
         param: VLQueryParam | None = None,
-        default_video_path: str | None = None,
-        max_frames: int = 128,
         max_new_tokens: int = 128,
-        model=None,
-        processor=None,
-        model_path: str | None = None,
+        qa_model=None,
+        qa_prompt: str | None = None,
     ) -> dict:
-        """Retrieve events, stitch decoded frames from values, run VLM QA."""
+        """Retrieve events and delegate their values to a VideoLLM."""
         return answer_from_retrieval(
             self,
             question,
             param=param,
-            default_video_path=default_video_path,
-            max_frames=max_frames,
             max_new_tokens=max_new_tokens,
-            model=model,
-            processor=processor,
-            model_path=model_path,
+            qa_model=qa_model,
+            qa_prompt=qa_prompt,
         )
 
     # --- introspection ------------------------------------------------------

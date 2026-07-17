@@ -1,12 +1,12 @@
 """Retrieval debug: index one video, query GraphRAG, print retrieved segments.
 
-No VLM question-answering — use eval_qwen3_vl_rag.py for MCQ answers.
+No VLM question-answering — use ``python -m morph_graph.video_qa.cli`` for
+benchmark QA.
 
 Examples:
-  python3.11 morph_graph/eval/eval_retrieval_debug.py
-  python3.11 morph_graph/eval/eval_retrieval_debug.py --query "where is the kitchen"
-  python3.11 morph_graph/eval/eval_retrieval_debug.py --plot_graph
-  python3.11 morph_graph/eval/plot_segment_graph.py outputs/vl_graphrag_cache_debug/Cat__0000/graph_segment_relation.graphml
+  python -m tests.debug_oracle_retrieval
+  python -m tests.debug_oracle_retrieval --query "where is the kitchen"
+  python -m tests.debug_oracle_retrieval --plot_graph
 """
 
 from __future__ import annotations
@@ -20,20 +20,21 @@ from ezcolorlog import root_logger as logger
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT.parent))
 
-from morph_graph.eval.plot_segment_graph import plot_from_graphml  # noqa: E402
+from morph_graph.graphrag.vl_graphrag.event_viz import plot_from_graphml  # noqa: E402
 from morph_graph.graphrag.vl_graphrag.vl_base import VLQueryParam  # noqa: E402
 from morph_graph.graphrag.vl_graphrag.vl_segments import _video_id_from_path  # noqa: E402
-from morph_graph.inference.benchmarks.vsi_morph import (  # noqa: E402
-    DEFAULT_CAPTIONS,
-    _vision_segments,
+from morph_graph.video_qa.oracle import (  # noqa: E402
+    OracleIndexInputs,
+    build_oracle_scene_segments,
+    index_oracle,
+    resolve_embedding_model,
 )
-from morph_graph.inference.framework.base import IndexInputs  # noqa: E402
-from morph_graph.inference.framework.rag import index_rag, resolve_embedding_model  # noqa: E402
 
 DEFAULT_VIDEO = REPO_ROOT / "data" / "vsi_morph" / "vsi_constructed" / "Cat" / "0000.mp4"
 DEFAULT_QUERY = "In what order was the Cat first seen across the Office, the Bedroom/Toy Room, and the Industrial Room?"
+DEFAULT_CAPTIONS = REPO_ROOT / "outputs" / "per_video_segment_captions_qwen3_vl_8b.json"
 
-logger.info(f"Starting eval_retrieval_debug: QUERY: {DEFAULT_QUERY}")
+logger.info(f"Starting debug_oracle_retrieval: QUERY: {DEFAULT_QUERY}")
 
 
 def _load_caption_rows(path: Path) -> list[dict]:
@@ -145,10 +146,10 @@ def main() -> None:
 
     # Patch video_path in the caption row so indexing uses the local file.
     caption_row = {**caption_row, "video_path": str(video_path)}
-    vision = _vision_segments(str(video_path), caption_row) or None
-    inputs = IndexInputs(caption=caption_row, vision=vision)
+    vision = build_oracle_scene_segments(str(video_path), caption_row) or None
+    inputs = OracleIndexInputs(caption=caption_row, vision=vision)
 
-    if not inputs.required_for(args.key_source):
+    if not inputs.for_source(args.key_source):
         raise ValueError(f"No {args.key_source} index data available for {video_path}")
 
     embedding_model = resolve_embedding_model(args.embedding_model)
@@ -162,14 +163,14 @@ def main() -> None:
     logger.info(f"Query:          {args.query!r}")
     logger.info(f"Cache dir:      {cache_root}")
 
-    rag = index_rag(
+    rag = index_oracle(
         str(video_path),
         cache_root,
         embedding_model,
         args.key_source,
-        args.reindex,
-        {},
         inputs,
+        reindex=args.reindex,
+        cache={},
         semantic_similarity_threshold=args.semantic_similarity_threshold,
         embedding_batch_num=args.embedding_batch_num,
     )

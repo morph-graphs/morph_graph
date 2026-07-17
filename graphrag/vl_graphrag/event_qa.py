@@ -68,11 +68,11 @@ def fetch_event_values(value_store, segments: list[dict]) -> list[dict]:
         node_id = str(segment["node_id"])
         value = value_store.load(node_id)
         enriched.append({**segment, "values": value})
-        pooled = value.get("pooled")
-        n_units = int(pooled.shape[0]) if pooled is not None and hasattr(pooled, "shape") else "?"
+        patch_tokens = value.get("patch_tokens")
+        n_units = int(patch_tokens.shape[0]) if patch_tokens is not None else "?"
         logger.info(
             f"[qa][fetch] {node_id} seg={segment.get('segment_idx')} "
-            f"stored_frames={len(_indices_from_value(value))} pooled_units={n_units}"
+            f"stored_frames={len(_indices_from_value(value))} cached_units={n_units}"
         )
     return enriched
 
@@ -107,7 +107,7 @@ def stitch_retrieved_event_values(
     """Decode frames from stored `frame_indices` and concatenate (step G, pixels).
 
     `segments` may already include a `values` dict (from `fetch_event_values`);
-    otherwise `value_path` / `EventValueStore` is not consulted here — call
+    otherwise `EventValueStore` is not consulted here — call
     `fetch_event_values` first.
 
     Returns `(video_tensor, video_metadata, stitch_log)` where `stitch_log` lists
@@ -223,20 +223,11 @@ def answer_from_retrieval(
     question: str,
     *,
     param: VLQueryParam | None = None,
-    default_video_path: str | None = None,
-    max_frames: int = 128,
     max_new_tokens: int = 128,
-    model=None,
-    processor=None,
-    model_path: str | None = None,
+    qa_model=None,
+    qa_prompt: str | None = None,
 ) -> dict[str, Any]:
-    """End-to-end E→F→G: query graph, load values, stitch pixels, VLM answer."""
-    from morph_graph.inference.framework.vlm import (
-        build_messages_open_qa,
-        load_model,
-        run_inference_on_video_tensor,
-    )
-
+    """End-to-end E→F→G: query graph, stitch cached tokens, VLM answer."""
     param = param or VLQueryParam(mode="local")
     retrieval = event_graph.query(question, param)
     segments = retrieval.get("segments") or []
@@ -248,38 +239,25 @@ def answer_from_retrieval(
 
     try:
         segments_with_values = fetch_event_values(event_graph.value_store, segments)
-        video_tensor, video_metadata, stitch_log = stitch_retrieved_event_values(
-            segments_with_values,
-            default_video_path=default_video_path,
-            max_frames=max_frames,
+        if qa_model is None:
+            raise ValueError(
+                "qa_model is required; pass a registered VideoLLM implementation"
+            )
+        answer, qa_metadata = qa_model.answer_from_event_values(
+            qa_prompt or question,
+            [segment["values"] for segment in segments_with_values],
+            max_new_tokens=max_new_tokens,
         )
-    except (ValueError, OSError, FileNotFoundError) as exc:
-        logger.warning(f"[qa] stitch failed: {exc}")
+    except (KeyError, ValueError, OSError) as exc:
+        logger.warning(f"[qa] event-value QA failed: {exc}")
         return {**retrieval, "answer": "", "stitch_log": [], "qa_error": str(exc)}
 
-    if model is None or processor is None:
-        if not model_path:
-            raise ValueError("model_path required when model/processor are not provided")
-        logger.info(f"[qa][llm] loading VLM from {model_path}")
-        model, processor = load_model(model_path)
-
-    messages = build_messages_open_qa(question)
-    logger.info(f"[qa][llm] running inference on stitched video_tensor {tuple(video_tensor.shape)}")
-    answer = run_inference_on_video_tensor(
-        model,
-        processor,
-        video_tensor,
-        messages,
-        video_metadata=video_metadata,
-        max_new_tokens=max_new_tokens,
-    )
     logger.info(f"[qa][llm] answer ({len(answer)} chars): {answer}")
     return {
         **retrieval,
         "segments": segments_with_values,
         "answer": answer,
-        "stitch_log": stitch_log,
-        "video_metadata": video_metadata,
-        "stitched_video_shape": tuple(video_tensor.shape),
+        "stitch_log": [],
+        **qa_metadata,
         "qa_error": None,
     }

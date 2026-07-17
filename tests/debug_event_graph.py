@@ -10,8 +10,8 @@ EgoLongQA:
         --aligned-model pe_core_vit_l \
         --query "After I left the grassy trail that ran alongside the flooded marsh, what was the first man-made structure I encountered on the paved section of my walk?" \
         --qa \
-        --working-dir morph_graph/tests/out/eg_00cdb8ca \
-        --plot-graph morph_graph/tests/out/eg_00cdb8ca/graph.png
+        --working-dir outputs/debug/eg_00cdb8ca \
+        --plot-graph outputs/debug/eg_00cdb8ca/graph.png
 
 VSI-Morph 
     python -m morph_graph.tests.debug_event_graph \
@@ -20,8 +20,8 @@ VSI-Morph
         --aligned-model pe_core_vit_l \
         --query "In what order was the Cat first seen across the Office, the Bedroom/Toy Room, and the Industrial Room?" \
         --qa \
-        --working-dir morph_graph/tests/out/vsi_cat_0000 \
-        --plot-graph morph_graph/tests/out/vsi_cat_0000/graph.png
+        --working-dir outputs/debug/vsi_cat_0000 \
+        --plot-graph outputs/debug/vsi_cat_0000/graph.png
 
 
 Qwen3-VL drives TSM segmentation + values; PE-Core (or SigLIP2) supplies
@@ -39,8 +39,8 @@ from pathlib import Path
 from ezcolorlog import root_logger as logger
 
 from morph_graph.events import TSMEventSegmenter
-from morph_graph.features import get_extractor
-from morph_graph.features.video_io import decode_frames
+from morph_graph.video_models import get_extractor, get_video_llm
+from morph_graph.video_models.video_io import decode_frames
 from morph_graph.graphrag.vl_graphrag import EventGraph, VLQueryParam
 from morph_graph.graphrag.vl_graphrag.vl_segments import _video_id_from_path
 
@@ -58,6 +58,12 @@ def main() -> None:
     ap.add_argument("--model", default="qwen3_vl_8b")
     ap.add_argument("--fps", type=float, default=1.0)
     ap.add_argument("--max-frames", type=int, default=None)
+    ap.add_argument(
+        "--frame-batch-size",
+        type=int,
+        default=128,
+        help="maximum frames per Qwen vision forward; bounds GPU VRAM",
+    )
     ap.add_argument("--tokens-per-frame", type=int, default=256)
     ap.add_argument("--feature-stage", choices=["post", "pre"], default="post",
                     help="Qwen3 vision stage for TSM: post-projection (4096) or pre-merger")
@@ -65,7 +71,8 @@ def main() -> None:
     ap.add_argument("--peak-height", type=float, default=1.0)
     ap.add_argument("--sim-threshold", type=float, default=0.5)
     ap.add_argument("--sim-top-k", type=int, default=None)
-    ap.add_argument("--store-patch-tokens", action="store_true")
+    ap.add_argument("--no-store-patch-tokens", dest="store_patch_tokens", action="store_false",
+        default=True, help="disable cached-token QA storage (retrieval-only/debug use)")
     ap.add_argument("--working-dir", type=Path, default=None,
                     help="persist graph cache here (wiped automatically on each run)")
     ap.add_argument("--keep-working-dir", action="store_true",
@@ -89,9 +96,13 @@ def main() -> None:
 
     # A) decode + extract
     logger.info(f"[load] extractor={args.model} tokens_per_frame={args.tokens_per_frame} stage={args.feature_stage}")
-    ext = get_extractor(args.model, tokens_per_frame=args.tokens_per_frame, feature_stage=args.feature_stage)
+    ext = get_video_llm(
+        args.model,
+        tokens_per_frame=args.tokens_per_frame,
+        feature_stage=args.feature_stage,
+    )
     frames, frame_indices = decode_frames(str(args.video), fps=args.fps, max_frames=args.max_frames)
-    feats = ext.encode_frames(frames)
+    feats = ext.encode_frames(frames, frame_batch_size=args.frame_batch_size)
     logger.info(f"[encode] pooled={tuple(feats.pooled.shape)} n_units={feats.n_units} dim={feats.dim}")
 
     # B) segment
@@ -142,10 +153,12 @@ def main() -> None:
     node_id = f"{video_id}::seg_0000"
     record = always_get_an_event_loop().run_until_complete(eg.segments_kv.get_by_id(node_id))
     logger.info(f"[kv] {node_id} -> unit_range={record['unit_range']} frame_range={record['frame_range']} "
-                f"n_units={record['n_units']} value_path={Path(record['value_path']).name}")
+                f"n_units={record['n_units']} values=in_memory")
     value = eg.value_store.load(node_id)
-    logger.info(f"[value] pooled={tuple(value['pooled'].shape)} frame_indices={tuple(value['frame_indices'].shape)}"
-                + (f" patch_tokens={tuple(value['patch_tokens'].shape)}" if "patch_tokens" in value else ""))
+    logger.info(
+        f"[value] frame_indices={tuple(value['frame_indices'].shape)}"
+        + (f" patch_tokens={tuple(value['patch_tokens'].shape)}" if "patch_tokens" in value else "")
+    )
 
     # E) text query (+ optional F+G QA)
     resp = None
@@ -160,22 +173,10 @@ def main() -> None:
                 max_frames_for_video_unit=args.max_qa_frames,
             )
             if args.qa:
-                # Reuse the Qwen3-VL already loaded for step A (vision encode) —
-                # avoid a second full model load for QA.
-                qa_model = getattr(ext, "model", None)
-                qa_processor = getattr(ext, "processor", None)
-                if qa_model is not None and qa_processor is not None:
-                    logger.info("[qa] reusing extractor model/processor for VLM QA")
-                else:
-                    logger.info(f"[qa] extractor has no LLM; will load from {args.llm_model_path}")
                 resp = eg.answer(
                     args.query,
                     param=query_param,
-                    default_video_path=str(args.video),
-                    model=qa_model,
-                    processor=qa_processor,
-                    model_path=args.llm_model_path if qa_model is None else None,
-                    max_frames=args.max_qa_frames,
+                    qa_model=ext,
                     max_new_tokens=args.max_new_tokens,
                 )
                 if resp.get("qa_error"):
@@ -189,10 +190,10 @@ def main() -> None:
 
     # plot the graph memory (highlight retrieval + show the question when available)
     if args.plot_graph is not None:
-        from morph_graph.graphrag.vl_graphrag import plot_event_graph
+        from morph_graph.graphrag.vl_graphrag import plot_graph
 
         args.plot_graph.parent.mkdir(parents=True, exist_ok=True)
-        plot_event_graph(
+        plot_graph(
             eg,
             str(args.plot_graph),
             html=args.plot_graph.suffix == ".html",

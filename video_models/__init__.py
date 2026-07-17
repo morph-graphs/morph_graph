@@ -3,10 +3,13 @@ emit per-temporal-unit patch values + pooled embeddings."""
 
 from .base import (
     AlignedFeatureExtractor,
+    VideoLLM,
     VisualFeatures,
     VisualFeatureExtractor,
     get_extractor,
+    get_video_llm,
     register_extractor,
+    register_video_llm,
 )
 from .video_io import decode_frames, sample_frame_indices
 
@@ -22,8 +25,11 @@ __all__ = [
     "VisualFeatures",
     "VisualFeatureExtractor",
     "AlignedFeatureExtractor",
+    "VideoLLM",
     "get_extractor",
+    "get_video_llm",
     "register_extractor",
+    "register_video_llm",
     "decode_frames",
     "sample_frame_indices",
 ]

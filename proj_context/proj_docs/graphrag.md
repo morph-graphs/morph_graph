@@ -154,35 +154,17 @@ Eval runner (`inference/framework/runner.py`) after retrieval:
 
 ---
 
-## Eval integration
+## QA and oracle integration
 
-```
-eval/eval_qwen3_vl_rag.py
-  → inference/framework/runner.py
-       → inference/framework/rag.py          (per-video index cache)
-       → graphrag/vl_graphrag/vl_graphrag.py (index + query)
-       → inference/benchmarks/vsi_morph.py   (VSI-Morph adapter)
-```
-
-**Benchmark adapter contract** (`inference/framework/base.py` → `VLGraphRAGBenchmark`):
-- `load_samples` / `get_video_path` / `get_index_inputs`
-- `IndexInputs.caption` → `insert_text_nodes`
-- `IndexInputs.vision` → `insert_vision_nodes`
-
-**VSI-Morph** (`inference/benchmarks/vsi_morph.py`):
-- Caption index: row from `per_video_segment_captions_qwen3_vl_8b.json`
-- Vision index: scene segments from `{video}.json` annotations, captions merged by `frame_range`
-- Optional **clue hit rate** metric: fraction of GT `clue_frames` covered by retrieved segment `frame_range`s
-
-**CLI highlights** (`eval_qwen3_vl_rag.py`):
+`video_qa/` is the supported benchmark and Slurm execution layer. EventGraph
+builds events from raw video; `video_qa/oracle.py` indexes externally supplied
+or pseudo-GT caption/vision segments for controlled retrieval experiments.
 
 ```bash
-python3.11 morph_graph/eval/eval_qwen3_vl_rag.py \
+python -m morph_graph.video_qa.cli \
   --benchmark vsi_morph \
-  --retrieval_mode local \
-  --key_source caption \
-  --qa_mode caption \
-  --retrieval_only   # skip VLM; dump retrieval only
+  --output-json outputs/vsi.json \
+  --cache-dir outputs/vsi_cache
 ```
 
 ---
@@ -192,8 +174,8 @@ python3.11 morph_graph/eval/eval_qwen3_vl_rag.py \
 | Module | Role |
 | --- | --- |
 | `vl_ops.stitch_retrieved_segments_video` | Decode + concat frames for video QA |
-| `eval/plot_segment_graph.py` | Visualize segment relation graph |
-| `eval/eval_retrieval_debug.py` | Retrieval debugging |
+| `graphrag/vl_graphrag/event_viz.py` | Visualize live or persisted relation graphs |
+| `tests/debug_oracle_retrieval.py` | Oracle/pre-segmented retrieval debugging |
 
 ---
 

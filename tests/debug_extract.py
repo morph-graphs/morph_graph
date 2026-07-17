@@ -19,7 +19,7 @@ from pathlib import Path
 import torch.nn.functional as F
 from ezcolorlog import root_logger as logger
 
-from morph_graph.features import get_extractor
+from morph_graph.video_models import get_extractor
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _DEFAULT_VIDEO = _REPO_ROOT / "data" / "wearable-ai" / "egolongqa" / "val" / "00cdb8ca10c069f8.mp4"
