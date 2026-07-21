@@ -5,8 +5,9 @@ from __future__ import annotations
 import unittest
 from dataclasses import replace
 
-from morph_graph.event_eval.annotate import AnnotationSample, _filter_samples
+from morph_graph.event_eval.annotate import AnnotationSample, _filter_samples, build_parser
 from morph_graph.event_eval.gemini import build_agnostic_prompt, build_prompt
+from morph_graph.event_eval.kimi import KimiAnnotationError, KimiOracleAnnotator
 from morph_graph.event_eval.metrics import (
     boundary_f1,
     compare_annotation,
@@ -14,7 +15,7 @@ from morph_graph.event_eval.metrics import (
     query_event_coverage,
 )
 from morph_graph.event_eval.query_taxonomy import classify_question
-from morph_graph.event_eval.schema import OracleAnnotation, OracleEvent
+from morph_graph.event_eval.schema import OracleAnnotation, OracleEvent, gemini_response_schema
 from morph_graph.event_eval.select_pilot import select_records
 from pathlib import Path
 
@@ -236,6 +237,52 @@ class AnnotateFilterTests(unittest.TestCase):
             samples, sample_ids=["511", "73"], video_ids=["b3fba3c9b747e519"]
         )
         self.assertEqual([s.sample_id for s in both], ["511"])
+
+
+class KimiAnnotatorTests(unittest.TestCase):
+    def test_requires_api_key(self) -> None:
+        with self.assertRaisesRegex(ValueError, "MOONSHOT_API_KEY"):
+            KimiOracleAnnotator(api_key=None)
+
+    def test_response_format_matches_shared_schema(self) -> None:
+        annotator = KimiOracleAnnotator(api_key="test-key")
+        for mode in ("query_conditioned", "query_agnostic"):
+            response_format = annotator._response_format(mode)
+            self.assertEqual(response_format["type"], "json_schema")
+            self.assertEqual(
+                response_format["json_schema"]["schema"], gemini_response_schema(mode)
+            )
+
+    def test_query_conditioned_requires_question(self) -> None:
+        annotator = KimiOracleAnnotator(api_key="test-key")
+        with self.assertRaisesRegex(ValueError, "requires a question"):
+            annotator.annotate(
+                sample_id="s1",
+                video_path="/tmp/does-not-need-to-exist.mp4",
+                question="   ",
+                annotation_mode="query_conditioned",
+            )
+
+    def test_error_carries_last_payload(self) -> None:
+        error = KimiAnnotationError(
+            "boom", raw_response="{bad json", parsed_events=[{"event_id": "e1"}]
+        )
+        self.assertEqual(error.raw_response, "{bad json")
+        self.assertEqual(error.parsed_events, [{"event_id": "e1"}])
+
+
+class ProviderCliTests(unittest.TestCase):
+    def test_provider_defaults_to_gemini(self) -> None:
+        args = build_parser().parse_args(["--output-dir", "/tmp/out"])
+        self.assertEqual(args.provider, "gemini")
+        self.assertIsNone(args.model)
+
+    def test_kimi_provider_selectable(self) -> None:
+        args = build_parser().parse_args(
+            ["--output-dir", "/tmp/out", "--provider", "kimi", "--model", "kimi-k2.5"]
+        )
+        self.assertEqual(args.provider, "kimi")
+        self.assertEqual(args.model, "kimi-k2.5")
 
 
 if __name__ == "__main__":

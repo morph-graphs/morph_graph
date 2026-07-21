@@ -24,6 +24,13 @@ pip install google-genai
 export GOOGLE_API_KEY=...
 ```
 
+For the Kimi (Moonshot) provider instead of Gemini:
+
+```bash
+pip install openai  # already satisfied in the shared conda env
+export MOONSHOT_API_KEY=...
+```
+
 Run all commands from the `morph_graph/` directory.
 
 ## 1. Annotate a pilot
@@ -71,6 +78,35 @@ agnostic segmentations). Agnostic outputs are keyed by `video_id`.
 
 Use `--max-samples N` for an inexpensive smoke test. Do not pass API keys on
 the command line; use `GOOGLE_API_KEY`.
+
+### Kimi (Moonshot) provider
+
+To pilot Kimi K2.5 as a cheaper alternative to Gemini, pass `--provider kimi`
+to either annotation command above, e.g.:
+
+```bash
+python -m event_eval.annotate \
+  --benchmark egolongqa \
+  --mode query_agnostic \
+  --provider kimi \
+  --sample-ids-json outputs/event_eval/pilot_ids.json \
+  --output-dir outputs/event_eval/agnostic_kimi \
+  --overwrite
+```
+
+Uses model `kimi-k2.5` by default (override with `--model`), Moonshot's
+hosted API at `https://api.moonshot.ai/v1` (override with `--base-url`, e.g.
+for the `.cn` endpoint), and the same prompts/schema/output format as the
+Gemini path, so `metrics.py`/`report.py` and the viewer work unchanged and
+Kimi vs. Gemini outputs are directly comparable. `--fps` and
+`--media-resolution` are Gemini-only (Kimi's API exposes no equivalent
+sampling control); the saved `video_fps` field for Kimi outputs is a nominal
+placeholder, not a guaranteed sample rate. Retry/output-token flags
+(`--max-retries`, `--retry-delay-sec`, `--max-output-tokens`) apply to both
+providers.
+
+Self-hosting Kimi K2.5 (vs. the hosted API used here) needs ~8x H200 GPUs per
+Moonshot's own deployment guide; not attempted by this module yet.
 
 ## 2. Export TSM for oracle videos
 

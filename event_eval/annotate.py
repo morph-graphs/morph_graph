@@ -10,7 +10,10 @@ import traceback
 from dataclasses import dataclass
 from pathlib import Path
 
-from .gemini import DEFAULT_MODEL, GeminiOracleAnnotator
+from .gemini import DEFAULT_MODEL as GEMINI_DEFAULT_MODEL
+from .gemini import GeminiOracleAnnotator
+from .kimi import DEFAULT_MODEL as KIMI_DEFAULT_MODEL
+from .kimi import KimiOracleAnnotator
 from .schema import OracleAnnotation
 
 _PACKAGE_ROOT = Path(__file__).resolve().parents[1]
@@ -185,10 +188,33 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--sample-ids-json", type=Path)
     parser.add_argument("--start-index", type=int, default=0)
     parser.add_argument("--max-samples", type=int)
-    parser.add_argument("--model", default=DEFAULT_MODEL)
-    parser.add_argument("--fps", type=float, default=1.0)
     parser.add_argument(
-        "--media-resolution", choices=["low", "medium"], default="medium"
+        "--provider",
+        choices=["gemini", "kimi"],
+        default="gemini",
+        help="Which annotator backend to use (default: gemini).",
+    )
+    parser.add_argument(
+        "--model",
+        default=None,
+        help=(
+            "Defaults to the provider's default model "
+            f"(gemini={GEMINI_DEFAULT_MODEL!r}, kimi={KIMI_DEFAULT_MODEL!r})."
+        ),
+    )
+    parser.add_argument(
+        "--base-url",
+        default=None,
+        help="Override the Kimi/Moonshot API base URL (kimi provider only).",
+    )
+    parser.add_argument(
+        "--fps", type=float, default=1.0, help="Video sampling fps (gemini only)."
+    )
+    parser.add_argument(
+        "--media-resolution",
+        choices=["low", "medium"],
+        default="medium",
+        help="Gemini media resolution (gemini only).",
     )
     parser.add_argument(
         "--max-output-tokens", type=int, default=32768,
@@ -215,14 +241,24 @@ def main() -> None:
     if not samples:
         raise ValueError("No benchmark samples selected")
 
-    annotator = GeminiOracleAnnotator(
-        model=args.model,
-        fps=args.fps,
-        media_resolution=args.media_resolution,
-        max_output_tokens=args.max_output_tokens,
-        max_retries=args.max_retries,
-        retry_delay_sec=args.retry_delay_sec,
-    )
+    if args.provider == "gemini":
+        annotator = GeminiOracleAnnotator(
+            model=args.model or GEMINI_DEFAULT_MODEL,
+            fps=args.fps,
+            media_resolution=args.media_resolution,
+            max_output_tokens=args.max_output_tokens,
+            max_retries=args.max_retries,
+            retry_delay_sec=args.retry_delay_sec,
+        )
+    else:
+        kimi_kwargs = {"base_url": args.base_url} if args.base_url else {}
+        annotator = KimiOracleAnnotator(
+            model=args.model or KIMI_DEFAULT_MODEL,
+            max_output_tokens=args.max_output_tokens,
+            max_retries=args.max_retries,
+            retry_delay_sec=args.retry_delay_sec,
+            **kimi_kwargs,
+        )
     completed = skipped = failed = 0
     for index, sample in enumerate(samples, start=1):
         stem = _safe_id(sample.sample_id)
