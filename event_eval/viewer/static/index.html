@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Event eval viewer</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <aside class="panel">
+        <h1>Event eval viewer</h1>
+        <div class="sub">
+          Gemini oracle vs TSM · paths are editable
+        </div>
+
+        <h2>Data paths</h2>
+        <div class="field">
+          <label for="oracle-dir">Oracle directory (query-conditioned)</label>
+          <textarea
+            id="oracle-dir"
+            class="path-input"
+            rows="3"
+            spellcheck="false"
+          ></textarea>
+        </div>
+        <div class="field">
+          <label for="agnostic-dir">Agnostic directory (query-agnostic Gemini)</label>
+          <textarea
+            id="agnostic-dir"
+            class="path-input"
+            rows="3"
+            spellcheck="false"
+          ></textarea>
+        </div>
+        <div class="field">
+          <label for="tsm-dir">TSM directory</label>
+          <textarea
+            id="tsm-dir"
+            class="path-input"
+            rows="3"
+            spellcheck="false"
+          ></textarea>
+        </div>
+        <div class="field">
+          <label for="report-json">Report JSON</label>
+          <textarea
+            id="report-json"
+            class="path-input"
+            rows="3"
+            spellcheck="false"
+          ></textarea>
+        </div>
+        <div class="field">
+          <label for="questions-jsonl">Questions JSONL (answers)</label>
+          <textarea
+            id="questions-jsonl"
+            class="path-input"
+            rows="3"
+            spellcheck="false"
+          ></textarea>
+        </div>
+        <div class="row">
+          <button id="load-btn" class="primary" type="button">Load</button>
+          <button id="reset-btn" type="button">Reset presets</button>
+        </div>
+        <div id="status" class="status"></div>
+        <pre id="resolved" class="status"></pre>
+
+        <h2>Sample</h2>
+        <div class="field">
+          <label for="sample-select">Oracle sample</label>
+          <select id="sample-select"></select>
+        </div>
+        <div id="video-name" class="video-name muted">—</div>
+
+        <h2>Query</h2>
+        <div id="query" class="query-box muted">—</div>
+
+        <h2>Ground-truth answer</h2>
+        <div id="answer" class="query-box answer-box muted">—</div>
+
+        <h2>Sample metrics</h2>
+        <div id="metrics" class="metrics"></div>
+      </aside>
+
+      <main class="main">
+        <div class="video-wrap">
+          <img id="frame" alt="Current video frame" />
+          <div id="overlay" class="overlay hidden">
+            <div id="overlay-time" class="time"></div>
+            <div id="overlay-desc" class="desc"></div>
+          </div>
+        </div>
+        <div class="scrubber">
+          <div class="scrubber-row">
+            <button id="btn-prev-frame" type="button" title="Previous frame (, )">‹ frame</button>
+            <button id="btn-play" type="button" title="Play / pause (Space)">▶</button>
+            <button id="btn-next-frame" type="button" title="Next frame (.)">frame ›</button>
+            <label class="fps-control" title="Scrub / play sampling rate">
+              <span>FPS</span>
+              <input id="display-fps" type="number" min="0.1" max="30" step="0.1" value="1" />
+            </label>
+            <span id="scrubber-time" class="scrubber-time">0:00</span>
+            <span id="scrubber-meta" class="scrubber-meta muted">no video</span>
+          </div>
+          <input id="scrubber" type="range" min="0" max="0" step="1" value="0" disabled />
+        </div>
+        <div class="timeline-panel">
+          <div class="legend">
+            <span><i class="swatch tsm"></i>TSM</span>
+            <span><i class="swatch tsm-hit"></i>TSM overlaps agnostic</span>
+            <span><i class="swatch agnostic"></i>Gemini agnostic</span>
+            <span><i class="swatch oracle"></i>Gemini oracle</span>
+            <span><i class="swatch answer"></i>answer-bearing</span>
+            <span>dashed red = TSM cover of agnostic event (from report)</span>
+          </div>
+          <svg id="tracks" height="118"></svg>
+        </div>
+      </main>
+
+      <aside class="panel">
+        <h2>Parent → child <span class="h2-sub">(oracle)</span></h2>
+        <svg id="graph"></svg>
+
+        <h2>Agnostic events <span id="agnostic-count" class="h2-sub"></span></h2>
+        <div id="agnostic-list" class="event-list"></div>
+
+        <h2>Oracle events <span id="oracle-count" class="h2-sub"></span></h2>
+        <div id="event-list" class="event-list"></div>
+      </aside>
+    </div>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
