@@ -5,6 +5,7 @@
       agnostic_dir: "",
       agnostic_kimi_dir: "",
       tsm_dir: "",
+      event_graph_dir: "",
       questions_jsonl: "",
     },
     samples: [],
@@ -12,9 +13,11 @@
     activeEventId: null,
     activeAgnosticId: null,
     activeAgnosticKimiId: null,
+    activeEventGraphId: null,
     scrolledEventId: null,
     scrolledAgnosticId: null,
     scrolledAgnosticKimiId: null,
+    scrolledEventGraphId: null,
     videoPath: null,
     duration: 0,
     sourceFps: 1,
@@ -38,6 +41,7 @@
     agnosticDir: document.getElementById("agnostic-dir"),
     agnosticKimiDir: document.getElementById("agnostic-kimi-dir"),
     tsmDir: document.getElementById("tsm-dir"),
+    eventGraphDir: document.getElementById("event-graph-dir"),
     questionsJsonl: document.getElementById("questions-jsonl"),
     loadBtn: document.getElementById("load-btn"),
     resetBtn: document.getElementById("reset-btn"),
@@ -46,6 +50,7 @@
     status: document.getElementById("status"),
     query: document.getElementById("query"),
     answer: document.getElementById("answer"),
+    predAnswer: document.getElementById("pred-answer"),
     metrics: document.getElementById("metrics"),
     providerMetrics: document.getElementById("provider-metrics"),
     frame: document.getElementById("frame"),
@@ -61,6 +66,8 @@
     overlayDesc: document.getElementById("overlay-desc"),
     tracks: document.getElementById("tracks"),
     eventList: document.getElementById("event-list"),
+    eventGraphList: document.getElementById("event-graph-list"),
+    eventGraphCount: document.getElementById("event-graph-count"),
     agnosticList: document.getElementById("agnostic-list"),
     agnosticKimiList: document.getElementById("agnostic-kimi-list"),
     agnosticCount: document.getElementById("agnostic-count"),
@@ -78,6 +85,7 @@
       agnostic_dir: state.paths.agnostic_dir,
       agnostic_kimi_dir: state.paths.agnostic_kimi_dir,
       tsm_dir: state.paths.tsm_dir,
+      event_graph_dir: state.paths.event_graph_dir,
       questions_jsonl: state.paths.questions_jsonl,
     });
     return p.toString();
@@ -116,6 +124,7 @@
       agnostic_dir: el.agnosticDir.value.trim(),
       agnostic_kimi_dir: el.agnosticKimiDir.value.trim(),
       tsm_dir: el.tsmDir.value.trim(),
+      event_graph_dir: el.eventGraphDir.value.trim(),
       questions_jsonl: el.questionsJsonl.value.trim(),
     };
   }
@@ -125,6 +134,7 @@
     el.agnosticDir.value = paths.agnostic_dir || "";
     el.agnosticKimiDir.value = paths.agnostic_kimi_dir || "";
     el.tsmDir.value = paths.tsm_dir || "";
+    el.eventGraphDir.value = paths.event_graph_dir || "";
     el.questionsJsonl.value = paths.questions_jsonl || "";
     state.paths = { ...paths };
   }
@@ -146,6 +156,7 @@
       agnostic_dir: data.resolved.agnostic_dir,
       agnostic_kimi_dir: data.resolved.agnostic_kimi_dir,
       tsm_dir: data.resolved.tsm_dir,
+      event_graph_dir: data.resolved.event_graph_dir,
       questions_jsonl: data.resolved.questions_jsonl,
     });
     el.resolved.textContent = "";
@@ -160,9 +171,11 @@
       const opt = document.createElement("option");
       opt.value = s.sample_id;
       const vid = s.video_id || "unknown";
+      const eg = s.n_event_graph_events || 0;
       opt.textContent =
         `${s.sample_id} · ${vid}.mp4 · ${s.n_oracle_events} oracle / ` +
-        `${s.n_agnostic_events || 0} gemini / ${s.n_agnostic_kimi_events || 0} kimi / ${s.n_tsm_events} TSM`;
+        `${s.n_agnostic_events || 0} gemini / ${s.n_agnostic_kimi_events || 0} kimi / ${s.n_tsm_events} TSM` +
+        (s.has_event_graph ? ` / ${eg} EG` : "");
       el.sampleSelect.appendChild(opt);
     }
     setStatus(`${state.samples.length} samples loaded.`);
@@ -177,6 +190,7 @@
     state.activeEventId = null;
     state.activeAgnosticId = null;
     state.activeAgnosticKimiId = null;
+    state.activeEventGraphId = null;
     el.sampleSelect.value = detail.sample_id;
     const videoFile =
       (detail.video_path && detail.video_path.split(/[/\\]/).pop()) ||
@@ -192,19 +206,35 @@
       el.answer.textContent = "(answer not found in questions JSONL)";
       el.answer.classList.add("muted");
     }
+    if (detail.pred_answer) {
+      el.predAnswer.textContent = detail.pred_answer;
+      el.predAnswer.classList.remove("muted");
+    } else if (detail.qa_error) {
+      el.predAnswer.textContent = `(error) ${detail.qa_error}`;
+      el.predAnswer.classList.add("muted");
+    } else if (detail.has_event_graph) {
+      el.predAnswer.textContent = "(EventGraph file found, but no answer field)";
+      el.predAnswer.classList.add("muted");
+    } else {
+      el.predAnswer.textContent =
+        "(no EventGraph JSON for this sample — check event_graph_dir, then Load)";
+      el.predAnswer.classList.add("muted");
+    }
     renderMetrics(detail);
     renderProviderMetrics(detail);
     renderGraph(detail);
     renderAgnosticEvents(detail, "gemini");
     renderAgnosticEvents(detail, "kimi");
+    renderEventGraphEvents(detail);
     renderEvents(detail);
     renderTracks(detail);
     setupFrameViewer(detail).catch((err) =>
       setStatus(String(err.message || err), true)
     );
+    const egN = (detail.event_graph_events || []).length;
     setStatus(
       detail.video_exists
-        ? `Sample ${detail.sample_id} · ${videoFile || detail.video_id} · ${detail.oracle_events.length} oracle · ${detail.agnostic_events.length} gemini · ${(detail.agnostic_kimi_events || []).length} kimi · ${detail.tsm_events.length} TSM`
+        ? `Sample ${detail.sample_id} · ${videoFile || detail.video_id} · ${detail.oracle_events.length} oracle · ${detail.agnostic_events.length} gemini · ${(detail.agnostic_kimi_events || []).length} kimi · ${detail.tsm_events.length} TSM · ${egN} EG`
         : `Sample ${detail.sample_id} loaded, but video file is missing: ${detail.video_path || "(none)"}`,
       !detail.video_exists
     );
@@ -573,7 +603,7 @@
     if (!listEl) return prevKey;
     const card = listEl.querySelector(selector);
     if (!card) return null;
-    const id = card.dataset.agnosticId || card.dataset.id || null;
+    const id = card.dataset.agnosticId || card.dataset.eventGraphId || card.dataset.id || null;
     if (id && id !== prevKey) {
       card.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
     }
@@ -587,25 +617,29 @@
     const activeOracle = activeOracleAt(t);
     const activeAgnostic = activeAgnosticAt(t);
     const activeAgnosticKimi = activeAgnosticKimiAt(t);
+    const activeEventGraph = activeEventGraphAt(t);
     state.activeEventId = activeOracle ? activeOracle.event_id : null;
     state.activeAgnosticId = activeAgnostic ? activeAgnostic.event_id : null;
     state.activeAgnosticKimiId = activeAgnosticKimi
       ? activeAgnosticKimi.event_id
       : null;
+    state.activeEventGraphId = activeEventGraph ? activeEventGraph.event_id : null;
 
-    // Prefer agnostic overlay when reviewing that track; fall back to oracle.
-    const overlayEvent = activeAgnostic || activeAgnosticKimi || activeOracle;
+    // Prefer agnostic overlay when reviewing that track; fall back to oracle / EG.
+    const overlayEvent = activeAgnostic || activeAgnosticKimi || activeOracle || activeEventGraph;
     if (overlayEvent) {
       const kind = activeAgnostic
         ? "gemini"
         : activeAgnosticKimi
           ? "kimi"
-          : "oracle";
+          : activeOracle
+            ? "oracle"
+            : "event-graph";
       el.overlay.classList.remove("hidden");
       el.overlayTime.textContent =
         `${mmss(overlayEvent.start_sec)} – ${mmss(overlayEvent.end_sec)} · ` +
         `${kind} · ${overlayEvent.event_id}`;
-      el.overlayDesc.textContent = overlayEvent.description;
+      el.overlayDesc.textContent = overlayEvent.description || overlayEvent.event_id;
     } else {
       el.overlay.classList.add("hidden");
     }
@@ -623,6 +657,12 @@
       card.classList.toggle(
         "active",
         card.dataset.agnosticId === state.activeAgnosticKimiId
+      );
+    });
+    document.querySelectorAll("#event-graph-list .event-card").forEach((card) => {
+      card.classList.toggle(
+        "active",
+        card.dataset.eventGraphId === state.activeEventGraphId
       );
     });
 
@@ -643,6 +683,15 @@
       );
     } else {
       state.scrolledAgnosticKimiId = null;
+    }
+    if (state.activeEventGraphId) {
+      state.scrolledEventGraphId = scrollActiveCard(
+        el.eventGraphList,
+        `#event-graph-list .event-card.active`,
+        state.scrolledEventGraphId
+      );
+    } else {
+      state.scrolledEventGraphId = null;
     }
     if (state.activeEventId) {
       state.scrolledEventId = scrollActiveCard(
@@ -699,6 +748,15 @@
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
+  }
+
+  function activeEventGraphAt(t) {
+    const events = state.sample?.event_graph_events || [];
+    return (
+      events.find((e) => t >= e.start_sec && t < e.end_sec) ||
+      events.find((e) => Math.abs(t - e.start_sec) < 0.25) ||
+      null
+    );
   }
 
   function activeAgnosticAt(t) {
@@ -791,6 +849,41 @@
     });
   }
 
+  function renderEventGraphEvents(detail) {
+    el.eventGraphList.innerHTML = "";
+    state.scrolledEventGraphId = null;
+    const events = detail.event_graph_events || [];
+    el.eventGraphCount.textContent = events.length ? `(${events.length})` : "(none)";
+    if (!events.length) {
+      el.eventGraphList.innerHTML =
+        `<div class="muted" style="padding:4px 0">No EventGraph retrieval for this sample. Run tests.debug_event_graph_pilot.</div>`;
+      return;
+    }
+    const sorted = [...events].sort(
+      (a, b) => (a.rank || 0) - (b.rank || 0) || a.start_sec - b.start_sec
+    );
+    sorted.forEach((e) => {
+      const span = e.end_sec - e.start_sec;
+      const score =
+        e.retrieval_score == null || Number.isNaN(Number(e.retrieval_score))
+          ? "n/a"
+          : Number(e.retrieval_score).toFixed(3);
+      const card = document.createElement("div");
+      card.className = "event-card event-graph" + (e.is_seed ? " seed" : "");
+      card.dataset.eventGraphId = e.event_id;
+      card.innerHTML = `
+        <div class="meta">
+          <span>#${e.rank || "?"} · seg ${e.segment_idx}${e.is_seed ? " · seed" : ""}</span>
+          <span>${mmss(e.start_sec)} – ${mmss(e.end_sec)} (${Math.round(span)}s)</span>
+        </div>
+        <div class="title">${escapeHtml(e.event_id)}</div>
+        <div class="cover">score ${escapeHtml(score)}</div>
+      `;
+      card.addEventListener("click", () => seekTo(e.start_sec));
+      el.eventGraphList.appendChild(card);
+    });
+  }
+
   function renderEvents(detail) {
     el.eventList.innerHTML = "";
     state.scrolledEventId = null;
@@ -867,13 +960,15 @@
     const gemY = 40;
     const kimiY = 64;
     const oraY = 88;
+    const egY = 112;
     const barH = 14;
-    const height = 146;
+    const height = 170;
     svg.setAttribute("viewBox", `0 0 ${w} ${height}`);
 
     const oracle = detail.oracle_events || [];
     const agnostic = detail.agnostic_events || [];
     const agnosticKimi = detail.agnostic_kimi_events || [];
+    const eventGraph = detail.event_graph_events || [];
     const allAgnostic = [...agnostic, ...agnosticKimi];
     const covering = new Set();
     detail.tsm_events.forEach((seg, i) => {
@@ -891,10 +986,12 @@
     markup += `<text x="0" y="${gemY + 11}" fill="#9aa3b5" font-size="11">Gemini</text>`;
     markup += `<text x="0" y="${kimiY + 11}" fill="#9aa3b5" font-size="11">Kimi</text>`;
     markup += `<text x="0" y="${oraY + 11}" fill="#9aa3b5" font-size="11">Oracle</text>`;
+    markup += `<text x="0" y="${egY + 11}" fill="#9aa3b5" font-size="11">EG</text>`;
     markup += `<rect x="${left}" y="${tsmY}" width="${trackW}" height="${barH}" fill="#222632" />`;
     markup += `<rect x="${left}" y="${gemY}" width="${trackW}" height="${barH}" fill="#222632" />`;
     markup += `<rect x="${left}" y="${kimiY}" width="${trackW}" height="${barH}" fill="#222632" />`;
     markup += `<rect x="${left}" y="${oraY}" width="${trackW}" height="${barH}" fill="#222632" />`;
+    markup += `<rect x="${left}" y="${egY}" width="${trackW}" height="${barH}" fill="#222632" />`;
 
     detail.tsm_events.forEach((seg, i) => {
       const x = left + (seg.start_sec / duration) * trackW;
@@ -929,6 +1026,16 @@
       markup += `<rect x="${x}" y="${oraY}" width="${ww}" height="${barH}" fill="${fill}" data-t="${e.start_sec}" rx="2" />`;
       if (ww >= 14) {
         markup += `<text x="${x + ww / 2}" y="${oraY + 11}" text-anchor="middle" fill="#0b1020" font-size="10" font-weight="600">${i + 1}</text>`;
+      }
+    });
+
+    eventGraph.forEach((e) => {
+      const x = left + (e.start_sec / duration) * trackW;
+      const ww = Math.max(2, ((e.end_sec - e.start_sec) / duration) * trackW);
+      const fill = e.is_seed ? "#f472b6" : "#c084fc";
+      markup += `<rect x="${x}" y="${egY}" width="${ww}" height="${barH}" fill="${fill}" stroke="#0d0f14" stroke-width="0.5" data-t="${e.start_sec}" rx="2" />`;
+      if (ww >= 12) {
+        markup += `<text x="${x + ww / 2}" y="${egY + 11}" text-anchor="middle" fill="#0b1020" font-size="9" font-weight="600">${e.rank || ""}</text>`;
       }
     });
 

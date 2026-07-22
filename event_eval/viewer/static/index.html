@@ -11,7 +11,7 @@
       <aside class="panel">
         <h1>Event eval viewer</h1>
         <div class="sub">
-          Gemini vs Kimi vs TSM · annotations live in *_latest dirs
+          Gemini vs Kimi vs TSM vs EventGraph · annotations live in *_latest dirs
         </div>
 
         <h2>Data paths</h2>
@@ -52,6 +52,15 @@
           ></textarea>
         </div>
         <div class="field">
+          <label for="event-graph-dir">EventGraph directory (retrieved + QA)</label>
+          <textarea
+            id="event-graph-dir"
+            class="path-input"
+            rows="3"
+            spellcheck="false"
+          ></textarea>
+        </div>
+        <div class="field">
           <label for="questions-jsonl">Questions JSONL (answers)</label>
           <textarea
             id="questions-jsonl"
@@ -79,6 +88,9 @@
 
         <h2>Ground-truth answer</h2>
         <div id="answer" class="query-box answer-box muted">—</div>
+
+        <h2>EventGraph prediction</h2>
+        <div id="pred-answer" class="query-box pred-box muted">—</div>
 
         <h2>Sample metrics</h2>
         <div id="metrics" class="metrics"></div>
@@ -115,9 +127,11 @@
             <span><i class="swatch kimi"></i>Kimi agnostic</span>
             <span><i class="swatch oracle"></i>Oracle (query-conditioned)</span>
             <span><i class="swatch answer"></i>answer-bearing</span>
+            <span><i class="swatch event-graph"></i>EventGraph retrieved</span>
+            <span><i class="swatch event-graph-seed"></i>EventGraph seed</span>
             <span>dashed red = TSM cover of agnostic event (computed on load)</span>
           </div>
-          <svg id="tracks" height="146"></svg>
+          <svg id="tracks" height="170"></svg>
         </div>
       </main>
 
@@ -138,6 +152,9 @@
             <div id="agnostic-kimi-list" class="event-list"></div>
           </div>
         </div>
+
+        <h2>EventGraph retrieved <span id="event-graph-count" class="h2-sub"></span></h2>
+        <div id="event-graph-list" class="event-list"></div>
 
         <h2>Oracle events <span id="oracle-count" class="h2-sub"></span></h2>
         <div id="event-list" class="event-list"></div>
