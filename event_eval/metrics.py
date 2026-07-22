@@ -153,6 +153,44 @@ def boundary_f1(
     }
 
 
+def _internal_boundaries(
+    events: Iterable[OracleEvent], duration_sec: float
+) -> list[float]:
+    return sorted(
+        {
+            boundary
+            for event in events
+            for boundary in (event.start_sec, event.end_sec)
+            if 0 < boundary < duration_sec
+        }
+    )
+
+
+def compare_providers(
+    annotation_a: OracleAnnotation,
+    annotation_b: OracleAnnotation,
+    *,
+    tolerances_sec: tuple[float, ...] = (2.0, 5.0, 10.0),
+) -> dict[str, Any]:
+    """Boundary F1 between two provider annotations on the same video."""
+    duration = max(annotation_a.video_duration_sec, annotation_b.video_duration_sec)
+    boundaries_a = _internal_boundaries(annotation_a.events, duration)
+    boundaries_b = _internal_boundaries(annotation_b.events, duration)
+    boundary_scores = {
+        f"{tolerance:g}s": boundary_f1(
+            boundaries_b, boundaries_a, tolerance
+        )
+        for tolerance in tolerances_sec
+    }
+    return {
+        "model_a": annotation_a.model,
+        "model_b": annotation_b.model,
+        "n_events_a": len(annotation_a.events),
+        "n_events_b": len(annotation_b.events),
+        "boundary_f1": boundary_scores,
+    }
+
+
 def compare_annotation(
     annotation: OracleAnnotation,
     tsm: dict[str, Any],

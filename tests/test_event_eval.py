@@ -279,10 +279,10 @@ class ProviderCliTests(unittest.TestCase):
 
     def test_kimi_provider_selectable(self) -> None:
         args = build_parser().parse_args(
-            ["--output-dir", "/tmp/out", "--provider", "kimi", "--model", "kimi-k2.5"]
+            ["--output-dir", "/tmp/out", "--provider", "kimi", "--model", "kimi-k2.6"]
         )
         self.assertEqual(args.provider, "kimi")
-        self.assertEqual(args.model, "kimi-k2.5")
+        self.assertEqual(args.model, "kimi-k2.6")
 
 
 if __name__ == "__main__":

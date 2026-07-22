@@ -11,7 +11,7 @@
       <aside class="panel">
         <h1>Event eval viewer</h1>
         <div class="sub">
-          Gemini oracle vs TSM · paths are editable
+          Gemini vs Kimi vs TSM · annotations live in *_latest dirs
         </div>
 
         <h2>Data paths</h2>
@@ -25,9 +25,18 @@
           ></textarea>
         </div>
         <div class="field">
-          <label for="agnostic-dir">Agnostic directory (query-agnostic Gemini)</label>
+          <label for="agnostic-dir">Agnostic directory (Gemini, *_latest)</label>
           <textarea
             id="agnostic-dir"
+            class="path-input"
+            rows="3"
+            spellcheck="false"
+          ></textarea>
+        </div>
+        <div class="field">
+          <label for="agnostic-kimi-dir">Agnostic directory (Kimi, *_latest)</label>
+          <textarea
+            id="agnostic-kimi-dir"
             class="path-input"
             rows="3"
             spellcheck="false"
@@ -37,15 +46,6 @@
           <label for="tsm-dir">TSM directory</label>
           <textarea
             id="tsm-dir"
-            class="path-input"
-            rows="3"
-            spellcheck="false"
-          ></textarea>
-        </div>
-        <div class="field">
-          <label for="report-json">Report JSON</label>
-          <textarea
-            id="report-json"
             class="path-input"
             rows="3"
             spellcheck="false"
@@ -82,6 +82,7 @@
 
         <h2>Sample metrics</h2>
         <div id="metrics" class="metrics"></div>
+        <div id="provider-metrics" class="provider-metrics"></div>
       </aside>
 
       <main class="main">
@@ -111,11 +112,12 @@
             <span><i class="swatch tsm"></i>TSM</span>
             <span><i class="swatch tsm-hit"></i>TSM overlaps agnostic</span>
             <span><i class="swatch agnostic"></i>Gemini agnostic</span>
-            <span><i class="swatch oracle"></i>Gemini oracle</span>
+            <span><i class="swatch kimi"></i>Kimi agnostic</span>
+            <span><i class="swatch oracle"></i>Oracle (query-conditioned)</span>
             <span><i class="swatch answer"></i>answer-bearing</span>
-            <span>dashed red = TSM cover of agnostic event (from report)</span>
+            <span>dashed red = TSM cover of agnostic event (computed on load)</span>
           </div>
-          <svg id="tracks" height="118"></svg>
+          <svg id="tracks" height="146"></svg>
         </div>
       </main>
 
@@ -123,8 +125,19 @@
         <h2>Parent → child <span class="h2-sub">(oracle)</span></h2>
         <svg id="graph"></svg>
 
-        <h2>Agnostic events <span id="agnostic-count" class="h2-sub"></span></h2>
-        <div id="agnostic-list" class="event-list"></div>
+        <h2>Agnostic events <span class="h2-sub">(side-by-side)</span></h2>
+        <div class="agnostic-columns">
+          <div class="agnostic-col">
+            <h3>Gemini <span id="agnostic-count" class="h2-sub"></span></h3>
+            <div id="agnostic-meta" class="col-meta muted"></div>
+            <div id="agnostic-list" class="event-list"></div>
+          </div>
+          <div class="agnostic-col">
+            <h3>Kimi <span id="agnostic-kimi-count" class="h2-sub"></span></h3>
+            <div id="agnostic-kimi-meta" class="col-meta muted"></div>
+            <div id="agnostic-kimi-list" class="event-list"></div>
+          </div>
+        </div>
 
         <h2>Oracle events <span id="oracle-count" class="h2-sub"></span></h2>
         <div id="event-list" class="event-list"></div>

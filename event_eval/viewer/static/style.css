@@ -10,6 +10,7 @@
   --answer: #3ecf8e;
   --tsm: #6b7385;
   --tsm-hit: #c4cad8;
+  --kimi: #17a2d4;
   --danger: #e06c75;
   --mono: "IBM Plex Mono", "SF Mono", Menlo, Consolas, monospace;
   --sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
@@ -299,6 +300,9 @@ h2 {
 .swatch.agnostic {
   background: #d4a017;
 }
+.swatch.kimi {
+  background: var(--kimi);
+}
 .swatch.tsm {
   background: var(--tsm);
 }
@@ -339,6 +343,41 @@ h2 {
   grid-template-columns: 1fr 1fr;
   gap: 8px;
   margin-bottom: 8px;
+}
+
+.metrics-section {
+  grid-column: 1 / -1;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+.provider-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.agnostic-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.agnostic-col h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.agnostic-col .event-list {
+  max-height: 36vh;
 }
 
 .metric {
@@ -406,6 +445,20 @@ h2 {
   border-color: #d4a017;
 }
 
+.event-card.kimi {
+  border-left: 3px solid var(--kimi);
+}
+
+.event-card.kimi.active {
+  border-color: var(--kimi);
+}
+
+.col-meta {
+  font-size: 11px;
+  margin: -4px 0 8px;
+  line-height: 1.35;
+}
+
 .event-card.answer {
   border-left: 3px solid var(--answer);
 }
@@ -462,6 +515,9 @@ h2 {
     border-right: none;
     border-bottom: 1px solid var(--stroke);
     max-height: none;
+  }
+  .agnostic-columns {
+    grid-template-columns: 1fr;
   }
   video {
     max-height: 50vh;

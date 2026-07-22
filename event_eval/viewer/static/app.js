@@ -3,16 +3,18 @@
     paths: {
       oracle_dir: "",
       agnostic_dir: "",
+      agnostic_kimi_dir: "",
       tsm_dir: "",
-      report_json: "",
       questions_jsonl: "",
     },
     samples: [],
     sample: null,
     activeEventId: null,
     activeAgnosticId: null,
+    activeAgnosticKimiId: null,
     scrolledEventId: null,
     scrolledAgnosticId: null,
+    scrolledAgnosticKimiId: null,
     videoPath: null,
     duration: 0,
     sourceFps: 1,
@@ -34,8 +36,8 @@
   const el = {
     oracleDir: document.getElementById("oracle-dir"),
     agnosticDir: document.getElementById("agnostic-dir"),
+    agnosticKimiDir: document.getElementById("agnostic-kimi-dir"),
     tsmDir: document.getElementById("tsm-dir"),
-    reportJson: document.getElementById("report-json"),
     questionsJsonl: document.getElementById("questions-jsonl"),
     loadBtn: document.getElementById("load-btn"),
     resetBtn: document.getElementById("reset-btn"),
@@ -45,6 +47,7 @@
     query: document.getElementById("query"),
     answer: document.getElementById("answer"),
     metrics: document.getElementById("metrics"),
+    providerMetrics: document.getElementById("provider-metrics"),
     frame: document.getElementById("frame"),
     scrubber: document.getElementById("scrubber"),
     scrubberTime: document.getElementById("scrubber-time"),
@@ -59,7 +62,11 @@
     tracks: document.getElementById("tracks"),
     eventList: document.getElementById("event-list"),
     agnosticList: document.getElementById("agnostic-list"),
+    agnosticKimiList: document.getElementById("agnostic-kimi-list"),
     agnosticCount: document.getElementById("agnostic-count"),
+    agnosticKimiCount: document.getElementById("agnostic-kimi-count"),
+    agnosticMeta: document.getElementById("agnostic-meta"),
+    agnosticKimiMeta: document.getElementById("agnostic-kimi-meta"),
     oracleCount: document.getElementById("oracle-count"),
     graph: document.getElementById("graph"),
     resolved: document.getElementById("resolved"),
@@ -69,8 +76,8 @@
     const p = new URLSearchParams({
       oracle_dir: state.paths.oracle_dir,
       agnostic_dir: state.paths.agnostic_dir,
+      agnostic_kimi_dir: state.paths.agnostic_kimi_dir,
       tsm_dir: state.paths.tsm_dir,
-      report_json: state.paths.report_json,
       questions_jsonl: state.paths.questions_jsonl,
     });
     return p.toString();
@@ -107,8 +114,8 @@
     state.paths = {
       oracle_dir: el.oracleDir.value.trim(),
       agnostic_dir: el.agnosticDir.value.trim(),
+      agnostic_kimi_dir: el.agnosticKimiDir.value.trim(),
       tsm_dir: el.tsmDir.value.trim(),
-      report_json: el.reportJson.value.trim(),
       questions_jsonl: el.questionsJsonl.value.trim(),
     };
   }
@@ -116,8 +123,8 @@
   function writePathInputs(paths) {
     el.oracleDir.value = paths.oracle_dir || "";
     el.agnosticDir.value = paths.agnostic_dir || "";
+    el.agnosticKimiDir.value = paths.agnostic_kimi_dir || "";
     el.tsmDir.value = paths.tsm_dir || "";
-    el.reportJson.value = paths.report_json || "";
     el.questionsJsonl.value = paths.questions_jsonl || "";
     state.paths = { ...paths };
   }
@@ -137,8 +144,8 @@
     writePathInputs({
       oracle_dir: data.resolved.oracle_dir,
       agnostic_dir: data.resolved.agnostic_dir,
+      agnostic_kimi_dir: data.resolved.agnostic_kimi_dir,
       tsm_dir: data.resolved.tsm_dir,
-      report_json: data.resolved.report_json,
       questions_jsonl: data.resolved.questions_jsonl,
     });
     el.resolved.textContent = "";
@@ -155,7 +162,7 @@
       const vid = s.video_id || "unknown";
       opt.textContent =
         `${s.sample_id} · ${vid}.mp4 · ${s.n_oracle_events} oracle / ` +
-        `${s.n_agnostic_events || 0} agnostic / ${s.n_tsm_events} TSM`;
+        `${s.n_agnostic_events || 0} gemini / ${s.n_agnostic_kimi_events || 0} kimi / ${s.n_tsm_events} TSM`;
       el.sampleSelect.appendChild(opt);
     }
     setStatus(`${state.samples.length} samples loaded.`);
@@ -168,6 +175,8 @@
     const detail = await fetchJSON(`/api/sample/${encodeURIComponent(sampleId)}?${qs()}`);
     state.sample = detail;
     state.activeEventId = null;
+    state.activeAgnosticId = null;
+    state.activeAgnosticKimiId = null;
     el.sampleSelect.value = detail.sample_id;
     const videoFile =
       (detail.video_path && detail.video_path.split(/[/\\]/).pop()) ||
@@ -184,8 +193,10 @@
       el.answer.classList.add("muted");
     }
     renderMetrics(detail);
+    renderProviderMetrics(detail);
     renderGraph(detail);
-    renderAgnosticEvents(detail);
+    renderAgnosticEvents(detail, "gemini");
+    renderAgnosticEvents(detail, "kimi");
     renderEvents(detail);
     renderTracks(detail);
     setupFrameViewer(detail).catch((err) =>
@@ -193,7 +204,7 @@
     );
     setStatus(
       detail.video_exists
-        ? `Sample ${detail.sample_id} · ${videoFile || detail.video_id} · ${detail.oracle_events.length} oracle · ${detail.tsm_events.length} TSM`
+        ? `Sample ${detail.sample_id} · ${videoFile || detail.video_id} · ${detail.oracle_events.length} oracle · ${detail.agnostic_events.length} gemini · ${(detail.agnostic_kimi_events || []).length} kimi · ${detail.tsm_events.length} TSM`
         : `Sample ${detail.sample_id} loaded, but video file is missing: ${detail.video_path || "(none)"}`,
       !detail.video_exists
     );
@@ -203,20 +214,20 @@
     return f1 == null || Number.isNaN(f1) ? "–" : Number(f1).toFixed(2);
   }
 
-  function renderMetrics(detail) {
-    const c = detail.comparison;
-    if (!c || !c.summary) {
-      el.metrics.innerHTML =
+  function metricCards(comparison, label) {
+    if (!comparison || !comparison.summary) {
+      return (
+        `<div class="metrics-section">${label}</div>` +
         `<div class="metric"><div class="label">Metrics</div>` +
         `<div class="value muted">n/a</div>` +
-        `<div class="hint">TSM vs query-agnostic report missing for this video.</div></div>`;
-      return;
+        `<div class="hint">TSM vs agnostic — computed on load when both exist.</div></div>`
+      );
     }
-    const s = c.summary;
-    const f1 = c.boundary_f1 || {};
+    const s = comparison.summary;
+    const f1 = comparison.boundary_f1 || {};
     const fmtMean = (value) =>
       value == null || Number.isNaN(value) ? "–" : Number(value).toFixed(2);
-    el.metrics.innerHTML = [
+    const cards = [
       [
         "Overseg",
         fmtMean(s.mean_over_segmentation),
@@ -251,6 +262,59 @@
         "F1@10s",
         fmtF1(f1["10s"]?.f1),
         "Loose diagnostic boundary F1 with 10s tolerance.",
+      ],
+    ]
+      .map(
+        ([lbl, value, hint]) =>
+          `<div class="metric">` +
+          `<div class="label">${lbl}</div>` +
+          `<div class="value">${value}</div>` +
+          `<div class="hint">${hint}</div>` +
+          `</div>`
+      )
+      .join("");
+    return `<div class="metrics-section">${label}</div>${cards}`;
+  }
+
+  function renderMetrics(detail) {
+    el.metrics.innerHTML =
+      metricCards(detail.comparison, "Gemini vs TSM") +
+      metricCards(detail.comparison_kimi, "Kimi vs TSM");
+  }
+
+  function renderProviderMetrics(detail) {
+    const pc = detail.provider_comparison;
+    if (!pc) {
+      el.providerMetrics.innerHTML =
+        `<div class="metric" style="grid-column:1/-1">` +
+        `<div class="label">Provider comparison</div>` +
+        `<div class="value muted">n/a</div>` +
+        `<div class="hint">Need both Gemini and Kimi agnostic annotations for this video.</div></div>`;
+      return;
+    }
+    const f1 = pc.boundary_f1 || {};
+    const modelA = pc.model_a || detail.agnostic_model || "Gemini";
+    const modelB = pc.model_b || detail.agnostic_kimi_model || "Kimi";
+    el.providerMetrics.innerHTML = [
+      [
+        "Events",
+        `${pc.n_events_a} / ${pc.n_events_b}`,
+        `${modelA} vs ${modelB} event counts.`,
+      ],
+      [
+        "F1@2s",
+        fmtF1(f1["2s"]?.f1),
+        `Boundary agreement within 2s (${modelB} pred vs ${modelA} ref).`,
+      ],
+      [
+        "F1@5s",
+        fmtF1(f1["5s"]?.f1),
+        "Boundary agreement within 5s.",
+      ],
+      [
+        "F1@10s",
+        fmtF1(f1["10s"]?.f1),
+        "Loose boundary agreement within 10s.",
       ],
     ]
       .map(
@@ -522,13 +586,21 @@
     const t = currentTimeSec();
     const activeOracle = activeOracleAt(t);
     const activeAgnostic = activeAgnosticAt(t);
+    const activeAgnosticKimi = activeAgnosticKimiAt(t);
     state.activeEventId = activeOracle ? activeOracle.event_id : null;
     state.activeAgnosticId = activeAgnostic ? activeAgnostic.event_id : null;
+    state.activeAgnosticKimiId = activeAgnosticKimi
+      ? activeAgnosticKimi.event_id
+      : null;
 
     // Prefer agnostic overlay when reviewing that track; fall back to oracle.
-    const overlayEvent = activeAgnostic || activeOracle;
+    const overlayEvent = activeAgnostic || activeAgnosticKimi || activeOracle;
     if (overlayEvent) {
-      const kind = activeAgnostic ? "agnostic" : "oracle";
+      const kind = activeAgnostic
+        ? "gemini"
+        : activeAgnosticKimi
+          ? "kimi"
+          : "oracle";
       el.overlay.classList.remove("hidden");
       el.overlayTime.textContent =
         `${mmss(overlayEvent.start_sec)} – ${mmss(overlayEvent.end_sec)} · ` +
@@ -547,8 +619,13 @@
         card.dataset.agnosticId === state.activeAgnosticId
       );
     });
+    document.querySelectorAll("#agnostic-kimi-list .event-card").forEach((card) => {
+      card.classList.toggle(
+        "active",
+        card.dataset.agnosticId === state.activeAgnosticKimiId
+      );
+    });
 
-    // Keep Gemini event cards in view while scrubbing frames.
     if (state.activeAgnosticId) {
       state.scrolledAgnosticId = scrollActiveCard(
         el.agnosticList,
@@ -557,6 +634,15 @@
       );
     } else {
       state.scrolledAgnosticId = null;
+    }
+    if (state.activeAgnosticKimiId) {
+      state.scrolledAgnosticKimiId = scrollActiveCard(
+        el.agnosticKimiList,
+        `#agnostic-kimi-list .event-card.active`,
+        state.scrolledAgnosticKimiId
+      );
+    } else {
+      state.scrolledAgnosticKimiId = null;
     }
     if (state.activeEventId) {
       state.scrolledEventId = scrollActiveCard(
@@ -624,26 +710,56 @@
     );
   }
 
-  function renderAgnosticEvents(detail) {
-    const events = detail.agnostic_events || [];
-    el.agnosticList.innerHTML = "";
-    state.scrolledAgnosticId = null;
-    el.agnosticCount.textContent = events.length
-      ? `(${events.length})`
-      : "(none)";
+  function activeAgnosticKimiAt(t) {
+    const events = state.sample?.agnostic_kimi_events || [];
+    return (
+      events.find((e) => t >= e.start_sec && t < e.end_sec) ||
+      events.find((e) => Math.abs(t - e.start_sec) < 0.25) ||
+      null
+    );
+  }
+
+  function renderAgnosticEvents(detail, provider) {
+    const isKimi = provider === "kimi";
+    const events = isKimi
+      ? detail.agnostic_kimi_events || []
+      : detail.agnostic_events || [];
+    const listEl = isKimi ? el.agnosticKimiList : el.agnosticList;
+    const countEl = isKimi ? el.agnosticKimiCount : el.agnosticCount;
+    const metaEl = isKimi ? el.agnosticKimiMeta : el.agnosticMeta;
+    const comparison = isKimi ? detail.comparison_kimi : detail.comparison;
+    const cardClass = isKimi ? "event-card kimi" : "event-card agnostic";
+    const model = isKimi ? detail.agnostic_kimi_model : detail.agnostic_model;
+    const promptVer = isKimi
+      ? detail.agnostic_kimi_prompt_version
+      : detail.agnostic_prompt_version;
+
+    listEl.innerHTML = "";
+    if (isKimi) {
+      state.scrolledAgnosticKimiId = null;
+    } else {
+      state.scrolledAgnosticId = null;
+    }
+    countEl.textContent = events.length ? `(${events.length})` : "(none)";
+    if (model || promptVer) {
+      metaEl.textContent = [model, promptVer].filter(Boolean).join(" · ");
+    } else {
+      metaEl.textContent = "";
+    }
     if (!events.length) {
-      el.agnosticList.innerHTML =
-        `<div class="muted" style="padding:4px 0">No query-agnostic annotation for this video.</div>`;
+      listEl.innerHTML =
+        `<div class="muted" style="padding:4px 0">No ${isKimi ? "Kimi" : "Gemini"} agnostic annotation for this video.</div>`;
       return;
     }
     const metricsById = {};
-    for (const ev of detail.comparison?.events || []) {
+    for (const ev of comparison?.events || []) {
       metricsById[ev.event_id] = ev;
     }
     const sorted = [...events].sort(
       (a, b) => a.start_sec - b.start_sec || a.end_sec - b.end_sec
     );
     sorted.forEach((e, i) => {
+      const span = e.end_sec - e.start_sec;
       const parents = (e.parent_event_ids || []).join(", ");
       const cats = (e.categories || []).join(", ");
       const m = metricsById[e.event_id];
@@ -655,12 +771,12 @@
         ? `overseg ${m.over_segmentation ?? Math.max(0, (m.fragmentation || 0) - 1)} · contam ${((m.contamination_ratio || 0) * 100).toFixed(0)}% · Δt ${(m.start_boundary_error_sec ?? 0).toFixed(1)}/${(m.end_boundary_error_sec ?? 0).toFixed(1)}s`
         : "";
       const card = document.createElement("div");
-      card.className = "event-card agnostic";
+      card.className = cardClass;
       card.dataset.agnosticId = e.event_id;
       card.innerHTML = `
         <div class="meta">
           <span>${i + 1}. ${escapeHtml(e.event_id)}</span>
-          <span>${mmss(e.start_sec)} – ${mmss(e.end_sec)}</span>
+          <span>${mmss(e.start_sec)} – ${mmss(e.end_sec)} (${Math.round(span)}s)</span>
         </div>
         <div class="title">${escapeHtml(e.granularity || "event")}${
           parents ? " · child of " + escapeHtml(parents) : " · root"
@@ -671,7 +787,7 @@
         }</div>
       `;
       card.addEventListener("click", () => seekTo(e.start_sec));
-      el.agnosticList.appendChild(card);
+      listEl.appendChild(card);
     });
   }
 
@@ -748,18 +864,21 @@
     const left = 70;
     const trackW = w - left - 8;
     const tsmY = 16;
-    const agnY = 44;
-    const gemY = 72;
+    const gemY = 40;
+    const kimiY = 64;
+    const oraY = 88;
     const barH = 14;
-    const height = 118;
+    const height = 146;
     svg.setAttribute("viewBox", `0 0 ${w} ${height}`);
 
     const oracle = detail.oracle_events || [];
     const agnostic = detail.agnostic_events || [];
+    const agnosticKimi = detail.agnostic_kimi_events || [];
+    const allAgnostic = [...agnostic, ...agnosticKimi];
     const covering = new Set();
     detail.tsm_events.forEach((seg, i) => {
       if (
-        agnostic.some((e) =>
+        allAgnostic.some((e) =>
           overlaps(seg.start_sec, seg.end_sec, e.start_sec, e.end_sec)
         )
       ) {
@@ -769,11 +888,13 @@
 
     let markup = "";
     markup += `<text x="0" y="${tsmY + 11}" fill="#9aa3b5" font-size="11">TSM</text>`;
-    markup += `<text x="0" y="${agnY + 11}" fill="#9aa3b5" font-size="11">Agnostic</text>`;
-    markup += `<text x="0" y="${gemY + 11}" fill="#9aa3b5" font-size="11">Oracle</text>`;
+    markup += `<text x="0" y="${gemY + 11}" fill="#9aa3b5" font-size="11">Gemini</text>`;
+    markup += `<text x="0" y="${kimiY + 11}" fill="#9aa3b5" font-size="11">Kimi</text>`;
+    markup += `<text x="0" y="${oraY + 11}" fill="#9aa3b5" font-size="11">Oracle</text>`;
     markup += `<rect x="${left}" y="${tsmY}" width="${trackW}" height="${barH}" fill="#222632" />`;
-    markup += `<rect x="${left}" y="${agnY}" width="${trackW}" height="${barH}" fill="#222632" />`;
     markup += `<rect x="${left}" y="${gemY}" width="${trackW}" height="${barH}" fill="#222632" />`;
+    markup += `<rect x="${left}" y="${kimiY}" width="${trackW}" height="${barH}" fill="#222632" />`;
+    markup += `<rect x="${left}" y="${oraY}" width="${trackW}" height="${barH}" fill="#222632" />`;
 
     detail.tsm_events.forEach((seg, i) => {
       const x = left + (seg.start_sec / duration) * trackW;
@@ -785,9 +906,18 @@
     agnostic.forEach((e, i) => {
       const x = left + (e.start_sec / duration) * trackW;
       const ww = Math.max(2, ((e.end_sec - e.start_sec) / duration) * trackW);
-      markup += `<rect x="${x}" y="${agnY}" width="${ww}" height="${barH}" fill="#d4a017" stroke="#0d0f14" stroke-width="0.5" data-t="${e.start_sec}" rx="2" />`;
+      markup += `<rect x="${x}" y="${gemY}" width="${ww}" height="${barH}" fill="#d4a017" stroke="#0d0f14" stroke-width="0.5" data-t="${e.start_sec}" rx="2" />`;
       if (ww >= 12) {
-        markup += `<text x="${x + ww / 2}" y="${agnY + 11}" text-anchor="middle" fill="#0b1020" font-size="9" font-weight="600">${i + 1}</text>`;
+        markup += `<text x="${x + ww / 2}" y="${gemY + 11}" text-anchor="middle" fill="#0b1020" font-size="9" font-weight="600">${i + 1}</text>`;
+      }
+    });
+
+    agnosticKimi.forEach((e, i) => {
+      const x = left + (e.start_sec / duration) * trackW;
+      const ww = Math.max(2, ((e.end_sec - e.start_sec) / duration) * trackW);
+      markup += `<rect x="${x}" y="${kimiY}" width="${ww}" height="${barH}" fill="#17a2d4" stroke="#0d0f14" stroke-width="0.5" data-t="${e.start_sec}" rx="2" />`;
+      if (ww >= 12) {
+        markup += `<text x="${x + ww / 2}" y="${kimiY + 11}" text-anchor="middle" fill="#0b1020" font-size="9" font-weight="600">${i + 1}</text>`;
       }
     });
 
@@ -796,13 +926,13 @@
       const ww = Math.max(2, ((e.end_sec - e.start_sec) / duration) * trackW);
       const answer = e.query_roles.includes("answer_bearing");
       const fill = answer ? "#3ecf8e" : "#5b8cff";
-      markup += `<rect x="${x}" y="${gemY}" width="${ww}" height="${barH}" fill="${fill}" data-t="${e.start_sec}" rx="2" />`;
+      markup += `<rect x="${x}" y="${oraY}" width="${ww}" height="${barH}" fill="${fill}" data-t="${e.start_sec}" rx="2" />`;
       if (ww >= 14) {
-        markup += `<text x="${x + ww / 2}" y="${gemY + 11}" text-anchor="middle" fill="#0b1020" font-size="10" font-weight="600">${i + 1}</text>`;
+        markup += `<text x="${x + ww / 2}" y="${oraY + 11}" text-anchor="middle" fill="#0b1020" font-size="10" font-weight="600">${i + 1}</text>`;
       }
     });
 
-    // comparison cover brackets from report
+    // comparison cover brackets from report (Gemini)
     for (const m of detail.comparison?.events || []) {
       const [c0, c1] = m.tsm_cover_sec || [];
       if (c0 == null || c1 == null) continue;

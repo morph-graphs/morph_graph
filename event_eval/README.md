@@ -55,16 +55,17 @@ python -m event_eval.annotate \
   --output-dir outputs/event_eval/oracles
 ```
 
-And query-agnostic Gemini segmentations (one per unique video). Uses prompt
-`eval_agnostic_v2` (compact activity-level partitions; hierarchy rare). Re-run
-with `--overwrite` after prompt changes:
+And query-agnostic Gemini segmentations (one per unique video). Write the
+current iteration to `outputs/event_eval/agnostic_gemini_latest` (older versioned
+dirs such as `agnostic_v2` are kept for history). Re-run with `--overwrite`
+after prompt changes:
 
 ```bash
 python -m event_eval.annotate \
   --benchmark egolongqa \
   --mode query_agnostic \
   --sample-ids-json outputs/event_eval/pilot_ids.json \
-  --output-dir outputs/event_eval/agnostic \
+  --output-dir outputs/event_eval/agnostic_gemini_latest \
   --overwrite
 ```
 
@@ -90,11 +91,11 @@ python -m event_eval.annotate \
   --mode query_agnostic \
   --provider kimi \
   --sample-ids-json outputs/event_eval/pilot_ids.json \
-  --output-dir outputs/event_eval/agnostic_kimi \
+  --output-dir outputs/event_eval/agnostic_kimi_latest \
   --overwrite
 ```
 
-Uses model `kimi-k2.5` by default (override with `--model`), Moonshot's
+Uses model `kimi-k2.6` by default (override with `--model`), Moonshot's
 hosted API at `https://api.moonshot.ai/v1` (override with `--base-url`, e.g.
 for the `.cn` endpoint), and the same prompts/schema/output format as the
 Gemini path, so `metrics.py`/`report.py` and the viewer work unchanged and
@@ -127,14 +128,14 @@ which remains correct when the frame cap reduces the effective sampling rate.
 
 ## 3. Compare (TSM vs query-agnostic)
 
-Primary segmentation metrics compare TSM to **query-agnostic** Gemini (one
-comparison per video), not to the query-conditioned oracle:
+The HTML viewer computes TSM metrics on load (no pre-built report required).
+For batch summaries or CI, you can still export a report JSON:
 
 ```bash
 python -m event_eval.report \
-  --agnostic-dir outputs/event_eval/agnostic \
+  --agnostic-dir outputs/event_eval/agnostic_gemini_latest \
   --tsm-dir outputs/event_eval/tsm \
-  --output-json outputs/event_eval/report.json
+  --output-json outputs/event_eval/report_latest.json
 ```
 
 Legacy conditioned comparison (per question) still works with `--oracle-dir`
@@ -170,10 +171,10 @@ would always be 100%.
 
 ## 4. HTML event viewer
 
-Browse oracle / query-agnostic Gemini / TSM on the actual videos (frame-by-frame
-scrubbing via ffmpeg JPEGs, triple timeline, parent→child edges, per-event
-cover metrics). Paths are preset to the pilot outputs but can be edited in the
-UI.
+Browse oracle / query-agnostic Gemini / Kimi / TSM on the actual videos
+(frame-by-frame scrubbing via ffmpeg JPEGs, side-by-side provider timelines,
+parent→child edges, per-event cover metrics). Paths default to `*_latest`
+annotation dirs; TSM vs reference metrics are computed on load.
 
 For reusable design notes (why not `<video>`, ffmpeg warm/cache, SSH tunnels),
 see
@@ -187,9 +188,9 @@ python -m event_eval.viewer
 Open `http://127.0.0.1:8765/`. Defaults:
 
 - `outputs/event_eval/oracles` (query-conditioned Gemini)
-- `outputs/event_eval/agnostic` (query-agnostic Gemini)
+- `outputs/event_eval/agnostic_gemini_latest` (query-agnostic Gemini, current)
+- `outputs/event_eval/agnostic_kimi_latest` (query-agnostic Kimi, current)
 - `outputs/event_eval/tsm`
-- `outputs/event_eval/report.json`
 - `data/wearable-ai/egolongqa/wearable_ai_2026_egolongqa_val_700.jsonl`
   (ground-truth answers)
 

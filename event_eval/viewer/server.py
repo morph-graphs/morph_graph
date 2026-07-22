@@ -18,6 +18,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
+from ..metrics import compare_annotation, compare_providers
+from ..schema import OracleAnnotation
+
 _FRAME_CACHE_DIR = Path(tempfile.gettempdir()) / "event_eval_viewer_frames"
 _FRAME_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 _VIDEO_EXTS = {".mp4", ".webm", ".mkv", ".mov", ".m4v"}
@@ -32,12 +35,12 @@ _STATIC_DIR = Path(__file__).resolve().parent / "static"
 DEFAULT_PATHS = {
     "oracle_dir": str(_MORPH_GRAPH_ROOT / "outputs" / "event_eval" / "oracles"),
     "agnostic_dir": str(
-        _MORPH_GRAPH_ROOT / "outputs" / "event_eval" / "agnostic"
+        _MORPH_GRAPH_ROOT / "outputs" / "event_eval" / "agnostic_gemini_latest"
+    ),
+    "agnostic_kimi_dir": str(
+        _MORPH_GRAPH_ROOT / "outputs" / "event_eval" / "agnostic_kimi_latest"
     ),
     "tsm_dir": str(_MORPH_GRAPH_ROOT / "outputs" / "event_eval" / "tsm"),
-    "report_json": str(
-        _MORPH_GRAPH_ROOT / "outputs" / "event_eval" / "report.json"
-    ),
     "questions_jsonl": str(
         _MORPH_GRAPH_ROOT
         / "data"
@@ -75,29 +78,6 @@ def _list_oracle_files(oracle_dir: Path) -> list[Path]:
             int(path.stem) if path.stem.isdigit() else path.stem
         ),
     )
-
-
-def _load_report_indexes(
-    report_path: Path,
-) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]], str | None]:
-    """Return (by_sample_id, by_video_id, reference_mode).
-
-    Agnostic reports are keyed by video; conditioned reports by sample_id.
-    Lookup prefers video_id so multiple questions on one video share metrics.
-    """
-    if not report_path.is_file():
-        return {}, {}, None
-    report = _read_json(report_path)
-    by_sample: dict[str, dict[str, Any]] = {}
-    by_video: dict[str, dict[str, Any]] = {}
-    for item in report.get("comparisons", []):
-        sample_id = item.get("sample_id")
-        video_id = item.get("video_id")
-        if sample_id is not None:
-            by_sample[str(sample_id)] = item
-        if video_id:
-            by_video[str(video_id)] = item
-    return by_sample, by_video, report.get("reference_mode")
 
 
 def _parse_rate(raw: str) -> float:
@@ -345,7 +325,7 @@ def _load_tsm(tsm_dir: Path, video_id: str) -> dict[str, Any] | None:
 
 
 def _load_agnostic(agnostic_dir: Path, video_id: str) -> dict[str, Any] | None:
-    """Load query-agnostic Gemini annotation keyed by video_id."""
+    """Load query-agnostic annotation keyed by video_id."""
     if not video_id or not agnostic_dir.is_dir():
         return None
     path = agnostic_dir / f"{video_id}.json"
@@ -357,6 +337,27 @@ def _load_agnostic(agnostic_dir: Path, video_id: str) -> dict[str, Any] | None:
         if data.get("query"):
             return None
     return data
+
+
+def _format_agnostic_events(
+    agnostic: dict[str, Any] | None,
+) -> tuple[list[dict[str, Any]], str | None, str | None]:
+    if agnostic is None:
+        return [], None, None
+    events = []
+    for index, event in enumerate(agnostic.get("events", [])):
+        events.append(
+            {
+                "event_id": event.get("event_id", f"agnostic_{index}"),
+                "start_sec": float(event["start_sec"]),
+                "end_sec": float(event["end_sec"]),
+                "granularity": event.get("granularity", ""),
+                "description": event.get("description", ""),
+                "categories": event.get("categories", []),
+                "parent_event_ids": event.get("parent_event_ids", []),
+            }
+        )
+    return events, agnostic.get("model"), str(agnostic.get("prompt_version") or "")
 
 
 def _load_answer_index(questions_path: Path) -> dict[str, str]:
@@ -377,14 +378,34 @@ def _load_answer_index(questions_path: Path) -> dict[str, str]:
     return answers
 
 
+def _comparison_for_video(
+    agnostic_dir: Path | None,
+    video_id: str,
+    tsm: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """TSM vs one agnostic reference for a single video (computed on load)."""
+    if not agnostic_dir or not video_id or tsm is None:
+        return None
+    reference_path = agnostic_dir / f"{video_id}.json"
+    if not reference_path.is_file():
+        return None
+    try:
+        annotation = OracleAnnotation.load(reference_path)
+        result = compare_annotation(annotation, tsm)
+        result["reference_mode"] = annotation.annotation_mode
+        result["reference_json"] = str(reference_path)
+        return result
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def build_sample_list(
     oracle_dir: Path,
     tsm_dir: Path,
-    report_path: Path,
     questions_path: Path | None = None,
     agnostic_dir: Path | None = None,
+    agnostic_kimi_dir: Path | None = None,
 ) -> list[dict[str, Any]]:
-    by_sample, by_video, _reference_mode = _load_report_indexes(report_path)
     answer_index = _load_answer_index(questions_path) if questions_path else {}
     samples: list[dict[str, Any]] = []
     for path in _list_oracle_files(oracle_dir):
@@ -397,7 +418,11 @@ def build_sample_list(
             if agnostic_dir and video_id
             else None
         )
-        comparison = by_video.get(video_id) or by_sample.get(sample_id)
+        agnostic_kimi = (
+            _load_agnostic(agnostic_kimi_dir, video_id)
+            if agnostic_kimi_dir and video_id
+            else None
+        )
         samples.append(
             {
                 "sample_id": sample_id,
@@ -408,12 +433,17 @@ def build_sample_list(
                 "n_agnostic_events": (
                     len(agnostic.get("events", [])) if agnostic else 0
                 ),
+                "n_agnostic_kimi_events": (
+                    len(agnostic_kimi.get("events", [])) if agnostic_kimi else 0
+                ),
                 "n_tsm_events": (
                     len(tsm.get("events_sec", [])) if tsm else 0
                 ),
                 "has_tsm": tsm is not None,
                 "has_agnostic": agnostic is not None,
-                "has_metrics": comparison is not None,
+                "has_agnostic_kimi": agnostic_kimi is not None,
+                "has_metrics": agnostic is not None and tsm is not None,
+                "has_metrics_kimi": agnostic_kimi is not None and tsm is not None,
                 "oracle_path": str(path),
             }
         )
@@ -424,9 +454,9 @@ def build_sample_detail(
     sample_id: str,
     oracle_dir: Path,
     tsm_dir: Path,
-    report_path: Path,
     questions_path: Path | None = None,
     agnostic_dir: Path | None = None,
+    agnostic_kimi_dir: Path | None = None,
 ) -> dict[str, Any]:
     oracle_path = oracle_dir / f"{sample_id}.json"
     if not oracle_path.is_file():
@@ -451,8 +481,13 @@ def build_sample_detail(
         if agnostic_dir and video_id
         else None
     )
-    by_sample, by_video, reference_mode = _load_report_indexes(report_path)
-    comparison = by_video.get(video_id) or by_sample.get(sample_id)
+    agnostic_kimi = (
+        _load_agnostic(agnostic_kimi_dir, video_id)
+        if agnostic_kimi_dir and video_id
+        else None
+    )
+    comparison = _comparison_for_video(agnostic_dir, video_id, tsm)
+    comparison_kimi = _comparison_for_video(agnostic_kimi_dir, video_id, tsm)
     answer_index = _load_answer_index(questions_path) if questions_path else {}
     answer = answer_index.get(str(oracle.get("sample_id", sample_id)))
 
@@ -495,20 +530,24 @@ def build_sample_detail(
                 }
             )
 
-    agnostic_events = []
-    if agnostic is not None:
-        for index, event in enumerate(agnostic.get("events", [])):
-            agnostic_events.append(
-                {
-                    "event_id": event.get("event_id", f"agnostic_{index}"),
-                    "start_sec": float(event["start_sec"]),
-                    "end_sec": float(event["end_sec"]),
-                    "granularity": event.get("granularity", ""),
-                    "description": event.get("description", ""),
-                    "categories": event.get("categories", []),
-                    "parent_event_ids": event.get("parent_event_ids", []),
-                }
+    agnostic_events, agnostic_model, agnostic_prompt = _format_agnostic_events(
+        agnostic
+    )
+    (
+        agnostic_kimi_events,
+        agnostic_kimi_model,
+        agnostic_kimi_prompt,
+    ) = _format_agnostic_events(agnostic_kimi)
+
+    provider_comparison = None
+    if agnostic is not None and agnostic_kimi is not None:
+        try:
+            provider_comparison = compare_providers(
+                OracleAnnotation.load(agnostic_dir / f"{video_id}.json"),
+                OracleAnnotation.load(agnostic_kimi_dir / f"{video_id}.json"),
             )
+        except Exception:  # noqa: BLE001
+            provider_comparison = None
 
     video_path = oracle.get("video_path")
     if video_path:
@@ -525,10 +564,18 @@ def build_sample_detail(
         "oracle_events": events,
         "oracle_edges": edges,
         "agnostic_events": agnostic_events,
+        "agnostic_model": agnostic_model,
+        "agnostic_prompt_version": agnostic_prompt,
+        "agnostic_kimi_events": agnostic_kimi_events,
+        "agnostic_kimi_model": agnostic_kimi_model,
+        "agnostic_kimi_prompt_version": agnostic_kimi_prompt,
         "tsm_events": tsm_events,
         "comparison": comparison,
-        "metrics_reference_mode": reference_mode
-        or (comparison or {}).get("reference_mode"),
+        "comparison_kimi": comparison_kimi,
+        "provider_comparison": provider_comparison,
+        "metrics_reference_mode": (comparison or {}).get(
+            "reference_mode", "query_agnostic"
+        ),
         "paths": {
             "oracle_json": str(oracle_path),
             "agnostic_json": (
@@ -536,8 +583,12 @@ def build_sample_detail(
                 if agnostic_dir and video_id and agnostic is not None
                 else None
             ),
+            "agnostic_kimi_json": (
+                str(agnostic_kimi_dir / f"{video_id}.json")
+                if agnostic_kimi_dir and video_id and agnostic_kimi is not None
+                else None
+            ),
             "tsm_json": str(tsm_dir / f"{video_id}.json") if video_id else None,
-            "report_json": str(report_path) if report_path.is_file() else None,
             "questions_jsonl": (
                 str(questions_path) if questions_path and questions_path.is_file() else None
             ),
@@ -588,13 +639,15 @@ class ViewerHandler(BaseHTTPRequestHandler):
         raw = parse_qs(parsed.query)
         return {key: values[0] for key, values in raw.items() if values}
 
-    def _paths_from_query(self) -> tuple[Path, Path, Path, Path, Path]:
+    def _paths_from_query(
+        self,
+    ) -> tuple[Path, Path, Path, Path, Path]:
         q = self._query()
         return (
             _resolve_path(q.get("oracle_dir"), "oracle_dir"),
             _resolve_path(q.get("agnostic_dir"), "agnostic_dir"),
+            _resolve_path(q.get("agnostic_kimi_dir"), "agnostic_kimi_dir"),
             _resolve_path(q.get("tsm_dir"), "tsm_dir"),
-            _resolve_path(q.get("report_json"), "report_json"),
             _resolve_path(q.get("questions_jsonl"), "questions_jsonl"),
         )
 
@@ -628,17 +681,17 @@ class ViewerHandler(BaseHTTPRequestHandler):
             (
                 oracle_dir,
                 agnostic_dir,
+                agnostic_kimi_dir,
                 tsm_dir,
-                report_path,
                 questions_path,
             ) = self._paths_from_query()
             try:
                 samples = build_sample_list(
                     oracle_dir,
                     tsm_dir,
-                    report_path,
                     questions_path,
                     agnostic_dir,
+                    agnostic_kimi_dir,
                 )
             except Exception as exc:  # noqa: BLE001
                 self._send_error_json(400, str(exc))
@@ -649,8 +702,8 @@ class ViewerHandler(BaseHTTPRequestHandler):
                     "resolved": {
                         "oracle_dir": str(oracle_dir),
                         "agnostic_dir": str(agnostic_dir),
+                        "agnostic_kimi_dir": str(agnostic_kimi_dir),
                         "tsm_dir": str(tsm_dir),
-                        "report_json": str(report_path),
                         "questions_jsonl": str(questions_path),
                     },
                 }
@@ -662,8 +715,8 @@ class ViewerHandler(BaseHTTPRequestHandler):
             (
                 oracle_dir,
                 agnostic_dir,
+                agnostic_kimi_dir,
                 tsm_dir,
-                report_path,
                 questions_path,
             ) = self._paths_from_query()
             try:
@@ -671,9 +724,9 @@ class ViewerHandler(BaseHTTPRequestHandler):
                     sample_id,
                     oracle_dir,
                     tsm_dir,
-                    report_path,
                     questions_path,
                     agnostic_dir,
+                    agnostic_kimi_dir,
                 )
             except FileNotFoundError as exc:
                 self._send_error_json(404, str(exc))
@@ -875,10 +928,11 @@ def main(argv: list[str] | None = None) -> None:
         f"Event eval viewer: http://{args.host}:{args.port}/",
         f"Defaults rooted at {_MORPH_GRAPH_ROOT}",
         f"  oracle_dir:      {DEFAULT_PATHS['oracle_dir']}",
-        f"  agnostic_dir:    {DEFAULT_PATHS['agnostic_dir']}",
-        f"  tsm_dir:         {DEFAULT_PATHS['tsm_dir']}",
-        f"  report:          {DEFAULT_PATHS['report_json']}",
-        f"  questions_jsonl: {DEFAULT_PATHS['questions_jsonl']}",
+        f"  agnostic_dir:      {DEFAULT_PATHS['agnostic_dir']}",
+        f"  agnostic_kimi_dir: {DEFAULT_PATHS['agnostic_kimi_dir']}",
+        f"  tsm_dir:           {DEFAULT_PATHS['tsm_dir']}",
+        f"  questions_jsonl:   {DEFAULT_PATHS['questions_jsonl']}",
+        "  (TSM metrics computed on load; no report JSON required)",
     ]
     print("\n".join(lines), flush=True)
     try:
