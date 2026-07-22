@@ -43,7 +43,13 @@ class VideoQABenchmark(ABC):
         }
 
     def parse_prediction(self, answer: str) -> str:
-        return answer.split()[0].rstrip(".").upper() if self.options_are_mcq else answer.strip()
+        if not answer or not answer.strip():
+            return ""
+        tokens = answer.strip().split()
+        if not tokens:
+            return ""
+        return tokens[0].rstrip(".").upper() if self.options_are_mcq else answer.strip()
+
 
     @property
     def options_are_mcq(self) -> bool:
