@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .base import VideoQABenchmark, VideoQASample
 
-_REPO_ROOT = Path(__file__).resolve().parents[3]
+_REPO_ROOT = Path(__file__).resolve().parents[4]
 DEFAULT_QUESTIONS = _REPO_ROOT / "vsi_output" / "vsi_events_mc_poc.json"
 DEFAULT_VIDEO_DIR = _REPO_ROOT / "vsi_output" / "vsi_constructed"
 

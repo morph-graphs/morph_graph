@@ -10,7 +10,8 @@ from typing import Any
 
 from .benchmarks import BENCHMARKS
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+breakpoint()
 _EGO_GT = (
     _REPO_ROOT
     / "data"

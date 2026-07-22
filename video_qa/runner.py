@@ -34,6 +34,13 @@ class VideoQAConfig:
     max_qa_frames: int = 128
     max_new_tokens: int = 128
     retrieval_only: bool = False
+    retrieval_mode: str = "qafd"
+    qafd_alpha: float = 10.0
+    qafd_epsilon: float = 1e-4
+    qafd_step_size: float = 0.2
+    qafd_max_iterations: int = 500
+    qafd_weight_scheme: str = "multiply"
+    sim_mode: str = "normalized"
 
 
 class VideoQARunner:
@@ -103,10 +110,16 @@ class VideoQARunner:
     ) -> dict[str, Any]:
         graph = self._graph_for(sample)
         param = VLQueryParam(
-            mode="local",
+            mode=self.config.retrieval_mode,
             top_k=self.config.top_k,
             max_segments_for_qa=self.config.max_segments_for_qa,
             max_frames_for_video_unit=self.config.max_qa_frames,
+            qafd_alpha=self.config.qafd_alpha,
+            qafd_epsilon=self.config.qafd_epsilon,
+            qafd_step_size=self.config.qafd_step_size,
+            qafd_max_iterations=self.config.qafd_max_iterations,
+            qafd_weight_scheme=self.config.qafd_weight_scheme,
+            sim_mode=self.config.sim_mode,
         )
         if self.config.retrieval_only:
             response = graph.query(sample.question, param)
