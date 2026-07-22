@@ -1,18 +1,18 @@
-"""Event value store + precomputed embedding func.
+"""CPU-resident event value store + precomputed embedding func.
 
 The event *keys* are already vectors (mean-pooled Qwen3-VL vision features), so we
 feed them through the existing NanoVectorDB / `vl_ops` edge builders via an
 identity ("precomputed") embedding func instead of re-embedding.
 
-The event *values* are tensors (per-unit `pooled` / `patch_tokens`), which don't
-fit the JSON KV store. `EventValueStore` persists them to disk (fp16) keyed by
-node_id; the JSON KV record only holds a `value_path` pointer + metadata.
+The event *values* are cached `patch_tokens` and Qwen DeepStack streams, which
+don't fit the JSON KV store. `EventValueStore` keeps them in CPU RAM keyed by
+node ID for the lifetime of one EventGraph worker. Pooled TSM features are
+transient and not stored.
 """
 
 from __future__ import annotations
 
-import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable
 
 import numpy as np
@@ -66,29 +66,31 @@ def precomputed_embedding_func(embedding_dim: int) -> EmbeddingFunc:
 
 @dataclass
 class EventValueStore:
-    """On-disk store for per-event value tensors (the 'V' in the k/V store)."""
+    """CPU-memory store for per-event value tensors (the 'V' in the k/V store)."""
 
-    working_dir: str
-    namespace: str = "event_values"
+    _values: dict[str, dict[str, Any]] = field(default_factory=dict)
 
-    def __post_init__(self):
-        self.dir = os.path.join(self.working_dir, self.namespace)
-        os.makedirs(self.dir, exist_ok=True)
+    @staticmethod
+    def _to_cpu(value: Any) -> Any:
+        if isinstance(value, torch.Tensor):
+            value = value.detach()
+            return value.to(dtype=torch.float16).cpu() if value.is_floating_point() else value.cpu()
+        if isinstance(value, list):
+            return [EventValueStore._to_cpu(item) for item in value]
+        return value
 
-    def path_for(self, node_id: str) -> str:
-        safe = node_id.replace("/", "__").replace("::", "--")
-        return os.path.join(self.dir, f"{safe}.pt")
+    def save(self, node_id: str, value: dict[str, Any]) -> None:
+        self._values[node_id] = {
+            key: self._to_cpu(item) for key, item in value.items()
+        }
 
-    def save(self, node_id: str, value: dict[str, torch.Tensor]) -> str:
-        path = self.path_for(node_id)
-        torch.save(value, path)
-        return path
+    def load(self, node_id: str) -> dict[str, Any]:
+        try:
+            return self._values[node_id]
+        except KeyError as exc:
+            raise KeyError(
+                f"No in-memory value for {node_id!r}; re-index in this worker before QA"
+            ) from exc
 
-    def load(self, node_id: str) -> dict[str, torch.Tensor]:
-        path = self.path_for(node_id)
-        if not os.path.exists(path):
-            raise FileNotFoundError(f"No stored value for {node_id!r} at {path}")
-        return torch.load(path, map_location="cpu")
-
-    def load_many(self, node_ids: list[str]) -> dict[str, dict[str, torch.Tensor]]:
+    def load_many(self, node_ids: list[str]) -> dict[str, dict[str, Any]]:
         return {node_id: self.load(node_id) for node_id in node_ids}

@@ -33,3 +33,34 @@
 | LightRAG: Simple and Fast Retrieval-Augmented Generation | [2410.05779](https://arxiv.org/abs/2410.05779) | EMNLP 2025 | Builds a dual-level entity/relation graph index and supports local/global/mix retrieval with cheaper incremental updates than GraphRAG. |
 | From RAG to Memory: Non-Parametric Continual Learning for Large Language Models (HippoRAG 2) | [2502.14802](https://arxiv.org/abs/2502.14802) | ICML 2025 | Uses query-seeded Personalized PageRank over a knowledge graph plus passages to improve associative multi-hop retrieval without hurting simple factual RAG. |
 | HippoRAG: Neurobiologically Inspired Long-Term Memory for Large Language Models | [2405.14831](https://arxiv.org/abs/2405.14831) | NeurIPS 2024 | Seeds Personalized PageRank from query-linked KG concepts to perform multi-hop GraphRAG-style retrieval inspired by hippocampal indexing. |
+
+## Evolving Memory Connectivity
+
+| Title | Identifier | Venue | Summary |
+| --- | --- | --- | --- |
+| Rethinking Memory as Continuously Evolving Connectivity (FluxMem) | [2605.28773](https://arxiv.org/abs/2605.28773) | EMNLP 2026 | Treats memory as a heterogeneous semantic/episodic/procedural graph whose local task subgraph is expanded, pruned, or reshaped from execution feedback, then consolidated offline into reusable procedures. |
+
+### FluxMem relevance to MorphGraph
+
+**Relevant**
+- The paper's Stage II makes graph edits from feedback: expand missing links,
+  prune distractors, and split/merge mismatched memory units. This is directly
+  relevant to evaluating and improving EventGraph temporal/semantic edges after
+  QA failures.
+- Its distinction between initial retrieval and feedback-refined retrieval is a
+  useful future extension to the current seed-plus-one-hop EventGraph query
+  path, where expanded neighbors are not yet query re-ranked.
+- Offline consolidation suggests a principled future process for merging
+  recurrent event patterns or refining pseudo-GT/oracle segment granularity.
+
+**Not directly applicable to v1**
+- FluxMem evaluates text-agent memory (LoCoMo, Mind2Web, GAIA), not long-video
+  retrieval or visual-token replay; it does not specify how to index video
+  events or inject cached VideoLLM features.
+- Its semantic/episodic/procedural hierarchy and PEMS procedure metric assume
+  repeated multi-step agent trajectories. MorphGraph currently has
+  per-video event memory and QA supervision, so adding procedural nodes or
+  online topology rewrites now would be premature.
+- The immediate priority remains measurable event-frame retrieval quality and
+  VideoLLM QA correctness; use FluxMem as design inspiration only after those
+  baselines are stable.

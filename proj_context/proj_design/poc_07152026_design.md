@@ -2,59 +2,118 @@
 
 Companion to [poc_07152026_overview.md](poc_07152026_overview.md) (functional outline). This records
 the concrete design decisions made while building the POC: step A (visual feature
-extraction, `features/`), step B (offline TSM segmentation, `events/`), steps C+D
+extraction, `video_models/`), step B (offline TSM segmentation, `events/`), steps C+D
 (event k/V store + graph linking on nano-graphrag, `graphrag/vl_graphrag/`), and
 step E (text-aligned query retrieval).
 
 ---
 
-## Evaluation scripts
+## Production QA pipeline and debug scripts
 
-Run on a GPU node with the `morph_graphs_qwen3_cu126` env, from the repo root.
+Run on a GPU node with the `morph_graphs_qwen3_cu126` env, from the
+`morph_graph/` directory. Debug commands use the top-level `tests` package,
+which adds the repository parent before absolute package imports; no
+`PYTHONPATH` export is required.
+
+```bash
+module load cuda/12.6.3
+module load ffmpeg/7.1
+```
+
+### Supported benchmark execution
+
+`morph_graph.video_qa` is the maintained QA boundary. It uses one
+`UnifiedVideoGraph` API with two indexing adapters: raw-video EventGraph events
+(feature extraction → TSM → aligned retrieval keys → event values) and the
+pre-segmented caption/vision records used by VLGraphRAG. Both adapters share the
+same graph retrieval contract.
+
+Benchmarks live in `morph_graph/video_qa/benchmarks/`, not under GraphRAG:
+
+- `vsi_morph` — VSI-Morph MCQ data;
+- `egolongqa` — EgoLongQA validation JSONL.
+
+Pre-segmented caption/vision records are called **oracle segments**. They are
+externally supplied annotations or pseudo-GT events and are indexed through
+`morph_graph.video_qa.oracle`; they are distinct from EventGraph's raw-video
+TSM event construction.
+
+`VideoLLM` is the model boundary for raw-video QA. A VideoLLM owns a visual
+extractor that defines its persisted event-value schema and implements QA from
+those retrieved values. EventGraph remains model-agnostic: it retrieves ordered
+event values and delegates answer generation to the selected VideoLLM.
+
+The first production runner uses the raw EventGraph adapter and stores a
+retrieval trace for every question (rank, node ID, event/frame range, score,
+and graph source), separately from answer correctness:
+
+```bash
+python -m morph_graph.video_qa.cli \
+    --benchmark egolongqa \
+    --output-json outputs/egolongqa_eventgraph.json \
+    --cache-dir outputs/egolongqa_cache \
+    --frame-batch-size 128
+```
+
+Use `python -m morph_graph.video_qa.slurm` to generate a resumable, video-grouped
+Slurm array. It writes per-chunk `answers_chunk_*.json` files and only submits
+when `--submit` is set. Cluster setup is deliberately passed through
+`--preamble`/`--sbatch-arg`, rather than embedded in source.
+
+### Debug-only scripts
 
 ### Feature extraction (step A)
 
 ```bash
-python -m morph_graph.tests.debug_extract \
-    --video morph_graph/data/wearable-ai/egolongqa/val/00cdb8ca10c069f8.mp4 \
-    --tokens-per-frame 256 --fps 1.0
+python -m tests.debug_extract \
+  --video data/wearable-ai/egolongqa/val/00cdb8ca10c069f8.mp4 \
+  --tokens-per-frame 256 \
+  --fps 1.0
 ```
 
 ### Event segmentation (step B)
 
 ```bash
-python -m morph_graph.tests.debug_events \
-    --video morph_graph/data/wearable-ai/egolongqa/val/00cdb8ca10c069f8.mp4 \
-    --tokens-per-frame 256 --fps 1.0 --kernel-width 6 --peak-height 1.0 \
-    --plot morph_graph/tests/out/seg_00cdb8ca10c069f8.png
+python -m tests.debug_events \
+  --video data/wearable-ai/egolongqa/val/00cdb8ca10c069f8.mp4 \
+  --tokens-per-frame 256 \
+  --fps 1.0 \
+  --kernel-width 6 \
+  --peak-height 1.0 \
+  --plot outputs/debug/seg_00cdb8ca.png
 ```
 
-### Graph + QA (steps C–G)
+### Graph + QA smoke test (steps C–G)
 
 VSI Cat (ordering question):
 
 ```bash
-python -m morph_graph.tests.debug_event_graph \
-    --video morph_graph/data/vsi_morph/vsi_constructed/Cat/0000.mp4 \
-    --tokens-per-frame 256 --fps 1.0 --sim-threshold 0.9 \
+python -m tests.debug_event_graph \
+    --video data/vsi_morph/vsi_constructed/Cat/0000.mp4 \
+    --tokens-per-frame 256 --frame-batch-size 128 --fps 1.0 --sim-threshold 0.9 \
     --aligned-model pe_core_vit_l \
     --query "In what order was the Cat first seen across the Office, the Bedroom/Toy Room, and the Industrial Room?" \
     --qa \
-    --working-dir morph_graph/tests/out/vsi_cat_0000 \
-    --plot-graph morph_graph/tests/out/vsi_cat_0000/graph.png
+    --working-dir outputs/debug/vsi_cat_0000 \
+    --plot-graph outputs/debug/vsi_cat_0000/graph.png
 ```
 
 EgoLongQA walk (egocentric QA):
 
 ```bash
-python -m morph_graph.tests.debug_event_graph \
-    --video morph_graph/data/wearable-ai/egolongqa/val/00cdb8ca10c069f8.mp4 \
-    --tokens-per-frame 256 --fps 1.0 --sim-threshold 0.9 \
-    --aligned-model pe_core_vit_l \
-    --query "After I left the grassy trail that ran alongside the flooded marsh, what was the first man-made structure I encountered on the paved section of my walk?" \
-    --qa \
-    --working-dir morph_graph/tests/out/eg_00cdb8ca \
-    --plot-graph morph_graph/tests/out/eg_00cdb8ca/graph.png
+python -m tests.debug_event_graph \
+  --video data/wearable-ai/egolongqa/val/00cdb8ca10c069f8.mp4 \
+  --tokens-per-frame 256 \
+  --frame-batch-size 128 \
+  --fps 1.0 \
+  --kernel-width 6 \
+  --peak-height 1.0 \
+  --sim-threshold 0.9 \
+  --aligned-model pe_core_vit_l \
+  --query "After I left the grassy trail that ran alongside the flooded marsh, what was the first man-made structure I encountered on the paved section of my walk?" \
+  --qa \
+  --working-dir outputs/debug/eg_00cdb8ca \
+  --plot-graph outputs/debug/eg_00cdb8ca/graph.png
 ```
 
 ---
@@ -65,8 +124,8 @@ python -m morph_graph.tests.debug_event_graph \
 
 - Produce, for a video, the visual features that later steps consume:
   - `**pooled**` `(n_units, dim)` — mean-pooled per-unit embedding, input to TSM.
-  - `**patch_tokens**` `(n_units, tokens_per_unit, dim)` — patch-level "values",
-  reused after retrieval.
+  - `**patch_tokens**` `(n_units, tokens_per_unit, dim)` plus DeepStack streams —
+  cached Qwen visual values replayed after retrieval without a second vision pass.
 - Event generation (TSM), graph, retrieval, QA are separate later steps.
 
 ## Model & space
@@ -131,22 +190,13 @@ Implemented as the `tokens_per_frame` knob (default 128); `_size_for(n_frames)`
 computes it. Manual fallback: `min_pixels` / `total_pixels` (also totals),
 mirroring the embeddings-code setup (`min = 64*32*32`, `total = 20480*32*32`).
 
-## Frame cap (temporary)
-
-- Total vision tokens grow linearly: `total_tokens = TPF * (n_frames / 2)`, and the
-encoder runs one forward — long videos OOM.
-- For now: hard cap `MAX_SAMPLED_FRAMES = 1024` in
-[video_io.py](../../features/video_io.py). FIXME: replace with chunked/streaming
-vision encoding (FluxMem precedent: `_visual_forward_videos_chunked`) so long
-videos keep full temporal coverage.
-
 ## Decoding
 
 - **torchcodec only, never decord.** `VideoDecoder` imported lazily inside
 functions so the package stays importable where torchcodec's native lib fails to
 load (e.g. login nodes).
 
-## Interface & package layout (`morph_graph/features/`)
+## Interface & package layout (`morph_graph/video_models/`)
 
 - `video_io.py` — torchcodec decode + fps sampling (+ frame cap).
 - `base.py` — `VisualFeatures` dataclass, `VisualFeatureExtractor` ABC
@@ -155,24 +205,6 @@ and a string-keyed extractor registry (`register_extractor` / `get_extractor`)
 so any MLLM can plug in.
 - `qwen3_vl.py` — `Qwen3VLFeatureExtractor` (first implementation), auto-registered
 as `"qwen3_vl_8b"`.
-
-## Dropped / deferred
-
-- **Dropped**: per-unit timestamps and frame_ranges (uniform 2-frame units => the
-unit index encodes position).
-- **Deferred**: persisting `patch_tokens` to disk (large: `n_units * tokens_per_unit * 4096` fp16) — designed later alongside retrieval so values can
-be lazily loaded post-retrieval.
-- **Deferred**: DeepStack features (kept in the model output but dropped by the
-extractor) — only needed when re-injecting embeddings into the LLM (steps F/G).
-
-## Things to watch
-
-- Variable frame resolution -> variable `tokens_per_unit`; pinning `tokens_per_frame`
-keeps grids uniform. Otherwise `patch_tokens` must be a list.
-- Odd frame counts: `temporal_patch_size=2` rounds up to even (processor pads the
-last frame), yielding one extra unit.
-- Loading the full 8B to use only the vision tower is wasteful but fine for v1
-(the LLM is reused later for QA).
 
 ---
 
@@ -222,7 +254,7 @@ Peak picking via `scipy.signal.find_peaks` (adds a scipy dependency).
 
 - `base.py` — `EventSegmentation` dataclass, `EventSegmenter` ABC, string-keyed
 registry (`register_segmenter` / `get_segmenter`), and `events_from_boundaries`
-(boundaries -> contiguous gap-free spans). Mirrors the `features/` pattern so
+(boundaries -> contiguous gap-free spans). Mirrors the `video_models/` pattern so
 other boundary methods (adjacency, Otsu, ...) plug in later.
 - `tsm.py` — `TSMEventSegmenter` (offline), auto-registered as `"tsm_offline"`;
 exposes `novelty_curve()` separately for reuse/debug.
@@ -230,39 +262,33 @@ exposes `novelty_curve()` separately for reuse/debug.
 boundary lines, top-down `origin="upper"`; novelty curve with peaks + threshold
 and alternating shaded event spans). Agg backend, matplotlib imported lazily.
 
-## Things to watch
-
-- `find_peaks` `distance` merges nearby boundaries; too small over-segments busy
-scenes, too large misses fast cuts. Tie it to `kernel_width` by default.
-- Z-scoring assumes some novelty variance; a near-constant video yields a flat
-curve and (correctly) no boundaries.
-- Offline z-score uses global mean/std — not available in the streaming setting,
-where a running/local normalization will be needed (flagged for the online port).
-
 ---
 
 # C+D: Event k/V Store + Linking (on nano-graphrag)
 
-## Decision: build on nano-graphrag (reuse, don't reinvent)
+## Decision: one graph pipeline on nano-graphrag (reuse, don't reinvent)
 
 - We reuse the existing VLGraphRAG storage stack + `vl_ops` edge builders rather
-than a bespoke in-memory graph, for drop-in compatibility with the existing
-query/traversal path. New orchestrator `EventGraph` mirrors `VLGraphRAG`.
+than a bespoke in-memory graph. `UnifiedVideoGraph` is the public API and
+dispatches to an EventGraph raw-event adapter or VLGraphRAG pre-segmented
+adapter; both preserve the same retrieval response and node schema.
 - Stores (per `working_dir`): `NetworkXStorage` (event_relation graph),
 `JsonKVStorage` (event metadata), `NanoVectorDBStorage` (event keys),
-`EventValueStore` (value tensors on disk).
+`EventValueStore` (CPU-resident value tensors).
 
 ## Node scheme = reuse `seg`_ (event == segment)
 
-- Events use `{video_id}::seg_{idx:04d}` (not `evt_`) so `build_temporal_edges`'
+- Events use `{video_id}::seg_{idx:04d}` (not `evt`_) so `build_temporal_edges`'
 cross-batch reconstruction works verbatim. In this path "segment" *is* an event.
 
 ## Keys vs values split
 
 - **Value tensors don't fit JSON KV.** `EventValueStore` saves per-event tensors
-(fp16) to disk (`pooled`, optional `patch_tokens`, `frame_indices`); JSON KV holds
-a `value_path` pointer + metadata (`unit_range`, `frame_range`, `time_range_sec`).
-- `patch_tokens` persistence is opt-in (`store_patch_tokens`, default off — large).
+(fp16) in CPU memory (required `patch_tokens` + DeepStack streams and
+`frame_indices`) for one EventGraph worker; JSON KV holds only event metadata
+(`unit_range`, `frame_range`, `time_range_sec`).
+- `patch_tokens` and DeepStack persistence are enabled by default
+(`store_patch_tokens=True`) because cached-token QA is the supported path.
 
 ## Precomputed / aligned embedding func
 
@@ -276,7 +302,7 @@ text queries raise (keys not in a text-aligned space).
 - `NetworkXStorage` is an undirected `nx.Graph`, so the old
 `temporal_next`/`temporal_prev` pair collapsed to one edge (last write won —
 every cached graph showed `temporal_prev`). Fixed `_temporal_edge` to emit a
-single `**temporal_adjacent*`* edge; direction is recoverable from `segment_idx`.
+single `**temporal_adjacent`** edge; direction is recoverable from `segment_idx`.
 Applies to `EventGraph` and `VLGraphRAG` alike.
 
 ## Semantic edges
@@ -290,21 +316,6 @@ undirected slot; semantic is written after temporal), punching a hole in the
 temporal spine. So `build_semantic_similarity_edges` skips pairs with same video +
 `|Δsegment_idx| == 1`. Semantic edges then carry only the useful signal:
 long-range recurrence between non-adjacent events. Applies to `VLGraphRAG` too.
-
-## Future: typed / parallel edges (not done)
-
-- Current model assumes **untyped edges**: at most one edge per unordered node
-pair, with `edge_type` as a *string attribute* (backing store is a plain
-`nx.Graph`). So a pair can be temporal **or** semantic, not both — hence the
-adjacency skip above is a workaround, not a real multi-relation graph.
-- If we later want a pair to be *both* temporal and semantic (each with its own
-weight), options in increasing fidelity: (1) merge onto one edge —
-`edge_types=[...]` + per-type weights (GraphML-safe as a delimited string; cheap,
-but viz/traversal/summary must read the list); (2) `nx.MultiGraph` keyed by
-`edge_type` for true parallel edges (touches storage, serialization,
-`get_nodes_edges_batch`, dedup, viz); (3) `nx.MultiDiGraph` to also restore
-direction (temporal_next vs temporal_prev). Deferred — revisit if retrieval wants
-to specially weight "adjacent **and** recurring" pairs.
 
 # E: Query Retrieval (text-aligned keys)
 
@@ -323,7 +334,7 @@ poorly, and the failure is silent.
 - **retrieval key** (CLIP-family, aligned): text-query seeding (E) + semantic
 edges (D). Mean of per-frame aligned embeddings over the event's frame span.
 
-## Aligned extractors (`features/`)
+## Aligned extractors (`video_models/`)
 
 - `AlignedFeatureExtractor` base: `supports_text_query=True`,
 `temporal_patch_size=1` (per-frame), abstract `encode_text`. `pooled` is the
@@ -341,33 +352,98 @@ L2-normalized joint-space image embedding; `patch_tokens = pooled.unsqueeze(1)`
 text embedding, expands 1-hop (`mode="local"`), ranks + caps. Returns event
 records (node_id, scores, unit/frame ranges) for value fetch (F) + stitching (G).
 
-# F+G: Value fetch, stitch, LLM QA (v1 pixel path)
+# F+G: Value fetch, token stitch, LLM QA
 
 ## F — fetch stored values
 
 - `EventValueStore.load` / `load_many`; `fetch_event_values` attaches `values` dict
-  to each retrieved segment. Values include `pooled` (Qwen3 unit embeddings),
-  `frame_indices` (source indices at indexing fps), `unit_range`.
+to each retrieved segment. Values include `patch_tokens`, all Qwen DeepStack
+streams, `frame_indices`, and `unit_range`; pooled TSM features are not stored.
 
-## G — stitch + answer (pixels, not embedding inject)
+## G — stitch cached tokens + answer (no vision re-encode)
 
-- **Decision (v1):** re-decode **pixels** at stitch time using stored
-  `frame_indices` (not `frame_range` subsampling — avoids gaps between sampled
-  frames). Global frame budget (`max_frames`, default 128) split proportionally
-  across retrieved events; uniform subsample within each event's indices.
-- `stitch_retrieved_event_values` → `(video_tensor, video_metadata, stitch_log)`.
-- `answer_from_retrieval` / `EventGraph.answer`: E → F → stitch →
-  `run_inference_on_video_tensor` (Qwen3-VL). Open-ended prompts via
-  `build_messages_open_qa`.
-- **Deferred:** concat `pooled`/`patch_tokens` and inject into vision forward
-  (DeepStack / skip vision tower).
+- **Decision:** concatenate the retrieved events' cached post-vision
+`patch_tokens` and Qwen3-VL DeepStack streams on CPU, then transfer only that
+selected token sequence to GPU. Qwen's normal placeholder, M-RoPE, and
+DeepStack injection path consumes it; the vision tower is not run a second
+time and source frames are not re-decoded.
+- `stitch_retrieved_event_tokens` returns the concatenated token streams and
+retrieval-aligned stitch log. All indexed videos must use a fixed
+`tokens_per_frame` so retrieved events share a token grid.
+- `answer_from_retrieval` / `EventGraph.answer`: E → F → cached-token stitch →
+`run_inference_on_cached_video_features`. Open-ended prompts use
+`build_messages_open_qa`.
 
-## Things to watch
+---
 
-- Aligned keys pool per-frame embeddings by the **frame span** of each event
-(units×`temporal_patch_size`), not unit indices — the CLIP model and Qwen3 must
-run on the **same sampled frames**.
-- SigLIP2-L not yet in `model_zoo/` (downloads on first use); PE-Core needs the
-`perception_models` package.
-- Key pooling is mean over frames (tunable: attention / first-last).
+# Limitations & considerations (current POC)
+
+Cross-cutting gaps, deferred work, and things to watch while the POC is in flight.
+Grouped by pipeline step.
+
+## A — Feature extraction
+
+- **Long-video VRAM.** Qwen extraction supports `frame_batch_size` (default 128
+in the production runner), which encodes fixed-size frame batches and trims
+only padded temporal units. This bounds vision-forward VRAM, but needs
+regression checks against unchunked extraction for partial final batches.
+- **Variable resolution → variable `tokens_per_unit`.** Pinning `tokens_per_frame`
+keeps grids uniform; otherwise `patch_tokens` must be a list.
+- **Odd frame counts.** `temporal_patch_size=2` pads to even, yielding one extra unit.
+- **Wasteful model load.** Loading the full 8B to use only the vision tower is fine
+for v1 (LLM reused later for QA) but not scalable.
+- **Dropped:** per-unit timestamps and `frame_ranges` (uniform 2-frame units =>
+unit index encodes position).
+- **Cached-value volume.** Patch tokens and DeepStack streams are persisted fp16
+in CPU memory for the active video worker; move only retrieved blocks to GPU.
+
+## B — Segmentation
+
+- `**find_peaks` distance tuning.** Too small over-segments busy scenes; too large
+misses fast cuts. Default ties `peak_distance` to `kernel_width`.
+- **Flat novelty curves.** Z-scoring assumes variance; near-constant video =>
+correctly no boundaries.
+- **Offline z-score.** Global mean/std not available in streaming; online port needs
+running/local normalization.
+
+## C+D — Graph
+
+- **Value-store capacity.** `store_patch_tokens=True` is required for no-reencode
+QA and increases CPU RAM use for long videos.
+- **Untyped / single-slot edges.** Backing store is a plain `nx.Graph`: at most one
+edge per unordered pair, `edge_type` as a string attribute. A pair can be
+temporal **or** semantic, not both — the adjacent-pair semantic skip is a
+workaround, not a real multi-relation graph.
+- **Deferred — parallel edge types.** To represent both temporal and semantic on the
+same pair: (1) merge onto one edge with `edge_types=[...]`; (2) `nx.MultiGraph`
+keyed by `edge_type`; (3) `nx.MultiDiGraph` for direction. Revisit if retrieval
+should weight "adjacent **and** recurring" pairs.
+
+## E — Retrieval
+
+- **Vision-pooled keys are not text-retrievable.** Qwen3-VL pooled features are
+post-projection (4096-d) but not contrastively text-aligned; mean-pooled text
+queries there retrieve poorly and fail silently. Hence the separate CLIP-family
+retrieval key.
+- **Local 1-hop neighbors are not query-ranked.** `vl_query` seeds via text→key
+VDB (`top_k`), expands all graph neighbors in `mode="local"`, then
+`rank_and_cap_node_ids` keeps seeds first (sorted by query similarity) and
+pushes neighbors without scores to the back. Among neighbors there is no
+re-scoring against the query — remaining slots after the seeds are filled in
+graph expansion order, not by relevance. With `top_k=3` and `max_segments_for_qa=5`,
+the last 2 segments can be arbitrary 1-hop neighbors. **Better:** expand, then
+re-score all seeds ∪ neighbors by query similarity (optionally with a
+temporal-adjacency bias), then cap.
+
+## F+G — QA
+
+- **Frame-span alignment for keys.** Aligned keys pool per-frame embeddings over each
+event's **frame span** (`units × temporal_patch_size`), not unit indices — CLIP and
+Qwen3 must run on the **same sampled frames**.
+- **Model zoo / deps.** SigLIP2-L not yet in `model_zoo/` (downloads on first use);
+PE-Core needs the `perception_models` package.
+- **Key pooling is a mean** over frames (tunable: attention / first-last).
+- **Validation required:** compare cached-token replay against pixel re-encoding
+on a small QA set. Replay preserves the original visual outputs but does not
+recompute visual context over a newly stitched clip.
 

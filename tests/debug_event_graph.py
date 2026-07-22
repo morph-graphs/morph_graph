@@ -10,8 +10,8 @@ EgoLongQA:
         --aligned-model pe_core_vit_l \
         --query "After I left the grassy trail that ran alongside the flooded marsh, what was the first man-made structure I encountered on the paved section of my walk?" \
         --qa \
-        --working-dir morph_graph/tests/out/eg_00cdb8ca \
-        --plot-graph morph_graph/tests/out/eg_00cdb8ca/graph.png
+        --working-dir outputs/debug/eg_00cdb8ca \
+        --plot-graph outputs/debug/eg_00cdb8ca/graph.png
 
 VSI-Morph 
     python -m morph_graph.tests.debug_event_graph \
@@ -20,8 +20,8 @@ VSI-Morph
         --aligned-model pe_core_vit_l \
         --query "In what order was the Cat first seen across the Office, the Bedroom/Toy Room, and the Industrial Room?" \
         --qa \
-        --working-dir morph_graph/tests/out/vsi_cat_0000 \
-        --plot-graph morph_graph/tests/out/vsi_cat_0000/graph.png
+        --working-dir outputs/debug/vsi_cat_0000 \
+        --plot-graph outputs/debug/vsi_cat_0000/graph.png
 
 
 Qwen3-VL drives TSM segmentation + values; PE-Core (or SigLIP2) supplies
@@ -39,8 +39,8 @@ from pathlib import Path
 from ezcolorlog import root_logger as logger
 
 from morph_graph.events import TSMEventSegmenter
-from morph_graph.features import get_extractor
-from morph_graph.features.video_io import decode_frames
+from morph_graph.video_models import get_extractor, get_video_llm
+from morph_graph.video_models.video_io import decode_frames
 from morph_graph.graphrag.vl_graphrag import EventGraph, VLQueryParam
 from morph_graph.graphrag.vl_graphrag.vl_segments import _video_id_from_path
 
@@ -58,6 +58,12 @@ def main() -> None:
     ap.add_argument("--model", default="qwen3_vl_8b")
     ap.add_argument("--fps", type=float, default=1.0)
     ap.add_argument("--max-frames", type=int, default=None)
+    ap.add_argument(
+        "--frame-batch-size",
+        type=int,
+        default=128,
+        help="maximum frames per Qwen vision forward; bounds GPU VRAM",
+    )
     ap.add_argument("--tokens-per-frame", type=int, default=256)
     ap.add_argument("--feature-stage", choices=["post", "pre"], default="post",
                     help="Qwen3 vision stage for TSM: post-projection (4096) or pre-merger")
@@ -65,7 +71,8 @@ def main() -> None:
     ap.add_argument("--peak-height", type=float, default=1.0)
     ap.add_argument("--sim-threshold", type=float, default=0.5)
     ap.add_argument("--sim-top-k", type=int, default=None)
-    ap.add_argument("--store-patch-tokens", action="store_true")
+    ap.add_argument("--no-store-patch-tokens", dest="store_patch_tokens", action="store_false",
+        default=True, help="disable cached-token QA storage (retrieval-only/debug use)")
     ap.add_argument("--working-dir", type=Path, default=None,
                     help="persist graph cache here (wiped automatically on each run)")
     ap.add_argument("--keep-working-dir", action="store_true",
@@ -98,7 +105,14 @@ def main() -> None:
 
     # A) Initialize models ONCE
     logger.info(f"[load] extractor={args.model} tokens_per_frame={args.tokens_per_frame} stage={args.feature_stage}")
-    ext = get_extractor(args.model, tokens_per_frame=args.tokens_per_frame, feature_stage=args.feature_stage)
+    ext = get_video_llm(
+        args.model,
+        tokens_per_frame=args.tokens_per_frame,
+        feature_stage=args.feature_stage,
+    )
+    frames, frame_indices = decode_frames(str(args.video), fps=args.fps, max_frames=args.max_frames)
+    feats = ext.encode_frames(frames, frame_batch_size=args.frame_batch_size)
+    logger.info(f"[encode] pooled={tuple(feats.pooled.shape)} n_units={feats.n_units} dim={feats.dim}")
 
     aligned = None
     text_encoder = None
@@ -135,83 +149,57 @@ def main() -> None:
         except Exception as e:
             logger.warning(f"[resume] Failed to load existing answers: {e}")
 
-    for task in tasks:
-        vid_path = task['video']
-        query = task.get('query')
-        vid_id = _video_id_from_path(vid_path)
-        
-        # Format query with options if present
-        vlm_query = query
-        mcq = task.get('mcq_options')
-        if query and mcq:
-            mcq_str = "\n".join(mcq) if isinstance(mcq, list) else str(mcq)
-            vlm_query = f"{query.strip()}\nOptions:\n{mcq_str}\nAnswer with the option's letter from the given choices directly."
-        
-        if (vid_path, query) in processed_keys:
-            logger.info(f"--- Skipping already processed task: {vid_path} | query: {query}")
-            continue
-            
-        logger.info(f"--- Processing task: {vid_path} | query: {query}")
-        
-        if vid_path != last_video:
-            # A) decode + extract
-            frames, frame_indices = decode_frames(vid_path, fps=args.fps, max_frames=args.max_frames)
-            feats = ext.encode_frames(frames)
-            
-            # B) segment
-            result = seg.segment(feats.pooled)
-            logger.info(f"[segment] n_events={result.n_events} boundaries={result.boundaries}")
-            
-            # E-prep) aligned keys
-            aligned_pooled = None
-            if aligned:
-                aligned_pooled = aligned.encode_frames(frames).pooled
-                key_dim = int(aligned_pooled.shape[-1])
+    # round-trip one node + its value
+    from morph_graph.graphrag._utils import always_get_an_event_loop
+
+    node_id = f"{video_id}::seg_0000"
+    record = always_get_an_event_loop().run_until_complete(eg.segments_kv.get_by_id(node_id))
+    logger.info(f"[kv] {node_id} -> unit_range={record['unit_range']} frame_range={record['frame_range']} "
+                f"n_units={record['n_units']} values=in_memory")
+    value = eg.value_store.load(node_id)
+    logger.info(
+        f"[value] frame_indices={tuple(value['frame_indices'].shape)}"
+        + (f" patch_tokens={tuple(value['patch_tokens'].shape)}" if "patch_tokens" in value else "")
+    )
+
+    # E) text query (+ optional F+G QA)
+    resp = None
+    if args.query:
+        if text_encoder is None:
+            logger.warning("[query] skipped: --query needs an --aligned-model for text-aligned keys")
+        else:
+            query_param = VLQueryParam(
+                mode="local",
+                top_k=args.retrieval_top_k,
+                max_segments_for_qa=args.max_segments_for_qa,
+                max_frames_for_video_unit=args.max_qa_frames,
+            )
+            if args.qa:
+                resp = eg.answer(
+                    args.query,
+                    param=query_param,
+                    qa_model=ext,
+                    max_new_tokens=args.max_new_tokens,
+                )
+                if resp.get("qa_error"):
+                    logger.warning(f"[qa] failed: {resp['qa_error']}")
             else:
                 key_dim = feats.dim
 
-            # C+D) build event graph
-            if args.working_dir:
-                video_working_dir = str(args.working_dir / vid_id)
-            else:
-                video_working_dir = tempfile.mkdtemp(prefix=f"event_graph_{vid_id}_")
-                
-            eg = EventGraph(
-                embedding_dim=key_dim,
-                text_encoder=text_encoder,
-                working_dir=video_working_dir,
-                semantic_similarity_threshold=args.sim_threshold,
-                semantic_similarity_top_k=args.sim_top_k,
-                store_patch_tokens=args.store_patch_tokens,
-                clear_working_dir=bool(args.working_dir) and not args.keep_working_dir,
-            )
-            eg.insert(vid_id, vid_path, feats, result, frame_indices,
-                      aligned_pooled=aligned_pooled, fps=args.fps)
-            logger.info(f"[graph] working_dir={video_working_dir}")
-            
-            # inspect
-            summary = eg.summary()
-            logger.info(f"[graph] nodes={summary['n_nodes']} edges={summary['n_edges']} by_type={summary['edge_types']}")
-        
-            assert summary["n_nodes"] == result.n_events, "node count != event count"
-            exp_temporal = max(result.n_events - 1, 0)
-            assert summary["edge_types"].get("temporal_adjacent", 0) == exp_temporal, "unexpected temporal edge count"
-        
-            from morph_graph.graphrag._utils import always_get_an_event_loop
-            node_id = f"{vid_id}::seg_0000"
-            record = always_get_an_event_loop().run_until_complete(eg.segments_kv.get_by_id(node_id))
-            logger.info(f"[kv] {node_id} -> unit_range={record['unit_range']} frame_range={record['frame_range']} "
-                        f"n_units={record['n_units']} value_path={Path(record['value_path']).name}")
-            value = eg.value_store.load(node_id)
-            logger.info(f"[value] pooled={tuple(value['pooled'].shape)} frame_indices={tuple(value['frame_indices'].shape)}"
-                        + (f" patch_tokens={tuple(value['patch_tokens'].shape)}" if "patch_tokens" in value else ""))
+    # plot the graph memory (highlight retrieval + show the question when available)
+    if args.plot_graph is not None:
+        from morph_graph.graphrag.vl_graphrag import plot_graph
 
-            last_video = vid_path
-            cached_feats = feats
-            cached_result = result
-            cached_aligned_pooled = aligned_pooled
-            cached_frames = frames
-            cached_frame_indices = frame_indices
+        args.plot_graph.parent.mkdir(parents=True, exist_ok=True)
+        plot_graph(
+            eg,
+            str(args.plot_graph),
+            html=args.plot_graph.suffix == ".html",
+            title=f"{video_id} event graph",
+            question=args.query if resp is not None else None,
+            retrieved_segments=resp["segments"] if resp is not None else None,
+        )
+        logger.info(f"[plot] event graph -> {args.plot_graph}")
 
         # E) text query (+ optional F+G QA)
         resp = None

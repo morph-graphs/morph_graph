@@ -32,7 +32,7 @@ def build_event_segments(
     aligned_pooled=None,
     fps: float = 1.0,
     temporal_patch_size: int = 2,
-    store_patch_tokens: bool = False,
+    store_patch_tokens: bool = True,
 ) -> list[dict[str, Any]]:
     """One record per event span in `segmentation.events`.
 
@@ -47,6 +47,7 @@ def build_event_segments(
     """
     pooled = features.pooled  # (n_units, dim)
     patch_tokens = features.patch_tokens  # (n_units, tokens, dim) or list
+    deepstack_features = getattr(features, "deepstack_features", None)
     n_sampled = len(frame_indices)
 
     segments: list[dict[str, Any]] = []
@@ -73,12 +74,17 @@ def build_event_segments(
         time_range_sec = [round(fs0 / fps, 3), round(fs1 / fps, 3)]
 
         value: dict[str, torch.Tensor] = {
-            "pooled": pooled[u0:u1].to(torch.float16).cpu(),
             "unit_range": torch.tensor([u0, u1]),
             "frame_indices": torch.tensor(member_frames, dtype=torch.long),
+            "grid_hw": torch.tensor(features.grid_hw, dtype=torch.long),
         }
         if store_patch_tokens and not isinstance(patch_tokens, list):
             value["patch_tokens"] = patch_tokens[u0:u1].to(torch.float16).cpu()
+            if deepstack_features is not None:
+                value["deepstack_features"] = [
+                    stream[u0:u1].to(torch.float16).cpu()
+                    for stream in deepstack_features
+                ]
 
         node_id = _node_id(video_id, idx)
         segments.append(

@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EgoLongQA — Query Structure Explorer</title>
+  <style>
+    :root {
+      --bg:#0f1117; --surface:#181b24; --surface2:#1f2430; --border:#2a3142;
+      --text:#e8eaef; --muted:#8b93a7; --accent:#6c9eff; --green:#7dd3a8;
+      --amber:#e8b86d; --purple:#c4a7e7;
+      --font:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:var(--font); background:var(--bg); color:var(--text); line-height:1.5; font-size:15px; }
+    .wrap { max-width:1080px; margin:0 auto; padding:2rem 1.5rem 3rem; }
+    h1 { margin:0; font-size:1.6rem; }
+    header p, .note, footer { color:var(--muted); }
+    .note { margin-top:1rem; padding:0.8rem 1rem; background:var(--surface);
+      border:1px solid var(--border); border-radius:8px; font-size:0.84rem; }
+    .stats { display:grid; grid-template-columns:repeat(3,1fr); gap:0.75rem; margin:1.25rem 0; }
+    .stat, .panel { background:var(--surface); border:1px solid var(--border); border-radius:8px; }
+    .stat { padding:1rem 1.1rem; }
+    .stat .label { color:var(--muted); font-size:0.78rem; }
+    .stat .value { color:var(--accent); font-size:1.7rem; font-weight:600; }
+    section { margin-top:1.75rem; }
+    section h2 { font-size:1rem; margin:0 0 0.7rem; }
+    .panel { padding:1rem; }
+    .axis-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:0.8rem; }
+    .axis h3 { margin:0 0 0.25rem; font-size:0.88rem; }
+    .axis p { margin:0; color:var(--muted); font-size:0.77rem; }
+    .bars { margin-top:0.75rem; }
+    .bar-row { display:grid; grid-template-columns:8.5rem 1fr 2.5rem; gap:0.5rem;
+      align-items:center; margin:0.38rem 0; font-size:0.78rem; }
+    .bar-track { height:14px; background:var(--surface2); border-radius:3px; overflow:hidden; }
+    .bar-fill { height:100%; background:var(--accent); min-width:2px; }
+    .bar-fill.green { background:var(--green); }
+    .bar-fill.amber { background:var(--amber); }
+    .controls { display:grid; grid-template-columns:2fr repeat(4,1fr); gap:0.5rem; margin-bottom:0.75rem; }
+    input, select { width:100%; background:var(--surface2); border:1px solid var(--border);
+      color:var(--text); padding:0.48rem 0.6rem; border-radius:6px; }
+    .result-meta { color:var(--muted); font-size:0.76rem; margin-bottom:0.6rem; }
+    .q-list { display:flex; flex-direction:column; gap:0.45rem; max-height:620px; overflow-y:auto; }
+    .q-card { background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:0.7rem 0.85rem; }
+    .q-meta { color:var(--muted); font-size:0.7rem; }
+    .q-text { margin-top:0.2rem; font-size:0.87rem; }
+    .q-answer { margin-top:0.45rem; color:var(--green); font-size:0.82rem; }
+    .q-answer strong { color:var(--muted); font-weight:500; }
+    .tags { display:flex; flex-wrap:wrap; gap:0.3rem; margin-top:0.45rem; }
+    .tag { border:1px solid var(--border); border-radius:4px; padding:0.08rem 0.38rem; font-size:0.66rem; }
+    .tag.scope { color:var(--accent); }
+    .tag.link { color:var(--green); }
+    .tag.operation { color:var(--amber); }
+    .tag.activity { color:var(--purple); }
+    .error { color:#ff8f8f; }
+    footer { margin-top:2rem; font-size:0.72rem; }
+    @media (max-width:800px) {
+      .stats, .axis-grid { grid-template-columns:1fr; }
+      .controls { grid-template-columns:1fr 1fr; }
+      .controls input { grid-column:1/-1; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>EgoLongQA — query structure explorer</h1>
+    <p>Browse 700 validation questions using separate, interpretable axes.</p>
+  </header>
+
+  <div class="note">
+    These labels are browsing aids, not event annotations or ground truth.
+    They distinguish whether referenced events merely locate one target or
+    supply evidence that must be integrated. Link bases and answer operations
+    are classified automatically from explicit question language. Dataset
+    activity labels are shown only as source metadata.
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="label">Questions</div><div class="value" id="total">—</div></div>
+    <div class="stat"><div class="label">Single target + locator</div><div class="value" id="singleTarget">—</div></div>
+    <div class="stat"><div class="label">Multi-event integration</div><div class="value" id="multiIntegration">—</div></div>
+  </div>
+
+  <section>
+    <h2>Three orthogonal views</h2>
+    <div class="axis-grid">
+      <div class="panel axis">
+        <h3>Evidence scope</h3>
+        <p>Does one target contain the answer, or must evidence from multiple events be integrated?</p>
+        <div class="bars" id="scopeBars"></div>
+      </div>
+      <div class="panel axis">
+        <h3>Link basis</h3>
+        <p>What relationship connects the referenced events? Labels may overlap.</p>
+        <div class="bars" id="linkBars"></div>
+      </div>
+      <div class="panel axis">
+        <h3>Answer operation</h3>
+        <p>What must be done with the selected event evidence?</p>
+        <div class="bars" id="operatorBars"></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Questions</h2>
+    <div class="panel">
+      <div class="controls">
+        <input type="search" id="search" placeholder="Search question text…">
+        <select id="scopeFilter"><option value="">Any evidence scope</option></select>
+        <select id="linkFilter"><option value="">Any link basis</option></select>
+        <select id="operatorFilter"><option value="">Any answer operation</option></select>
+        <select id="activityFilter"><option value="">Any activity metadata</option></select>
+      </div>
+      <div class="result-meta" id="resultMeta">Loading…</div>
+      <div class="q-list" id="questionList"></div>
+    </div>
+  </section>
+
+  <footer>Source: egolongqa_dashboard_data.json · derived labels are heuristic and version-local.</footer>
+</div>
+
+<script>
+const LABELS = {
+  single_target: "single target; other events are locators",
+  multi_event_integration: "integrate evidence across events",
+  temporal_constraint: "temporal constraint",
+  shared_entity: "shared object / person",
+  shared_location: "shared or changing location",
+  shared_activity_goal: "shared activity / goal",
+  causal_dependency: "causal dependency",
+  unspecified_link: "link not explicit in question text",
+  identify: "identify target-event content",
+  compare_change: "compare states / identify change",
+  combine: "combine facts from events",
+  order: "determine event order",
+  aggregate: "count / aggregate",
+  explain: "explain cause"
+};
+
+let records = [];
+const $ = id => document.getElementById(id);
+
+function esc(value) {
+  const node = document.createElement("div");
+  node.textContent = String(value ?? "");
+  return node.innerHTML;
+}
+
+function classifyScope(question) {
+  const multiEvidence = [
+    /\b(different|difference|changed|change|compared)\b/i,
+    /\b(first time|initially|earlier)\b.*\b(last time|second time|later|eventually)\b/i,
+    /\b(same|again|twice)\b/i,
+    /\b(that|which|it)\b.*\b(later|earlier|again|eventually)\b/i,
+    /\b(how many|total|sum|number of years|duration)\b/i,
+    /\bwhat\b.*\band\b.*\bwhat\b/i
+  ].some(pattern => pattern.test(question));
+  return multiEvidence ? "multi_event_integration" : "single_target";
+}
+
+function classifyLinks(question) {
+  const rules = [
+    ["temporal_constraint", /\b(after|before|between|first|last|earlier|later|when|while|during|then)\b/i],
+    ["shared_entity", /\b(same|again|twice|second time|first time.*last time|(that|which|it)\b.*\b(later|earlier|again))\b/i],
+    ["shared_location", /\b(same (place|location|area|room)|returned? to|back (at|to|in)|location.*again)\b/i],
+    ["shared_activity_goal", /\b(same (activity|task|project)|continued|resumed|finished|completed)\b/i],
+    ["causal_dependency", /\b(why|caused|prompted|reason|because|led to|evidence indicates)\b/i]
+  ];
+  const links = rules.filter(([, pattern]) => pattern.test(question)).map(([label]) => label);
+  return links.length ? links : ["unspecified_link"];
+}
+
+function classifyOperation(question) {
+  if (/\b(how many|total|sum|number of years|duration|how long)\b/i.test(question)) return "aggregate";
+  if (/\b(why|caused|prompted|reason|because|what evidence|indicates)\b/i.test(question)) return "explain";
+  if (/\b(different|difference|changed|change|compared|first time.*last time|initially.*later)\b/i.test(question)) return "compare_change";
+  if (/\b(in what order|what (?:was|is) the order|what sequence)\b/i.test(question) ||
+      /\bwhich\b.*\b(?:did i|was)\b.*\bfirst\b.*\b(?:or|before)\b/i.test(question)) return "order";
+  if (/\bwhat\b.*\band\b.*\bwhat\b/i.test(question) || /\bwhich\b.*\band\b.*\bwhere\b/i.test(question)) return "combine";
+  return "identify";
+}
+
+function enrich(record) {
+  return {
+    ...record,
+    evidenceScope: classifyScope(record.question),
+    linkBases: classifyLinks(record.question),
+    answerOperation: classifyOperation(record.question)
+  };
+}
+
+function countsFor(key) {
+  const counts = {};
+  records.forEach(record => {
+    const values = Array.isArray(record[key]) ? record[key] : [record[key]];
+    values.forEach(value => counts[value] = (counts[value] || 0) + 1);
+  });
+  return counts;
+}
+
+function renderBars(target, counts, colorClass="") {
+  const entries = Object.entries(counts).sort((a,b) => b[1] - a[1]);
+  const max = Math.max(...entries.map(([, count]) => count), 1);
+  $(target).innerHTML = entries.map(([label, count]) => `
+    <div class="bar-row">
+      <span>${esc(LABELS[label] || label)}</span>
+      <div class="bar-track"><div class="bar-fill ${colorClass}" style="width:${100 * count / max}%"></div></div>
+      <span>${count}</span>
+    </div>`).join("");
+}
+
+function populateSelect(target, values, labelMap={}) {
+  [...new Set(values)].sort().forEach(value => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = labelMap[value] || value;
+    $(target).appendChild(option);
+  });
+}
+
+function renderQuestions() {
+  const query = $("search").value.trim().toLowerCase();
+  const scope = $("scopeFilter").value;
+  const link = $("linkFilter").value;
+  const operator = $("operatorFilter").value;
+  const activity = $("activityFilter").value;
+  const filtered = records.filter(record =>
+    (!query || record.question.toLowerCase().includes(query) ||
+      String(record.answer || "").toLowerCase().includes(query)) &&
+    (!scope || record.evidenceScope === scope) &&
+    (!link || record.linkBases.includes(link)) &&
+    (!operator || record.answerOperation === operator) &&
+    (!activity || record.category === activity)
+  );
+  $("resultMeta").textContent = `${filtered.length} of ${records.length} questions shown`;
+  $("questionList").innerHTML = filtered.slice(0, 200).map(record => `
+    <article class="q-card">
+      <div class="q-meta">#${record.id} · ${esc(record.category || "uncategorized")}</div>
+      <div class="q-text">${esc(record.question)}</div>
+      <div class="q-answer"><strong>Answer${record.mcq_answer ? ` (${esc(record.mcq_answer)})` : ""}:</strong> ${esc(record.answer || "Not provided")}</div>
+      <div class="tags">
+        <span class="tag scope">${esc(LABELS[record.evidenceScope])}</span>
+        ${record.linkBases.map(value => `<span class="tag link">${esc(LABELS[value])}</span>`).join("")}
+        <span class="tag operation">${esc(LABELS[record.answerOperation])}</span>
+        <span class="tag activity">source: ${esc(record.category || "unknown")}</span>
+      </div>
+    </article>`).join("");
+}
+
+async function init() {
+  try {
+    const response = await fetch("egolongqa_dashboard_data.json");
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    records = data.records.map(enrich);
+
+    $("total").textContent = records.length;
+    const singleCount = records.filter(record => record.evidenceScope === "single_target").length;
+    $("singleTarget").textContent = `${singleCount} (${Math.round(100 * singleCount / records.length)}%)`;
+    const multiCount = records.filter(record => record.evidenceScope === "multi_event_integration").length;
+    $("multiIntegration").textContent = `${multiCount} (${Math.round(100 * multiCount / records.length)}%)`;
+
+    renderBars("scopeBars", countsFor("evidenceScope"));
+    renderBars("linkBars", countsFor("linkBases"), "green");
+    renderBars("operatorBars", countsFor("answerOperation"), "amber");
+
+    populateSelect("scopeFilter", records.map(record => record.evidenceScope), LABELS);
+    populateSelect("linkFilter", records.flatMap(record => record.linkBases), LABELS);
+    populateSelect("operatorFilter", records.map(record => record.answerOperation), LABELS);
+    populateSelect("activityFilter", records.map(record => record.category || "unknown"));
+
+    ["search", "scopeFilter", "linkFilter", "operatorFilter", "activityFilter"]
+      .forEach(id => $(id).addEventListener(id === "search" ? "input" : "change", renderQuestions));
+    renderQuestions();
+  } catch (error) {
+    $("resultMeta").innerHTML = `<span class="error">Could not load dashboard data: ${esc(error.message)}. Serve this directory over HTTP rather than opening the file directly.</span>`;
+  }
+}
+
+init();
+</script>
+</body>
+</html>
