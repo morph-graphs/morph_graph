@@ -171,10 +171,18 @@ would always be 100%.
 
 ## 4. HTML event viewer
 
-Browse oracle / query-agnostic Gemini / Kimi / TSM on the actual videos
-(frame-by-frame scrubbing via ffmpeg JPEGs, side-by-side provider timelines,
-parent→child edges, per-event cover metrics). Paths default to `*_latest`
-annotation dirs; TSM vs reference metrics are computed on load.
+Browse oracle / query-agnostic Gemini / Kimi / TSM / EventGraph retrieval on the
+actual videos (frame-by-frame scrubbing via ffmpeg JPEGs, side-by-side provider
+timelines, parent→child edges, per-event cover metrics). Paths default to
+`*_latest` annotation dirs; TSM vs reference metrics are computed on load.
+
+To populate the EventGraph track (retrieved spans + predicted answer) for the
+pilot:
+
+```bash
+python -m tests.debug_event_graph_pilot --qa --aligned-model pe_core_vit_l
+# writes outputs/event_eval/event_graph/<sample_id>.json
+```
 
 For reusable design notes (why not `<video>`, ffmpeg warm/cache, SSH tunnels),
 see
@@ -191,6 +199,7 @@ Open `http://127.0.0.1:8765/`. Defaults:
 - `outputs/event_eval/agnostic_gemini_latest` (query-agnostic Gemini, current)
 - `outputs/event_eval/agnostic_kimi_latest` (query-agnostic Kimi, current)
 - `outputs/event_eval/tsm`
+- `outputs/event_eval/event_graph` (EventGraph retrieval + QA; optional)
 - `data/wearable-ai/egolongqa/wearable_ai_2026_egolongqa_val_700.jsonl`
   (ground-truth answers)
 

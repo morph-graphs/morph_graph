@@ -120,96 +120,98 @@ class Qwen3VLFeatureExtractor(VisualFeatureExtractor):
     def encode_frames(
         self, frames: torch.Tensor, frame_batch_size: int | None = None
     ) -> VisualFeatures:
-        """Encode frames, optionally in fixed-size batches to bound VRAM.
+        """Encode frames, optionally chunking only the vision-tower forward pass.
 
-        Qwen's vision tower groups frames by ``temporal_patch_size``.  Batches
-        must therefore preserve that grouping: pad the final batch to an even
-        number of frames, then discard only the padded temporal unit(s).
+        Preprocesses (resizes/normalizes/patchifies) the *entire* frame
+        sequence in one processor call, so every chunk shares one spatial
+        grid by construction -- no per-chunk resize, no short-final-chunk
+        drift. ``frame_batch_size`` only bounds how many temporal units go
+        through ``self.visual(...)`` per forward pass, to cap peak VRAM.
         """
-        if frame_batch_size is not None:
-            if frame_batch_size < self._temporal_patch_size:
-                raise ValueError(
-                    f"frame_batch_size must be >= {self._temporal_patch_size}"
-                )
-            if frames.shape[0] > frame_batch_size:
-                pooled_chunks = []
-                token_chunks = []
-                deepstack_chunks = None
-                metadata = None
-                for start in range(0, frames.shape[0], frame_batch_size):
-                    chunk = frames[start : start + frame_batch_size]
-                    n_real_frames = chunk.shape[0]
-
-                    if n_real_frames < frame_batch_size:
-                        pad_len = frame_batch_size - n_real_frames
-                        pad_frames = chunk[-1:].repeat(pad_len, 1, 1, 1)
-                        chunk = torch.cat([chunk, pad_frames], dim=0)
-
-                    encoded_chunk = self.encode_frames(
-                        chunk, frame_batch_size=frame_batch_size
-                    )
-                    n_real_units = (
-                        n_real_frames + self._temporal_patch_size - 1
-                    ) // self._temporal_patch_size
-
-                    pooled_chunks.append(encoded_chunk.pooled[:n_real_units])
-                    if encoded_chunk.patch_tokens is not None:
-                        token_chunks.append(encoded_chunk.patch_tokens[:n_real_units])
-                    if encoded_chunk.deepstack_features is not None:
-                        if deepstack_chunks is None:
-                            deepstack_chunks = [
-                                [] for _ in encoded_chunk.deepstack_features
-                            ]
-                        for target, features in zip(
-                            deepstack_chunks, encoded_chunk.deepstack_features
-                        ):
-                            target.append(features[:n_real_units])
-                    if metadata is None:
-                        metadata = encoded_chunk
-
-                assert metadata is not None
-                return VisualFeatures(
-                    patch_tokens=(
-                        torch.cat(token_chunks, dim=0) if token_chunks else None
-                    ),
-                    pooled=torch.cat(pooled_chunks, dim=0),
-                    grid_hw=metadata.grid_hw,
-                    dim=metadata.dim,
-                    model_name=metadata.model_name,
-                    deepstack_features=(
-                        [torch.cat(features, dim=0) for features in deepstack_chunks]
-                        if deepstack_chunks is not None
-                        else None
-                    ),
-                )
-
-        # Preprocess our torchcodec frames directly; do_sample_frames=False so
-        # the processor keeps exactly the frames we sampled.
+        # preprocess the full video;  output is flat patch embeddings. 
+        # grid_t/h/w are patch-grid units (grid_t = frames / temporal_patch_size).
         proc = self.processor.video_processor.preprocess(
             videos=[frames],
             return_tensors="pt",
             do_sample_frames=False,
             size=self._size_for(int(frames.shape[0])),
         )
-        grid_thw = proc["video_grid_thw"]  # (1, 3) -> [t, h, w] in patch units
+        pixel_values = proc["pixel_values_videos"]  # (grid_t*grid_h*grid_w, patch_dim)
+        grid_t, grid_h, grid_w = (int(x) for x in proc["video_grid_thw"][0].tolist())
+
+        if frame_batch_size is None:
+            return self._encode_patches(pixel_values, grid_t, grid_h, grid_w)
+
+        if frame_batch_size < self._temporal_patch_size:
+            raise ValueError(f"frame_batch_size must be >= {self._temporal_patch_size}")
+        if frame_batch_size % self._temporal_patch_size:
+            raise ValueError(
+                f"frame_batch_size must be divisible by temporal_patch_size="
+                f"{self._temporal_patch_size}"
+            )
+        # frame_batch_size counts raw frames; grid_t counts temporal units
+        # (pairs of frames), so convert once here.
+        chunk_units = frame_batch_size // self._temporal_patch_size
+        if grid_t <= chunk_units:
+            return self._encode_patches(pixel_values, grid_t, grid_h, grid_w)
+
+        # Patches are flattened temporal-major (grid_t outermost), so a
+        # contiguous slice of `units * grid_h * grid_w` rows is exactly the
+        # patches for `units` consecutive temporal units.
+        patches_per_unit = grid_h * grid_w
+        pooled_chunks = []
+        token_chunks = []
+        deepstack_chunks = None
+        metadata = None
+        for start in range(0, grid_t, chunk_units):
+            units = min(chunk_units, grid_t - start)
+            lo, hi = start * patches_per_unit, (start + units) * patches_per_unit
+            chunk = self._encode_patches(pixel_values[lo:hi], units, grid_h, grid_w)
+            pooled_chunks.append(chunk.pooled)
+            if chunk.patch_tokens is not None:
+                token_chunks.append(chunk.patch_tokens)
+            if chunk.deepstack_features is not None:
+                if deepstack_chunks is None:
+                    deepstack_chunks = [[] for _ in chunk.deepstack_features]
+                for target, features in zip(deepstack_chunks, chunk.deepstack_features):
+                    target.append(features)
+            if metadata is None:
+                metadata = chunk
+        assert metadata is not None
+        return VisualFeatures(
+            patch_tokens=(torch.cat(token_chunks, dim=0) if token_chunks else None),
+            pooled=torch.cat(pooled_chunks, dim=0),
+            grid_hw=metadata.grid_hw,
+            dim=metadata.dim,
+            model_name=metadata.model_name,
+            deepstack_features=(
+                [torch.cat(features, dim=0) for features in deepstack_chunks]
+                if deepstack_chunks is not None
+                else None
+            ),
+        )
+
+    def _encode_patches(
+        self, pixel_values: torch.Tensor, grid_t: int, grid_h: int, grid_w: int
+    ) -> VisualFeatures:
+        """Run the vision tower on a (pre-patchified) slice of one video."""
         vis_device = next(self.visual.parameters()).device
-        pixel_values = proc["pixel_values_videos"].to(vis_device, self.visual.dtype)
-        grid_thw = grid_thw.to(vis_device)
+        pixel_values = pixel_values.to(vis_device, self.visual.dtype)
+        grid_thw = torch.tensor([[grid_t, grid_h, grid_w]], device=vis_device)
 
         # `pooler_output` = merged (post-projection) tokens; `last_hidden_state`
         # = pre-merger tokens. DeepStack streams are needed to replay cached
         # visual tokens through Qwen's language path without re-encoding pixels.
         out = self.visual(pixel_values, grid_thw=grid_thw, return_dict=True)
-        t, h, w = (int(x) for x in grid_thw[0].tolist())
-        n_units = t
+        n_units = grid_t
 
         if self.feature_stage == "pre":
             tokens = out.last_hidden_state       # (t * h * w, vhid)
-            gh, gw = h, w                        # pre-merge patch grid
+            gh, gw = grid_h, grid_w              # pre-merge patch grid
             dim = self._vhid
         else:
             tokens = out.pooler_output           # (t * h/merge * w/merge, 4096)
-            gh, gw = h // self._merge, w // self._merge
+            gh, gw = grid_h // self._merge, grid_w // self._merge
             dim = self._dim
 
         tokens_per_unit = gh * gw

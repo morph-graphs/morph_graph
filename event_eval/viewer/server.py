@@ -41,6 +41,9 @@ DEFAULT_PATHS = {
         _MORPH_GRAPH_ROOT / "outputs" / "event_eval" / "agnostic_kimi_latest"
     ),
     "tsm_dir": str(_MORPH_GRAPH_ROOT / "outputs" / "event_eval" / "tsm"),
+    "event_graph_dir": str(
+        _MORPH_GRAPH_ROOT / "outputs" / "event_eval" / "event_graph"
+    ),
     "questions_jsonl": str(
         _MORPH_GRAPH_ROOT
         / "data"
@@ -55,6 +58,11 @@ def _resolve_path(raw: str | None, default_key: str) -> Path:
     text = (raw or "").strip() or DEFAULT_PATHS[default_key]
     path = Path(text).expanduser()
     if not path.is_absolute():
+        # Inputs are relative to morph_graph/. Tolerate a duplicated
+        # ``morph_graph/`` prefix from path pickers / @-mentions.
+        parts = path.parts
+        if parts and parts[0] in {"morph_graph", _MORPH_GRAPH_ROOT.name}:
+            path = Path(*parts[1:]) if len(parts) > 1 else Path(".")
         path = (_MORPH_GRAPH_ROOT / path).resolve()
     else:
         path = path.resolve()
@@ -324,6 +332,46 @@ def _load_tsm(tsm_dir: Path, video_id: str) -> dict[str, Any] | None:
     return _read_json(path)
 
 
+def _load_event_graph(
+    event_graph_dir: Path | None, sample_id: str
+) -> dict[str, Any] | None:
+    """Load EventGraph pilot/retrieval export keyed by sample_id."""
+    if not event_graph_dir or not sample_id or not event_graph_dir.is_dir():
+        return None
+    path = event_graph_dir / f"{sample_id}.json"
+    if not path.is_file():
+        return None
+    return _read_json(path)
+
+
+def _format_event_graph(
+    record: dict[str, Any] | None,
+) -> tuple[list[dict[str, Any]], str | None, str | None]:
+    """Return (retrieved_events, predicted_answer, qa_error)."""
+    if record is None:
+        return [], None, None
+    events: list[dict[str, Any]] = []
+    for index, event in enumerate(record.get("retrieved_events") or []):
+        events.append(
+            {
+                "event_id": event.get("event_id", f"eg_{index}"),
+                "segment_idx": event.get("segment_idx", index),
+                "start_sec": float(event["start_sec"]),
+                "end_sec": float(event["end_sec"]),
+                "retrieval_score": event.get("retrieval_score"),
+                "is_seed": bool(event.get("is_seed")),
+                "rank": event.get("rank", index + 1),
+                "frame_range": event.get("frame_range") or [],
+                "unit_range": event.get("unit_range") or [],
+            }
+        )
+    answer = record.get("answer")
+    qa_error = record.get("qa_error") or record.get("error")
+    return events, (None if answer is None else str(answer)), (
+        None if qa_error is None else str(qa_error)
+    )
+
+
 def _load_agnostic(agnostic_dir: Path, video_id: str) -> dict[str, Any] | None:
     """Load query-agnostic annotation keyed by video_id."""
     if not video_id or not agnostic_dir.is_dir():
@@ -405,6 +453,7 @@ def build_sample_list(
     questions_path: Path | None = None,
     agnostic_dir: Path | None = None,
     agnostic_kimi_dir: Path | None = None,
+    event_graph_dir: Path | None = None,
 ) -> list[dict[str, Any]]:
     answer_index = _load_answer_index(questions_path) if questions_path else {}
     samples: list[dict[str, Any]] = []
@@ -423,12 +472,15 @@ def build_sample_list(
             if agnostic_kimi_dir and video_id
             else None
         )
+        event_graph = _load_event_graph(event_graph_dir, sample_id)
+        retrieved, pred_answer, _qa_error = _format_event_graph(event_graph)
         samples.append(
             {
                 "sample_id": sample_id,
                 "video_id": video_id,
                 "query": oracle.get("query", ""),
                 "answer": answer_index.get(sample_id),
+                "pred_answer": pred_answer,
                 "n_oracle_events": len(oracle.get("events", [])),
                 "n_agnostic_events": (
                     len(agnostic.get("events", [])) if agnostic else 0
@@ -439,9 +491,11 @@ def build_sample_list(
                 "n_tsm_events": (
                     len(tsm.get("events_sec", [])) if tsm else 0
                 ),
+                "n_event_graph_events": len(retrieved),
                 "has_tsm": tsm is not None,
                 "has_agnostic": agnostic is not None,
                 "has_agnostic_kimi": agnostic_kimi is not None,
+                "has_event_graph": event_graph is not None,
                 "has_metrics": agnostic is not None and tsm is not None,
                 "has_metrics_kimi": agnostic_kimi is not None and tsm is not None,
                 "oracle_path": str(path),
@@ -457,6 +511,7 @@ def build_sample_detail(
     questions_path: Path | None = None,
     agnostic_dir: Path | None = None,
     agnostic_kimi_dir: Path | None = None,
+    event_graph_dir: Path | None = None,
 ) -> dict[str, Any]:
     oracle_path = oracle_dir / f"{sample_id}.json"
     if not oracle_path.is_file():
@@ -486,10 +541,12 @@ def build_sample_detail(
         if agnostic_kimi_dir and video_id
         else None
     )
+    event_graph = _load_event_graph(event_graph_dir, str(oracle.get("sample_id", sample_id)))
     comparison = _comparison_for_video(agnostic_dir, video_id, tsm)
     comparison_kimi = _comparison_for_video(agnostic_kimi_dir, video_id, tsm)
     answer_index = _load_answer_index(questions_path) if questions_path else {}
     answer = answer_index.get(str(oracle.get("sample_id", sample_id)))
+    retrieved_events, pred_answer, qa_error = _format_event_graph(event_graph)
 
     duration = float(
         oracle.get("video_duration_sec")
@@ -561,6 +618,9 @@ def build_sample_detail(
         "duration_sec": duration,
         "query": oracle.get("query", ""),
         "answer": answer,
+        "pred_answer": pred_answer,
+        "qa_error": qa_error,
+        "has_event_graph": event_graph is not None,
         "oracle_events": events,
         "oracle_edges": edges,
         "agnostic_events": agnostic_events,
@@ -570,6 +630,7 @@ def build_sample_detail(
         "agnostic_kimi_model": agnostic_kimi_model,
         "agnostic_kimi_prompt_version": agnostic_kimi_prompt,
         "tsm_events": tsm_events,
+        "event_graph_events": retrieved_events,
         "comparison": comparison,
         "comparison_kimi": comparison_kimi,
         "provider_comparison": provider_comparison,
@@ -589,6 +650,11 @@ def build_sample_detail(
                 else None
             ),
             "tsm_json": str(tsm_dir / f"{video_id}.json") if video_id else None,
+            "event_graph_json": (
+                str(event_graph_dir / f"{sample_id}.json")
+                if event_graph_dir and event_graph is not None
+                else None
+            ),
             "questions_jsonl": (
                 str(questions_path) if questions_path and questions_path.is_file() else None
             ),
@@ -631,6 +697,8 @@ class ViewerHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
+        # Viewer UI iterates quickly; never let the browser keep a stale shell.
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(data)
 
@@ -641,13 +709,14 @@ class ViewerHandler(BaseHTTPRequestHandler):
 
     def _paths_from_query(
         self,
-    ) -> tuple[Path, Path, Path, Path, Path]:
+    ) -> tuple[Path, Path, Path, Path, Path, Path]:
         q = self._query()
         return (
             _resolve_path(q.get("oracle_dir"), "oracle_dir"),
             _resolve_path(q.get("agnostic_dir"), "agnostic_dir"),
             _resolve_path(q.get("agnostic_kimi_dir"), "agnostic_kimi_dir"),
             _resolve_path(q.get("tsm_dir"), "tsm_dir"),
+            _resolve_path(q.get("event_graph_dir"), "event_graph_dir"),
             _resolve_path(q.get("questions_jsonl"), "questions_jsonl"),
         )
 
@@ -683,6 +752,7 @@ class ViewerHandler(BaseHTTPRequestHandler):
                 agnostic_dir,
                 agnostic_kimi_dir,
                 tsm_dir,
+                event_graph_dir,
                 questions_path,
             ) = self._paths_from_query()
             try:
@@ -692,6 +762,7 @@ class ViewerHandler(BaseHTTPRequestHandler):
                     questions_path,
                     agnostic_dir,
                     agnostic_kimi_dir,
+                    event_graph_dir,
                 )
             except Exception as exc:  # noqa: BLE001
                 self._send_error_json(400, str(exc))
@@ -704,6 +775,7 @@ class ViewerHandler(BaseHTTPRequestHandler):
                         "agnostic_dir": str(agnostic_dir),
                         "agnostic_kimi_dir": str(agnostic_kimi_dir),
                         "tsm_dir": str(tsm_dir),
+                        "event_graph_dir": str(event_graph_dir),
                         "questions_jsonl": str(questions_path),
                     },
                 }
@@ -717,6 +789,7 @@ class ViewerHandler(BaseHTTPRequestHandler):
                 agnostic_dir,
                 agnostic_kimi_dir,
                 tsm_dir,
+                event_graph_dir,
                 questions_path,
             ) = self._paths_from_query()
             try:
@@ -727,6 +800,7 @@ class ViewerHandler(BaseHTTPRequestHandler):
                     questions_path,
                     agnostic_dir,
                     agnostic_kimi_dir,
+                    event_graph_dir,
                 )
             except FileNotFoundError as exc:
                 self._send_error_json(404, str(exc))
@@ -931,6 +1005,7 @@ def main(argv: list[str] | None = None) -> None:
         f"  agnostic_dir:      {DEFAULT_PATHS['agnostic_dir']}",
         f"  agnostic_kimi_dir: {DEFAULT_PATHS['agnostic_kimi_dir']}",
         f"  tsm_dir:           {DEFAULT_PATHS['tsm_dir']}",
+        f"  event_graph_dir:   {DEFAULT_PATHS['event_graph_dir']}",
         f"  questions_jsonl:   {DEFAULT_PATHS['questions_jsonl']}",
         "  (TSM metrics computed on load; no report JSON required)",
     ]

@@ -11,6 +11,8 @@
   --tsm: #6b7385;
   --tsm-hit: #c4cad8;
   --kimi: #17a2d4;
+  --event-graph: #c084fc;
+  --event-graph-seed: #f472b6;
   --danger: #e06c75;
   --mono: "IBM Plex Mono", "SF Mono", Menlo, Consolas, monospace;
   --sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
@@ -309,6 +311,12 @@ h2 {
 .swatch.tsm-hit {
   background: var(--tsm-hit);
 }
+.swatch.event-graph {
+  background: var(--event-graph);
+}
+.swatch.event-graph-seed {
+  background: var(--event-graph-seed);
+}
 
 #tracks {
   width: 100%;
@@ -336,6 +344,11 @@ h2 {
 .answer-box {
   border-color: #3a5a45;
   background: #18241c;
+}
+
+.pred-box {
+  border-color: #4a3560;
+  background: #1c1628;
 }
 
 .metrics {
@@ -461,6 +474,18 @@ h2 {
 
 .event-card.answer {
   border-left: 3px solid var(--answer);
+}
+
+.event-card.event-graph {
+  border-left: 3px solid var(--event-graph);
+}
+
+.event-card.event-graph.seed {
+  border-left-color: var(--event-graph-seed);
+}
+
+.event-card.event-graph.active {
+  border-color: var(--event-graph);
 }
 
 .event-card .meta {
