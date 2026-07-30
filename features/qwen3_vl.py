@@ -14,6 +14,7 @@ from pathlib import Path
 import torch
 from ezcolorlog import root_logger as logger
 from transformers import AutoModelForImageTextToText, AutoProcessor
+from transformers.utils import is_flash_attn_2_available
 
 from .base import VisualFeatureExtractor, VisualFeatures, register_extractor
 
@@ -61,7 +62,11 @@ class Qwen3VLFeatureExtractor(VisualFeatureExtractor):
             model_path,
             torch_dtype=self._dtype,
             device_map="auto" if torch.cuda.is_available() else None,
-            attn_implementation="flash_attention_2" if torch.cuda.is_available() else "sdpa",
+            attn_implementation=(
+                "flash_attention_2"
+                if (torch.cuda.is_available() and is_flash_attn_2_available())
+                else "sdpa"
+            ),
         ).eval()
         self.processor = AutoProcessor.from_pretrained(model_path)
 

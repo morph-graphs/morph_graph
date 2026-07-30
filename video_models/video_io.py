@@ -5,6 +5,9 @@ from __future__ import annotations
 import torch
 from ezcolorlog import root_logger as logger
 
+import ctypes
+import os
+
 # NOTE: temporary hard cap on sampled frames. Vision-token count (and memory)
 # grows linearly with frames, so until chunked encoding lands we clamp any
 # fps-based sample to this many frames. FIXME: replace with chunked/streaming
@@ -12,12 +15,45 @@ from ezcolorlog import root_logger as logger
 MAX_SAMPLED_FRAMES = 1024
 
 
+def _ensure_ffmpeg_libs() -> None:
+    """Preload FFmpeg C shared libraries if not already in system search path."""
+    ffmpeg_dir = os.environ.get(
+        "MORPH_GRAPH_FFMPEG_DIR", "/opt/local/stow/ffmpeg-7.1/lib"
+    )
+    if not os.path.exists(ffmpeg_dir):
+        ffmpeg_dir = "/opt/local/stow/ffmpeg-6.1/lib"
+    if not os.path.exists(ffmpeg_dir):
+        return
+
+    libs = [
+        ["libavutil.so.59", "libavutil.so.58", "libavutil.so"],
+        ["libswresample.so.5", "libswresample.so.4", "libswresample.so"],
+        ["libavcodec.so.61", "libavcodec.so.60", "libavcodec.so"],
+        ["libavformat.so.61", "libavformat.so.60", "libavformat.so"],
+        ["libswscale.so.8", "libswscale.so.7", "libswscale.so"],
+        ["libavfilter.so.10", "libavfilter.so.9", "libavfilter.so"],
+        ["libavdevice.so.61", "libavdevice.so.60", "libavdevice.so"],
+    ]
+
+    for names in libs:
+        for name in names:
+            full_path = os.path.join(ffmpeg_dir, name)
+            if os.path.exists(full_path):
+                try:
+                    ctypes.CDLL(full_path, mode=ctypes.RTLD_GLOBAL)
+                    break
+                except Exception:
+                    pass
+
+
 def load_decoder(video_path: str):
     # Imported lazily so the package stays importable where torchcodec's native
     # extension isn't loadable. torchcodec only; never decord.
+    _ensure_ffmpeg_libs()
     from torchcodec.decoders import VideoDecoder
 
     return VideoDecoder(video_path)
+
 
 
 def sample_frame_indices(

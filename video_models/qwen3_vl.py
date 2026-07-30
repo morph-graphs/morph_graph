@@ -15,6 +15,7 @@ from types import SimpleNamespace
 import torch
 from ezcolorlog import root_logger as logger
 from transformers import AutoModelForImageTextToText, AutoProcessor
+from transformers.utils import is_flash_attn_2_available
 
 from .base import (
     VideoLLM,
@@ -68,7 +69,11 @@ class Qwen3VLFeatureExtractor(VisualFeatureExtractor):
             model_path,
             torch_dtype=self._dtype,
             device_map="auto" if torch.cuda.is_available() else None,
-            attn_implementation="flash_attention_2" if torch.cuda.is_available() else "sdpa",
+            attn_implementation=(
+                "flash_attention_2"
+                if (torch.cuda.is_available() and is_flash_attn_2_available())
+                else "sdpa"
+            ),
         ).eval()
         self.processor = AutoProcessor.from_pretrained(model_path)
 
@@ -132,17 +137,36 @@ class Qwen3VLFeatureExtractor(VisualFeatureExtractor):
                 deepstack_chunks = None
                 metadata = None
                 for start in range(0, frames.shape[0], frame_batch_size):
-                    chunk = self.encode_frames(frames[start : start + frame_batch_size])
-                    pooled_chunks.append(chunk.pooled)
-                    if chunk.patch_tokens is not None:
-                        token_chunks.append(chunk.patch_tokens)
-                    if chunk.deepstack_features is not None:
+                    chunk = frames[start : start + frame_batch_size]
+                    n_real_frames = chunk.shape[0]
+
+                    if n_real_frames < frame_batch_size:
+                        pad_len = frame_batch_size - n_real_frames
+                        pad_frames = chunk[-1:].repeat(pad_len, 1, 1, 1)
+                        chunk = torch.cat([chunk, pad_frames], dim=0)
+
+                    encoded_chunk = self.encode_frames(
+                        chunk, frame_batch_size=frame_batch_size
+                    )
+                    n_real_units = (
+                        n_real_frames + self._temporal_patch_size - 1
+                    ) // self._temporal_patch_size
+
+                    pooled_chunks.append(encoded_chunk.pooled[:n_real_units])
+                    if encoded_chunk.patch_tokens is not None:
+                        token_chunks.append(encoded_chunk.patch_tokens[:n_real_units])
+                    if encoded_chunk.deepstack_features is not None:
                         if deepstack_chunks is None:
-                            deepstack_chunks = [[] for _ in chunk.deepstack_features]
-                        for target, features in zip(deepstack_chunks, chunk.deepstack_features):
-                            target.append(features)
+                            deepstack_chunks = [
+                                [] for _ in encoded_chunk.deepstack_features
+                            ]
+                        for target, features in zip(
+                            deepstack_chunks, encoded_chunk.deepstack_features
+                        ):
+                            target.append(features[:n_real_units])
                     if metadata is None:
-                        metadata = chunk
+                        metadata = encoded_chunk
+
                 assert metadata is not None
                 return VisualFeatures(
                     patch_tokens=(
@@ -158,6 +182,7 @@ class Qwen3VLFeatureExtractor(VisualFeatureExtractor):
                         else None
                     ),
                 )
+
         # Preprocess our torchcodec frames directly; do_sample_frames=False so
         # the processor keeps exactly the frames we sampled.
         proc = self.processor.video_processor.preprocess(

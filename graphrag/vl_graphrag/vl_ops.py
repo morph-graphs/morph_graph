@@ -51,9 +51,10 @@ def _are_temporally_adjacent(src_id: str, tgt_id: str) -> bool:
 
 
 def _video_decoder(video_path: str):
-    from torchcodec.decoders import VideoDecoder
+    from ...video_models.video_io import load_decoder
 
-    return VideoDecoder(video_path)
+    return load_decoder(video_path)
+
 
 
 def segment_value(segment: dict, exclude_fields: set[str] | None = None) -> dict:

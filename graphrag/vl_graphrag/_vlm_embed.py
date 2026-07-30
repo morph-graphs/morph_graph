@@ -25,6 +25,8 @@ _EMBEDDING_SRC = (
 
 EmbedMode = Literal["text", "video"]
 
+from transformers.utils import is_flash_attn_2_available
+
 _EMBEDDERS: dict[str, Any] = {}
 _EMBEDDING_FUNCS: dict[str, EmbeddingFunc] = {}
 
@@ -39,8 +41,11 @@ class VideoHyperparams:
     fps: float = 1.0
     max_frames: int = 2048
     torch_dtype: str = "auto"
-    attn_implementation: str = "flash_attention_2"
+    attn_implementation: str = field(
+        default_factory=lambda: "flash_attention_2" if is_flash_attn_2_available() else "sdpa"
+    )
     device_map: str | None = "auto"
+
 
 
 def _resolve_torch_dtype(name: str):
