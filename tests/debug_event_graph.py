@@ -113,6 +113,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="VLM for --qa (fallback only; reuses the step-A Qwen3-VL by default)",
     )
     ap.add_argument("--retrieval-top-k", type=int, default=3)
+    ap.add_argument("--retrieval-mode", choices=["local", "qafd"], default="local")
     ap.add_argument("--max-segments-for-qa", type=int, default=5)
     ap.add_argument(
         "--max-qa-frames",
@@ -165,12 +166,14 @@ def run_debug_event_graph(
 
     aligned_pooled = None
     text_encoder = None
+    key_dim = feats.dim
     if args.aligned_model:
         if aligned is None:
             logger.info(f"[aligned] extractor={args.aligned_model}")
             aligned = get_extractor(args.aligned_model)
         aligned_pooled = aligned.encode_frames(frames).pooled
         text_encoder = aligned.encode_text
+        key_dim = int(aligned_pooled.shape[-1])
 
     working_dir = (
         str(args.working_dir) if args.working_dir else tempfile.mkdtemp(prefix="event_graph_")
@@ -233,7 +236,7 @@ def run_debug_event_graph(
             )
         else:
             query_param = VLQueryParam(
-                mode="local",
+                mode=args.retrieval_mode,
                 top_k=args.retrieval_top_k,
                 max_segments_for_qa=args.max_segments_for_qa,
                 max_frames_for_video_unit=args.max_qa_frames,

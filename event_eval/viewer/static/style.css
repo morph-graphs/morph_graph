@@ -13,6 +13,8 @@
   --kimi: #17a2d4;
   --event-graph: #c084fc;
   --event-graph-seed: #f472b6;
+  --qafd: #fb923c;
+  --qafd-seed: #f97316;
   --danger: #e06c75;
   --mono: "IBM Plex Mono", "SF Mono", Menlo, Consolas, monospace;
   --sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
@@ -317,6 +319,12 @@ h2 {
 .swatch.event-graph-seed {
   background: var(--event-graph-seed);
 }
+.swatch.qafd {
+  background: var(--qafd);
+}
+.swatch.qafd-seed {
+  background: var(--qafd-seed);
+}
 
 #tracks {
   width: 100%;
@@ -486,6 +494,18 @@ h2 {
 
 .event-card.event-graph.active {
   border-color: var(--event-graph);
+}
+
+.event-card.qafd {
+  border-left: 3px solid var(--qafd);
+}
+
+.event-card.qafd.seed {
+  border-left-color: var(--qafd-seed);
+}
+
+.event-card.qafd.active {
+  border-color: var(--qafd);
 }
 
 .event-card .meta {

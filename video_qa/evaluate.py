@@ -11,18 +11,12 @@ from typing import Any
 from .benchmarks import BENCHMARKS
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-_EGO_GT = (
-    _REPO_ROOT
-    / "data"
-    / "wearable-ai"
-    / "egolongqa"
-    / "wearable_ai_2026_egolongqa_val_700.jsonl"
-)
+_EGO_GT = Path("/fs/cfar-projects/mem_open_vocab/datasets/wearable-ai/egolongqa/wearable_ai_2026_egolongqa_val_700.jsonl")
 _VSI_GT = _REPO_ROOT / "vsi_output" / "vsi_events_mc_poc.json"
 
 
 def _load_official_evaluator():
-    path = _REPO_ROOT / "data" / "wearable-ai" / "starter_kit" / "run_evaluation.py"
+    path = Path("/fs/cfar-projects/mem_open_vocab/datasets/wearable-ai/starter_kit/run_evaluation.py")
     spec = importlib.util.spec_from_file_location("wearable_ai_evaluator", path)
     if spec is None or spec.loader is None:
         raise ImportError(f"Could not load evaluation helpers from {path}")

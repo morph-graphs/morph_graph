@@ -81,8 +81,8 @@ def resolve_preset(
     name: str,
     *,
     n_gpu: int = 1,
-    cpus: int = 8,
-    mem: str = "32G",
+    cpus: int = 4,
+    mem: str = "20G",
     time: str = "4:00:00",
 ) -> list[str]:
     """Expand a preset name into ``#SBATCH`` directive bodies (no ``#SBATCH``)."""
@@ -115,7 +115,7 @@ def main() -> None:
     parser.add_argument("--out-dir", type=Path, required=True)
     parser.add_argument("--log-dir", type=Path, required=True)
     parser.add_argument("--num-jobs", type=int, default=10)
-    parser.add_argument("--python", default="python")
+    parser.add_argument("--python", default="python3")
     parser.add_argument(
         "--preset",
         choices=_preset_names(),
@@ -127,7 +127,7 @@ def main() -> None:
         ),
     )
     parser.add_argument("--gpus", type=int, default=1, help="GPUs per task (with --preset)")
-    parser.add_argument("--cpus", type=int, default=8, help="CPUs per task (with --preset)")
+    parser.add_argument("--cpus", type=int, default=4, help="CPUs per task (with --preset)")
     parser.add_argument("--mem", default="32G", help="Memory (with --preset)")
     parser.add_argument("--time", default="4:00:00", help="Walltime (with --preset)")
     parser.add_argument(
@@ -155,8 +155,25 @@ def main() -> None:
         args.benchmark, question_path=args.question_path, video_dir=args.video_dir
     )
     samples = sorted(benchmark.load(), key=lambda sample: str(sample.video_path))
+    
+    # Filter out already processed samples globally
+    completed_ids = set()
+    if args.out_dir.exists():
+        for chunk_path in args.out_dir.glob("answers_chunk_*.json"):
+            try:
+                data = json.loads(chunk_path.read_text())
+                for row in data:
+                    if "sample_id" in row:
+                        completed_ids.add(str(row["sample_id"]))
+            except Exception:
+                pass
+    if completed_ids:
+        samples = [s for s in samples if str(s.sample_id) not in completed_ids]
+        print(f"Skipping {len(completed_ids)} already processed samples. {len(samples)} remaining.")
+
     if not samples:
-        raise ValueError("Benchmark produced no samples")
+        print("All samples are already processed. Exiting.")
+        return
     if args.num_jobs < 1:
         raise ValueError("--num-jobs must be positive")
     if args.gpus < 1:
@@ -209,7 +226,7 @@ def main() -> None:
     elif args.sbatch_arg:
         directives = list(args.sbatch_arg)
     else:
-        directives = ["--gres=gpu:1", "--cpus-per-task=8", "--mem=32G", "--time=4:00:00"]
+        directives = ["--gres=gpu:1", "--cpus-per-task=4", "--mem=32G", "--time=4:00:00"]
 
     submit_path = args.log_dir / "submit.slurm"
     lines = [
@@ -219,6 +236,11 @@ def main() -> None:
         f"#SBATCH --error={args.log_dir.resolve()}/%A_%a.err",
         *(f"#SBATCH {directive}" for directive in directives),
         "set -euo pipefail",
+        'eval "$(/fs/cfar-projects/mem_open_vocab/miniconda3/bin/conda shell.bash hook)"',
+        "conda activate morph_graphs_qwen3_cu126",
+        "source /etc/profile.d/modules.sh",
+        "module load cuda/12.6.3",
+        "module load ffmpeg/7.1",
         *args.preamble,
         f"CMD=$(sed -n \"${{SLURM_ARRAY_TASK_ID}}p\" {shlex.quote(str(commands_path.resolve()))})",
         'srun bash -lc "$CMD"',
