@@ -44,6 +44,9 @@ DEFAULT_PATHS = {
     "event_graph_dir": str(
         _MORPH_GRAPH_ROOT / "outputs" / "event_eval" / "event_graph"
     ),
+    "qafd_dir": str(
+        _MORPH_GRAPH_ROOT / "outputs" / "event_eval" / "qafd"
+    ),
     "questions_jsonl": str(
         _MORPH_GRAPH_ROOT
         / "data"
@@ -454,6 +457,7 @@ def build_sample_list(
     agnostic_dir: Path | None = None,
     agnostic_kimi_dir: Path | None = None,
     event_graph_dir: Path | None = None,
+    qafd_dir: Path | None = None,
 ) -> list[dict[str, Any]]:
     answer_index = _load_answer_index(questions_path) if questions_path else {}
     samples: list[dict[str, Any]] = []
@@ -474,6 +478,8 @@ def build_sample_list(
         )
         event_graph = _load_event_graph(event_graph_dir, sample_id)
         retrieved, pred_answer, _qa_error = _format_event_graph(event_graph)
+        qafd = _load_event_graph(qafd_dir, sample_id)
+        qafd_retrieved, qafd_pred_answer, _qafd_qa_error = _format_event_graph(qafd)
         samples.append(
             {
                 "sample_id": sample_id,
@@ -481,6 +487,7 @@ def build_sample_list(
                 "query": oracle.get("query", ""),
                 "answer": answer_index.get(sample_id),
                 "pred_answer": pred_answer,
+                "qafd_pred_answer": qafd_pred_answer,
                 "n_oracle_events": len(oracle.get("events", [])),
                 "n_agnostic_events": (
                     len(agnostic.get("events", [])) if agnostic else 0
@@ -492,10 +499,12 @@ def build_sample_list(
                     len(tsm.get("events_sec", [])) if tsm else 0
                 ),
                 "n_event_graph_events": len(retrieved),
+                "n_qafd_events": len(qafd_retrieved),
                 "has_tsm": tsm is not None,
                 "has_agnostic": agnostic is not None,
                 "has_agnostic_kimi": agnostic_kimi is not None,
                 "has_event_graph": event_graph is not None,
+                "has_qafd": qafd is not None,
                 "has_metrics": agnostic is not None and tsm is not None,
                 "has_metrics_kimi": agnostic_kimi is not None and tsm is not None,
                 "oracle_path": str(path),
@@ -512,6 +521,7 @@ def build_sample_detail(
     agnostic_dir: Path | None = None,
     agnostic_kimi_dir: Path | None = None,
     event_graph_dir: Path | None = None,
+    qafd_dir: Path | None = None,
 ) -> dict[str, Any]:
     oracle_path = oracle_dir / f"{sample_id}.json"
     if not oracle_path.is_file():
@@ -547,6 +557,9 @@ def build_sample_detail(
     answer_index = _load_answer_index(questions_path) if questions_path else {}
     answer = answer_index.get(str(oracle.get("sample_id", sample_id)))
     retrieved_events, pred_answer, qa_error = _format_event_graph(event_graph)
+    
+    qafd = _load_event_graph(qafd_dir, str(oracle.get("sample_id", sample_id)))
+    qafd_retrieved_events, qafd_pred_answer, qafd_qa_error = _format_event_graph(qafd)
 
     duration = float(
         oracle.get("video_duration_sec")
@@ -620,7 +633,10 @@ def build_sample_detail(
         "answer": answer,
         "pred_answer": pred_answer,
         "qa_error": qa_error,
+        "qafd_pred_answer": qafd_pred_answer,
+        "qafd_qa_error": qafd_qa_error,
         "has_event_graph": event_graph is not None,
+        "has_qafd": qafd is not None,
         "oracle_events": events,
         "oracle_edges": edges,
         "agnostic_events": agnostic_events,
@@ -631,6 +647,7 @@ def build_sample_detail(
         "agnostic_kimi_prompt_version": agnostic_kimi_prompt,
         "tsm_events": tsm_events,
         "event_graph_events": retrieved_events,
+        "qafd_events": qafd_retrieved_events,
         "comparison": comparison,
         "comparison_kimi": comparison_kimi,
         "provider_comparison": provider_comparison,
@@ -653,6 +670,11 @@ def build_sample_detail(
             "event_graph_json": (
                 str(event_graph_dir / f"{sample_id}.json")
                 if event_graph_dir and event_graph is not None
+                else None
+            ),
+            "qafd_json": (
+                str(qafd_dir / f"{sample_id}.json")
+                if qafd_dir and qafd is not None
                 else None
             ),
             "questions_jsonl": (
@@ -717,6 +739,7 @@ class ViewerHandler(BaseHTTPRequestHandler):
             _resolve_path(q.get("agnostic_kimi_dir"), "agnostic_kimi_dir"),
             _resolve_path(q.get("tsm_dir"), "tsm_dir"),
             _resolve_path(q.get("event_graph_dir"), "event_graph_dir"),
+            _resolve_path(q.get("qafd_dir"), "qafd_dir"),
             _resolve_path(q.get("questions_jsonl"), "questions_jsonl"),
         )
 
@@ -753,6 +776,7 @@ class ViewerHandler(BaseHTTPRequestHandler):
                 agnostic_kimi_dir,
                 tsm_dir,
                 event_graph_dir,
+                qafd_dir,
                 questions_path,
             ) = self._paths_from_query()
             try:
@@ -763,6 +787,7 @@ class ViewerHandler(BaseHTTPRequestHandler):
                     agnostic_dir,
                     agnostic_kimi_dir,
                     event_graph_dir,
+                    qafd_dir,
                 )
             except Exception as exc:  # noqa: BLE001
                 self._send_error_json(400, str(exc))
@@ -776,6 +801,7 @@ class ViewerHandler(BaseHTTPRequestHandler):
                         "agnostic_kimi_dir": str(agnostic_kimi_dir),
                         "tsm_dir": str(tsm_dir),
                         "event_graph_dir": str(event_graph_dir),
+                        "qafd_dir": str(qafd_dir),
                         "questions_jsonl": str(questions_path),
                     },
                 }
@@ -790,6 +816,7 @@ class ViewerHandler(BaseHTTPRequestHandler):
                 agnostic_kimi_dir,
                 tsm_dir,
                 event_graph_dir,
+                qafd_dir,
                 questions_path,
             ) = self._paths_from_query()
             try:
@@ -801,6 +828,7 @@ class ViewerHandler(BaseHTTPRequestHandler):
                     agnostic_dir,
                     agnostic_kimi_dir,
                     event_graph_dir,
+                    qafd_dir,
                 )
             except FileNotFoundError as exc:
                 self._send_error_json(404, str(exc))
@@ -1006,6 +1034,7 @@ def main(argv: list[str] | None = None) -> None:
         f"  agnostic_kimi_dir: {DEFAULT_PATHS['agnostic_kimi_dir']}",
         f"  tsm_dir:           {DEFAULT_PATHS['tsm_dir']}",
         f"  event_graph_dir:   {DEFAULT_PATHS['event_graph_dir']}",
+        f"  qafd_dir:          {DEFAULT_PATHS['qafd_dir']}",
         f"  questions_jsonl:   {DEFAULT_PATHS['questions_jsonl']}",
         "  (TSM metrics computed on load; no report JSON required)",
     ]

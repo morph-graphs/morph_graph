@@ -6,6 +6,7 @@
       agnostic_kimi_dir: "",
       tsm_dir: "",
       event_graph_dir: "",
+      qafd_dir: "",
       questions_jsonl: "",
     },
     samples: [],
@@ -14,10 +15,12 @@
     activeAgnosticId: null,
     activeAgnosticKimiId: null,
     activeEventGraphId: null,
+    activeQafdId: null,
     scrolledEventId: null,
     scrolledAgnosticId: null,
     scrolledAgnosticKimiId: null,
     scrolledEventGraphId: null,
+    scrolledQafdId: null,
     videoPath: null,
     duration: 0,
     sourceFps: 1,
@@ -42,6 +45,7 @@
     agnosticKimiDir: document.getElementById("agnostic-kimi-dir"),
     tsmDir: document.getElementById("tsm-dir"),
     eventGraphDir: document.getElementById("event-graph-dir"),
+    qafdDir: document.getElementById("qafd-dir"),
     questionsJsonl: document.getElementById("questions-jsonl"),
     loadBtn: document.getElementById("load-btn"),
     resetBtn: document.getElementById("reset-btn"),
@@ -51,6 +55,7 @@
     query: document.getElementById("query"),
     answer: document.getElementById("answer"),
     predAnswer: document.getElementById("pred-answer"),
+    qafdPredAnswer: document.getElementById("qafd-pred-answer"),
     metrics: document.getElementById("metrics"),
     providerMetrics: document.getElementById("provider-metrics"),
     frame: document.getElementById("frame"),
@@ -68,6 +73,8 @@
     eventList: document.getElementById("event-list"),
     eventGraphList: document.getElementById("event-graph-list"),
     eventGraphCount: document.getElementById("event-graph-count"),
+    qafdList: document.getElementById("qafd-list"),
+    qafdCount: document.getElementById("qafd-count"),
     agnosticList: document.getElementById("agnostic-list"),
     agnosticKimiList: document.getElementById("agnostic-kimi-list"),
     agnosticCount: document.getElementById("agnostic-count"),
@@ -86,6 +93,7 @@
       agnostic_kimi_dir: state.paths.agnostic_kimi_dir,
       tsm_dir: state.paths.tsm_dir,
       event_graph_dir: state.paths.event_graph_dir,
+      qafd_dir: state.paths.qafd_dir,
       questions_jsonl: state.paths.questions_jsonl,
     });
     return p.toString();
@@ -125,6 +133,7 @@
       agnostic_kimi_dir: el.agnosticKimiDir.value.trim(),
       tsm_dir: el.tsmDir.value.trim(),
       event_graph_dir: el.eventGraphDir.value.trim(),
+      qafd_dir: el.qafdDir.value.trim(),
       questions_jsonl: el.questionsJsonl.value.trim(),
     };
   }
@@ -135,6 +144,7 @@
     el.agnosticKimiDir.value = paths.agnostic_kimi_dir || "";
     el.tsmDir.value = paths.tsm_dir || "";
     el.eventGraphDir.value = paths.event_graph_dir || "";
+    el.qafdDir.value = paths.qafd_dir || "";
     el.questionsJsonl.value = paths.questions_jsonl || "";
     state.paths = { ...paths };
   }
@@ -157,6 +167,7 @@
       agnostic_kimi_dir: data.resolved.agnostic_kimi_dir,
       tsm_dir: data.resolved.tsm_dir,
       event_graph_dir: data.resolved.event_graph_dir,
+      qafd_dir: data.resolved.qafd_dir,
       questions_jsonl: data.resolved.questions_jsonl,
     });
     el.resolved.textContent = "";
@@ -172,10 +183,12 @@
       opt.value = s.sample_id;
       const vid = s.video_id || "unknown";
       const eg = s.n_event_graph_events || 0;
+      const qafdN = s.n_qafd_events || 0;
       opt.textContent =
         `${s.sample_id} · ${vid}.mp4 · ${s.n_oracle_events} oracle / ` +
         `${s.n_agnostic_events || 0} gemini / ${s.n_agnostic_kimi_events || 0} kimi / ${s.n_tsm_events} TSM` +
-        (s.has_event_graph ? ` / ${eg} EG` : "");
+        (s.has_event_graph ? ` / ${eg} EG` : "") +
+        (s.has_qafd ? ` / ${qafdN} QAFD` : "");
       el.sampleSelect.appendChild(opt);
     }
     setStatus(`${state.samples.length} samples loaded.`);
@@ -191,6 +204,7 @@
     state.activeAgnosticId = null;
     state.activeAgnosticKimiId = null;
     state.activeEventGraphId = null;
+    state.activeQafdId = null;
     el.sampleSelect.value = detail.sample_id;
     const videoFile =
       (detail.video_path && detail.video_path.split(/[/\\]/).pop()) ||
@@ -220,21 +234,38 @@
         "(no EventGraph JSON for this sample — check event_graph_dir, then Load)";
       el.predAnswer.classList.add("muted");
     }
+    
+    if (detail.qafd_pred_answer) {
+      el.qafdPredAnswer.textContent = detail.qafd_pred_answer;
+      el.qafdPredAnswer.classList.remove("muted");
+    } else if (detail.qafd_qa_error) {
+      el.qafdPredAnswer.textContent = `(error) ${detail.qafd_qa_error}`;
+      el.qafdPredAnswer.classList.add("muted");
+    } else if (detail.has_qafd) {
+      el.qafdPredAnswer.textContent = "(QAFD file found, but no answer field)";
+      el.qafdPredAnswer.classList.add("muted");
+    } else {
+      el.qafdPredAnswer.textContent =
+        "(no QAFD JSON for this sample — check qafd_dir, then Load)";
+      el.qafdPredAnswer.classList.add("muted");
+    }
     renderMetrics(detail);
     renderProviderMetrics(detail);
     renderGraph(detail);
     renderAgnosticEvents(detail, "gemini");
     renderAgnosticEvents(detail, "kimi");
     renderEventGraphEvents(detail);
+    renderQafdEvents(detail);
     renderEvents(detail);
     renderTracks(detail);
     setupFrameViewer(detail).catch((err) =>
       setStatus(String(err.message || err), true)
     );
     const egN = (detail.event_graph_events || []).length;
+    const qafdN = (detail.qafd_events || []).length;
     setStatus(
       detail.video_exists
-        ? `Sample ${detail.sample_id} · ${videoFile || detail.video_id} · ${detail.oracle_events.length} oracle · ${detail.agnostic_events.length} gemini · ${(detail.agnostic_kimi_events || []).length} kimi · ${detail.tsm_events.length} TSM · ${egN} EG`
+        ? `Sample ${detail.sample_id} · ${videoFile || detail.video_id} · ${detail.oracle_events.length} oracle · ${detail.agnostic_events.length} gemini · ${(detail.agnostic_kimi_events || []).length} kimi · ${detail.tsm_events.length} TSM · ${egN} EG · ${qafdN} QAFD`
         : `Sample ${detail.sample_id} loaded, but video file is missing: ${detail.video_path || "(none)"}`,
       !detail.video_exists
     );
@@ -618,15 +649,17 @@
     const activeAgnostic = activeAgnosticAt(t);
     const activeAgnosticKimi = activeAgnosticKimiAt(t);
     const activeEventGraph = activeEventGraphAt(t);
+    const activeQafd = activeQafdAt(t);
     state.activeEventId = activeOracle ? activeOracle.event_id : null;
     state.activeAgnosticId = activeAgnostic ? activeAgnostic.event_id : null;
     state.activeAgnosticKimiId = activeAgnosticKimi
       ? activeAgnosticKimi.event_id
       : null;
     state.activeEventGraphId = activeEventGraph ? activeEventGraph.event_id : null;
+    state.activeQafdId = activeQafd ? activeQafd.event_id : null;
 
-    // Prefer agnostic overlay when reviewing that track; fall back to oracle / EG.
-    const overlayEvent = activeAgnostic || activeAgnosticKimi || activeOracle || activeEventGraph;
+    // Prefer agnostic overlay when reviewing that track; fall back to oracle / EG / QAFD.
+    const overlayEvent = activeAgnostic || activeAgnosticKimi || activeOracle || activeEventGraph || activeQafd;
     if (overlayEvent) {
       const kind = activeAgnostic
         ? "gemini"
@@ -634,7 +667,9 @@
           ? "kimi"
           : activeOracle
             ? "oracle"
-            : "event-graph";
+            : activeEventGraph
+              ? "event-graph"
+              : "qafd";
       el.overlay.classList.remove("hidden");
       el.overlayTime.textContent =
         `${mmss(overlayEvent.start_sec)} – ${mmss(overlayEvent.end_sec)} · ` +
@@ -665,6 +700,12 @@
         card.dataset.eventGraphId === state.activeEventGraphId
       );
     });
+    document.querySelectorAll("#qafd-list .event-card").forEach((card) => {
+      card.classList.toggle(
+        "active",
+        card.dataset.qafdId === state.activeQafdId
+      );
+    });
 
     if (state.activeAgnosticId) {
       state.scrolledAgnosticId = scrollActiveCard(
@@ -692,6 +733,15 @@
       );
     } else {
       state.scrolledEventGraphId = null;
+    }
+    if (state.activeQafdId) {
+      state.scrolledQafdId = scrollActiveCard(
+        el.qafdList,
+        `#qafd-list .event-card.active`,
+        state.scrolledQafdId
+      );
+    } else {
+      state.scrolledQafdId = null;
     }
     if (state.activeEventId) {
       state.scrolledEventId = scrollActiveCard(
@@ -752,6 +802,15 @@
 
   function activeEventGraphAt(t) {
     const events = state.sample?.event_graph_events || [];
+    return (
+      events.find((e) => t >= e.start_sec && t < e.end_sec) ||
+      events.find((e) => Math.abs(t - e.start_sec) < 0.25) ||
+      null
+    );
+  }
+
+  function activeQafdAt(t) {
+    const events = state.sample?.qafd_events || [];
     return (
       events.find((e) => t >= e.start_sec && t < e.end_sec) ||
       events.find((e) => Math.abs(t - e.start_sec) < 0.25) ||
@@ -884,6 +943,41 @@
     });
   }
 
+  function renderQafdEvents(detail) {
+    el.qafdList.innerHTML = "";
+    state.scrolledQafdId = null;
+    const events = detail.qafd_events || [];
+    el.qafdCount.textContent = events.length ? `(${events.length})` : "(none)";
+    if (!events.length) {
+      el.qafdList.innerHTML =
+        `<div class="muted" style="padding:4px 0">No QAFD retrieval for this sample.</div>`;
+      return;
+    }
+    const sorted = [...events].sort(
+      (a, b) => (a.rank || 0) - (b.rank || 0) || a.start_sec - b.start_sec
+    );
+    sorted.forEach((e) => {
+      const span = e.end_sec - e.start_sec;
+      const score =
+        e.retrieval_score == null || Number.isNaN(Number(e.retrieval_score))
+          ? "n/a"
+          : Number(e.retrieval_score).toFixed(3);
+      const card = document.createElement("div");
+      card.className = "event-card qafd" + (e.is_seed ? " seed" : "");
+      card.dataset.qafdId = e.event_id;
+      card.innerHTML = `
+        <div class="meta">
+          <span>#${e.rank || "?"} · seg ${e.segment_idx}${e.is_seed ? " · seed" : ""}</span>
+          <span>${mmss(e.start_sec)} – ${mmss(e.end_sec)} (${Math.round(span)}s)</span>
+        </div>
+        <div class="title">${escapeHtml(e.event_id)}</div>
+        <div class="cover">score ${escapeHtml(score)}</div>
+      `;
+      card.addEventListener("click", () => seekTo(e.start_sec));
+      el.qafdList.appendChild(card);
+    });
+  }
+
   function renderEvents(detail) {
     el.eventList.innerHTML = "";
     state.scrolledEventId = null;
@@ -962,13 +1056,14 @@
     const oraY = 88;
     const egY = 112;
     const barH = 14;
-    const height = 170;
+    const height = 194;
     svg.setAttribute("viewBox", `0 0 ${w} ${height}`);
 
     const oracle = detail.oracle_events || [];
     const agnostic = detail.agnostic_events || [];
     const agnosticKimi = detail.agnostic_kimi_events || [];
     const eventGraph = detail.event_graph_events || [];
+    const qafd = detail.qafd_events || [];
     const allAgnostic = [...agnostic, ...agnosticKimi];
     const covering = new Set();
     detail.tsm_events.forEach((seg, i) => {
@@ -987,11 +1082,13 @@
     markup += `<text x="0" y="${kimiY + 11}" fill="#9aa3b5" font-size="11">Kimi</text>`;
     markup += `<text x="0" y="${oraY + 11}" fill="#9aa3b5" font-size="11">Oracle</text>`;
     markup += `<text x="0" y="${egY + 11}" fill="#9aa3b5" font-size="11">EG</text>`;
+    markup += `<text x="0" y="${egY + 24 + 11}" fill="#9aa3b5" font-size="11">QAFD</text>`;
     markup += `<rect x="${left}" y="${tsmY}" width="${trackW}" height="${barH}" fill="#222632" />`;
     markup += `<rect x="${left}" y="${gemY}" width="${trackW}" height="${barH}" fill="#222632" />`;
     markup += `<rect x="${left}" y="${kimiY}" width="${trackW}" height="${barH}" fill="#222632" />`;
     markup += `<rect x="${left}" y="${oraY}" width="${trackW}" height="${barH}" fill="#222632" />`;
     markup += `<rect x="${left}" y="${egY}" width="${trackW}" height="${barH}" fill="#222632" />`;
+    markup += `<rect x="${left}" y="${egY + 24}" width="${trackW}" height="${barH}" fill="#222632" />`;
 
     detail.tsm_events.forEach((seg, i) => {
       const x = left + (seg.start_sec / duration) * trackW;
@@ -1036,6 +1133,16 @@
       markup += `<rect x="${x}" y="${egY}" width="${ww}" height="${barH}" fill="${fill}" stroke="#0d0f14" stroke-width="0.5" data-t="${e.start_sec}" rx="2" />`;
       if (ww >= 12) {
         markup += `<text x="${x + ww / 2}" y="${egY + 11}" text-anchor="middle" fill="#0b1020" font-size="9" font-weight="600">${e.rank || ""}</text>`;
+      }
+    });
+
+    qafd.forEach((e) => {
+      const x = left + (e.start_sec / duration) * trackW;
+      const ww = Math.max(2, ((e.end_sec - e.start_sec) / duration) * trackW);
+      const fill = e.is_seed ? "#f97316" : "#fb923c";
+      markup += `<rect x="${x}" y="${egY + 24}" width="${ww}" height="${barH}" fill="${fill}" stroke="#0d0f14" stroke-width="0.5" data-t="${e.start_sec}" rx="2" />`;
+      if (ww >= 12) {
+        markup += `<text x="${x + ww / 2}" y="${egY + 24 + 11}" text-anchor="middle" fill="#0b1020" font-size="9" font-weight="600">${e.rank || ""}</text>`;
       }
     });
 
