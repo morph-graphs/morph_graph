@@ -5,8 +5,7 @@
       agnostic_dir: "",
       agnostic_kimi_dir: "",
       tsm_dir: "",
-      event_graph_dir: "",
-      qafd_dir: "",
+      event_graph_dirs: "",
       questions_jsonl: "",
     },
     samples: [],
@@ -39,6 +38,14 @@
     warmReady: false,
   };
 
+  /** Same retrieved/seed colors for every EventGraph run (matches CSS vars). */
+  const EG_EVENT_COLORS = { fill: "#c084fc", seed: "#f472b6" };
+
+  function egRunHeaderHtml(run, fallbackIndex = 0) {
+    const title = escapeHtml(run.label || `EG ${fallbackIndex + 1}`);
+    return `<h3>${title}</h3>`;
+  }
+
   const el = {
     oracleDir: document.getElementById("oracle-dir"),
     agnosticDir: document.getElementById("agnostic-dir"),
@@ -54,8 +61,7 @@
     status: document.getElementById("status"),
     query: document.getElementById("query"),
     answer: document.getElementById("answer"),
-    predAnswer: document.getElementById("pred-answer"),
-    qafdPredAnswer: document.getElementById("qafd-pred-answer"),
+    predAnswers: document.getElementById("pred-answers"),
     metrics: document.getElementById("metrics"),
     providerMetrics: document.getElementById("provider-metrics"),
     frame: document.getElementById("frame"),
@@ -71,7 +77,7 @@
     overlayDesc: document.getElementById("overlay-desc"),
     tracks: document.getElementById("tracks"),
     eventList: document.getElementById("event-list"),
-    eventGraphList: document.getElementById("event-graph-list"),
+    eventGraphColumns: document.getElementById("event-graph-columns"),
     eventGraphCount: document.getElementById("event-graph-count"),
     qafdList: document.getElementById("qafd-list"),
     qafdCount: document.getElementById("qafd-count"),
@@ -86,14 +92,29 @@
     resolved: document.getElementById("resolved"),
   };
 
+  function eventGraphRuns(detail) {
+    if (detail.event_graph_runs?.length) return detail.event_graph_runs;
+    if (detail.event_graph_events?.length || detail.has_event_graph) {
+      return [
+        {
+          label: "EG",
+          events: detail.event_graph_events || [],
+          pred_answer: detail.pred_answer,
+          qa_error: detail.qa_error,
+          has_event_graph: detail.has_event_graph,
+        },
+      ];
+    }
+    return [];
+  }
+
   function qs() {
     const p = new URLSearchParams({
       oracle_dir: state.paths.oracle_dir,
       agnostic_dir: state.paths.agnostic_dir,
       agnostic_kimi_dir: state.paths.agnostic_kimi_dir,
       tsm_dir: state.paths.tsm_dir,
-      event_graph_dir: state.paths.event_graph_dir,
-      qafd_dir: state.paths.qafd_dir,
+      event_graph_dirs: state.paths.event_graph_dirs,
       questions_jsonl: state.paths.questions_jsonl,
     });
     return p.toString();
@@ -132,8 +153,7 @@
       agnostic_dir: el.agnosticDir.value.trim(),
       agnostic_kimi_dir: el.agnosticKimiDir.value.trim(),
       tsm_dir: el.tsmDir.value.trim(),
-      event_graph_dir: el.eventGraphDir.value.trim(),
-      qafd_dir: el.qafdDir.value.trim(),
+      event_graph_dirs: el.eventGraphDir.value.trim(),
       questions_jsonl: el.questionsJsonl.value.trim(),
     };
   }
@@ -143,10 +163,17 @@
     el.agnosticDir.value = paths.agnostic_dir || "";
     el.agnosticKimiDir.value = paths.agnostic_kimi_dir || "";
     el.tsmDir.value = paths.tsm_dir || "";
-    el.eventGraphDir.value = paths.event_graph_dir || "";
-    el.qafdDir.value = paths.qafd_dir || "";
+    el.eventGraphDir.value =
+      paths.event_graph_dirs || paths.event_graph_dir || "";
     el.questionsJsonl.value = paths.questions_jsonl || "";
-    state.paths = { ...paths };
+    state.paths = {
+      oracle_dir: el.oracleDir.value.trim(),
+      agnostic_dir: el.agnosticDir.value.trim(),
+      agnostic_kimi_dir: el.agnosticKimiDir.value.trim(),
+      tsm_dir: el.tsmDir.value.trim(),
+      event_graph_dirs: el.eventGraphDir.value.trim(),
+      questions_jsonl: el.questionsJsonl.value.trim(),
+    };
   }
 
   async function loadDefaults() {
@@ -166,8 +193,7 @@
       agnostic_dir: data.resolved.agnostic_dir,
       agnostic_kimi_dir: data.resolved.agnostic_kimi_dir,
       tsm_dir: data.resolved.tsm_dir,
-      event_graph_dir: data.resolved.event_graph_dir,
-      qafd_dir: data.resolved.qafd_dir,
+      event_graph_dirs: data.resolved.event_graph_dirs,
       questions_jsonl: data.resolved.questions_jsonl,
     });
     el.resolved.textContent = "";
@@ -182,13 +208,11 @@
       const opt = document.createElement("option");
       opt.value = s.sample_id;
       const vid = s.video_id || "unknown";
-      const eg = s.n_event_graph_events || 0;
-      const qafdN = s.n_qafd_events || 0;
+      const egRuns = s.n_event_graph_runs || (s.has_event_graph ? 1 : 0);
       opt.textContent =
         `${s.sample_id} · ${vid}.mp4 · ${s.n_oracle_events} oracle / ` +
         `${s.n_agnostic_events || 0} gemini / ${s.n_agnostic_kimi_events || 0} kimi / ${s.n_tsm_events} TSM` +
-        (s.has_event_graph ? ` / ${eg} EG` : "") +
-        (s.has_qafd ? ` / ${qafdN} QAFD` : "");
+        (egRuns ? ` / ${egRuns} EG` : "");
       el.sampleSelect.appendChild(opt);
     }
     setStatus(`${state.samples.length} samples loaded.`);
@@ -203,8 +227,7 @@
     state.activeEventId = null;
     state.activeAgnosticId = null;
     state.activeAgnosticKimiId = null;
-    state.activeEventGraphId = null;
-    state.activeQafdId = null;
+    state.activeEventGraphKey = null;
     el.sampleSelect.value = detail.sample_id;
     const videoFile =
       (detail.video_path && detail.video_path.split(/[/\\]/).pop()) ||
@@ -220,55 +243,60 @@
       el.answer.textContent = "(answer not found in questions JSONL)";
       el.answer.classList.add("muted");
     }
-    if (detail.pred_answer) {
-      el.predAnswer.textContent = detail.pred_answer;
-      el.predAnswer.classList.remove("muted");
-    } else if (detail.qa_error) {
-      el.predAnswer.textContent = `(error) ${detail.qa_error}`;
-      el.predAnswer.classList.add("muted");
-    } else if (detail.has_event_graph) {
-      el.predAnswer.textContent = "(EventGraph file found, but no answer field)";
-      el.predAnswer.classList.add("muted");
-    } else {
-      el.predAnswer.textContent =
-        "(no EventGraph JSON for this sample — check event_graph_dir, then Load)";
-      el.predAnswer.classList.add("muted");
-    }
-    
-    if (detail.qafd_pred_answer) {
-      el.qafdPredAnswer.textContent = detail.qafd_pred_answer;
-      el.qafdPredAnswer.classList.remove("muted");
-    } else if (detail.qafd_qa_error) {
-      el.qafdPredAnswer.textContent = `(error) ${detail.qafd_qa_error}`;
-      el.qafdPredAnswer.classList.add("muted");
-    } else if (detail.has_qafd) {
-      el.qafdPredAnswer.textContent = "(QAFD file found, but no answer field)";
-      el.qafdPredAnswer.classList.add("muted");
-    } else {
-      el.qafdPredAnswer.textContent =
-        "(no QAFD JSON for this sample — check qafd_dir, then Load)";
-      el.qafdPredAnswer.classList.add("muted");
-    }
+    renderPredAnswers(detail);
     renderMetrics(detail);
     renderProviderMetrics(detail);
     renderGraph(detail);
     renderAgnosticEvents(detail, "gemini");
     renderAgnosticEvents(detail, "kimi");
-    renderEventGraphEvents(detail);
-    renderQafdEvents(detail);
+    renderEventGraphRuns(detail);
     renderEvents(detail);
     renderTracks(detail);
     setupFrameViewer(detail).catch((err) =>
       setStatus(String(err.message || err), true)
     );
-    const egN = (detail.event_graph_events || []).length;
-    const qafdN = (detail.qafd_events || []).length;
+    const runs = eventGraphRuns(detail);
+    const egN = runs.reduce((n, run) => n + (run.events?.length || 0), 0);
     setStatus(
       detail.video_exists
-        ? `Sample ${detail.sample_id} · ${videoFile || detail.video_id} · ${detail.oracle_events.length} oracle · ${detail.agnostic_events.length} gemini · ${(detail.agnostic_kimi_events || []).length} kimi · ${detail.tsm_events.length} TSM · ${egN} EG · ${qafdN} QAFD`
+        ? `Sample ${detail.sample_id} · ${videoFile || detail.video_id} · ${detail.oracle_events.length} oracle · ${detail.agnostic_events.length} gemini · ${(detail.agnostic_kimi_events || []).length} kimi · ${detail.tsm_events.length} TSM · ${runs.length} EG run(s) / ${egN} spans`
         : `Sample ${detail.sample_id} loaded, but video file is missing: ${detail.video_path || "(none)"}`,
       !detail.video_exists
     );
+  }
+
+  function renderPredAnswers(detail) {
+    el.predAnswers.innerHTML = "";
+    const runs = eventGraphRuns(detail);
+    if (!runs.length) {
+      el.predAnswers.innerHTML =
+        `<div class="muted" style="padding:4px 0">No EventGraph dirs loaded. Add one path per line, then Load.</div>`;
+      return;
+    }
+    runs.forEach((run, index) => {
+      const col = document.createElement("div");
+      col.className = "pred-col";
+      const box = document.createElement("div");
+      box.className = "query-box pred-box";
+      let text = "(no prediction)";
+      if (run.pred_answer) {
+        text = run.pred_answer;
+        box.classList.remove("muted");
+      } else if (run.qa_error) {
+        text = `(error) ${run.qa_error}`;
+        box.classList.add("muted");
+      } else if (run.has_event_graph) {
+        text = "(file found, no answer field)";
+        box.classList.add("muted");
+      } else {
+        text = "(no JSON for this sample)";
+        box.classList.add("muted");
+      }
+      box.textContent = text;
+      col.innerHTML = egRunHeaderHtml(run, index);
+      col.appendChild(box);
+      el.predAnswers.appendChild(col);
+    });
   }
 
   function fmtF1(f1) {
@@ -493,7 +521,7 @@
       if (idx < 0 || idx >= state.nFrames) continue;
       const key = cacheKey(idx);
       if (state.frameCache.has(key) || state.prefetching.has(key)) continue;
-      ensureFrame(idx).catch(() => {});
+      ensureFrame(idx).catch(() => { });
     }
   }
 
@@ -524,7 +552,7 @@
         );
         if (state.warmReady) prefetchAround(state.frameIndex);
       })
-      .catch(() => {});
+      .catch(() => { });
     state.warmTimer = setInterval(() => {
       fetchJSON(`/api/warm_status?${qsWarm}`)
         .then((st) => {
@@ -545,7 +573,7 @@
             updateScrubberMeta(`cache ${st.cached}/${st.total}`);
           }
         })
-        .catch(() => {});
+        .catch(() => { });
     }, 1500);
   }
 
@@ -634,7 +662,11 @@
     if (!listEl) return prevKey;
     const card = listEl.querySelector(selector);
     if (!card) return null;
-    const id = card.dataset.agnosticId || card.dataset.eventGraphId || card.dataset.id || null;
+    const id =
+      card.dataset.agnosticId ||
+      card.dataset.eventGraphKey ||
+      card.dataset.id ||
+      null;
     if (id && id !== prevKey) {
       card.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
     }
@@ -655,11 +687,15 @@
     state.activeAgnosticKimiId = activeAgnosticKimi
       ? activeAgnosticKimi.event_id
       : null;
-    state.activeEventGraphId = activeEventGraph ? activeEventGraph.event_id : null;
-    state.activeQafdId = activeQafd ? activeQafd.event_id : null;
+    state.activeEventGraphKey = activeEventGraph
+      ? `${activeEventGraph.runIndex}:${activeEventGraph.event.event_id}`
+      : null;
 
-    // Prefer agnostic overlay when reviewing that track; fall back to oracle / EG / QAFD.
-    const overlayEvent = activeAgnostic || activeAgnosticKimi || activeOracle || activeEventGraph || activeQafd;
+    const overlayEvent =
+      activeAgnostic ||
+      activeAgnosticKimi ||
+      activeOracle ||
+      (activeEventGraph ? activeEventGraph.event : null);
     if (overlayEvent) {
       const kind = activeAgnostic
         ? "gemini"
@@ -667,14 +703,13 @@
           ? "kimi"
           : activeOracle
             ? "oracle"
-            : activeEventGraph
-              ? "event-graph"
-              : "qafd";
+            : `eg:${activeEventGraph.runIndex + 1}`;
       el.overlay.classList.remove("hidden");
+      const ev = activeEventGraph ? activeEventGraph.event : overlayEvent;
       el.overlayTime.textContent =
-        `${mmss(overlayEvent.start_sec)} – ${mmss(overlayEvent.end_sec)} · ` +
-        `${kind} · ${overlayEvent.event_id}`;
-      el.overlayDesc.textContent = overlayEvent.description || overlayEvent.event_id;
+        `${mmss(ev.start_sec)} – ${mmss(ev.end_sec)} · ` +
+        `${kind} · ${ev.event_id}`;
+      el.overlayDesc.textContent = ev.description || ev.event_id;
     } else {
       el.overlay.classList.add("hidden");
     }
@@ -694,10 +729,10 @@
         card.dataset.agnosticId === state.activeAgnosticKimiId
       );
     });
-    document.querySelectorAll("#event-graph-list .event-card").forEach((card) => {
+    document.querySelectorAll("#event-graph-columns .event-card").forEach((card) => {
       card.classList.toggle(
         "active",
-        card.dataset.eventGraphId === state.activeEventGraphId
+        card.dataset.eventGraphKey === state.activeEventGraphKey
       );
     });
     document.querySelectorAll("#qafd-list .event-card").forEach((card) => {
@@ -725,14 +760,14 @@
     } else {
       state.scrolledAgnosticKimiId = null;
     }
-    if (state.activeEventGraphId) {
-      state.scrolledEventGraphId = scrollActiveCard(
-        el.eventGraphList,
-        `#event-graph-list .event-card.active`,
-        state.scrolledEventGraphId
+    if (state.activeEventGraphKey) {
+      state.scrolledEventGraphKey = scrollActiveCard(
+        el.eventGraphColumns,
+        `#event-graph-columns .event-card.active`,
+        state.scrolledEventGraphKey
       );
     } else {
-      state.scrolledEventGraphId = null;
+      state.scrolledEventGraphKey = null;
     }
     if (state.activeQafdId) {
       state.scrolledQafdId = scrollActiveCard(
@@ -801,12 +836,14 @@
   }
 
   function activeEventGraphAt(t) {
-    const events = state.sample?.event_graph_events || [];
-    return (
-      events.find((e) => t >= e.start_sec && t < e.end_sec) ||
-      events.find((e) => Math.abs(t - e.start_sec) < 0.25) ||
-      null
-    );
+    for (let runIndex = 0; runIndex < eventGraphRuns(state.sample || {}).length; runIndex++) {
+      const events = eventGraphRuns(state.sample)[runIndex].events || [];
+      const hit =
+        events.find((e) => t >= e.start_sec && t < e.end_sec) ||
+        events.find((e) => Math.abs(t - e.start_sec) < 0.25);
+      if (hit) return { runIndex, event: hit };
+    }
+    return null;
   }
 
   function activeQafdAt(t) {
@@ -895,12 +932,10 @@
           <span>${i + 1}. ${escapeHtml(e.event_id)}</span>
           <span>${mmss(e.start_sec)} – ${mmss(e.end_sec)} (${Math.round(span)}s)</span>
         </div>
-        <div class="title">${escapeHtml(e.granularity || "event")}${
-          parents ? " · child of " + escapeHtml(parents) : " · root"
+        <div class="title">${escapeHtml(e.granularity || "event")}${parents ? " · child of " + escapeHtml(parents) : " · root"
         }</div>
         <div class="desc">${escapeHtml(e.description)}</div>
-        <div class="cover">${escapeHtml(cats || "no categories")} · ${escapeHtml(coverText)}${
-          metricText ? " · " + escapeHtml(metricText) : ""
+        <div class="cover">${escapeHtml(cats || "no categories")} · ${escapeHtml(coverText)}${metricText ? " · " + escapeHtml(metricText) : ""
         }</div>
       `;
       card.addEventListener("click", () => seekTo(e.start_sec));
@@ -908,38 +943,56 @@
     });
   }
 
-  function renderEventGraphEvents(detail) {
-    el.eventGraphList.innerHTML = "";
-    state.scrolledEventGraphId = null;
-    const events = detail.event_graph_events || [];
-    el.eventGraphCount.textContent = events.length ? `(${events.length})` : "(none)";
-    if (!events.length) {
-      el.eventGraphList.innerHTML =
-        `<div class="muted" style="padding:4px 0">No EventGraph retrieval for this sample. Run tests.debug_event_graph_pilot.</div>`;
+  function renderEventGraphRuns(detail) {
+    el.eventGraphColumns.innerHTML = "";
+    state.scrolledEventGraphKey = null;
+    const runs = eventGraphRuns(detail);
+    const total = runs.reduce((n, run) => n + (run.events?.length || 0), 0);
+    el.eventGraphCount.textContent = runs.length
+      ? `(${runs.length} run${runs.length === 1 ? "" : "s"}, ${total} spans)`
+      : "(none)";
+    if (!runs.length) {
+      el.eventGraphColumns.innerHTML =
+        `<div class="muted" style="padding:4px 0">No EventGraph retrieval. Run tests.debug_event_graph_pilot into each dir.</div>`;
       return;
     }
-    const sorted = [...events].sort(
-      (a, b) => (a.rank || 0) - (b.rank || 0) || a.start_sec - b.start_sec
-    );
-    sorted.forEach((e) => {
-      const span = e.end_sec - e.start_sec;
-      const score =
-        e.retrieval_score == null || Number.isNaN(Number(e.retrieval_score))
-          ? "n/a"
-          : Number(e.retrieval_score).toFixed(3);
-      const card = document.createElement("div");
-      card.className = "event-card event-graph" + (e.is_seed ? " seed" : "");
-      card.dataset.eventGraphId = e.event_id;
-      card.innerHTML = `
-        <div class="meta">
-          <span>#${e.rank || "?"} · seg ${e.segment_idx}${e.is_seed ? " · seed" : ""}</span>
-          <span>${mmss(e.start_sec)} – ${mmss(e.end_sec)} (${Math.round(span)}s)</span>
-        </div>
-        <div class="title">${escapeHtml(e.event_id)}</div>
-        <div class="cover">score ${escapeHtml(score)}</div>
-      `;
-      card.addEventListener("click", () => seekTo(e.start_sec));
-      el.eventGraphList.appendChild(card);
+    runs.forEach((run, runIndex) => {
+      const col = document.createElement("div");
+      col.className = "event-graph-col";
+      const list = document.createElement("div");
+      list.className = "event-list";
+      const events = run.events || [];
+      if (!events.length) {
+        list.innerHTML =
+          `<div class="muted" style="padding:4px 0">No JSON for this sample.</div>`;
+      } else {
+        const sorted = [...events].sort(
+          (a, b) => (a.rank || 0) - (b.rank || 0) || a.start_sec - b.start_sec
+        );
+        sorted.forEach((e) => {
+          const span = e.end_sec - e.start_sec;
+          const score =
+            e.retrieval_score == null || Number.isNaN(Number(e.retrieval_score))
+              ? "n/a"
+              : Number(e.retrieval_score).toFixed(3);
+          const card = document.createElement("div");
+          card.className = "event-card event-graph" + (e.is_seed ? " seed" : "");
+          card.dataset.eventGraphKey = `${runIndex}:${e.event_id}`;
+          card.innerHTML = `
+            <div class="meta">
+              <span>#${e.rank || "?"} · seg ${e.segment_idx}${e.is_seed ? " · seed" : ""}</span>
+              <span>${mmss(e.start_sec)} – ${mmss(e.end_sec)} (${Math.round(span)}s)</span>
+            </div>
+            <div class="title">${escapeHtml(e.event_id)}</div>
+            <div class="cover">score ${escapeHtml(score)}</div>
+          `;
+          card.addEventListener("click", () => seekTo(e.start_sec));
+          list.appendChild(card);
+        });
+      }
+      col.innerHTML = egRunHeaderHtml(run, runIndex);
+      col.appendChild(list);
+      el.eventGraphColumns.appendChild(col);
     });
   }
 
@@ -994,8 +1047,7 @@
           <span>${i + 1}. ${escapeHtml(e.event_id)}</span>
           <span>${mmss(e.start_sec)} – ${mmss(e.end_sec)}</span>
         </div>
-        <div class="title">${escapeHtml(e.granularity || "event")}${
-          roles ? " · " + escapeHtml(roles) : ""
+        <div class="title">${escapeHtml(e.granularity || "event")}${roles ? " · " + escapeHtml(roles) : ""
         }</div>
         <div class="desc">${escapeHtml(e.description)}</div>
         <div class="cover">query-conditioned (metrics use agnostic track)</div>
@@ -1054,16 +1106,17 @@
     const gemY = 40;
     const kimiY = 64;
     const oraY = 88;
-    const egY = 112;
+    const runs = eventGraphRuns(detail);
+    const egStartY = 112;
+    const rowStep = 24;
     const barH = 14;
-    const height = 194;
+    const height = Math.max(170, egStartY + runs.length * rowStep + 34);
     svg.setAttribute("viewBox", `0 0 ${w} ${height}`);
+    svg.setAttribute("height", String(height));
 
     const oracle = detail.oracle_events || [];
     const agnostic = detail.agnostic_events || [];
     const agnosticKimi = detail.agnostic_kimi_events || [];
-    const eventGraph = detail.event_graph_events || [];
-    const qafd = detail.qafd_events || [];
     const allAgnostic = [...agnostic, ...agnosticKimi];
     const covering = new Set();
     detail.tsm_events.forEach((seg, i) => {
@@ -1081,14 +1134,15 @@
     markup += `<text x="0" y="${gemY + 11}" fill="#9aa3b5" font-size="11">Gemini</text>`;
     markup += `<text x="0" y="${kimiY + 11}" fill="#9aa3b5" font-size="11">Kimi</text>`;
     markup += `<text x="0" y="${oraY + 11}" fill="#9aa3b5" font-size="11">Oracle</text>`;
-    markup += `<text x="0" y="${egY + 11}" fill="#9aa3b5" font-size="11">EG</text>`;
-    markup += `<text x="0" y="${egY + 24 + 11}" fill="#9aa3b5" font-size="11">QAFD</text>`;
     markup += `<rect x="${left}" y="${tsmY}" width="${trackW}" height="${barH}" fill="#222632" />`;
     markup += `<rect x="${left}" y="${gemY}" width="${trackW}" height="${barH}" fill="#222632" />`;
     markup += `<rect x="${left}" y="${kimiY}" width="${trackW}" height="${barH}" fill="#222632" />`;
     markup += `<rect x="${left}" y="${oraY}" width="${trackW}" height="${barH}" fill="#222632" />`;
-    markup += `<rect x="${left}" y="${egY}" width="${trackW}" height="${barH}" fill="#222632" />`;
-    markup += `<rect x="${left}" y="${egY + 24}" width="${trackW}" height="${barH}" fill="#222632" />`;
+    runs.forEach((run, runIndex) => {
+      const y = egStartY + runIndex * rowStep;
+      markup += `<text x="0" y="${y + 11}" fill="#9aa3b5" font-size="11">${escapeHtml(run.label || `EG${runIndex + 1}`).slice(0, 10)}</text>`;
+      markup += `<rect x="${left}" y="${y}" width="${trackW}" height="${barH}" fill="#222632" />`;
+    });
 
     detail.tsm_events.forEach((seg, i) => {
       const x = left + (seg.start_sec / duration) * trackW;
@@ -1126,14 +1180,17 @@
       }
     });
 
-    eventGraph.forEach((e) => {
-      const x = left + (e.start_sec / duration) * trackW;
-      const ww = Math.max(2, ((e.end_sec - e.start_sec) / duration) * trackW);
-      const fill = e.is_seed ? "#f472b6" : "#c084fc";
-      markup += `<rect x="${x}" y="${egY}" width="${ww}" height="${barH}" fill="${fill}" stroke="#0d0f14" stroke-width="0.5" data-t="${e.start_sec}" rx="2" />`;
-      if (ww >= 12) {
-        markup += `<text x="${x + ww / 2}" y="${egY + 11}" text-anchor="middle" fill="#0b1020" font-size="9" font-weight="600">${e.rank || ""}</text>`;
-      }
+    runs.forEach((run, runIndex) => {
+      const y = egStartY + runIndex * rowStep;
+      (run.events || []).forEach((e) => {
+        const x = left + (e.start_sec / duration) * trackW;
+        const ww = Math.max(2, ((e.end_sec - e.start_sec) / duration) * trackW);
+        const fill = e.is_seed ? EG_EVENT_COLORS.seed : EG_EVENT_COLORS.fill;
+        markup += `<rect x="${x}" y="${y}" width="${ww}" height="${barH}" fill="${fill}" stroke="#0d0f14" stroke-width="0.5" data-t="${e.start_sec}" rx="2" />`;
+        if (ww >= 12) {
+          markup += `<text x="${x + ww / 2}" y="${y + 11}" text-anchor="middle" fill="#0b1020" font-size="9" font-weight="600">${e.rank || ""}</text>`;
+        }
+      });
     });
 
     qafd.forEach((e) => {

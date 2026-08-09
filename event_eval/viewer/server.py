@@ -375,6 +375,52 @@ def _format_event_graph(
     )
 
 
+def _parse_event_graph_dirs(raw: str | None) -> list[tuple[str, Path]]:
+    """Parse multiline EventGraph dirs; optional ``label|path`` per line."""
+    text = (raw or "").strip()
+    if not text:
+        path = _resolve_path(None, "event_graph_dir")
+        return [(path.name, path)]
+
+    entries: list[tuple[str, Path]] = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        label: str | None = None
+        path_text = line
+        if "|" in line:
+            label, path_text = line.split("|", 1)
+            label = label.strip() or None
+            path_text = path_text.strip()
+        path = _resolve_path(path_text, "event_graph_dir")
+        entries.append((label or path.name, path))
+    return entries
+
+
+def _event_graph_run(
+    label: str, event_graph_dir: Path, sample_id: str
+) -> dict[str, Any]:
+    record = _load_event_graph(event_graph_dir, sample_id)
+    events, pred_answer, qa_error = _format_event_graph(record)
+    return {
+        "label": label,
+        "path": str(event_graph_dir),
+        "events": events,
+        "pred_answer": pred_answer,
+        "qa_error": qa_error,
+        "has_event_graph": record is not None,
+        "json_path": (
+            str(event_graph_dir / f"{sample_id}.json") if record is not None else None
+        ),
+    }
+
+
+def _event_graph_dirs_from_query(q: dict[str, str]) -> list[tuple[str, Path]]:
+    raw = q.get("event_graph_dirs") or q.get("event_graph_dir") or ""
+    return _parse_event_graph_dirs(raw)
+
+
 def _load_agnostic(agnostic_dir: Path, video_id: str) -> dict[str, Any] | None:
     """Load query-agnostic annotation keyed by video_id."""
     if not video_id or not agnostic_dir.is_dir():
@@ -456,8 +502,7 @@ def build_sample_list(
     questions_path: Path | None = None,
     agnostic_dir: Path | None = None,
     agnostic_kimi_dir: Path | None = None,
-    event_graph_dir: Path | None = None,
-    qafd_dir: Path | None = None,
+    event_graph_dirs: list[tuple[str, Path]] | None = None,
 ) -> list[dict[str, Any]]:
     answer_index = _load_answer_index(questions_path) if questions_path else {}
     samples: list[dict[str, Any]] = []
@@ -476,18 +521,18 @@ def build_sample_list(
             if agnostic_kimi_dir and video_id
             else None
         )
-        event_graph = _load_event_graph(event_graph_dir, sample_id)
-        retrieved, pred_answer, _qa_error = _format_event_graph(event_graph)
-        qafd = _load_event_graph(qafd_dir, sample_id)
-        qafd_retrieved, qafd_pred_answer, _qafd_qa_error = _format_event_graph(qafd)
+        runs = [
+            _event_graph_run(label, eg_dir, sample_id)
+            for label, eg_dir in (event_graph_dirs or [])
+        ]
+        first = runs[0] if runs else None
         samples.append(
             {
                 "sample_id": sample_id,
                 "video_id": video_id,
                 "query": oracle.get("query", ""),
                 "answer": answer_index.get(sample_id),
-                "pred_answer": pred_answer,
-                "qafd_pred_answer": qafd_pred_answer,
+                "pred_answer": first.get("pred_answer") if first else None,
                 "n_oracle_events": len(oracle.get("events", [])),
                 "n_agnostic_events": (
                     len(agnostic.get("events", [])) if agnostic else 0
@@ -498,13 +543,12 @@ def build_sample_list(
                 "n_tsm_events": (
                     len(tsm.get("events_sec", [])) if tsm else 0
                 ),
-                "n_event_graph_events": len(retrieved),
-                "n_qafd_events": len(qafd_retrieved),
+                "n_event_graph_events": len(first["events"]) if first else 0,
+                "n_event_graph_runs": len(runs),
                 "has_tsm": tsm is not None,
                 "has_agnostic": agnostic is not None,
                 "has_agnostic_kimi": agnostic_kimi is not None,
-                "has_event_graph": event_graph is not None,
-                "has_qafd": qafd is not None,
+                "has_event_graph": any(run["has_event_graph"] for run in runs),
                 "has_metrics": agnostic is not None and tsm is not None,
                 "has_metrics_kimi": agnostic_kimi is not None and tsm is not None,
                 "oracle_path": str(path),
@@ -520,8 +564,7 @@ def build_sample_detail(
     questions_path: Path | None = None,
     agnostic_dir: Path | None = None,
     agnostic_kimi_dir: Path | None = None,
-    event_graph_dir: Path | None = None,
-    qafd_dir: Path | None = None,
+    event_graph_dirs: list[tuple[str, Path]] | None = None,
 ) -> dict[str, Any]:
     oracle_path = oracle_dir / f"{sample_id}.json"
     if not oracle_path.is_file():
@@ -551,15 +594,19 @@ def build_sample_detail(
         if agnostic_kimi_dir and video_id
         else None
     )
-    event_graph = _load_event_graph(event_graph_dir, str(oracle.get("sample_id", sample_id)))
+    sid = str(oracle.get("sample_id", sample_id))
+    event_graph_runs = [
+        _event_graph_run(label, eg_dir, sid)
+        for label, eg_dir in (event_graph_dirs or [])
+    ]
+    first_run = event_graph_runs[0] if event_graph_runs else None
     comparison = _comparison_for_video(agnostic_dir, video_id, tsm)
     comparison_kimi = _comparison_for_video(agnostic_kimi_dir, video_id, tsm)
     answer_index = _load_answer_index(questions_path) if questions_path else {}
-    answer = answer_index.get(str(oracle.get("sample_id", sample_id)))
-    retrieved_events, pred_answer, qa_error = _format_event_graph(event_graph)
-    
-    qafd = _load_event_graph(qafd_dir, str(oracle.get("sample_id", sample_id)))
-    qafd_retrieved_events, qafd_pred_answer, qafd_qa_error = _format_event_graph(qafd)
+    answer = answer_index.get(sid)
+    retrieved_events = first_run["events"] if first_run else []
+    pred_answer = first_run.get("pred_answer") if first_run else None
+    qa_error = first_run.get("qa_error") if first_run else None
 
     duration = float(
         oracle.get("video_duration_sec")
@@ -633,10 +680,8 @@ def build_sample_detail(
         "answer": answer,
         "pred_answer": pred_answer,
         "qa_error": qa_error,
-        "qafd_pred_answer": qafd_pred_answer,
-        "qafd_qa_error": qafd_qa_error,
-        "has_event_graph": event_graph is not None,
-        "has_qafd": qafd is not None,
+        "has_event_graph": any(run["has_event_graph"] for run in event_graph_runs),
+        "event_graph_runs": event_graph_runs,
         "oracle_events": events,
         "oracle_edges": edges,
         "agnostic_events": agnostic_events,
@@ -667,16 +712,10 @@ def build_sample_detail(
                 else None
             ),
             "tsm_json": str(tsm_dir / f"{video_id}.json") if video_id else None,
-            "event_graph_json": (
-                str(event_graph_dir / f"{sample_id}.json")
-                if event_graph_dir and event_graph is not None
-                else None
-            ),
-            "qafd_json": (
-                str(qafd_dir / f"{sample_id}.json")
-                if qafd_dir and qafd is not None
-                else None
-            ),
+            "event_graph_json": first_run.get("json_path") if first_run else None,
+            "event_graph_jsons": [
+                run["json_path"] for run in event_graph_runs if run.get("json_path")
+            ],
             "questions_jsonl": (
                 str(questions_path) if questions_path and questions_path.is_file() else None
             ),
@@ -731,15 +770,14 @@ class ViewerHandler(BaseHTTPRequestHandler):
 
     def _paths_from_query(
         self,
-    ) -> tuple[Path, Path, Path, Path, Path, Path]:
+    ) -> tuple[Path, Path, Path, Path, list[tuple[str, Path]], Path]:
         q = self._query()
         return (
             _resolve_path(q.get("oracle_dir"), "oracle_dir"),
             _resolve_path(q.get("agnostic_dir"), "agnostic_dir"),
             _resolve_path(q.get("agnostic_kimi_dir"), "agnostic_kimi_dir"),
             _resolve_path(q.get("tsm_dir"), "tsm_dir"),
-            _resolve_path(q.get("event_graph_dir"), "event_graph_dir"),
-            _resolve_path(q.get("qafd_dir"), "qafd_dir"),
+            _event_graph_dirs_from_query(q),
             _resolve_path(q.get("questions_jsonl"), "questions_jsonl"),
         )
 
@@ -775,8 +813,7 @@ class ViewerHandler(BaseHTTPRequestHandler):
                 agnostic_dir,
                 agnostic_kimi_dir,
                 tsm_dir,
-                event_graph_dir,
-                qafd_dir,
+                event_graph_dirs,
                 questions_path,
             ) = self._paths_from_query()
             try:
@@ -786,8 +823,7 @@ class ViewerHandler(BaseHTTPRequestHandler):
                     questions_path,
                     agnostic_dir,
                     agnostic_kimi_dir,
-                    event_graph_dir,
-                    qafd_dir,
+                    event_graph_dirs,
                 )
             except Exception as exc:  # noqa: BLE001
                 self._send_error_json(400, str(exc))
@@ -800,8 +836,9 @@ class ViewerHandler(BaseHTTPRequestHandler):
                         "agnostic_dir": str(agnostic_dir),
                         "agnostic_kimi_dir": str(agnostic_kimi_dir),
                         "tsm_dir": str(tsm_dir),
-                        "event_graph_dir": str(event_graph_dir),
-                        "qafd_dir": str(qafd_dir),
+                        "event_graph_dirs": "\n".join(
+                            f"{label}|{path}" for label, path in event_graph_dirs
+                        ),
                         "questions_jsonl": str(questions_path),
                     },
                 }
@@ -815,8 +852,7 @@ class ViewerHandler(BaseHTTPRequestHandler):
                 agnostic_dir,
                 agnostic_kimi_dir,
                 tsm_dir,
-                event_graph_dir,
-                qafd_dir,
+                event_graph_dirs,
                 questions_path,
             ) = self._paths_from_query()
             try:
@@ -827,8 +863,7 @@ class ViewerHandler(BaseHTTPRequestHandler):
                     questions_path,
                     agnostic_dir,
                     agnostic_kimi_dir,
-                    event_graph_dir,
-                    qafd_dir,
+                    event_graph_dirs,
                 )
             except FileNotFoundError as exc:
                 self._send_error_json(404, str(exc))

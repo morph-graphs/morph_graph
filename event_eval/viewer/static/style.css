@@ -383,6 +383,46 @@ h2 {
   margin-bottom: 8px;
 }
 
+.pred-columns,
+.event-graph-columns {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.pred-columns {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.event-graph-columns {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.pred-col,
+.event-graph-col {
+  min-width: 0;
+}
+
+.pred-col h3,
+.event-graph-col h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.pred-col .query-box {
+  margin-bottom: 0;
+  max-height: 28vh;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.event-graph-col .event-list {
+  max-height: 36vh;
+}
+
 .agnostic-columns {
   display: grid;
   grid-template-columns: 1fr 1fr;

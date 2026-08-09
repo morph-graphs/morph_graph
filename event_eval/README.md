@@ -176,12 +176,20 @@ actual videos (frame-by-frame scrubbing via ffmpeg JPEGs, side-by-side provider
 timelines, parent→child edges, per-event cover metrics). Paths default to
 `*_latest` annotation dirs; TSM vs reference metrics are computed on load.
 
-To populate the EventGraph track (retrieved spans + predicted answer) for the
-pilot:
+To populate the EventGraph track(s) (retrieved spans + predicted answer) for the
+pilot, run one or more exports (each into its own directory):
 
 ```bash
-python -m tests.debug_event_graph_pilot --qa --aligned-model pe_core_vit_l
-# writes outputs/event_eval/event_graph/<sample_id>.json
+python -m tests.debug_event_graph_pilot --qa --aligned-model pe_core_vit_l \
+  --out-dir outputs/event_eval/event_graph
+```
+
+Compare multiple runs in the viewer by listing one directory per line in
+**EventGraph directories** (optional ``label|path`` per line), e.g.:
+
+```
+local|outputs/event_eval/event_graph
+qafd|outputs/event_eval/event_graph_qafd
 ```
 
 For reusable design notes (why not `<video>`, ffmpeg warm/cache, SSH tunnels),
