@@ -34,7 +34,7 @@ class VideoQAConfig:
     max_qa_frames: int = 128
     max_new_tokens: int = 128
     retrieval_only: bool = False
-    retrieval_mode: str = "qafd"
+    retrieval_mode: str = "local"
     qafd_alpha: float = 10.0
     qafd_epsilon: float = 1e-4
     qafd_step_size: float = 0.2

@@ -35,7 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-new-tokens", type=int, default=128)
     parser.add_argument("--retrieval-only", action="store_true")
     parser.add_argument("--mode", "--retrieval-mode", dest="retrieval_mode",
-                        choices=["naive", "local", "qafd"], default="qafd")
+                        choices=["naive", "local", "qafd"], default="local")
     parser.add_argument("--qafd-alpha", type=float, default=10.0)
     parser.add_argument("--qafd-weight-scheme", choices=["multiply", "add", "hybrid"], default="multiply")
     return parser

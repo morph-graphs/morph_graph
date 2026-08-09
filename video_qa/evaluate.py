@@ -11,7 +11,7 @@ from typing import Any
 
 from .benchmarks import BENCHMARKS
 
-_REPO_ROOT = Path(__file__).resolve().parents[3]
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 _DATA_DIR = Path(os.environ.get("MEM_OPEN_VOCAB_DATA_DIR", _REPO_ROOT / "data"))
 _EGO_GT = _DATA_DIR / "wearable-ai" / "egolongqa" / "wearable_ai_2026_egolongqa_val_700.jsonl"
 _VSI_GT = _REPO_ROOT / "vsi_output" / "vsi_events_mc_poc.json"

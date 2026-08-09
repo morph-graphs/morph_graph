@@ -61,6 +61,10 @@ def main():
     parser.add_argument('--cml', action='store_true')
     parser.add_argument('--gpus_to_use', default='a6', type=str, help='GPU type to use')
     parser.add_argument('--num_jobs', type=int, default=10, help="Number of slurm jobs to distribute tasks into")
+    parser.add_argument('--gpus', type=int, default=4, help="GPUs per task")
+    parser.add_argument('--cpus', type=int, default=8, help="CPUs per task")
+    parser.add_argument('--mem', type=str, default="32G", help="Memory per task")
+    parser.add_argument('--time', type=str, default="4:00:00", help="Walltime")
     parser.add_argument('--dryrun', action='store_true', help="Do not submit, just generate scripts")
     args = parser.parse_args()
 
@@ -177,15 +181,15 @@ def main():
         else:
             f.write(f"#SBATCH --qos={args.qos}\n")
 
-        f.write("#SBATCH --time=4:00:00\n")
-        f.write("#SBATCH --gres=gpu:4\n")
-        f.write("#SBATCH --cpus-per-task=8\n")
-        f.write("#SBATCH --mem=32G\n")
+        f.write(f"#SBATCH --time={args.time}\n")
+        f.write(f"#SBATCH --gres=gpu:{args.gpus}\n")
+        f.write(f"#SBATCH --cpus-per-task={args.cpus}\n")
+        f.write(f"#SBATCH --mem={args.mem}\n")
         f.write("\n")
         f.write("source /etc/profile.d/modules.sh\n")
         f.write('module load cuda/12.6.3\n')
         f.write('module load ffmpeg/7.1\n')
-        f.write('cd /fs/cfar-projects/mem_open_vocab/morph_graphs/anubhav\n')
+        f.write(f'cd {os.getcwd()}\n')
         f.write('eval "$(/fs/cfar-projects/mem_open_vocab/miniconda3/bin/conda shell.bash hook)"\n')
         f.write("conda activate morph_graphs_qwen3_cu126\n") # Use env specified in debug_event_graph.py
         f.write("export PYTHONPATH=$(pwd):$PYTHONPATH\n")

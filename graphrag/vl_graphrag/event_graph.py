@@ -58,7 +58,7 @@ class EventGraph:
 
     semantic_similarity_threshold: float = 0.5
     semantic_similarity_top_k: int | None = None
-    query_better_than_threshold: float = -1.0
+    query_better_than_threshold: float = 0.2
     embedding_batch_num: int = 32
 
     # Persist full Qwen token grids plus DeepStack streams for no-reencode QA.

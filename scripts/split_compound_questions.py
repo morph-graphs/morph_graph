@@ -27,7 +27,7 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-API_KEY = "AIzaSyA_KRcUnot0FgRTgbxyU6tr6uJfRyM_G20"
+API_KEY = os.environ["GEMINI_API_KEY"]
 MODEL = "gemini-3.6-flash"  # cheaper flash model
 URL = (
     f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}"
