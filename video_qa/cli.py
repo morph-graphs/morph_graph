@@ -34,6 +34,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-qa-frames", type=int, default=128)
     parser.add_argument("--max-new-tokens", type=int, default=128)
     parser.add_argument("--retrieval-only", action="store_true")
+    parser.add_argument("--mode", "--retrieval-mode", dest="retrieval_mode",
+                        choices=["naive", "local", "qafd"], default="local")
+    parser.add_argument("--qafd-alpha", type=float, default=10.0)
+    parser.add_argument("--qafd-weight-scheme", choices=["multiply", "add", "hybrid"], default="multiply")
     return parser
 
 
@@ -64,6 +68,9 @@ def main() -> None:
         max_qa_frames=args.max_qa_frames,
         max_new_tokens=args.max_new_tokens,
         retrieval_only=args.retrieval_only,
+        retrieval_mode=args.retrieval_mode,
+        qafd_alpha=args.qafd_alpha,
+        qafd_weight_scheme=args.qafd_weight_scheme,
     )
     results = VideoQARunner(config, args.cache_dir).run(
         benchmark, samples, args.output_json

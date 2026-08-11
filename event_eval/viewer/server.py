@@ -44,6 +44,9 @@ DEFAULT_PATHS = {
     "event_graph_dir": str(
         _MORPH_GRAPH_ROOT / "outputs" / "event_eval" / "event_graph"
     ),
+    "qafd_dir": str(
+        _MORPH_GRAPH_ROOT / "outputs" / "event_eval" / "qafd"
+    ),
     "questions_jsonl": str(
         _MORPH_GRAPH_ROOT
         / "data"
@@ -689,6 +692,7 @@ def build_sample_detail(
         "agnostic_kimi_prompt_version": agnostic_kimi_prompt,
         "tsm_events": tsm_events,
         "event_graph_events": retrieved_events,
+        "qafd_events": qafd_retrieved_events,
         "comparison": comparison,
         "comparison_kimi": comparison_kimi,
         "provider_comparison": provider_comparison,
@@ -1065,6 +1069,7 @@ def main(argv: list[str] | None = None) -> None:
         f"  agnostic_kimi_dir: {DEFAULT_PATHS['agnostic_kimi_dir']}",
         f"  tsm_dir:           {DEFAULT_PATHS['tsm_dir']}",
         f"  event_graph_dir:   {DEFAULT_PATHS['event_graph_dir']}",
+        f"  qafd_dir:          {DEFAULT_PATHS['qafd_dir']}",
         f"  questions_jsonl:   {DEFAULT_PATHS['questions_jsonl']}",
         "  (TSM metrics computed on load; no report JSON required)",
     ]

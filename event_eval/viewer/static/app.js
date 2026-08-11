@@ -13,11 +13,13 @@
     activeEventId: null,
     activeAgnosticId: null,
     activeAgnosticKimiId: null,
-    activeEventGraphKey: null,
+    activeEventGraphId: null,
+    activeQafdId: null,
     scrolledEventId: null,
     scrolledAgnosticId: null,
     scrolledAgnosticKimiId: null,
-    scrolledEventGraphKey: null,
+    scrolledEventGraphId: null,
+    scrolledQafdId: null,
     videoPath: null,
     duration: 0,
     sourceFps: 1,
@@ -50,6 +52,7 @@
     agnosticKimiDir: document.getElementById("agnostic-kimi-dir"),
     tsmDir: document.getElementById("tsm-dir"),
     eventGraphDir: document.getElementById("event-graph-dir"),
+    qafdDir: document.getElementById("qafd-dir"),
     questionsJsonl: document.getElementById("questions-jsonl"),
     loadBtn: document.getElementById("load-btn"),
     resetBtn: document.getElementById("reset-btn"),
@@ -76,6 +79,8 @@
     eventList: document.getElementById("event-list"),
     eventGraphColumns: document.getElementById("event-graph-columns"),
     eventGraphCount: document.getElementById("event-graph-count"),
+    qafdList: document.getElementById("qafd-list"),
+    qafdCount: document.getElementById("qafd-count"),
     agnosticList: document.getElementById("agnostic-list"),
     agnosticKimiList: document.getElementById("agnostic-kimi-list"),
     agnosticCount: document.getElementById("agnostic-count"),
@@ -516,7 +521,7 @@
       if (idx < 0 || idx >= state.nFrames) continue;
       const key = cacheKey(idx);
       if (state.frameCache.has(key) || state.prefetching.has(key)) continue;
-      ensureFrame(idx).catch(() => {});
+      ensureFrame(idx).catch(() => { });
     }
   }
 
@@ -547,7 +552,7 @@
         );
         if (state.warmReady) prefetchAround(state.frameIndex);
       })
-      .catch(() => {});
+      .catch(() => { });
     state.warmTimer = setInterval(() => {
       fetchJSON(`/api/warm_status?${qsWarm}`)
         .then((st) => {
@@ -568,7 +573,7 @@
             updateScrubberMeta(`cache ${st.cached}/${st.total}`);
           }
         })
-        .catch(() => {});
+        .catch(() => { });
     }, 1500);
   }
 
@@ -676,6 +681,7 @@
     const activeAgnostic = activeAgnosticAt(t);
     const activeAgnosticKimi = activeAgnosticKimiAt(t);
     const activeEventGraph = activeEventGraphAt(t);
+    const activeQafd = activeQafdAt(t);
     state.activeEventId = activeOracle ? activeOracle.event_id : null;
     state.activeAgnosticId = activeAgnostic ? activeAgnostic.event_id : null;
     state.activeAgnosticKimiId = activeAgnosticKimi
@@ -729,6 +735,12 @@
         card.dataset.eventGraphKey === state.activeEventGraphKey
       );
     });
+    document.querySelectorAll("#qafd-list .event-card").forEach((card) => {
+      card.classList.toggle(
+        "active",
+        card.dataset.qafdId === state.activeQafdId
+      );
+    });
 
     if (state.activeAgnosticId) {
       state.scrolledAgnosticId = scrollActiveCard(
@@ -756,6 +768,15 @@
       );
     } else {
       state.scrolledEventGraphKey = null;
+    }
+    if (state.activeQafdId) {
+      state.scrolledQafdId = scrollActiveCard(
+        el.qafdList,
+        `#qafd-list .event-card.active`,
+        state.scrolledQafdId
+      );
+    } else {
+      state.scrolledQafdId = null;
     }
     if (state.activeEventId) {
       state.scrolledEventId = scrollActiveCard(
@@ -823,6 +844,15 @@
       if (hit) return { runIndex, event: hit };
     }
     return null;
+  }
+
+  function activeQafdAt(t) {
+    const events = state.sample?.qafd_events || [];
+    return (
+      events.find((e) => t >= e.start_sec && t < e.end_sec) ||
+      events.find((e) => Math.abs(t - e.start_sec) < 0.25) ||
+      null
+    );
   }
 
   function activeAgnosticAt(t) {
@@ -902,12 +932,10 @@
           <span>${i + 1}. ${escapeHtml(e.event_id)}</span>
           <span>${mmss(e.start_sec)} – ${mmss(e.end_sec)} (${Math.round(span)}s)</span>
         </div>
-        <div class="title">${escapeHtml(e.granularity || "event")}${
-          parents ? " · child of " + escapeHtml(parents) : " · root"
+        <div class="title">${escapeHtml(e.granularity || "event")}${parents ? " · child of " + escapeHtml(parents) : " · root"
         }</div>
         <div class="desc">${escapeHtml(e.description)}</div>
-        <div class="cover">${escapeHtml(cats || "no categories")} · ${escapeHtml(coverText)}${
-          metricText ? " · " + escapeHtml(metricText) : ""
+        <div class="cover">${escapeHtml(cats || "no categories")} · ${escapeHtml(coverText)}${metricText ? " · " + escapeHtml(metricText) : ""
         }</div>
       `;
       card.addEventListener("click", () => seekTo(e.start_sec));
@@ -968,6 +996,41 @@
     });
   }
 
+  function renderQafdEvents(detail) {
+    el.qafdList.innerHTML = "";
+    state.scrolledQafdId = null;
+    const events = detail.qafd_events || [];
+    el.qafdCount.textContent = events.length ? `(${events.length})` : "(none)";
+    if (!events.length) {
+      el.qafdList.innerHTML =
+        `<div class="muted" style="padding:4px 0">No QAFD retrieval for this sample.</div>`;
+      return;
+    }
+    const sorted = [...events].sort(
+      (a, b) => (a.rank || 0) - (b.rank || 0) || a.start_sec - b.start_sec
+    );
+    sorted.forEach((e) => {
+      const span = e.end_sec - e.start_sec;
+      const score =
+        e.retrieval_score == null || Number.isNaN(Number(e.retrieval_score))
+          ? "n/a"
+          : Number(e.retrieval_score).toFixed(3);
+      const card = document.createElement("div");
+      card.className = "event-card qafd" + (e.is_seed ? " seed" : "");
+      card.dataset.qafdId = e.event_id;
+      card.innerHTML = `
+        <div class="meta">
+          <span>#${e.rank || "?"} · seg ${e.segment_idx}${e.is_seed ? " · seed" : ""}</span>
+          <span>${mmss(e.start_sec)} – ${mmss(e.end_sec)} (${Math.round(span)}s)</span>
+        </div>
+        <div class="title">${escapeHtml(e.event_id)}</div>
+        <div class="cover">score ${escapeHtml(score)}</div>
+      `;
+      card.addEventListener("click", () => seekTo(e.start_sec));
+      el.qafdList.appendChild(card);
+    });
+  }
+
   function renderEvents(detail) {
     el.eventList.innerHTML = "";
     state.scrolledEventId = null;
@@ -984,8 +1047,7 @@
           <span>${i + 1}. ${escapeHtml(e.event_id)}</span>
           <span>${mmss(e.start_sec)} – ${mmss(e.end_sec)}</span>
         </div>
-        <div class="title">${escapeHtml(e.granularity || "event")}${
-          roles ? " · " + escapeHtml(roles) : ""
+        <div class="title">${escapeHtml(e.granularity || "event")}${roles ? " · " + escapeHtml(roles) : ""
         }</div>
         <div class="desc">${escapeHtml(e.description)}</div>
         <div class="cover">query-conditioned (metrics use agnostic track)</div>
@@ -1129,6 +1191,16 @@
           markup += `<text x="${x + ww / 2}" y="${y + 11}" text-anchor="middle" fill="#0b1020" font-size="9" font-weight="600">${e.rank || ""}</text>`;
         }
       });
+    });
+
+    qafd.forEach((e) => {
+      const x = left + (e.start_sec / duration) * trackW;
+      const ww = Math.max(2, ((e.end_sec - e.start_sec) / duration) * trackW);
+      const fill = e.is_seed ? "#f97316" : "#fb923c";
+      markup += `<rect x="${x}" y="${egY + 24}" width="${ww}" height="${barH}" fill="${fill}" stroke="#0d0f14" stroke-width="0.5" data-t="${e.start_sec}" rx="2" />`;
+      if (ww >= 12) {
+        markup += `<text x="${x + ww / 2}" y="${egY + 24 + 11}" text-anchor="middle" fill="#0b1020" font-size="9" font-weight="600">${e.rank || ""}</text>`;
+      }
     });
 
     // comparison cover brackets from report (Gemini)

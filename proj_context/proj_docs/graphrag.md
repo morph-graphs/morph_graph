@@ -118,7 +118,7 @@ Two bound embedding funcs per `VLGraphRAG` instance:
 
 | Field | Default | Meaning |
 | --- | --- | --- |
-| `mode` | `"naive"` | `naive` = VDB top-k only; `local` = expand 1-hop graph neighbors |
+| `mode` | `"naive"` | `naive` = VDB top-k only; `local` = expand 1-hop graph neighbors; `qafd` = query-aware flow diffusion ([QAFD Design](../proj_design/qafd_retrieval.md)) |
 | `key_source` | `"caption"` | Which VDB to query: `caption` or `video` |
 | `top_k` | `3` | Initial vector search seeds |
 | `max_segments_for_qa` | `5` | Cap after expansion + score ranking |
@@ -137,7 +137,8 @@ Returns a dict: `seed_node_ids`, `selected_node_ids`, `segments`, `scores_by_id`
 ### Modes not implemented
 
 - **`global`** — raises `NotImplementedError` (no Leiden community traversal yet for VL)
-- **Query-adaptive edge weighting** — edges are static at index time; query does not modulate graph traversal weights (planned Morph Graphs idea)
+
+*(Note: Query-adaptive edge weighting is now implemented via the `qafd` retrieval mode. See [QAFD Design](../proj_design/qafd_retrieval.md) for details).*
 
 ---
 
@@ -198,7 +199,7 @@ graphrag/
 
 ## Current limitations (honest scope)
 
-- **Graph at query time = 1-hop expansion only** (`local` mode); no multi-hop traversal, no query-conditioned edge weights
+- **Graph at query time = 1-hop expansion only** (`local` mode) or **query-aware flow diffusion** (`qafd` mode). Global mode is still unimplemented for VL.
 - **Semantic edges** are symmetric similarity at index time, not relational/event semantics
 - **Global mode** unimplemented for VL
 - **Small eval surface**: primary benchmark adapter is `vsi_morph`; public benches (CG-Bench, SuperMemory-VQA, …) not wired yet
@@ -208,4 +209,4 @@ graphrag/
 
 ## Relation to Morph Graphs (planned)
 
-Today's VLGraphRAG is the **retrieval substrate**: segments ≈ proto event nodes, temporal + semantic edges ≈ proto graph structure. The research gap (see `morph_graph/proj_context/proj_notes/proj_description.md`) is **query-adaptive traversal** over **inter-event relations** — edge weights modulated by the query, not fixed similarity at index time. The current `local` mode is a minimal step (1-hop neighbor expansion after vector seeding).
+Today's VLGraphRAG is the **retrieval substrate**: segments ≈ proto event nodes, temporal + semantic edges ≈ proto graph structure. We have begun bridging the research gap (see `morph_graph/proj_context/proj_notes/proj_description.md`) via the **QAFD mode**, which introduces **query-adaptive traversal** over **inter-event relations** where edge weights are modulated dynamically by the query.

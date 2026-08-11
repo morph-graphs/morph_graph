@@ -7,10 +7,28 @@ import numpy as np
 from .._storage import NanoVectorDBStorage
 from .._utils import logger
 from ..base import BaseGraphStorage, BaseKVStorage, BaseVectorStorage
+from .qafd_retriever import NetworkXQAFDRetriever
 from .vl_base import VLQueryParam
 from .vl_segments import normalize_text_segments, normalize_vision_segments
 
 _DEFAULT_SEMANTIC_TOP_K = 32
+
+
+def get_node_embeddings_from_vdb(vdb: BaseVectorStorage) -> dict[str, np.ndarray]:
+    embeddings: dict[str, np.ndarray] = {}
+    client = getattr(vdb, "_client", None)
+    if client is None:
+        return embeddings
+    storage = getattr(client, "_NanoVectorDB__storage", None)
+    if storage is not None and "data" in storage and "matrix" in storage:
+        data_list = storage["data"]
+        matrix = storage["matrix"]
+        for idx, item in enumerate(data_list):
+            node_id = item.get("__id__")
+            if node_id and idx < len(matrix):
+                embeddings[node_id] = matrix[idx]
+    return embeddings
+
 
 # Node ids follow the "{video_id}::seg_{idx:04d}" scheme; used to detect
 # temporal adjacency so semantic edges don't clobber the temporal spine
@@ -33,9 +51,10 @@ def _are_temporally_adjacent(src_id: str, tgt_id: str) -> bool:
 
 
 def _video_decoder(video_path: str):
-    from torchcodec.decoders import VideoDecoder
+    from ...video_models.video_io import load_decoder
 
-    return VideoDecoder(video_path)
+    return load_decoder(video_path)
+
 
 
 def segment_value(segment: dict, exclude_fields: set[str] | None = None) -> dict:
@@ -185,6 +204,34 @@ async def vl_query(
         selected_node_ids = await expand_node_ids(
             selected_node_ids, segments_relation_graph
         )
+    elif param.mode == "qafd":
+        query_emb_list = await vdb.embedding_func([query])
+        query_embedding = query_emb_list[0] if len(query_emb_list) > 0 else None
+        node_embeddings = get_node_embeddings_from_vdb(vdb)
+        nx_graph = getattr(segments_relation_graph, "_graph", None)
+        if nx_graph is not None and nx_graph.number_of_nodes() > 0:
+            retriever = NetworkXQAFDRetriever(
+                graph=nx_graph,
+                seed_scores=scores_by_id,
+                node_embeddings=node_embeddings,
+                query_embedding=query_embedding,
+                alpha=param.qafd_alpha,
+                epsilon=param.qafd_epsilon,
+                step_size=param.qafd_step_size,
+                max_iterations=param.qafd_max_iterations,
+                weight_scheme=param.qafd_weight_scheme,
+                sim_mode=param.sim_mode,
+                batch_push=param.batch_push,
+                qa_sink_gamma=param.qafd_sink_gamma,
+                qa_warm_delta=param.qafd_warm_delta,
+                qa_warm_steps=param.qafd_warm_steps,
+                qa_accum_gamma=param.qafd_accum_gamma,
+                qa_post_lambda=param.qafd_post_lambda,
+            )
+            qafd_scores = retriever.retrieve()
+            if qafd_scores:
+                scores_by_id.update(qafd_scores)
+                selected_node_ids = list(qafd_scores.keys())
 
     selected_node_ids = rank_and_cap_node_ids(
         selected_node_ids, scores_by_id, param.max_segments_for_qa

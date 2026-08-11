@@ -31,8 +31,15 @@ _PE_REPO = os.environ.get(
 
 
 def _ensure_pe_on_path() -> None:
-    if Path(_PE_REPO, "core", "vision_encoder", "pe.py").exists() and _PE_REPO not in sys.path:
-        sys.path.insert(0, _PE_REPO)
+    pe_repo = os.environ.get(
+        "MORPH_GRAPH_PERCEPTION_MODELS",
+        "/fs/cfar-projects/mem_open_vocab/perception_models",
+    )
+    if Path(pe_repo, "core", "vision_encoder", "pe.py").exists():
+        if pe_repo in sys.path:
+            sys.path.remove(pe_repo)
+        sys.path.insert(0, pe_repo)
+
 
 
 class PECoreFeatureExtractor(AlignedFeatureExtractor):

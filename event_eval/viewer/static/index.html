@@ -62,6 +62,15 @@
           ></textarea>
         </div>
         <div class="field">
+          <label for="qafd-dir">QAFD directory (retrieved + QA)</label>
+          <textarea
+            id="qafd-dir"
+            class="path-input"
+            rows="3"
+            spellcheck="false"
+          ></textarea>
+        </div>
+        <div class="field">
           <label for="questions-jsonl">Questions JSONL (answers)</label>
           <textarea
             id="questions-jsonl"
@@ -92,6 +101,9 @@
 
         <h2>EventGraph predictions</h2>
         <div id="pred-answers" class="pred-columns"></div>
+
+        <h2>QAFD prediction</h2>
+        <div id="qafd-pred-answer" class="query-box pred-box muted">—</div>
 
         <h2>Sample metrics</h2>
         <div id="metrics" class="metrics"></div>
@@ -130,6 +142,8 @@
             <span><i class="swatch answer"></i>answer-bearing</span>
             <span><i class="swatch event-graph"></i>EventGraph retrieved</span>
             <span><i class="swatch event-graph-seed"></i>EventGraph seed</span>
+            <span><i class="swatch qafd"></i>QAFD retrieved</span>
+            <span><i class="swatch qafd-seed"></i>QAFD seed</span>
             <span>dashed red = TSM cover of agnostic event (computed on load)</span>
           </div>
           <svg id="tracks" height="170"></svg>
@@ -156,6 +170,9 @@
 
         <h2>EventGraph retrieved <span id="event-graph-count" class="h2-sub"></span></h2>
         <div id="event-graph-columns" class="event-graph-columns"></div>
+
+        <h2>QAFD retrieved <span id="qafd-count" class="h2-sub"></span></h2>
+        <div id="qafd-list" class="event-list"></div>
 
         <h2>Oracle events <span id="oracle-count" class="h2-sub"></span></h2>
         <div id="event-list" class="event-list"></div>

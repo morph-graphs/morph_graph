@@ -156,6 +156,7 @@ def main() -> None:
     ap.add_argument("--qa", action="store_true", default=True)
     ap.add_argument("--no-qa", dest="qa", action="store_false")
     ap.add_argument("--retrieval-top-k", type=int, default=3)
+    ap.add_argument("--retrieval-mode", choices=["local", "qafd"], default="local")
     ap.add_argument("--max-segments-for-qa", type=int, default=5)
     ap.add_argument("--max-qa-frames", type=int, default=128)
     ap.add_argument("--max-new-tokens", type=int, default=128)
@@ -227,6 +228,7 @@ def main() -> None:
                 aligned_model=args.aligned_model,
                 query=sample.question,
                 qa=args.qa,
+                retrieval_mode=args.retrieval_mode,
                 retrieval_top_k=args.retrieval_top_k,
                 max_segments_for_qa=args.max_segments_for_qa,
                 max_qa_frames=args.max_qa_frames,
