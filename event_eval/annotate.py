@@ -1,4 +1,4 @@
-"""Generate resumable Gemini event annotations (query-conditioned or agnostic)."""
+"""Generate resumable event annotations (query-conditioned or agnostic)."""
 
 from __future__ import annotations
 
@@ -10,8 +10,12 @@ import traceback
 from dataclasses import dataclass
 from pathlib import Path
 
+from .claude import DEFAULT_MODEL as CLAUDE_DEFAULT_MODEL
+from .claude import ClaudeOracleAnnotator
 from .gemini import DEFAULT_MODEL as GEMINI_DEFAULT_MODEL
 from .gemini import GeminiOracleAnnotator
+from .gpt import DEFAULT_MODEL as GPT_DEFAULT_MODEL
+from .gpt import GPTOracleAnnotator
 from .kimi import DEFAULT_MODEL as KIMI_DEFAULT_MODEL
 from .kimi import KimiOracleAnnotator
 from .schema import OracleAnnotation
@@ -190,7 +194,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-samples", type=int)
     parser.add_argument(
         "--provider",
-        choices=["gemini", "kimi"],
+        choices=["gemini", "kimi", "claude", "gpt"],
         default="gemini",
         help="Which annotator backend to use (default: gemini).",
     )
@@ -199,7 +203,8 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help=(
             "Defaults to the provider's default model "
-            f"(gemini={GEMINI_DEFAULT_MODEL!r}, kimi={KIMI_DEFAULT_MODEL!r})."
+            f"(gemini={GEMINI_DEFAULT_MODEL!r}, kimi={KIMI_DEFAULT_MODEL!r}, "
+            f"claude={CLAUDE_DEFAULT_MODEL!r}, gpt={GPT_DEFAULT_MODEL!r})."
         ),
     )
     parser.add_argument(
@@ -250,7 +255,7 @@ def main() -> None:
             max_retries=args.max_retries,
             retry_delay_sec=args.retry_delay_sec,
         )
-    else:
+    elif args.provider == "kimi":
         kimi_kwargs = {"base_url": args.base_url} if args.base_url else {}
         annotator = KimiOracleAnnotator(
             model=args.model or KIMI_DEFAULT_MODEL,
@@ -259,6 +264,26 @@ def main() -> None:
             retry_delay_sec=args.retry_delay_sec,
             **kimi_kwargs,
         )
+    elif args.provider == "claude":
+        annotator = ClaudeOracleAnnotator(
+            model=args.model or CLAUDE_DEFAULT_MODEL,
+            fps=args.fps,
+            max_output_tokens=args.max_output_tokens,
+            max_retries=args.max_retries,
+            retry_delay_sec=args.retry_delay_sec,
+        )
+    elif args.provider == "gpt":
+        gpt_kwargs = {"base_url": args.base_url} if args.base_url else {}
+        annotator = GPTOracleAnnotator(
+            model=args.model or GPT_DEFAULT_MODEL,
+            fps=args.fps,
+            max_output_tokens=args.max_output_tokens,
+            max_retries=args.max_retries,
+            retry_delay_sec=args.retry_delay_sec,
+            **gpt_kwargs,
+        )
+    else:
+        raise ValueError(f"Unknown provider: {args.provider!r}")
     completed = skipped = failed = 0
     for index, sample in enumerate(samples, start=1):
         stem = _safe_id(sample.sample_id)
