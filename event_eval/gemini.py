@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import json
 import os
 import subprocess
@@ -18,7 +19,7 @@ from .schema import (
     gemini_response_schema,
 )
 
-DEFAULT_MODEL = "gemini-3.1-pro-preview"
+DEFAULT_MODEL = "gemini-3.6-flash"
 PROMPT_VERSION_ORACLE = "eval_oracle_v1"
 PROMPT_VERSION_AGNOSTIC = "eval_agnostic_v3"
 # Backward-compatible alias used by older tests/imports.
@@ -57,10 +58,11 @@ segment unrelated portions of the video.
 
 An event is a meaningful intentional action, interaction, state change, goal
 or subgoal, spatial transition, location/context transition, causal transition,
-or temporal transition. Mere visibility of an object is NOT an event. Do not
-create one event per visible object. An object belongs in an event only when it
-participates meaningfully in an intentional action, interaction, state change,
-or context transition.
+or temporal transition. While mere visibility of a random object is not an event,
+if the question asks about a specific object, sign, or visual detail, the precise
+temporal window where that object is clearly observed IS considered an event.
+The query's focus makes the observation itself the event, even without a physical
+interaction or state change.
 
 Use fine granularity for short actions or state changes and coarse granularity
 for larger activities or goals. Use both only when the hierarchy helps answer
@@ -107,14 +109,14 @@ objects are in frame are not themselves events. Neither are movements or
 gestures that do not advance or alter the ongoing activity. If the underlying
 activity continues across such a change, it remains one event.
 
-Mere visibility or presence of an object is NOT an event, and neither is its
-appearance or disappearance from frame. Do not create one event per visible
-object. An object earns an event through engagement: passing a parked car while
-walking is not an event, whereas stopping to examine that car is. For deciding
-whether an object's presence matters, the test is whether it redirects or
-occupies the activity — incidental or passing looks do not. Sustained passive
-engagement (watching, listening, observing) is itself an activity and counts as
-an event even when nothing else changes.
+Mere visibility or presence of an everyday background object is NOT an event,
+and neither is its appearance or disappearance from frame. Do not create one
+event per visible object. However, notable visual encounters—such as passing a
+distinct object, a specific sign, or a landmark—should be recorded. For deciding
+whether an object's presence matters, the test is whether it is a distinct,
+notable item the wearer encounters or passes. Sustained passive engagement
+(watching, listening, observing) is itself an activity and counts as an event
+even when nothing else changes.
 
 An event boundary also occurs when what happens departs from what the ongoing
 situation predicts, even if no one intended it. Unexpected occurrences,
@@ -154,9 +156,12 @@ does **not** require any children, and most coarse events should have none.
 
 ## Overlap and parent–child links
 Concurrent events may overlap as independent roots. If you are walking and a
-dog runs up and barks, keep the walk span and add a separate overlapping dog
-event — do not force them into one description, and do not parent one to the
-other unless the child is a true sub-step of the parent.
+dog runs up and barks, or if you pass a notable landmark, sign, or distinct
+object, keep the long continuous walk span, but add a separate, short,
+overlapping event for the visual encounter or interruption (e.g., [0:00-0:30]
+"Walking along the path" and [0:10-0:12] "Passing a concrete bench"). Do not force
+them into one description, and do not parent one to the other unless the child
+is a true sub-step of the parent.
 
 Create a parent link only if BOTH hold:
 1. Temporal containment: the child's full interval lies within the parent
@@ -248,7 +253,7 @@ class GeminiOracleAnnotator:
                 raise RuntimeError(f"Gemini upload failed: {uploaded.name}")
             time.sleep(5)
 
-    def _config(self, annotation_mode: str) -> Any:
+    def _config(self, annotation_mode: str, cached_content_name: str | None = None) -> Any:
         kwargs: dict[str, Any] = {
             "temperature": 0.0,
             "max_output_tokens": self.max_output_tokens,
@@ -258,12 +263,122 @@ class GeminiOracleAnnotator:
             # as additionalProperties into an invalid API payload.
             "response_json_schema": gemini_response_schema(annotation_mode),
         }
+        if cached_content_name:
+            kwargs["cached_content"] = cached_content_name
         if self.media_resolution:
             kwargs["media_resolution"] = {
                 "low": self._types.MediaResolution.MEDIA_RESOLUTION_LOW,
                 "medium": self._types.MediaResolution.MEDIA_RESOLUTION_MEDIUM,
             }[self.media_resolution]
         return self._types.GenerateContentConfig(**kwargs)
+
+    def upload_video(self, video_path: str | Path) -> Any:
+        path = Path(video_path).resolve()
+        if not path.is_file():
+            raise FileNotFoundError(path)
+        return self._wait_until_active(self._client.files.upload(file=str(path)))
+
+    def delete_file(self, name: str) -> None:
+        try:
+            self._client.files.delete(name=name)
+        except Exception:
+            pass
+
+    def create_video_cache(self, uploaded_file: Any, ttl: str = "3600s") -> Any:
+        # We assume uploaded_file is a types.File from files.upload()
+        video_part = self._types.Part.from_uri(
+            file_uri=uploaded_file.uri,
+            mime_type=getattr(uploaded_file, "mime_type", None) or "video/mp4",
+        )
+        video_part.video_metadata = self._types.VideoMetadata(fps=self.fps)
+        return self._client.caches.create(
+            model=self.model,
+            config=self._types.CreateCachedContentConfig(
+                contents=[video_part],
+                ttl=ttl,
+            )
+        )
+
+    def delete_cache(self, name: str) -> None:
+        try:
+            self._client.caches.delete(name=name)
+        except Exception:
+            pass
+
+    def _generate_annotation(
+        self,
+        *,
+        sample_id: str,
+        video_id: str,
+        video_path: str,
+        duration: float,
+        query: str,
+        prompt_builder: Any,
+        prompt_version: str,
+        annotation_mode: str,
+        contents: list[Any],
+        cached_content_name: str | None = None,
+    ) -> OracleAnnotation:
+        last_error: Exception | None = None
+        last_raw_text: str | None = None
+        last_parsed_events: list[dict[str, Any]] | None = None
+        
+        config_kwargs = self._config(annotation_mode, cached_content_name=cached_content_name)
+
+        for attempt in range(self.max_retries):
+            try:
+                response = self._client.models.generate_content(
+                    model=self.model,
+                    contents=contents,
+                    config=config_kwargs,
+                )
+                raw_text = (response.text or "").strip()
+                last_raw_text = raw_text
+                last_parsed_events = None
+                generated = json.loads(raw_text)
+                events = []
+                event_dicts: list[dict[str, Any]] = []
+                for value in generated.get("events", []):
+                    if annotation_mode == "query_agnostic":
+                        # Schema omits roles; force empty for validation.
+                        value = {**value, "query_roles": []}
+                    event_dicts.append(dict(value))
+                    events.append(OracleEvent.from_dict(value))
+                last_parsed_events = event_dicts
+                annotation = OracleAnnotation(
+                    sample_id=str(sample_id),
+                    video_id=video_id,
+                    video_path=video_path,
+                    video_duration_sec=duration,
+                    query=query,
+                    events=tuple(events),
+                    model=self.model,
+                    prompt_version=prompt_version,
+                    video_fps=self.fps,
+                    media_resolution=self.media_resolution,
+                    generated_at=datetime.now(timezone.utc).isoformat(),
+                    warnings=tuple(
+                        str(value) for value in generated.get("warnings", [])
+                    ),
+                    raw_response=raw_text,
+                    annotation_mode=annotation_mode,
+                )
+                return annotation.require_valid()
+            except Exception as exc:
+                last_error = exc
+                if (
+                    isinstance(exc, self._errors.APIError)
+                    and 400 <= getattr(exc, "code", 0) < 500
+                    and getattr(exc, "code", 0) != 429
+                ):
+                    raise
+                if attempt + 1 < self.max_retries:
+                    time.sleep(self.retry_delay_sec)
+        raise GeminiAnnotationError(
+            f"Gemini annotation failed after {self.max_retries} attempts: {last_error}",
+            raw_response=last_raw_text,
+            parsed_events=last_parsed_events,
+        ) from last_error
 
     def annotate(
         self,
@@ -287,10 +402,8 @@ class GeminiOracleAnnotator:
             raise ValueError(f"Unknown annotation_mode={annotation_mode!r}")
 
         path = Path(video_path).resolve()
-        if not path.is_file():
-            raise FileNotFoundError(path)
         duration = video_duration_sec(path)
-        uploaded = self._wait_until_active(self._client.files.upload(file=str(path)))
+        uploaded = self.upload_video(path)
         try:
             video_part = self._types.Part.from_uri(
                 file_uri=uploaded.uri,
@@ -298,67 +411,78 @@ class GeminiOracleAnnotator:
             )
             video_part.video_metadata = self._types.VideoMetadata(fps=self.fps)
             contents = [video_part, prompt_builder(duration)]
-            last_error: Exception | None = None
-            last_raw_text: str | None = None
-            last_parsed_events: list[dict[str, Any]] | None = None
-            for attempt in range(self.max_retries):
-                try:
-                    response = self._client.models.generate_content(
-                        model=self.model,
-                        contents=contents,
-                        config=self._config(annotation_mode),
-                    )
-                    raw_text = (response.text or "").strip()
-                    last_raw_text = raw_text
-                    last_parsed_events = None
-                    generated = json.loads(raw_text)
-                    events = []
-                    event_dicts: list[dict[str, Any]] = []
-                    for value in generated.get("events", []):
-                        if annotation_mode == "query_agnostic":
-                            # Schema omits roles; force empty for validation.
-                            value = {**value, "query_roles": []}
-                        event_dicts.append(dict(value))
-                        events.append(OracleEvent.from_dict(value))
-                    last_parsed_events = event_dicts
-                    annotation = OracleAnnotation(
-                        sample_id=str(sample_id),
-                        video_id=path.stem,
-                        video_path=str(path),
-                        video_duration_sec=duration,
-                        query=query,
-                        events=tuple(events),
-                        model=self.model,
-                        prompt_version=prompt_version,
-                        video_fps=self.fps,
-                        media_resolution=self.media_resolution,
-                        generated_at=datetime.now(timezone.utc).isoformat(),
-                        warnings=tuple(
-                            str(value) for value in generated.get("warnings", [])
-                        ),
-                        raw_response=raw_text,
-                        annotation_mode=annotation_mode,
-                    )
-                    return annotation.require_valid()
-                except Exception as exc:
-                    last_error = exc
-                    if (
-                        isinstance(exc, self._errors.APIError)
-                        and 400 <= getattr(exc, "code", 0) < 500
-                        and getattr(exc, "code", 0) != 429
-                    ):
-                        raise
-                    if attempt + 1 < self.max_retries:
-                        time.sleep(self.retry_delay_sec)
-            raise GeminiAnnotationError(
-                f"Gemini annotation failed after {self.max_retries} attempts: {last_error}",
-                raw_response=last_raw_text,
-                parsed_events=last_parsed_events,
-            ) from last_error
+            return self._generate_annotation(
+                sample_id=sample_id,
+                video_id=path.stem,
+                video_path=str(path),
+                duration=duration,
+                query=query,
+                prompt_builder=prompt_builder,
+                prompt_version=prompt_version,
+                annotation_mode=annotation_mode,
+                contents=contents,
+            )
         finally:
+            self.delete_file(uploaded.name)
+
+    def annotate_batch(
+        self,
+        *,
+        video_path: str | Path,
+        queries: list[dict[str, str]],
+        annotation_mode: str = "query_conditioned",
+        max_workers: int = 5,
+        ttl: str = "3600s",
+    ) -> list[OracleAnnotation]:
+        """
+        Process multiple queries for a single video in parallel using Context Caching.
+        `queries` is a list of dicts with 'sample_id' and 'question' keys.
+        """
+        path = Path(video_path).resolve()
+        duration = video_duration_sec(path)
+        uploaded = self.upload_video(path)
+        
+        try:
+            cache = self.create_video_cache(uploaded, ttl=ttl)
             try:
-                self._client.files.delete(name=uploaded.name)
-            except Exception:
-                # The annotation result should not be discarded because remote
-                # cleanup failed; stale uploads can be removed separately.
-                pass
+                results = [None] * len(queries)
+                with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    futures_to_idx = {}
+                    for idx, q_dict in enumerate(queries):
+                        q_text = q_dict["question"]
+                        sample_id = q_dict["sample_id"]
+                        
+                        if annotation_mode == "query_conditioned":
+                            prompt_builder = (lambda d, qt=q_text: build_prompt(qt, d))
+                            prompt_version = PROMPT_VERSION_ORACLE
+                            query = q_text
+                        elif annotation_mode == "query_agnostic":
+                            prompt_builder = build_agnostic_prompt
+                            prompt_version = PROMPT_VERSION_AGNOSTIC
+                            query = ""
+                        else:
+                            raise ValueError(f"Unknown annotation_mode={annotation_mode!r}")
+
+                        future = executor.submit(
+                            self._generate_annotation,
+                            sample_id=sample_id,
+                            video_id=path.stem,
+                            video_path=str(path),
+                            duration=duration,
+                            query=query,
+                            prompt_builder=prompt_builder,
+                            prompt_version=prompt_version,
+                            annotation_mode=annotation_mode,
+                            contents=[prompt_builder(duration)],
+                            cached_content_name=cache.name,
+                        )
+                        futures_to_idx[future] = idx
+                        
+                    for future in concurrent.futures.as_completed(futures_to_idx):
+                        idx = futures_to_idx[future]
+                        results[idx] = future.result()
+                return results
+            finally:
+                self.delete_cache(cache.name)
+        finally:
+            self.delete_file(uploaded.name)
