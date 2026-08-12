@@ -37,8 +37,8 @@ from .schema import (
     gemini_response_schema,
 )
 
-DEFAULT_MODEL = "gpt-5.6-sol"
-DEFAULT_BASE_URL = "https://api.openai.com/v1"
+DEFAULT_MODEL = "us/openai/openai/eccn-gpt-5.6-sol"
+DEFAULT_BASE_URL = "https://inference-api.nvidia.com/v1"
 PROMPT_VERSION_AGNOSTIC_GPT = "eval_agnostic_v3_gpt"
 
 # Conservative default — GPT supports many images but each burns tokens.
@@ -86,9 +86,9 @@ class GPTOracleAnnotator:
             raise ValueError("fps must be positive")
         if image_detail not in {"low", "high", "auto"}:
             raise ValueError("image_detail must be 'low', 'high', or 'auto'")
-        api_key = api_key or os.getenv("OPENAI_API_KEY")
+        api_key = api_key or os.getenv("INFERENCE_API_KEY")
         if not api_key:
-            raise ValueError("Set OPENAI_API_KEY or pass api_key")
+            raise ValueError("Set INFERENCE_API_KEY or pass api_key")
         try:
             from openai import OpenAI
         except ImportError as exc:
