@@ -1,0 +1,15 @@
+[project]
+name = "morph-graph"
+version = "0.1.0"
+description = "Video event annotation and evaluation (event_eval pipeline + viewer)"
+requires-python = ">=3.10"
+dependencies = [
+    "openai>=1.0",
+    # Ships portable ffmpeg/ffprobe binaries (needed by event_eval/frames.py).
+    # After `uv sync`, run: python -m event_eval.setup_ffmpeg
+    "static-ffmpeg>=2.5",
+]
+
+[tool.uv]
+# This repo is a workspace of scripts, not an installable package.
+package = false
