@@ -1,0 +1,99 @@
+{
+  "sample_id": "11dc8afb864c685a",
+  "video_id": "11dc8afb864c685a",
+  "video_path": "/scratch/fsw/portfolios/nemotron/projects/nemotron_omni_vision/users/pulkitk/tracking/datasets/egolongqa/egolongqa/val/11dc8afb864c685a.mp4",
+  "video_duration_sec": 614.933333,
+  "query": "",
+  "events": [
+    {
+      "event_id": "E1",
+      "start_sec": 0.0,
+      "end_sec": 614.933,
+      "granularity": "coarse",
+      "description": "The camera wearer continuously walks along the sandy beach, following a track between low vegetated dunes on the left and the ocean on the right toward a rocky jetty.",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "goal_or_subgoal"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "E2",
+      "start_sec": 0.0,
+      "end_sec": 12.3,
+      "granularity": "fine",
+      "description": "The wearer moves through several nearby beachgoers, including a person crossing the sand with a folded beach chair.",
+      "categories": [
+        "agent_or_interaction",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "E3",
+      "start_sec": 12.3,
+      "end_sec": 30.7,
+      "granularity": "coarse",
+      "description": "The wearer leaves the busier upper-beach area and reaches the more open shoreline route with the surf clearly visible to the right.",
+      "categories": [
+        "location_or_scene",
+        "state_change",
+        "temporal_transition"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "E4",
+      "start_sec": 344.4,
+      "end_sec": 436.6,
+      "granularity": "coarse",
+      "description": "The wearer approaches and passes scattered groups of adults and children gathered, sitting, and playing near the waterline.",
+      "categories": [
+        "agent_or_interaction",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "E5",
+      "start_sec": 491.9,
+      "end_sec": 553.4,
+      "granularity": "fine",
+      "description": "While walking, the wearer holds a short cylindrical piece of wood and briefly extends or points it toward the ocean before lowering it.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "E6",
+      "start_sec": 559.6,
+      "end_sec": 596.5,
+      "granularity": "coarse",
+      "description": "Near the rocky jetty, the wearer passes beach chairs and two people standing beside a tripod and a blue bag.",
+      "categories": [
+        "agent_or_interaction",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/openai/openai/eccn-gpt-5.6-sol",
+  "prompt_version": "eval_agnostic_v3_gpt",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-12T22:03:58.988201+00:00",
+  "warnings": [
+    "The video was represented by frames sampled about 6.1 seconds apart, so boundaries for brief hand and object actions are approximate."
+  ],
+  "raw_response": "{\"events\":[{\"event_id\":\"E1\",\"start_sec\":0,\"end_sec\":614.933,\"granularity\":\"coarse\",\"description\":\"The camera wearer continuously walks along the sandy beach, following a track between low vegetated dunes on the left and the ocean on the right toward a rocky jetty.\",\"categories\":[\"action\",\"location_or_scene\",\"goal_or_subgoal\"],\"parent_event_ids\":[]},{\"event_id\":\"E2\",\"start_sec\":0,\"end_sec\":12.3,\"granularity\":\"fine\",\"description\":\"The wearer moves through several nearby beachgoers, including a person crossing the sand with a folded beach chair.\",\"categories\":[\"agent_or_interaction\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"E3\",\"start_sec\":12.3,\"end_sec\":30.7,\"granularity\":\"coarse\",\"description\":\"The wearer leaves the busier upper-beach area and reaches the more open shoreline route with the surf clearly visible to the right.\",\"categories\":[\"location_or_scene\",\"state_change\",\"temporal_transition\"],\"parent_event_ids\":[]},{\"event_id\":\"E4\",\"start_sec\":344.4,\"end_sec\":436.6,\"granularity\":\"coarse\",\"description\":\"The wearer approaches and passes scattered groups of adults and children gathered, sitting, and playing near the waterline.\",\"categories\":[\"agent_or_interaction\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"E5\",\"start_sec\":491.9,\"end_sec\":553.4,\"granularity\":\"fine\",\"description\":\"While walking, the wearer holds a short cylindrical piece of wood and briefly extends or points it toward the ocean before lowering it.\",\"categories\":[\"action\"],\"parent_event_ids\":[]},{\"event_id\":\"E6\",\"start_sec\":559.6,\"end_sec\":596.5,\"granularity\":\"coarse\",\"description\":\"Near the rocky jetty, the wearer passes beach chairs and two people standing beside a tripod and a blue bag.\",\"categories\":[\"agent_or_interaction\",\"location_or_scene\"],\"parent_event_ids\":[]}],\"warnings\":[\"The video was represented by frames sampled about 6.1 seconds apart, so boundaries for brief hand and object actions are approximate.\"]}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_agnostic"
+}

@@ -1,0 +1,161 @@
+{
+  "sample_id": "680244a66d976e3f",
+  "video_id": "680244a66d976e3f",
+  "video_path": "/scratch/fsw/portfolios/nemotron/projects/nemotron_omni_vision/users/pulkitk/tracking/datasets/egolongqa/egolongqa/val/680244a66d976e3f.mp4",
+  "video_duration_sec": 665.866667,
+  "query": "",
+  "events": [
+    {
+      "event_id": "event_1",
+      "start_sec": 0.0,
+      "end_sec": 186.4,
+      "granularity": "coarse",
+      "description": "Walking along a winding paved pathway in Central Park surrounded by trees with autumn leaves.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_2",
+      "start_sec": 186.4,
+      "end_sec": 219.7,
+      "granularity": "coarse",
+      "description": "Approaching and walking through a stone arch underpass.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_3",
+      "start_sec": 219.7,
+      "end_sec": 273.0,
+      "granularity": "coarse",
+      "description": "Continuing along the paved pathway after exiting the underpass.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_4",
+      "start_sec": 273.0,
+      "end_sec": 293.0,
+      "granularity": "coarse",
+      "description": "Climbing a set of stone steps leading to an elevated terrace.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_5",
+      "start_sec": 293.0,
+      "end_sec": 359.6,
+      "granularity": "coarse",
+      "description": "Walking under a rustic wooden trellis structure on the terrace near the rink.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_6",
+      "start_sec": 359.6,
+      "end_sec": 412.8,
+      "granularity": "coarse",
+      "description": "Standing at the railing of the overlook to watch people ice skating on Wollman Rink.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_7",
+      "start_sec": 412.8,
+      "end_sec": 432.8,
+      "granularity": "coarse",
+      "description": "Walking through a paved terrace area with picnic tables and benches.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_8",
+      "start_sec": 432.8,
+      "end_sec": 466.1,
+      "granularity": "coarse",
+      "description": "Watching the ice skating rink from the overlook railing while holding a green bottle.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_9",
+      "start_sec": 466.1,
+      "end_sec": 519.4,
+      "granularity": "coarse",
+      "description": "Walking back through the terrace seating area past picnic tables and concessions.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_10",
+      "start_sec": 519.4,
+      "end_sec": 566.0,
+      "granularity": "coarse",
+      "description": "Walking down a series of paved ramps with black metal railings.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_11",
+      "start_sec": 566.0,
+      "end_sec": 665.867,
+      "granularity": "coarse",
+      "description": "Walking along the paved park path with trees, rocks, and buildings in the background.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/gcp/google/eccn-gemini-3.5-flash",
+  "prompt_version": "eval_agnostic_v3_gpt",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-12T22:15:08.523367+00:00",
+  "warnings": [],
+  "raw_response": "{\n  \"events\": [\n    {\n      \"event_id\": \"event_1\",\n      \"start_sec\": 0,\n      \"end_sec\": 186.4,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking along a winding paved pathway in Central Park surrounded by trees with autumn leaves.\",\n      \"categories\": [\"action\", \"location_or_scene\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_2\",\n      \"start_sec\": 186.4,\n      \"end_sec\": 219.7,\n      \"granularity\": \"coarse\",\n      \"description\": \"Approaching and walking through a stone arch underpass.\",\n      \"categories\": [\"action\", \"location_or_scene\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_3\",\n      \"start_sec\": 219.7,\n      \"end_sec\": 273,\n      \"granularity\": \"coarse\",\n      \"description\": \"Continuing along the paved pathway after exiting the underpass.\",\n      \"categories\": [\"action\", \"location_or_scene\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_4\",\n      \"start_sec\": 273,\n      \"end_sec\": 293,\n      \"granularity\": \"coarse\",\n      \"description\": \"Climbing a set of stone steps leading to an elevated terrace.\",\n      \"categories\": [\"action\", \"location_or_scene\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_5\",\n      \"start_sec\": 293,\n      \"end_sec\": 359.6,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking under a rustic wooden trellis structure on the terrace near the rink.\",\n      \"categories\": [\"action\", \"location_or_scene\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_6\",\n      \"start_sec\": 359.6,\n      \"end_sec\": 412.8,\n      \"granularity\": \"coarse\",\n      \"description\": \"Standing at the railing of the overlook to watch people ice skating on Wollman Rink.\",\n      \"categories\": [\"action\", \"location_or_scene\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_7\",\n      \"start_sec\": 412.8,\n      \"end_sec\": 432.8,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking through a paved terrace area with picnic tables and benches.\",\n      \"categories\": [\"action\", \"location_or_scene\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_8\",\n      \"start_sec\": 432.8,\n      \"end_sec\": 466.1,\n      \"granularity\": \"coarse\",\n      \"description\": \"Watching the ice skating rink from the overlook railing while holding a green bottle.\",\n      \"categories\": [\"action\", \"location_or_scene\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_9\",\n      \"start_sec\": 466.1,\n      \"end_sec\": 519.4,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking back through the terrace seating area past picnic tables and concessions.\",\n      \"categories\": [\"action\", \"location_or_scene\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_10\",\n      \"start_sec\": 519.4,\n      \"end_sec\": 566,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking down a series of paved ramps with black metal railings.\",\n      \"categories\": [\"action\", \"location_or_scene\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_11\",\n      \"start_sec\": 566,\n      \"end_sec\": 665.867,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking along the paved park path with trees, rocks, and buildings in the background.\",\n      \"categories\": [\"action\", \"location_or_scene\"],\n      \"parent_event_ids\": []\n    }\n  ],\n  \"warnings\": []\n}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_agnostic"
+}

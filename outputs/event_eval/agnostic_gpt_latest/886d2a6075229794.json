@@ -1,0 +1,284 @@
+{
+  "sample_id": "886d2a6075229794",
+  "video_id": "886d2a6075229794",
+  "video_path": "/scratch/fsw/portfolios/nemotron/projects/nemotron_omni_vision/users/pulkitk/tracking/datasets/egolongqa/egolongqa/val/886d2a6075229794.mp4",
+  "video_duration_sec": 600.133333,
+  "query": "",
+  "events": [
+    {
+      "event_id": "e01",
+      "start_sec": 0.0,
+      "end_sec": 24.0,
+      "granularity": "coarse",
+      "description": "The cook checks pans of roasted banana pieces in the open oven, then moves to the kitchen island to prepare the blender.",
+      "categories": [
+        "action",
+        "goal_or_subgoal",
+        "location_or_scene",
+        "temporal_transition"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e02",
+      "start_sec": 24.0,
+      "end_sec": 78.0,
+      "granularity": "coarse",
+      "description": "Using a red spatula, the cook repeatedly scoops browned banana pieces from a dark baking dish into the blender pitcher.",
+      "categories": [
+        "action",
+        "goal_or_subgoal"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e03",
+      "start_sec": 78.0,
+      "end_sec": 90.0,
+      "granularity": "fine",
+      "description": "The emptied baking dish is carried back to the stove area, and the cook returns to the open oven.",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "temporal_transition"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e04",
+      "start_sec": 90.0,
+      "end_sec": 120.0,
+      "granularity": "coarse",
+      "description": "The cook removes a hot loaf pan from the oven with a towel and scrapes a second batch of roasted bananas into the blender pitcher; one piece falls onto the counter.",
+      "categories": [
+        "action",
+        "goal_or_subgoal",
+        "state_change"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e05",
+      "start_sec": 120.0,
+      "end_sec": 144.0,
+      "granularity": "coarse",
+      "description": "The empty loaf pan is set down and carried toward the sink before the cook returns to the island with the filled blender pitcher.",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "temporal_transition"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e06",
+      "start_sec": 144.0,
+      "end_sec": 168.0,
+      "granularity": "coarse",
+      "description": "The blender pitcher is placed on a Vitamix base, covered with its lid and cap, and connected for use.",
+      "categories": [
+        "action",
+        "goal_or_subgoal",
+        "state_change"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e07",
+      "start_sec": 168.0,
+      "end_sec": 222.0,
+      "granularity": "coarse",
+      "description": "The cook holds the blender lid and repeatedly adjusts the controls, blending the roasted bananas into a thick brown puree.",
+      "categories": [
+        "action",
+        "state_change",
+        "goal_or_subgoal"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e08",
+      "start_sec": 222.0,
+      "end_sec": 252.0,
+      "granularity": "coarse",
+      "description": "The cook opens the countertop ice-cream maker and handles its lid, freezer bowl, and paddle in preparation for filling it.",
+      "categories": [
+        "action",
+        "goal_or_subgoal",
+        "state_change"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e09",
+      "start_sec": 252.0,
+      "end_sec": 276.0,
+      "granularity": "fine",
+      "description": "A lemon half is squeezed with a handheld citrus press, adding juice to the banana puree in the blender pitcher.",
+      "categories": [
+        "action",
+        "goal_or_subgoal",
+        "state_change"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e10",
+      "start_sec": 276.0,
+      "end_sec": 300.0,
+      "granularity": "coarse",
+      "description": "The cook stirs the lemon juice into the puree with the red spatula and replaces the blender lid.",
+      "categories": [
+        "action",
+        "goal_or_subgoal"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e11",
+      "start_sec": 300.0,
+      "end_sec": 324.0,
+      "granularity": "coarse",
+      "description": "The puree is blended again briefly, then uncovered and stirred while the cook checks its smooth consistency.",
+      "categories": [
+        "action",
+        "state_change",
+        "goal_or_subgoal"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e12",
+      "start_sec": 324.0,
+      "end_sec": 336.0,
+      "granularity": "fine",
+      "description": "A small dog walks across the kitchen floor near the cook's work area.",
+      "categories": [
+        "agent_or_interaction",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e13",
+      "start_sec": 324.0,
+      "end_sec": 336.0,
+      "granularity": "fine",
+      "description": "The cook carries the finished puree from the blender station toward the ice-cream maker.",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "temporal_transition"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e14",
+      "start_sec": 336.0,
+      "end_sec": 378.0,
+      "granularity": "coarse",
+      "description": "The cook pours the banana puree into the ice-cream maker's freezer bowl and repeatedly scrapes the blender pitcher to transfer the remaining mixture.",
+      "categories": [
+        "action",
+        "goal_or_subgoal",
+        "state_change"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e15",
+      "start_sec": 378.0,
+      "end_sec": 408.0,
+      "granularity": "coarse",
+      "description": "The ice-cream maker is repositioned on the island and its power cord is routed across the kitchen and connected.",
+      "categories": [
+        "action",
+        "goal_or_subgoal",
+        "location_or_scene",
+        "state_change"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e16",
+      "start_sec": 408.0,
+      "end_sec": 438.0,
+      "granularity": "coarse",
+      "description": "The cook presses the ice-cream maker controls several times, changing the displayed timer setting.",
+      "categories": [
+        "action",
+        "goal_or_subgoal",
+        "state_change"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e17",
+      "start_sec": 438.0,
+      "end_sec": 468.0,
+      "granularity": "coarse",
+      "description": "The clear lid is removed, and the cook lifts and reseats the filled freezer bowl and paddle before restarting the machine.",
+      "categories": [
+        "action",
+        "goal_or_subgoal",
+        "state_change"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e18",
+      "start_sec": 468.0,
+      "end_sec": 600.133,
+      "granularity": "coarse",
+      "description": "The ice-cream maker churns the brown mixture while the cook monitors it, makes occasional lid and paddle adjustments, and ultimately leaves the clear lid in place.",
+      "categories": [
+        "action",
+        "state_change",
+        "goal_or_subgoal"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e19",
+      "start_sec": 588.0,
+      "end_sec": 600.133,
+      "granularity": "fine",
+      "description": "While the machine continues running, the cook looks down and reads the open recipe book beside the milk, lemon, and utensils.",
+      "categories": [
+        "action",
+        "agent_or_interaction"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/openai/openai/eccn-gpt-5.6-sol",
+  "prompt_version": "eval_agnostic_v3_gpt",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-12T22:01:38.854912+00:00",
+  "warnings": [
+    "Event boundaries are approximate because the source was uniformly sampled at roughly six-second intervals."
+  ],
+  "raw_response": "{\"events\":[{\"event_id\":\"e01\",\"start_sec\":0,\"end_sec\":24,\"granularity\":\"coarse\",\"description\":\"The cook checks pans of roasted banana pieces in the open oven, then moves to the kitchen island to prepare the blender.\",\"categories\":[\"action\",\"goal_or_subgoal\",\"location_or_scene\",\"temporal_transition\"],\"parent_event_ids\":[]},{\"event_id\":\"e02\",\"start_sec\":24,\"end_sec\":78,\"granularity\":\"coarse\",\"description\":\"Using a red spatula, the cook repeatedly scoops browned banana pieces from a dark baking dish into the blender pitcher.\",\"categories\":[\"action\",\"goal_or_subgoal\"],\"parent_event_ids\":[]},{\"event_id\":\"e03\",\"start_sec\":78,\"end_sec\":90,\"granularity\":\"fine\",\"description\":\"The emptied baking dish is carried back to the stove area, and the cook returns to the open oven.\",\"categories\":[\"action\",\"location_or_scene\",\"temporal_transition\"],\"parent_event_ids\":[]},{\"event_id\":\"e04\",\"start_sec\":90,\"end_sec\":120,\"granularity\":\"coarse\",\"description\":\"The cook removes a hot loaf pan from the oven with a towel and scrapes a second batch of roasted bananas into the blender pitcher; one piece falls onto the counter.\",\"categories\":[\"action\",\"goal_or_subgoal\",\"state_change\"],\"parent_event_ids\":[]},{\"event_id\":\"e05\",\"start_sec\":120,\"end_sec\":144,\"granularity\":\"coarse\",\"description\":\"The empty loaf pan is set down and carried toward the sink before the cook returns to the island with the filled blender pitcher.\",\"categories\":[\"action\",\"location_or_scene\",\"temporal_transition\"],\"parent_event_ids\":[]},{\"event_id\":\"e06\",\"start_sec\":144,\"end_sec\":168,\"granularity\":\"coarse\",\"description\":\"The blender pitcher is placed on a Vitamix base, covered with its lid and cap, and connected for use.\",\"categories\":[\"action\",\"goal_or_subgoal\",\"state_change\"],\"parent_event_ids\":[]},{\"event_id\":\"e07\",\"start_sec\":168,\"end_sec\":222,\"granularity\":\"coarse\",\"description\":\"The cook holds the blender lid and repeatedly adjusts the controls, blending the roasted bananas into a thick brown puree.\",\"categories\":[\"action\",\"state_change\",\"goal_or_subgoal\"],\"parent_event_ids\":[]},{\"event_id\":\"e08\",\"start_sec\":222,\"end_sec\":252,\"granularity\":\"coarse\",\"description\":\"The cook opens the countertop ice-cream maker and handles its lid, freezer bowl, and paddle in preparation for filling it.\",\"categories\":[\"action\",\"goal_or_subgoal\",\"state_change\"],\"parent_event_ids\":[]},{\"event_id\":\"e09\",\"start_sec\":252,\"end_sec\":276,\"granularity\":\"fine\",\"description\":\"A lemon half is squeezed with a handheld citrus press, adding juice to the banana puree in the blender pitcher.\",\"categories\":[\"action\",\"goal_or_subgoal\",\"state_change\"],\"parent_event_ids\":[]},{\"event_id\":\"e10\",\"start_sec\":276,\"end_sec\":300,\"granularity\":\"coarse\",\"description\":\"The cook stirs the lemon juice into the puree with the red spatula and replaces the blender lid.\",\"categories\":[\"action\",\"goal_or_subgoal\"],\"parent_event_ids\":[]},{\"event_id\":\"e11\",\"start_sec\":300,\"end_sec\":324,\"granularity\":\"coarse\",\"description\":\"The puree is blended again briefly, then uncovered and stirred while the cook checks its smooth consistency.\",\"categories\":[\"action\",\"state_change\",\"goal_or_subgoal\"],\"parent_event_ids\":[]},{\"event_id\":\"e12\",\"start_sec\":324,\"end_sec\":336,\"granularity\":\"fine\",\"description\":\"A small dog walks across the kitchen floor near the cook's work area.\",\"categories\":[\"agent_or_interaction\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e13\",\"start_sec\":324,\"end_sec\":336,\"granularity\":\"fine\",\"description\":\"The cook carries the finished puree from the blender station toward the ice-cream maker.\",\"categories\":[\"action\",\"location_or_scene\",\"temporal_transition\"],\"parent_event_ids\":[]},{\"event_id\":\"e14\",\"start_sec\":336,\"end_sec\":378,\"granularity\":\"coarse\",\"description\":\"The cook pours the banana puree into the ice-cream maker's freezer bowl and repeatedly scrapes the blender pitcher to transfer the remaining mixture.\",\"categories\":[\"action\",\"goal_or_subgoal\",\"state_change\"],\"parent_event_ids\":[]},{\"event_id\":\"e15\",\"start_sec\":378,\"end_sec\":408,\"granularity\":\"coarse\",\"description\":\"The ice-cream maker is repositioned on the island and its power cord is routed across the kitchen and connected.\",\"categories\":[\"action\",\"goal_or_subgoal\",\"location_or_scene\",\"state_change\"],\"parent_event_ids\":[]},{\"event_id\":\"e16\",\"start_sec\":408,\"end_sec\":438,\"granularity\":\"coarse\",\"description\":\"The cook presses the ice-cream maker controls several times, changing the displayed timer setting.\",\"categories\":[\"action\",\"goal_or_subgoal\",\"state_change\"],\"parent_event_ids\":[]},{\"event_id\":\"e17\",\"start_sec\":438,\"end_sec\":468,\"granularity\":\"coarse\",\"description\":\"The clear lid is removed, and the cook lifts and reseats the filled freezer bowl and paddle before restarting the machine.\",\"categories\":[\"action\",\"goal_or_subgoal\",\"state_change\"],\"parent_event_ids\":[]},{\"event_id\":\"e18\",\"start_sec\":468,\"end_sec\":600.133,\"granularity\":\"coarse\",\"description\":\"The ice-cream maker churns the brown mixture while the cook monitors it, makes occasional lid and paddle adjustments, and ultimately leaves the clear lid in place.\",\"categories\":[\"action\",\"state_change\",\"goal_or_subgoal\"],\"parent_event_ids\":[]},{\"event_id\":\"e19\",\"start_sec\":588,\"end_sec\":600.133,\"granularity\":\"fine\",\"description\":\"While the machine continues running, the cook looks down and reads the open recipe book beside the milk, lemon, and utensils.\",\"categories\":[\"action\",\"agent_or_interaction\"],\"parent_event_ids\":[]}],\"warnings\":[\"Event boundaries are approximate because the source was uniformly sampled at roughly six-second intervals.\"]}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_agnostic"
+}

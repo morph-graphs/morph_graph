@@ -1,0 +1,250 @@
+{
+  "sample_id": "a86f2f3570b7db44",
+  "video_id": "a86f2f3570b7db44",
+  "video_path": "/scratch/fsw/portfolios/nemotron/projects/nemotron_omni_vision/users/pulkitk/tracking/datasets/egolongqa/egolongqa/val/a86f2f3570b7db44.mp4",
+  "video_duration_sec": 602.2,
+  "query": "",
+  "events": [
+    {
+      "event_id": "e01",
+      "start_sec": 0.0,
+      "end_sec": 30.1,
+      "granularity": "coarse",
+      "description": "Walking along a downtown sidewalk toward a scaffold-covered intersection, passing parked taxis and a street kiosk.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e02",
+      "start_sec": 30.1,
+      "end_sec": 78.3,
+      "granularity": "coarse",
+      "description": "Turning left at the intersection and continuing along the sidewalk beside moving traffic and a stopped city bus.",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "temporal_transition"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e03",
+      "start_sec": 78.3,
+      "end_sec": 132.5,
+      "granularity": "coarse",
+      "description": "Turning into a narrow service lane and walking between buildings, parked vehicles, loading areas, and yellow bollards.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e04",
+      "start_sec": 132.5,
+      "end_sec": 186.7,
+      "granularity": "coarse",
+      "description": "Reaching a major intersection and lingering at the corner while viewing Philadelphia City Hall and passing traffic.",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "state_change"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e05",
+      "start_sec": 168.6,
+      "end_sec": 174.6,
+      "granularity": "fine",
+      "description": "An ambulance with emergency lights passes in front of City Hall.",
+      "categories": [
+        "action",
+        "agent_or_interaction",
+        "unexpected_or_interruption"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e06",
+      "start_sec": 186.7,
+      "end_sec": 216.8,
+      "granularity": "coarse",
+      "description": "Crossing the broad street on a marked crosswalk toward the City Hall plaza.",
+      "categories": [
+        "action",
+        "goal_or_subgoal",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e07",
+      "start_sec": 216.8,
+      "end_sec": 265.0,
+      "granularity": "coarse",
+      "description": "Entering the plaza and walking toward and around a temporary Ferris wheel between City Hall and the neighboring historic building.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e08",
+      "start_sec": 265.0,
+      "end_sec": 307.1,
+      "granularity": "coarse",
+      "description": "Walking beside City Hall while looking up at its ornate exterior, then approaching the John Christian Bullitt statue.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e09",
+      "start_sec": 295.1,
+      "end_sec": 307.1,
+      "granularity": "fine",
+      "description": "Examining the John Christian Bullitt statue and its inscribed pedestal at close range.",
+      "categories": [
+        "action",
+        "goal_or_subgoal"
+      ],
+      "query_roles": [],
+      "parent_event_ids": [
+        "e08"
+      ]
+    },
+    {
+      "event_id": "e10",
+      "start_sec": 307.1,
+      "end_sec": 343.3,
+      "granularity": "coarse",
+      "description": "Continuing through the plaza past closed wooden market stalls toward a large evergreen tree and the main City Hall entrance.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e11",
+      "start_sec": 343.3,
+      "end_sec": 415.5,
+      "granularity": "coarse",
+      "description": "Lingering near the entrance plaza and looking between City Hall's facade, the large evergreen tree, barriers, and parked maintenance lifts.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e12",
+      "start_sec": 415.5,
+      "end_sec": 445.6,
+      "granularity": "coarse",
+      "description": "Walking along the barricaded path toward City Hall's large arched gateway.",
+      "categories": [
+        "action",
+        "goal_or_subgoal",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e13",
+      "start_sec": 445.6,
+      "end_sec": 481.8,
+      "granularity": "coarse",
+      "description": "Passing through the open iron gates and traversing City Hall's grand columned interior arcade and tunnel.",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "state_change"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e14",
+      "start_sec": 481.8,
+      "end_sec": 517.9,
+      "granularity": "coarse",
+      "description": "Emerging into the interior courtyard and approaching a decorative carousel surrounded by pedestrians and holiday-market stalls.",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "temporal_transition"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e15",
+      "start_sec": 517.9,
+      "end_sec": 560.0,
+      "granularity": "coarse",
+      "description": "Walking around the courtyard while inspecting a rounded tower, upper architecture, trees, and rows of closed wooden stalls.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e16",
+      "start_sec": 560.0,
+      "end_sec": 584.1,
+      "granularity": "coarse",
+      "description": "Circling near the carousel and scanning the surrounding courtyard buildings and market area.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e17",
+      "start_sec": 584.1,
+      "end_sec": 602.2,
+      "granularity": "fine",
+      "description": "Stopping beside the carousel for close views of its ornate two-level structure and sculpted bird and horse figures.",
+      "categories": [
+        "action",
+        "goal_or_subgoal"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/openai/openai/eccn-gpt-5.6-sol",
+  "prompt_version": "eval_agnostic_v3_gpt",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-12T22:13:36.710422+00:00",
+  "warnings": [
+    "The source was uniformly sampled at roughly six-second intervals, so event boundaries are approximate and brief intervening actions may not be visible."
+  ],
+  "raw_response": "{\"events\":[{\"event_id\":\"e01\",\"start_sec\":0,\"end_sec\":30.1,\"granularity\":\"coarse\",\"description\":\"Walking along a downtown sidewalk toward a scaffold-covered intersection, passing parked taxis and a street kiosk.\",\"categories\":[\"action\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e02\",\"start_sec\":30.1,\"end_sec\":78.3,\"granularity\":\"coarse\",\"description\":\"Turning left at the intersection and continuing along the sidewalk beside moving traffic and a stopped city bus.\",\"categories\":[\"action\",\"location_or_scene\",\"temporal_transition\"],\"parent_event_ids\":[]},{\"event_id\":\"e03\",\"start_sec\":78.3,\"end_sec\":132.5,\"granularity\":\"coarse\",\"description\":\"Turning into a narrow service lane and walking between buildings, parked vehicles, loading areas, and yellow bollards.\",\"categories\":[\"action\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e04\",\"start_sec\":132.5,\"end_sec\":186.7,\"granularity\":\"coarse\",\"description\":\"Reaching a major intersection and lingering at the corner while viewing Philadelphia City Hall and passing traffic.\",\"categories\":[\"action\",\"location_or_scene\",\"state_change\"],\"parent_event_ids\":[]},{\"event_id\":\"e05\",\"start_sec\":168.6,\"end_sec\":174.6,\"granularity\":\"fine\",\"description\":\"An ambulance with emergency lights passes in front of City Hall.\",\"categories\":[\"action\",\"agent_or_interaction\",\"unexpected_or_interruption\"],\"parent_event_ids\":[]},{\"event_id\":\"e06\",\"start_sec\":186.7,\"end_sec\":216.8,\"granularity\":\"coarse\",\"description\":\"Crossing the broad street on a marked crosswalk toward the City Hall plaza.\",\"categories\":[\"action\",\"goal_or_subgoal\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e07\",\"start_sec\":216.8,\"end_sec\":265,\"granularity\":\"coarse\",\"description\":\"Entering the plaza and walking toward and around a temporary Ferris wheel between City Hall and the neighboring historic building.\",\"categories\":[\"action\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e08\",\"start_sec\":265,\"end_sec\":307.1,\"granularity\":\"coarse\",\"description\":\"Walking beside City Hall while looking up at its ornate exterior, then approaching the John Christian Bullitt statue.\",\"categories\":[\"action\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e09\",\"start_sec\":295.1,\"end_sec\":307.1,\"granularity\":\"fine\",\"description\":\"Examining the John Christian Bullitt statue and its inscribed pedestal at close range.\",\"categories\":[\"action\",\"goal_or_subgoal\"],\"parent_event_ids\":[\"e08\"]},{\"event_id\":\"e10\",\"start_sec\":307.1,\"end_sec\":343.3,\"granularity\":\"coarse\",\"description\":\"Continuing through the plaza past closed wooden market stalls toward a large evergreen tree and the main City Hall entrance.\",\"categories\":[\"action\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e11\",\"start_sec\":343.3,\"end_sec\":415.5,\"granularity\":\"coarse\",\"description\":\"Lingering near the entrance plaza and looking between City Hall's facade, the large evergreen tree, barriers, and parked maintenance lifts.\",\"categories\":[\"action\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e12\",\"start_sec\":415.5,\"end_sec\":445.6,\"granularity\":\"coarse\",\"description\":\"Walking along the barricaded path toward City Hall's large arched gateway.\",\"categories\":[\"action\",\"goal_or_subgoal\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e13\",\"start_sec\":445.6,\"end_sec\":481.8,\"granularity\":\"coarse\",\"description\":\"Passing through the open iron gates and traversing City Hall's grand columned interior arcade and tunnel.\",\"categories\":[\"action\",\"location_or_scene\",\"state_change\"],\"parent_event_ids\":[]},{\"event_id\":\"e14\",\"start_sec\":481.8,\"end_sec\":517.9,\"granularity\":\"coarse\",\"description\":\"Emerging into the interior courtyard and approaching a decorative carousel surrounded by pedestrians and holiday-market stalls.\",\"categories\":[\"action\",\"location_or_scene\",\"temporal_transition\"],\"parent_event_ids\":[]},{\"event_id\":\"e15\",\"start_sec\":517.9,\"end_sec\":560,\"granularity\":\"coarse\",\"description\":\"Walking around the courtyard while inspecting a rounded tower, upper architecture, trees, and rows of closed wooden stalls.\",\"categories\":[\"action\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e16\",\"start_sec\":560,\"end_sec\":584.1,\"granularity\":\"coarse\",\"description\":\"Circling near the carousel and scanning the surrounding courtyard buildings and market area.\",\"categories\":[\"action\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e17\",\"start_sec\":584.1,\"end_sec\":602.2,\"granularity\":\"fine\",\"description\":\"Stopping beside the carousel for close views of its ornate two-level structure and sculpted bird and horse figures.\",\"categories\":[\"action\",\"goal_or_subgoal\"],\"parent_event_ids\":[]}],\"warnings\":[\"The source was uniformly sampled at roughly six-second intervals, so event boundaries are approximate and brief intervening actions may not be visible.\"]}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_agnostic"
+}

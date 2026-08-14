@@ -1,0 +1,50 @@
+{
+  "sample_id": "252",
+  "video_id": "54a81d361b2a094f",
+  "video_path": "/scratch/fsw/portfolios/nemotron/projects/nemotron_omni_vision/users/pulkitk/tracking/datasets/egolongqa/egolongqa/val/54a81d361b2a094f.mp4",
+  "video_duration_sec": 675.8,
+  "query": "Which did I encounter first, the bench or the signpost, and how did the surrounding environment differ between the two locations?",
+  "events": [
+    {
+      "event_id": "bench_encounter",
+      "start_sec": 141.9,
+      "end_sec": 162.2,
+      "granularity": "fine",
+      "description": "The first bench is encountered on a path deeply enclosed by a wooded, forested environment with trees on both sides.",
+      "categories": [
+        "location_or_scene"
+      ],
+      "query_roles": [
+        "anchor",
+        "answer_bearing",
+        "evidence"
+      ],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "signpost_encounter",
+      "start_sec": 250.0,
+      "end_sec": 270.3,
+      "granularity": "fine",
+      "description": "The first signpost is encountered on a path bordering an open, harvested field on one side and a wooded area on the other.",
+      "categories": [
+        "location_or_scene"
+      ],
+      "query_roles": [
+        "anchor",
+        "answer_bearing",
+        "evidence"
+      ],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/gcp/google/eccn-gemini-3.5-flash",
+  "prompt_version": "eval_oracle_v1",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-14T00:07:53.179537+00:00",
+  "warnings": [],
+  "raw_response": "{\n  \"events\": [\n    {\n      \"event_id\": \"bench_encounter\",\n      \"start_sec\": 141.9,\n      \"end_sec\": 162.2,\n      \"granularity\": \"fine\",\n      \"description\": \"The first bench is encountered on a path deeply enclosed by a wooded, forested environment with trees on both sides.\",\n      \"categories\": [\n        \"location_or_scene\"\n      ],\n      \"parent_event_ids\": [],\n      \"query_roles\": [\n        \"anchor\",\n        \"answer_bearing\",\n        \"evidence\"\n      ]\n    },\n    {\n      \"event_id\": \"signpost_encounter\",\n      \"start_sec\": 250.0,\n      \"end_sec\": 270.3,\n      \"granularity\": \"fine\",\n      \"description\": \"The first signpost is encountered on a path bordering an open, harvested field on one side and a wooded area on the other.\",\n      \"categories\": [\n        \"location_or_scene\"\n      ],\n      \"parent_event_ids\": [],\n      \"query_roles\": [\n        \"anchor\",\n        \"answer_bearing\",\n        \"evidence\"\n      ]\n    }\n  ],\n  \"warnings\": []\n}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_conditioned"
+}

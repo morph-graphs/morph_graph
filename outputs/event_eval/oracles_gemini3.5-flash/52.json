@@ -1,0 +1,50 @@
+{
+  "sample_id": "52",
+  "video_id": "15ac76d47c8753f9",
+  "video_path": "/scratch/fsw/portfolios/nemotron/projects/nemotron_omni_vision/users/pulkitk/tracking/datasets/egolongqa/egolongqa/val/15ac76d47c8753f9.mp4",
+  "video_duration_sec": 604.333333,
+  "query": "Why didn't the two people I saw on the concrete path later react to the snake I encountered earlier, and where was the snake in relation to the path?",
+  "events": [
+    {
+      "event_id": "snake_encounter",
+      "start_sec": 0.0,
+      "end_sec": 18.1,
+      "granularity": "fine",
+      "description": "The person encounters a snake on the dirt and leaf-littered trail, off the concrete path.",
+      "categories": [
+        "unexpected_or_interruption",
+        "location_or_scene"
+      ],
+      "query_roles": [
+        "anchor",
+        "evidence"
+      ],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "people_on_path",
+      "start_sec": 398.9,
+      "end_sec": 410.9,
+      "granularity": "fine",
+      "description": "Two people are seen walking on the concrete path in the distance, far from where the snake was located.",
+      "categories": [
+        "agent_or_interaction",
+        "location_or_scene"
+      ],
+      "query_roles": [
+        "answer_bearing",
+        "evidence"
+      ],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/gcp/google/eccn-gemini-3.5-flash",
+  "prompt_version": "eval_oracle_v1",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-14T00:04:23.645325+00:00",
+  "warnings": [],
+  "raw_response": "{\n  \"events\": [\n    {\n      \"event_id\": \"snake_encounter\",\n      \"start_sec\": 0.0,\n      \"end_sec\": 18.1,\n      \"granularity\": \"fine\",\n      \"description\": \"The person encounters a snake on the dirt and leaf-littered trail, off the concrete path.\",\n      \"categories\": [\n        \"unexpected_or_interruption\",\n        \"location_or_scene\"\n      ],\n      \"parent_event_ids\": [],\n      \"query_roles\": [\n        \"anchor\",\n        \"evidence\"\n      ]\n    },\n    {\n      \"event_id\": \"people_on_path\",\n      \"start_sec\": 398.9,\n      \"end_sec\": 410.9,\n      \"granularity\": \"fine\",\n      \"description\": \"Two people are seen walking on the concrete path in the distance, far from where the snake was located.\",\n      \"categories\": [\n        \"agent_or_interaction\",\n        \"location_or_scene\"\n      ],\n      \"parent_event_ids\": [],\n      \"query_roles\": [\n        \"answer_bearing\",\n        \"evidence\"\n      ]\n    }\n  ],\n  \"warnings\": []\n}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_conditioned"
+}

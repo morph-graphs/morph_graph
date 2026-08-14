@@ -1,0 +1,46 @@
+{
+  "sample_id": "322",
+  "video_id": "6c34f96dae9476ce",
+  "video_path": "/scratch/fsw/portfolios/nemotron/projects/nemotron_omni_vision/users/pulkitk/tracking/datasets/egolongqa/egolongqa/val/6c34f96dae9476ce.mp4",
+  "video_duration_sec": 900.133333,
+  "query": "What did I secure to the wooden gate with the power drill, and what modification did I make to the green fence afterward?",
+  "events": [
+    {
+      "event_id": "event_1",
+      "start_sec": 108.0,
+      "end_sec": 171.0,
+      "granularity": "fine",
+      "description": "Securing a metal latch to the wooden gate using a power drill",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [
+        "answer_bearing"
+      ],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_2",
+      "start_sec": 486.1,
+      "end_sec": 540.1,
+      "granularity": "fine",
+      "description": "Cutting and trimming the green plastic fence mesh using a pair of scissors",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [
+        "answer_bearing"
+      ],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/gcp/google/eccn-gemini-3.5-flash",
+  "prompt_version": "eval_oracle_v1",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-14T00:06:04.725905+00:00",
+  "warnings": [],
+  "raw_response": "{\n  \"events\": [\n    {\n      \"event_id\": \"event_1\",\n      \"start_sec\": 108.0,\n      \"end_sec\": 171.0,\n      \"granularity\": \"fine\",\n      \"description\": \"Securing a metal latch to the wooden gate using a power drill\",\n      \"categories\": [\n        \"action\"\n      ],\n      \"parent_event_ids\": [],\n      \"query_roles\": [\n        \"answer_bearing\"\n      ]\n    },\n    {\n      \"event_id\": \"event_2\",\n      \"start_sec\": 486.1,\n      \"end_sec\": 540.1,\n      \"granularity\": \"fine\",\n      \"description\": \"Cutting and trimming the green plastic fence mesh using a pair of scissors\",\n      \"categories\": [\n        \"action\"\n      ],\n      \"parent_event_ids\": [],\n      \"query_roles\": [\n        \"answer_bearing\"\n      ]\n    }\n  ],\n  \"warnings\": []\n}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_conditioned"
+}

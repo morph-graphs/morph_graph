@@ -1,0 +1,65 @@
+{
+  "sample_id": "328",
+  "video_id": "6e4610f800b157a0",
+  "video_path": "/scratch/fsw/portfolios/nemotron/projects/nemotron_omni_vision/users/pulkitk/tracking/datasets/egolongqa/egolongqa/val/6e4610f800b157a0.mp4",
+  "video_duration_sec": 600.066667,
+  "query": "What was I working on right before I looked at the doorway, and what did I start working on right after I returned to the table?",
+  "events": [
+    {
+      "event_id": "event_1_working_before_doorway",
+      "start_sec": 120.0,
+      "end_sec": 188.0,
+      "granularity": "fine",
+      "description": "Working on assembling and gluing the border of the heart-shaped cardboard piece.",
+      "categories": [
+        "action",
+        "agent_or_interaction"
+      ],
+      "query_roles": [
+        "answer_bearing",
+        "evidence"
+      ],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_2_looking_at_doorway",
+      "start_sec": 188.0,
+      "end_sec": 194.0,
+      "granularity": "fine",
+      "description": "Looking at the open doorway.",
+      "categories": [
+        "location_or_scene",
+        "unexpected_or_interruption"
+      ],
+      "query_roles": [
+        "anchor"
+      ],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_3_working_after_doorway",
+      "start_sec": 194.0,
+      "end_sec": 240.0,
+      "granularity": "fine",
+      "description": "Returning to the table and starting to work on the cloud-shaped cardboard piece.",
+      "categories": [
+        "action",
+        "agent_or_interaction"
+      ],
+      "query_roles": [
+        "answer_bearing",
+        "evidence"
+      ],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/gcp/google/eccn-gemini-3.5-flash",
+  "prompt_version": "eval_oracle_v1",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-13T23:39:59.199760+00:00",
+  "warnings": [],
+  "raw_response": "{\n  \"events\": [\n    {\n      \"event_id\": \"event_1_working_before_doorway\",\n      \"start_sec\": 120.0,\n      \"end_sec\": 188.0,\n      \"granularity\": \"fine\",\n      \"description\": \"Working on assembling and gluing the border of the heart-shaped cardboard piece.\",\n      \"categories\": [\n        \"action\",\n        \"agent_or_interaction\"\n      ],\n      \"parent_event_ids\": [],\n      \"query_roles\": [\n        \"answer_bearing\",\n        \"evidence\"\n      ]\n    },\n    {\n      \"event_id\": \"event_2_looking_at_doorway\",\n      \"start_sec\": 188.0,\n      \"end_sec\": 194.0,\n      \"granularity\": \"fine\",\n      \"description\": \"Looking at the open doorway.\",\n      \"categories\": [\n        \"location_or_scene\",\n        \"unexpected_or_interruption\"\n      ],\n      \"parent_event_ids\": [],\n      \"query_roles\": [\n        \"anchor\"\n      ]\n    },\n    {\n      \"event_id\": \"event_3_working_after_doorway\",\n      \"start_sec\": 194.0,\n      \"end_sec\": 240.0,\n      \"granularity\": \"fine\",\n      \"description\": \"Returning to the table and starting to work on the cloud-shaped cardboard piece.\",\n      \"categories\": [\n        \"action\",\n        \"agent_or_interaction\"\n      ],\n      \"parent_event_ids\": [],\n      \"query_roles\": [\n        \"answer_bearing\",\n        \"evidence\"\n      ]\n    }\n  ],\n  \"warnings\": []\n}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_conditioned"
+}

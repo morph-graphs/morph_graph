@@ -1,0 +1,109 @@
+[
+  {
+    "sample_id": "73",
+    "video": "1cc66eed89b44527.mp4",
+    "question": "What did I paint with the yellow paint immediately after I finished the large star on the right side of the canvas?",
+    "evidence_scope": "single_target",
+    "link_bases": [
+      "temporal_constraint",
+      "shared_activity_goal"
+    ],
+    "answer_operation": "identify"
+  },
+  {
+    "sample_id": "510",
+    "video": "b3fba3c9b747e519.mp4",
+    "question": "What items that were on the bed when I was holding the envelope are missing when I later crochet in the same room?",
+    "evidence_scope": "multi_event_integration",
+    "link_bases": [
+      "temporal_constraint",
+      "shared_entity",
+      "shared_location"
+    ],
+    "answer_operation": "identify"
+  },
+  {
+    "sample_id": "7",
+    "video": "032392866755963e.mp4",
+    "question": "When I first arrived, I saw a red car parked alone near the museum building. Later, as I walked back toward the museum along a tree-lined path, I saw the same red car again. What was different about the red car\u2019s situation the second time?",
+    "evidence_scope": "multi_event_integration",
+    "link_bases": [
+      "temporal_constraint",
+      "shared_entity"
+    ],
+    "answer_operation": "compare_change"
+  },
+  {
+    "sample_id": "328",
+    "video": "6e4610f800b157a0.mp4",
+    "question": "What was I working on right before I looked at the doorway, and what did I start working on right after I returned to the table?",
+    "evidence_scope": "multi_event_integration",
+    "link_bases": [
+      "temporal_constraint",
+      "shared_location"
+    ],
+    "answer_operation": "combine"
+  },
+  {
+    "sample_id": "341",
+    "video": "7593bd8121dcfd39.mp4",
+    "question": "Which main structure did I assemble first according to the instruction manual, and what was the last step number I completed for it before switching to a new structure?",
+    "evidence_scope": "single_target",
+    "link_bases": [
+      "temporal_constraint",
+      "shared_activity_goal"
+    ],
+    "answer_operation": "order"
+  },
+  {
+    "sample_id": "52",
+    "video": "15ac76d47c8753f9.mp4",
+    "question": "Why didn't the two people I saw on the concrete path later react to the snake I encountered earlier, and where was the snake in relation to the path?",
+    "evidence_scope": "single_target",
+    "link_bases": [
+      "temporal_constraint",
+      "causal_dependency"
+    ],
+    "answer_operation": "explain"
+  },
+  {
+    "sample_id": "322",
+    "video": "6c34f96dae9476ce.mp4",
+    "question": "What did I secure to the wooden gate with the power drill, and what modification did I make to the green fence afterward?",
+    "evidence_scope": "multi_event_integration",
+    "link_bases": [
+      "unspecified_link"
+    ],
+    "answer_operation": "combine"
+  },
+  {
+    "sample_id": "252",
+    "video": "54a81d361b2a094f.mp4",
+    "question": "Which did I encounter first, the bench or the signpost, and how did the surrounding environment differ between the two locations?",
+    "evidence_scope": "single_target",
+    "link_bases": [
+      "temporal_constraint"
+    ],
+    "answer_operation": "order"
+  },
+  {
+    "sample_id": "46",
+    "video": "13aea9ab404e96a6.mp4",
+    "question": "Earlier I saw a decorated jar from the Middle Predynastic period, and later a silver ewer from the Early Byzantine era. What is the approximate number of years between the creation of these two artifacts?",
+    "evidence_scope": "multi_event_integration",
+    "link_bases": [
+      "temporal_constraint"
+    ],
+    "answer_operation": "aggregate"
+  },
+  {
+    "sample_id": "0",
+    "video": "00cdb8ca10c069f8.mp4",
+    "question": "After I left the grassy trail that ran alongside the flooded marsh, what was the first man-made structure I encountered on the paved section of my walk?",
+    "evidence_scope": "single_target",
+    "link_bases": [
+      "temporal_constraint"
+    ],
+    "answer_operation": "identify"
+  }
+]

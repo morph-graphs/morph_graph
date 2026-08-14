@@ -1,0 +1,235 @@
+{
+  "sample_id": "b7b62d576af7c64d",
+  "video_id": "b7b62d576af7c64d",
+  "video_path": "/scratch/fsw/portfolios/nemotron/projects/nemotron_omni_vision/users/pulkitk/tracking/datasets/egolongqa/egolongqa/val/b7b62d576af7c64d.mp4",
+  "video_duration_sec": 610.066667,
+  "query": "",
+  "events": [
+    {
+      "event_id": "e1",
+      "start_sec": 0.0,
+      "end_sec": 6.1,
+      "granularity": "coarse",
+      "description": "The visitor passes a decorated Christmas tree and approaches a brightly lit wall display of historic firearms.",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "temporal_transition"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e2",
+      "start_sec": 6.1,
+      "end_sec": 85.4,
+      "granularity": "coarse",
+      "description": "The visitor slowly examines a wall case containing mounted long guns, open presentation cases, photographs, labels, and a large curved tusk.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e3",
+      "start_sec": 85.4,
+      "end_sec": 91.5,
+      "granularity": "coarse",
+      "description": "The visitor backs away from the wall case and moves past an information kiosk toward a freestanding display.",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "temporal_transition"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e4",
+      "start_sec": 91.5,
+      "end_sec": 176.9,
+      "granularity": "coarse",
+      "description": "The visitor studies a sloped glass cabinet filled with antique pistols and accessories arranged in ornate fitted cases.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e5",
+      "start_sec": 176.9,
+      "end_sec": 183.0,
+      "granularity": "coarse",
+      "description": "The visitor turns across the gallery and relocates to an adjacent freestanding cabinet.",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "temporal_transition"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e6",
+      "start_sec": 183.0,
+      "end_sec": 262.3,
+      "granularity": "coarse",
+      "description": "The visitor examines another illuminated cabinet containing cased revolvers, loose long-barreled handguns, ammunition, and a small coffin-shaped pistol case.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e7",
+      "start_sec": 262.3,
+      "end_sec": 335.5,
+      "granularity": "coarse",
+      "description": "The visitor inspects a neighboring cabinet holding a long gun in a metal case, several green and gray pistol cases, loose mechanical parts, photographs, and labels.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e8",
+      "start_sec": 335.5,
+      "end_sec": 347.7,
+      "granularity": "coarse",
+      "description": "The visitor pauses at a separate display featuring gold-accented firearms, long barrels, presentation pieces, and a historical photograph.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e9",
+      "start_sec": 347.7,
+      "end_sec": 384.3,
+      "granularity": "coarse",
+      "description": "The visitor walks around and examines an Olympiad-themed glass enclosure containing mounted rifles and pistols, documents, a digital panel, and a tan blazer on a mannequin.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e10",
+      "start_sec": 384.3,
+      "end_sec": 390.4,
+      "granularity": "coarse",
+      "description": "The visitor turns back through the gallery toward a tall glass rack densely filled with long guns.",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "temporal_transition"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e11",
+      "start_sec": 390.4,
+      "end_sec": 433.1,
+      "granularity": "coarse",
+      "description": "The visitor examines rows of rifles and shotguns mounted inside the tall glass rack, including open presentation cases along its base.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e12",
+      "start_sec": 433.1,
+      "end_sec": 457.6,
+      "granularity": "coarse",
+      "description": "The visitor moves across the gallery past central cabinets and the Christmas tree toward a wall display labeled \u201cHolland & Holland.\u201d",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "temporal_transition"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e13",
+      "start_sec": 457.6,
+      "end_sec": 500.3,
+      "granularity": "coarse",
+      "description": "The visitor closely surveys the Holland & Holland wall case, viewing mounted long guns and numerous open presentation cases with firearms, ammunition, photographs, and documents.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e14",
+      "start_sec": 500.3,
+      "end_sec": 506.4,
+      "granularity": "coarse",
+      "description": "The visitor leaves the wall case and approaches a large central glass island displaying handguns.",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "temporal_transition"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e15",
+      "start_sec": 506.4,
+      "end_sec": 600.9,
+      "granularity": "coarse",
+      "description": "The visitor circles and studies the central handgun display, first viewing cased revolvers on the lower shelf and then rows of pistols and revolvers on the raised upper shelf.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e16",
+      "start_sec": 600.9,
+      "end_sec": 610.067,
+      "granularity": "coarse",
+      "description": "The visitor turns away from the handgun island and surveys the adjacent gallery and wall-mounted firearm displays.",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "temporal_transition"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/openai/openai/eccn-gpt-5.6-sol",
+  "prompt_version": "eval_agnostic_v3_gpt",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-12T22:06:26.794480+00:00",
+  "warnings": [
+    "Event boundaries are approximate because the video was represented by uniformly sampled frames roughly 6.1 seconds apart."
+  ],
+  "raw_response": "{\"events\":[{\"event_id\":\"e1\",\"start_sec\":0.0,\"end_sec\":6.1,\"granularity\":\"coarse\",\"description\":\"The visitor passes a decorated Christmas tree and approaches a brightly lit wall display of historic firearms.\",\"categories\":[\"action\",\"location_or_scene\",\"temporal_transition\"],\"parent_event_ids\":[]},{\"event_id\":\"e2\",\"start_sec\":6.1,\"end_sec\":85.4,\"granularity\":\"coarse\",\"description\":\"The visitor slowly examines a wall case containing mounted long guns, open presentation cases, photographs, labels, and a large curved tusk.\",\"categories\":[\"action\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e3\",\"start_sec\":85.4,\"end_sec\":91.5,\"granularity\":\"coarse\",\"description\":\"The visitor backs away from the wall case and moves past an information kiosk toward a freestanding display.\",\"categories\":[\"action\",\"location_or_scene\",\"temporal_transition\"],\"parent_event_ids\":[]},{\"event_id\":\"e4\",\"start_sec\":91.5,\"end_sec\":176.9,\"granularity\":\"coarse\",\"description\":\"The visitor studies a sloped glass cabinet filled with antique pistols and accessories arranged in ornate fitted cases.\",\"categories\":[\"action\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e5\",\"start_sec\":176.9,\"end_sec\":183.0,\"granularity\":\"coarse\",\"description\":\"The visitor turns across the gallery and relocates to an adjacent freestanding cabinet.\",\"categories\":[\"action\",\"location_or_scene\",\"temporal_transition\"],\"parent_event_ids\":[]},{\"event_id\":\"e6\",\"start_sec\":183.0,\"end_sec\":262.3,\"granularity\":\"coarse\",\"description\":\"The visitor examines another illuminated cabinet containing cased revolvers, loose long-barreled handguns, ammunition, and a small coffin-shaped pistol case.\",\"categories\":[\"action\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e7\",\"start_sec\":262.3,\"end_sec\":335.5,\"granularity\":\"coarse\",\"description\":\"The visitor inspects a neighboring cabinet holding a long gun in a metal case, several green and gray pistol cases, loose mechanical parts, photographs, and labels.\",\"categories\":[\"action\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e8\",\"start_sec\":335.5,\"end_sec\":347.7,\"granularity\":\"coarse\",\"description\":\"The visitor pauses at a separate display featuring gold-accented firearms, long barrels, presentation pieces, and a historical photograph.\",\"categories\":[\"action\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e9\",\"start_sec\":347.7,\"end_sec\":384.3,\"granularity\":\"coarse\",\"description\":\"The visitor walks around and examines an Olympiad-themed glass enclosure containing mounted rifles and pistols, documents, a digital panel, and a tan blazer on a mannequin.\",\"categories\":[\"action\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e10\",\"start_sec\":384.3,\"end_sec\":390.4,\"granularity\":\"coarse\",\"description\":\"The visitor turns back through the gallery toward a tall glass rack densely filled with long guns.\",\"categories\":[\"action\",\"location_or_scene\",\"temporal_transition\"],\"parent_event_ids\":[]},{\"event_id\":\"e11\",\"start_sec\":390.4,\"end_sec\":433.1,\"granularity\":\"coarse\",\"description\":\"The visitor examines rows of rifles and shotguns mounted inside the tall glass rack, including open presentation cases along its base.\",\"categories\":[\"action\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e12\",\"start_sec\":433.1,\"end_sec\":457.6,\"granularity\":\"coarse\",\"description\":\"The visitor moves across the gallery past central cabinets and the Christmas tree toward a wall display labeled \u201cHolland & Holland.\u201d\",\"categories\":[\"action\",\"location_or_scene\",\"temporal_transition\"],\"parent_event_ids\":[]},{\"event_id\":\"e13\",\"start_sec\":457.6,\"end_sec\":500.3,\"granularity\":\"coarse\",\"description\":\"The visitor closely surveys the Holland & Holland wall case, viewing mounted long guns and numerous open presentation cases with firearms, ammunition, photographs, and documents.\",\"categories\":[\"action\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e14\",\"start_sec\":500.3,\"end_sec\":506.4,\"granularity\":\"coarse\",\"description\":\"The visitor leaves the wall case and approaches a large central glass island displaying handguns.\",\"categories\":[\"action\",\"location_or_scene\",\"temporal_transition\"],\"parent_event_ids\":[]},{\"event_id\":\"e15\",\"start_sec\":506.4,\"end_sec\":600.9,\"granularity\":\"coarse\",\"description\":\"The visitor circles and studies the central handgun display, first viewing cased revolvers on the lower shelf and then rows of pistols and revolvers on the raised upper shelf.\",\"categories\":[\"action\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e16\",\"start_sec\":600.9,\"end_sec\":610.067,\"granularity\":\"coarse\",\"description\":\"The visitor turns away from the handgun island and surveys the adjacent gallery and wall-mounted firearm displays.\",\"categories\":[\"action\",\"location_or_scene\",\"temporal_transition\"],\"parent_event_ids\":[]}],\"warnings\":[\"Event boundaries are approximate because the video was represented by uniformly sampled frames roughly 6.1 seconds apart.\"]}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_agnostic"
+}

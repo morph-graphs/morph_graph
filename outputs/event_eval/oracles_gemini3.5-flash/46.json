@@ -1,0 +1,46 @@
+{
+  "sample_id": "46",
+  "video_id": "13aea9ab404e96a6",
+  "video_path": "/scratch/fsw/portfolios/nemotron/projects/nemotron_omni_vision/users/pulkitk/tracking/datasets/egolongqa/egolongqa/val/13aea9ab404e96a6.mp4",
+  "video_duration_sec": 620.733333,
+  "query": "Earlier I saw a decorated jar from the Middle Predynastic period, and later a silver ewer from the Early Byzantine era. What is the approximate number of years between the creation of these two artifacts?",
+  "events": [
+    {
+      "event_id": "decorated_jar_observation",
+      "start_sec": 37.2,
+      "end_sec": 58.0,
+      "granularity": "fine",
+      "description": "A close-up shot of the decorated jar from the Middle Predynastic period, along with its description label showing the date of creation.",
+      "categories": [
+        "location_or_scene"
+      ],
+      "query_roles": [
+        "anchor"
+      ],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "silver_ewer_observation",
+      "start_sec": 552.5,
+      "end_sec": 585.0,
+      "granularity": "fine",
+      "description": "A detailed shot showing the silver ewer from the Early Byzantine era and its museum display label detailing its era of creation.",
+      "categories": [
+        "location_or_scene"
+      ],
+      "query_roles": [
+        "answer_bearing"
+      ],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/gcp/google/eccn-gemini-3.5-flash",
+  "prompt_version": "eval_oracle_v1",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-14T00:08:32.599578+00:00",
+  "warnings": [],
+  "raw_response": "{\n  \"events\": [\n    {\n      \"event_id\": \"decorated_jar_observation\",\n      \"start_sec\": 37.2,\n      \"end_sec\": 58.0,\n      \"granularity\": \"fine\",\n      \"description\": \"A close-up shot of the decorated jar from the Middle Predynastic period, along with its description label showing the date of creation.\",\n      \"categories\": [\n        \"location_or_scene\"\n      ],\n      \"parent_event_ids\": [],\n      \"query_roles\": [\n        \"anchor\"\n      ]\n    },\n    {\n      \"event_id\": \"silver_ewer_observation\",\n      \"start_sec\": 552.5,\n      \"end_sec\": 585.0,\n      \"granularity\": \"fine\",\n      \"description\": \"A detailed shot showing the silver ewer from the Early Byzantine era and its museum display label detailing its era of creation.\",\n      \"categories\": [\n        \"location_or_scene\"\n      ],\n      \"parent_event_ids\": [],\n      \"query_roles\": [\n        \"answer_bearing\"\n      ]\n    }\n  ],\n  \"warnings\": []\n}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_conditioned"
+}

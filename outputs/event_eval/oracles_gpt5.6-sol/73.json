@@ -1,0 +1,50 @@
+{
+  "sample_id": "73",
+  "video_id": "1cc66eed89b44527",
+  "video_path": "/scratch/fsw/portfolios/nemotron/projects/nemotron_omni_vision/users/pulkitk/tracking/datasets/egolongqa/egolongqa/val/1cc66eed89b44527.mp4",
+  "video_duration_sec": 600.666667,
+  "query": "What did I paint with the yellow paint immediately after I finished the large star on the right side of the canvas?",
+  "events": [
+    {
+      "event_id": "e1",
+      "start_sec": 138.2,
+      "end_sec": 162.2,
+      "granularity": "fine",
+      "description": "The painter applies the final yellow strokes and finishes the large star on the right side of the canvas.",
+      "categories": [
+        "action",
+        "state_change"
+      ],
+      "query_roles": [
+        "anchor"
+      ],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e2",
+      "start_sec": 186.2,
+      "end_sec": 210.2,
+      "granularity": "fine",
+      "description": "Immediately afterward, the painter uses yellow paint to fill in a small star above and to the left of the large star.",
+      "categories": [
+        "action",
+        "state_change",
+        "temporal_transition"
+      ],
+      "query_roles": [
+        "answer_bearing",
+        "evidence"
+      ],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/openai/openai/eccn-gpt-5.6-sol",
+  "prompt_version": "eval_oracle_v1",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-13T23:09:31.195797+00:00",
+  "warnings": [],
+  "raw_response": "{\"events\":[{\"event_id\":\"e1\",\"start_sec\":138.2,\"end_sec\":162.2,\"granularity\":\"fine\",\"description\":\"The painter applies the final yellow strokes and finishes the large star on the right side of the canvas.\",\"categories\":[\"action\",\"state_change\"],\"parent_event_ids\":[],\"query_roles\":[\"anchor\"]},{\"event_id\":\"e2\",\"start_sec\":186.2,\"end_sec\":210.2,\"granularity\":\"fine\",\"description\":\"Immediately afterward, the painter uses yellow paint to fill in a small star above and to the left of the large star.\",\"categories\":[\"action\",\"state_change\",\"temporal_transition\"],\"parent_event_ids\":[],\"query_roles\":[\"answer_bearing\",\"evidence\"]}],\"warnings\":[]}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_conditioned"
+}

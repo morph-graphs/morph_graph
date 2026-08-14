@@ -1,0 +1,245 @@
+{
+  "sample_id": "acb3d780d280f0b6",
+  "video_id": "acb3d780d280f0b6",
+  "video_path": "/scratch/fsw/portfolios/nemotron/projects/nemotron_omni_vision/users/pulkitk/tracking/datasets/egolongqa/egolongqa/val/acb3d780d280f0b6.mp4",
+  "video_duration_sec": 600.466667,
+  "query": "",
+  "events": [
+    {
+      "event_id": "e01",
+      "start_sec": 0.0,
+      "end_sec": 36.0,
+      "granularity": "coarse",
+      "description": "Waits at a red-light intersection at night while several cars cross and turn through the crosswalk.",
+      "categories": [
+        "action",
+        "goal_or_subgoal",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e02",
+      "start_sec": 15.0,
+      "end_sec": 21.0,
+      "granularity": "fine",
+      "description": "Raises a wrist and checks a smartwatch while waiting at the intersection.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e03",
+      "start_sec": 36.0,
+      "end_sec": 42.0,
+      "granularity": "coarse",
+      "description": "Crosses the intersection and transitions from the street into a lamp-lit park path.",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "temporal_transition"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e04",
+      "start_sec": 42.0,
+      "end_sec": 156.0,
+      "granularity": "coarse",
+      "description": "Rides a bicycle along winding, illuminated park paths, with its headlight shining on the pavement and a purple bag visible at the handlebars.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e05",
+      "start_sec": 66.0,
+      "end_sec": 84.0,
+      "granularity": "fine",
+      "description": "Approaches and passes park users, including a pedestrian with a leashed dog near the path.",
+      "categories": [
+        "action",
+        "agent_or_interaction"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e06",
+      "start_sec": 156.0,
+      "end_sec": 180.0,
+      "granularity": "coarse",
+      "description": "Arrives beside a Citi Bike docking row, stops, and handles the bicycle controls before leaving the bike area.",
+      "categories": [
+        "action",
+        "goal_or_subgoal",
+        "state_change",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e07",
+      "start_sec": 180.0,
+      "end_sec": 240.0,
+      "granularity": "coarse",
+      "description": "Continues on foot through the park and an adjoining paved plaza toward the street edge.",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "temporal_transition"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e08",
+      "start_sec": 240.0,
+      "end_sec": 294.0,
+      "granularity": "coarse",
+      "description": "Walks along a roadside sidewalk lined with parked taxis and other vehicles.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e09",
+      "start_sec": 294.0,
+      "end_sec": 324.0,
+      "granularity": "coarse",
+      "description": "Rounds the end of the taxi-lined block and negotiates a curved road junction to reach a broader sidewalk.",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "temporal_transition"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e10",
+      "start_sec": 315.0,
+      "end_sec": 321.0,
+      "granularity": "fine",
+      "description": "Briefly checks the smartwatch near the road junction.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e11",
+      "start_sec": 324.0,
+      "end_sec": 492.0,
+      "granularity": "coarse",
+      "description": "Walks steadily along a broad waterfront-side urban sidewalk between apartment buildings, parked cars, large planters, and a raised roadway barrier.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e12",
+      "start_sec": 396.0,
+      "end_sec": 414.0,
+      "granularity": "fine",
+      "description": "Passes pedestrians on the sidewalk, including a person accompanied by a small dog.",
+      "categories": [
+        "action",
+        "agent_or_interaction"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e13",
+      "start_sec": 417.0,
+      "end_sec": 423.0,
+      "granularity": "fine",
+      "description": "Looks down at the smartwatch again while continuing along the sidewalk.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e14",
+      "start_sec": 492.0,
+      "end_sec": 540.0,
+      "granularity": "coarse",
+      "description": "Turns toward the barrier and spends time looking over the illuminated elevated highway, lower roadway, and distant waterfront lights.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e15",
+      "start_sec": 540.0,
+      "end_sec": 564.0,
+      "granularity": "coarse",
+      "description": "Returns to the street corner and crosses or turns through a side-street intersection as vehicles pass.",
+      "categories": [
+        "action",
+        "agent_or_interaction",
+        "location_or_scene",
+        "temporal_transition"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e16",
+      "start_sec": 564.0,
+      "end_sec": 600.467,
+      "granularity": "coarse",
+      "description": "Resumes walking along the building-side sidewalk, passing planters and parked cars toward another stop-controlled intersection.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e17",
+      "start_sec": 567.0,
+      "end_sec": 573.0,
+      "granularity": "fine",
+      "description": "Checks the smartwatch shortly after reaching the next sidewalk.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/openai/openai/eccn-gpt-5.6-sol",
+  "prompt_version": "eval_agnostic_v3_gpt",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-12T22:08:12.825858+00:00",
+  "warnings": [
+    "Event boundaries are approximate because the source was uniformly sampled at roughly six-second intervals."
+  ],
+  "raw_response": "{\"events\":[{\"event_id\":\"e01\",\"start_sec\":0,\"end_sec\":36,\"granularity\":\"coarse\",\"description\":\"Waits at a red-light intersection at night while several cars cross and turn through the crosswalk.\",\"categories\":[\"action\",\"goal_or_subgoal\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e02\",\"start_sec\":15,\"end_sec\":21,\"granularity\":\"fine\",\"description\":\"Raises a wrist and checks a smartwatch while waiting at the intersection.\",\"categories\":[\"action\"],\"parent_event_ids\":[]},{\"event_id\":\"e03\",\"start_sec\":36,\"end_sec\":42,\"granularity\":\"coarse\",\"description\":\"Crosses the intersection and transitions from the street into a lamp-lit park path.\",\"categories\":[\"action\",\"location_or_scene\",\"temporal_transition\"],\"parent_event_ids\":[]},{\"event_id\":\"e04\",\"start_sec\":42,\"end_sec\":156,\"granularity\":\"coarse\",\"description\":\"Rides a bicycle along winding, illuminated park paths, with its headlight shining on the pavement and a purple bag visible at the handlebars.\",\"categories\":[\"action\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e05\",\"start_sec\":66,\"end_sec\":84,\"granularity\":\"fine\",\"description\":\"Approaches and passes park users, including a pedestrian with a leashed dog near the path.\",\"categories\":[\"action\",\"agent_or_interaction\"],\"parent_event_ids\":[]},{\"event_id\":\"e06\",\"start_sec\":156,\"end_sec\":180,\"granularity\":\"coarse\",\"description\":\"Arrives beside a Citi Bike docking row, stops, and handles the bicycle controls before leaving the bike area.\",\"categories\":[\"action\",\"goal_or_subgoal\",\"state_change\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e07\",\"start_sec\":180,\"end_sec\":240,\"granularity\":\"coarse\",\"description\":\"Continues on foot through the park and an adjoining paved plaza toward the street edge.\",\"categories\":[\"action\",\"location_or_scene\",\"temporal_transition\"],\"parent_event_ids\":[]},{\"event_id\":\"e08\",\"start_sec\":240,\"end_sec\":294,\"granularity\":\"coarse\",\"description\":\"Walks along a roadside sidewalk lined with parked taxis and other vehicles.\",\"categories\":[\"action\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e09\",\"start_sec\":294,\"end_sec\":324,\"granularity\":\"coarse\",\"description\":\"Rounds the end of the taxi-lined block and negotiates a curved road junction to reach a broader sidewalk.\",\"categories\":[\"action\",\"location_or_scene\",\"temporal_transition\"],\"parent_event_ids\":[]},{\"event_id\":\"e10\",\"start_sec\":315,\"end_sec\":321,\"granularity\":\"fine\",\"description\":\"Briefly checks the smartwatch near the road junction.\",\"categories\":[\"action\"],\"parent_event_ids\":[]},{\"event_id\":\"e11\",\"start_sec\":324,\"end_sec\":492,\"granularity\":\"coarse\",\"description\":\"Walks steadily along a broad waterfront-side urban sidewalk between apartment buildings, parked cars, large planters, and a raised roadway barrier.\",\"categories\":[\"action\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e12\",\"start_sec\":396,\"end_sec\":414,\"granularity\":\"fine\",\"description\":\"Passes pedestrians on the sidewalk, including a person accompanied by a small dog.\",\"categories\":[\"action\",\"agent_or_interaction\"],\"parent_event_ids\":[]},{\"event_id\":\"e13\",\"start_sec\":417,\"end_sec\":423,\"granularity\":\"fine\",\"description\":\"Looks down at the smartwatch again while continuing along the sidewalk.\",\"categories\":[\"action\"],\"parent_event_ids\":[]},{\"event_id\":\"e14\",\"start_sec\":492,\"end_sec\":540,\"granularity\":\"coarse\",\"description\":\"Turns toward the barrier and spends time looking over the illuminated elevated highway, lower roadway, and distant waterfront lights.\",\"categories\":[\"action\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e15\",\"start_sec\":540,\"end_sec\":564,\"granularity\":\"coarse\",\"description\":\"Returns to the street corner and crosses or turns through a side-street intersection as vehicles pass.\",\"categories\":[\"action\",\"agent_or_interaction\",\"location_or_scene\",\"temporal_transition\"],\"parent_event_ids\":[]},{\"event_id\":\"e16\",\"start_sec\":564,\"end_sec\":600.467,\"granularity\":\"coarse\",\"description\":\"Resumes walking along the building-side sidewalk, passing planters and parked cars toward another stop-controlled intersection.\",\"categories\":[\"action\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e17\",\"start_sec\":567,\"end_sec\":573,\"granularity\":\"fine\",\"description\":\"Checks the smartwatch shortly after reaching the next sidewalk.\",\"categories\":[\"action\"],\"parent_event_ids\":[]}],\"warnings\":[\"Event boundaries are approximate because the source was uniformly sampled at roughly six-second intervals.\"]}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_agnostic"
+}

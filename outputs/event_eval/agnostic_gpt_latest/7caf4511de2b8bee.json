@@ -1,0 +1,335 @@
+{
+  "sample_id": "7caf4511de2b8bee",
+  "video_id": "7caf4511de2b8bee",
+  "video_path": "/scratch/fsw/portfolios/nemotron/projects/nemotron_omni_vision/users/pulkitk/tracking/datasets/egolongqa/egolongqa/val/7caf4511de2b8bee.mp4",
+  "video_duration_sec": 600.533333,
+  "query": "",
+  "events": [
+    {
+      "event_id": "e01",
+      "start_sec": 0.0,
+      "end_sec": 18.0,
+      "granularity": "coarse",
+      "description": "The camera wearer walks through a snowy parking area past parked vehicles while approaching companions carrying sleds.",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "goal_or_subgoal"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e02",
+      "start_sec": 18.0,
+      "end_sec": 48.0,
+      "granularity": "coarse",
+      "description": "The group carries colorful sleds along an icy paved path from the parking area toward the snow hill.",
+      "categories": [
+        "action",
+        "agent_or_interaction",
+        "goal_or_subgoal",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e03",
+      "start_sec": 48.0,
+      "end_sec": 84.0,
+      "granularity": "coarse",
+      "description": "They enter the wooded sledding area and continue along the snowy path toward the top of the hill.",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "temporal_transition"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e04",
+      "start_sec": 84.0,
+      "end_sec": 138.0,
+      "granularity": "coarse",
+      "description": "The camera wearer and companions mill around the crowded staging area, looking at the hill and other sledders among the trees.",
+      "categories": [
+        "action",
+        "agent_or_interaction",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e05",
+      "start_sec": 138.0,
+      "end_sec": 168.0,
+      "granularity": "coarse",
+      "description": "The group moves to the crest and surveys the broad sledding slope and mountain scenery below.",
+      "categories": [
+        "action",
+        "goal_or_subgoal",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e06",
+      "start_sec": 168.0,
+      "end_sec": 186.0,
+      "granularity": "fine",
+      "description": "The companion in a blue jacket gets onto a sled near the crest and slides downhill lying forward.",
+      "categories": [
+        "action",
+        "agent_or_interaction",
+        "state_change"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e07",
+      "start_sec": 186.0,
+      "end_sec": 222.0,
+      "granularity": "coarse",
+      "description": "Companions regroup near the launch area while people walk back uphill and sledders continue descending around them.",
+      "categories": [
+        "action",
+        "agent_or_interaction",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e08",
+      "start_sec": 222.0,
+      "end_sec": 246.0,
+      "granularity": "fine",
+      "description": "The blue-jacketed companion sits on a round blue saucer and takes another ride down the slope.",
+      "categories": [
+        "action",
+        "agent_or_interaction"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e09",
+      "start_sec": 246.0,
+      "end_sec": 264.0,
+      "granularity": "fine",
+      "description": "The beige-jacketed companion sits on a patterned sled and begins sliding downhill.",
+      "categories": [
+        "action",
+        "agent_or_interaction"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e10",
+      "start_sec": 264.0,
+      "end_sec": 312.0,
+      "granularity": "coarse",
+      "description": "The group waits and prepares near the crest as families arrange sleds and riders pass on the hill.",
+      "categories": [
+        "action",
+        "agent_or_interaction",
+        "goal_or_subgoal"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e11",
+      "start_sec": 312.0,
+      "end_sec": 324.0,
+      "granularity": "fine",
+      "description": "The camera wearer sits on a sled at the crest while the blue-jacketed companion approaches and gestures nearby.",
+      "categories": [
+        "action",
+        "agent_or_interaction",
+        "goal_or_subgoal"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e12",
+      "start_sec": 324.0,
+      "end_sec": 342.0,
+      "granularity": "coarse",
+      "description": "The camera wearer makes a first-person sled descent, with their knees visible as the snowy slope moves past.",
+      "categories": [
+        "action",
+        "state_change"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e13",
+      "start_sec": 342.0,
+      "end_sec": 366.0,
+      "granularity": "coarse",
+      "description": "After stopping, the camera wearer heads back uphill toward the crowded crest.",
+      "categories": [
+        "action",
+        "goal_or_subgoal",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e14",
+      "start_sec": 366.0,
+      "end_sec": 390.0,
+      "granularity": "coarse",
+      "description": "The camera wearer rests and prepares another sled at the tree-lined top of the hill with companions nearby.",
+      "categories": [
+        "action",
+        "agent_or_interaction",
+        "goal_or_subgoal"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e15",
+      "start_sec": 390.0,
+      "end_sec": 420.0,
+      "granularity": "coarse",
+      "description": "The camera wearer completes a second first-person sled ride down the hill, passing other riders on the slope.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e16",
+      "start_sec": 420.0,
+      "end_sec": 456.0,
+      "granularity": "coarse",
+      "description": "The camera wearer and companions walk uphill carrying their sleds after the ride.",
+      "categories": [
+        "action",
+        "agent_or_interaction",
+        "goal_or_subgoal"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e17",
+      "start_sec": 456.0,
+      "end_sec": 462.0,
+      "granularity": "fine",
+      "description": "While the group climbs, the blue-jacketed companion briefly slides downhill past on a round sled.",
+      "categories": [
+        "action",
+        "agent_or_interaction"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e18",
+      "start_sec": 462.0,
+      "end_sec": 480.0,
+      "granularity": "coarse",
+      "description": "The uphill walk resumes and the group reaches the crest among waiting sledders and pine trees.",
+      "categories": [
+        "action",
+        "goal_or_subgoal",
+        "location_or_scene",
+        "state_change"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e19",
+      "start_sec": 480.0,
+      "end_sec": 498.0,
+      "granularity": "coarse",
+      "description": "At the top, the camera wearer looks down the busy slope and gets seated for another run.",
+      "categories": [
+        "action",
+        "goal_or_subgoal",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e20",
+      "start_sec": 498.0,
+      "end_sec": 588.5,
+      "granularity": "coarse",
+      "description": "The camera wearer takes a long first-person sled ride across the slope, sometimes rotating to face uphill and weaving among walkers and seated riders.",
+      "categories": [
+        "action",
+        "agent_or_interaction"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e21",
+      "start_sec": 528.0,
+      "end_sec": 534.0,
+      "granularity": "fine",
+      "description": "During the ride, the camera wearer passes close to the blue-jacketed companion seated on a sled.",
+      "categories": [
+        "agent_or_interaction",
+        "unexpected_or_interruption"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e22",
+      "start_sec": 552.5,
+      "end_sec": 564.5,
+      "granularity": "fine",
+      "description": "The moving camera approaches two people lying or sitting directly ahead, and gloved hands rise as the sled passes the obstacle.",
+      "categories": [
+        "agent_or_interaction",
+        "unexpected_or_interruption"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e23",
+      "start_sec": 588.5,
+      "end_sec": 600.533,
+      "granularity": "coarse",
+      "description": "The ride slows or stops, and the camera wearer looks back uphill at scattered sledders continuing their runs.",
+      "categories": [
+        "state_change",
+        "location_or_scene",
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/openai/openai/eccn-gpt-5.6-sol",
+  "prompt_version": "eval_agnostic_v3_gpt",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-12T22:15:29.239923+00:00",
+  "warnings": [
+    "Events near the end are estimated from uniformly sampled frames; brief stops or additional ride transitions may occur between samples."
+  ],
+  "raw_response": "{\"events\":[{\"event_id\":\"e01\",\"start_sec\":0,\"end_sec\":18,\"granularity\":\"coarse\",\"description\":\"The camera wearer walks through a snowy parking area past parked vehicles while approaching companions carrying sleds.\",\"categories\":[\"action\",\"location_or_scene\",\"goal_or_subgoal\"],\"parent_event_ids\":[]},{\"event_id\":\"e02\",\"start_sec\":18,\"end_sec\":48,\"granularity\":\"coarse\",\"description\":\"The group carries colorful sleds along an icy paved path from the parking area toward the snow hill.\",\"categories\":[\"action\",\"agent_or_interaction\",\"goal_or_subgoal\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e03\",\"start_sec\":48,\"end_sec\":84,\"granularity\":\"coarse\",\"description\":\"They enter the wooded sledding area and continue along the snowy path toward the top of the hill.\",\"categories\":[\"action\",\"location_or_scene\",\"temporal_transition\"],\"parent_event_ids\":[]},{\"event_id\":\"e04\",\"start_sec\":84,\"end_sec\":138,\"granularity\":\"coarse\",\"description\":\"The camera wearer and companions mill around the crowded staging area, looking at the hill and other sledders among the trees.\",\"categories\":[\"action\",\"agent_or_interaction\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e05\",\"start_sec\":138,\"end_sec\":168,\"granularity\":\"coarse\",\"description\":\"The group moves to the crest and surveys the broad sledding slope and mountain scenery below.\",\"categories\":[\"action\",\"goal_or_subgoal\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e06\",\"start_sec\":168,\"end_sec\":186,\"granularity\":\"fine\",\"description\":\"The companion in a blue jacket gets onto a sled near the crest and slides downhill lying forward.\",\"categories\":[\"action\",\"agent_or_interaction\",\"state_change\"],\"parent_event_ids\":[]},{\"event_id\":\"e07\",\"start_sec\":186,\"end_sec\":222,\"granularity\":\"coarse\",\"description\":\"Companions regroup near the launch area while people walk back uphill and sledders continue descending around them.\",\"categories\":[\"action\",\"agent_or_interaction\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e08\",\"start_sec\":222,\"end_sec\":246,\"granularity\":\"fine\",\"description\":\"The blue-jacketed companion sits on a round blue saucer and takes another ride down the slope.\",\"categories\":[\"action\",\"agent_or_interaction\"],\"parent_event_ids\":[]},{\"event_id\":\"e09\",\"start_sec\":246,\"end_sec\":264,\"granularity\":\"fine\",\"description\":\"The beige-jacketed companion sits on a patterned sled and begins sliding downhill.\",\"categories\":[\"action\",\"agent_or_interaction\"],\"parent_event_ids\":[]},{\"event_id\":\"e10\",\"start_sec\":264,\"end_sec\":312,\"granularity\":\"coarse\",\"description\":\"The group waits and prepares near the crest as families arrange sleds and riders pass on the hill.\",\"categories\":[\"action\",\"agent_or_interaction\",\"goal_or_subgoal\"],\"parent_event_ids\":[]},{\"event_id\":\"e11\",\"start_sec\":312,\"end_sec\":324,\"granularity\":\"fine\",\"description\":\"The camera wearer sits on a sled at the crest while the blue-jacketed companion approaches and gestures nearby.\",\"categories\":[\"action\",\"agent_or_interaction\",\"goal_or_subgoal\"],\"parent_event_ids\":[]},{\"event_id\":\"e12\",\"start_sec\":324,\"end_sec\":342,\"granularity\":\"coarse\",\"description\":\"The camera wearer makes a first-person sled descent, with their knees visible as the snowy slope moves past.\",\"categories\":[\"action\",\"state_change\"],\"parent_event_ids\":[]},{\"event_id\":\"e13\",\"start_sec\":342,\"end_sec\":366,\"granularity\":\"coarse\",\"description\":\"After stopping, the camera wearer heads back uphill toward the crowded crest.\",\"categories\":[\"action\",\"goal_or_subgoal\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e14\",\"start_sec\":366,\"end_sec\":390,\"granularity\":\"coarse\",\"description\":\"The camera wearer rests and prepares another sled at the tree-lined top of the hill with companions nearby.\",\"categories\":[\"action\",\"agent_or_interaction\",\"goal_or_subgoal\"],\"parent_event_ids\":[]},{\"event_id\":\"e15\",\"start_sec\":390,\"end_sec\":420,\"granularity\":\"coarse\",\"description\":\"The camera wearer completes a second first-person sled ride down the hill, passing other riders on the slope.\",\"categories\":[\"action\"],\"parent_event_ids\":[]},{\"event_id\":\"e16\",\"start_sec\":420,\"end_sec\":456,\"granularity\":\"coarse\",\"description\":\"The camera wearer and companions walk uphill carrying their sleds after the ride.\",\"categories\":[\"action\",\"agent_or_interaction\",\"goal_or_subgoal\"],\"parent_event_ids\":[]},{\"event_id\":\"e17\",\"start_sec\":456,\"end_sec\":462,\"granularity\":\"fine\",\"description\":\"While the group climbs, the blue-jacketed companion briefly slides downhill past on a round sled.\",\"categories\":[\"action\",\"agent_or_interaction\"],\"parent_event_ids\":[]},{\"event_id\":\"e18\",\"start_sec\":462,\"end_sec\":480,\"granularity\":\"coarse\",\"description\":\"The uphill walk resumes and the group reaches the crest among waiting sledders and pine trees.\",\"categories\":[\"action\",\"goal_or_subgoal\",\"location_or_scene\",\"state_change\"],\"parent_event_ids\":[]},{\"event_id\":\"e19\",\"start_sec\":480,\"end_sec\":498,\"granularity\":\"coarse\",\"description\":\"At the top, the camera wearer looks down the busy slope and gets seated for another run.\",\"categories\":[\"action\",\"goal_or_subgoal\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e20\",\"start_sec\":498,\"end_sec\":588.5,\"granularity\":\"coarse\",\"description\":\"The camera wearer takes a long first-person sled ride across the slope, sometimes rotating to face uphill and weaving among walkers and seated riders.\",\"categories\":[\"action\",\"agent_or_interaction\"],\"parent_event_ids\":[]},{\"event_id\":\"e21\",\"start_sec\":528,\"end_sec\":534,\"granularity\":\"fine\",\"description\":\"During the ride, the camera wearer passes close to the blue-jacketed companion seated on a sled.\",\"categories\":[\"agent_or_interaction\",\"unexpected_or_interruption\"],\"parent_event_ids\":[]},{\"event_id\":\"e22\",\"start_sec\":552.5,\"end_sec\":564.5,\"granularity\":\"fine\",\"description\":\"The moving camera approaches two people lying or sitting directly ahead, and gloved hands rise as the sled passes the obstacle.\",\"categories\":[\"agent_or_interaction\",\"unexpected_or_interruption\"],\"parent_event_ids\":[]},{\"event_id\":\"e23\",\"start_sec\":588.5,\"end_sec\":600.533,\"granularity\":\"coarse\",\"description\":\"The ride slows or stops, and the camera wearer looks back uphill at scattered sledders continuing their runs.\",\"categories\":[\"state_change\",\"location_or_scene\",\"action\"],\"parent_event_ids\":[]}],\"warnings\":[\"Events near the end are estimated from uniformly sampled frames; brief stops or additional ride transitions may occur between samples.\"]}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_agnostic"
+}

@@ -1,0 +1,47 @@
+{
+  "sample_id": "510",
+  "video_id": "b3fba3c9b747e519",
+  "video_path": "/scratch/fsw/portfolios/nemotron/projects/nemotron_omni_vision/users/pulkitk/tracking/datasets/egolongqa/egolongqa/val/b3fba3c9b747e519.mp4",
+  "video_duration_sec": 600.133333,
+  "query": "What items that were on the bed when I was holding the envelope are missing when I later crochet in the same room?",
+  "events": [
+    {
+      "event_id": "holding_envelope",
+      "start_sec": 96.0,
+      "end_sec": 102.0,
+      "granularity": "fine",
+      "description": "The person picks up and holds an envelope next to the bed covered with Christmas decorations.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [
+        "anchor"
+      ],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "crocheting_in_room",
+      "start_sec": 126.0,
+      "end_sec": 594.1,
+      "granularity": "coarse",
+      "description": "The person sits in the bedroom and crochets with green yarn, showing the bed in the background.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [
+        "answer_bearing",
+        "evidence"
+      ],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/gcp/google/eccn-gemini-3.5-flash",
+  "prompt_version": "eval_oracle_v1",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-13T23:17:41.492637+00:00",
+  "warnings": [],
+  "raw_response": "{\n  \"events\": [\n    {\n      \"event_id\": \"holding_envelope\",\n      \"start_sec\": 96.0,\n      \"end_sec\": 102.0,\n      \"granularity\": \"fine\",\n      \"description\": \"The person picks up and holds an envelope next to the bed covered with Christmas decorations.\",\n      \"categories\": [\n        \"action\"\n      ],\n      \"parent_event_ids\": [],\n      \"query_roles\": [\n        \"anchor\"\n      ]\n    },\n    {\n      \"event_id\": \"crocheting_in_room\",\n      \"start_sec\": 126.0,\n      \"end_sec\": 594.1,\n      \"granularity\": \"coarse\",\n      \"description\": \"The person sits in the bedroom and crochets with green yarn, showing the bed in the background.\",\n      \"categories\": [\n        \"action\"\n      ],\n      \"parent_event_ids\": [],\n      \"query_roles\": [\n        \"answer_bearing\",\n        \"evidence\"\n      ]\n    }\n  ],\n  \"warnings\": []\n}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_conditioned"
+}

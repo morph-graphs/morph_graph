@@ -1,0 +1,70 @@
+{
+  "sample_id": "341",
+  "video_id": "7593bd8121dcfd39",
+  "video_path": "/scratch/fsw/portfolios/nemotron/projects/nemotron_omni_vision/users/pulkitk/tracking/datasets/egolongqa/egolongqa/val/7593bd8121dcfd39.mp4",
+  "video_duration_sec": 600.133333,
+  "query": "Which main structure did I assemble first according to the instruction manual, and what was the last step number I completed for it before switching to a new structure?",
+  "events": [
+    {
+      "event_id": "first_structure_build",
+      "start_sec": 84.0,
+      "end_sec": 528.1,
+      "granularity": "coarse",
+      "description": "The first main structure assembled from the manual is the blue-and-brown wheeled wagon/carriage.",
+      "categories": [
+        "action",
+        "goal_or_subgoal",
+        "state_change"
+      ],
+      "query_roles": [
+        "anchor",
+        "answer_bearing"
+      ],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "wagon_step_33",
+      "start_sec": 510.1,
+      "end_sec": 528.1,
+      "granularity": "fine",
+      "description": "The manual shows step 33 as the wagon is completed and connected to the reindeer; this is the last completed step before the build changes.",
+      "categories": [
+        "action",
+        "state_change",
+        "temporal_transition"
+      ],
+      "query_roles": [
+        "answer_bearing",
+        "evidence"
+      ],
+      "parent_event_ids": [
+        "first_structure_build"
+      ]
+    },
+    {
+      "event_id": "switch_to_new_structure",
+      "start_sec": 528.1,
+      "end_sec": 546.1,
+      "granularity": "fine",
+      "description": "The manual is turned to a new section with low-numbered steps, and assembly begins on a separate pink-and-lavender structure.",
+      "categories": [
+        "action",
+        "goal_or_subgoal",
+        "temporal_transition"
+      ],
+      "query_roles": [
+        "evidence"
+      ],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/openai/openai/eccn-gpt-5.6-sol",
+  "prompt_version": "eval_oracle_v1",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-13T23:50:27.897130+00:00",
+  "warnings": [],
+  "raw_response": "{\"events\":[{\"event_id\":\"first_structure_build\",\"start_sec\":84.0,\"end_sec\":528.1,\"granularity\":\"coarse\",\"description\":\"The first main structure assembled from the manual is the blue-and-brown wheeled wagon/carriage.\",\"categories\":[\"action\",\"goal_or_subgoal\",\"state_change\"],\"parent_event_ids\":[],\"query_roles\":[\"anchor\",\"answer_bearing\"]},{\"event_id\":\"wagon_step_33\",\"start_sec\":510.1,\"end_sec\":528.1,\"granularity\":\"fine\",\"description\":\"The manual shows step 33 as the wagon is completed and connected to the reindeer; this is the last completed step before the build changes.\",\"categories\":[\"action\",\"state_change\",\"temporal_transition\"],\"parent_event_ids\":[\"first_structure_build\"],\"query_roles\":[\"answer_bearing\",\"evidence\"]},{\"event_id\":\"switch_to_new_structure\",\"start_sec\":528.1,\"end_sec\":546.1,\"granularity\":\"fine\",\"description\":\"The manual is turned to a new section with low-numbered steps, and assembly begins on a separate pink-and-lavender structure.\",\"categories\":[\"action\",\"goal_or_subgoal\",\"temporal_transition\"],\"parent_event_ids\":[],\"query_roles\":[\"evidence\"]}],\"warnings\":[]}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_conditioned"
+}

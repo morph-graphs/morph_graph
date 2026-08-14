@@ -1,0 +1,52 @@
+{
+  "sample_id": "510",
+  "video_id": "b3fba3c9b747e519",
+  "video_path": "/scratch/fsw/portfolios/nemotron/projects/nemotron_omni_vision/users/pulkitk/tracking/datasets/egolongqa/egolongqa/val/b3fba3c9b747e519.mp4",
+  "video_duration_sec": 600.133333,
+  "query": "What items that were on the bed when I was holding the envelope are missing when I later crochet in the same room?",
+  "events": [
+    {
+      "event_id": "e1",
+      "start_sec": 102.0,
+      "end_sec": 108.0,
+      "granularity": "fine",
+      "description": "While the person holds a white envelope/paper beside the bed, the bed visibly holds a \u201cMerry Christmas\u201d sign, rolls of Christmas wrapping paper, a closed laptop, a small green round object, and gold tinsel.",
+      "categories": [
+        "agent_or_interaction",
+        "location_or_scene"
+      ],
+      "query_roles": [
+        "anchor",
+        "answer_bearing"
+      ],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e2",
+      "start_sec": 138.0,
+      "end_sec": 594.1,
+      "granularity": "coarse",
+      "description": "Later, the person crochets in the same bedroom; gold tinsel remains on the bed, but the \u201cMerry Christmas\u201d sign, wrapping-paper rolls, closed laptop, and small green round object are no longer present.",
+      "categories": [
+        "action",
+        "temporal_transition",
+        "location_or_scene",
+        "state_change"
+      ],
+      "query_roles": [
+        "answer_bearing",
+        "evidence"
+      ],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/openai/openai/eccn-gpt-5.6-sol",
+  "prompt_version": "eval_oracle_v1",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-13T23:17:44.595873+00:00",
+  "warnings": [],
+  "raw_response": "{\"events\":[{\"event_id\":\"e1\",\"start_sec\":102.0,\"end_sec\":108.0,\"granularity\":\"fine\",\"description\":\"While the person holds a white envelope/paper beside the bed, the bed visibly holds a \u201cMerry Christmas\u201d sign, rolls of Christmas wrapping paper, a closed laptop, a small green round object, and gold tinsel.\",\"categories\":[\"agent_or_interaction\",\"location_or_scene\"],\"parent_event_ids\":[],\"query_roles\":[\"anchor\",\"answer_bearing\"]},{\"event_id\":\"e2\",\"start_sec\":138.0,\"end_sec\":594.1,\"granularity\":\"coarse\",\"description\":\"Later, the person crochets in the same bedroom; gold tinsel remains on the bed, but the \u201cMerry Christmas\u201d sign, wrapping-paper rolls, closed laptop, and small green round object are no longer present.\",\"categories\":[\"action\",\"temporal_transition\",\"location_or_scene\",\"state_change\"],\"parent_event_ids\":[],\"query_roles\":[\"answer_bearing\",\"evidence\"]}],\"warnings\":[]}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_conditioned"
+}

@@ -1,0 +1,52 @@
+{
+  "sample_id": "252",
+  "video_id": "54a81d361b2a094f",
+  "video_path": "/scratch/fsw/portfolios/nemotron/projects/nemotron_omni_vision/users/pulkitk/tracking/datasets/egolongqa/egolongqa/val/54a81d361b2a094f.mp4",
+  "video_duration_sec": 675.8,
+  "query": "Which did I encounter first, the bench or the signpost, and how did the surrounding environment differ between the two locations?",
+  "events": [
+    {
+      "event_id": "bench_encounter",
+      "start_sec": 148.7,
+      "end_sec": 162.2,
+      "granularity": "fine",
+      "description": "The bench is encountered first, beside the leaf-covered trail in a dense wooded clearing surrounded by trees and underbrush.",
+      "categories": [
+        "location_or_scene",
+        "temporal_transition"
+      ],
+      "query_roles": [
+        "anchor",
+        "answer_bearing",
+        "evidence"
+      ],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "signpost_encounter",
+      "start_sec": 348.0,
+      "end_sec": 358.2,
+      "granularity": "fine",
+      "description": "Later, a slim signpost is encountered in a broad, exposed grassy field bordered by distant trees, unlike the enclosed woodland around the bench.",
+      "categories": [
+        "location_or_scene",
+        "temporal_transition"
+      ],
+      "query_roles": [
+        "anchor",
+        "answer_bearing",
+        "evidence"
+      ],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/openai/openai/eccn-gpt-5.6-sol",
+  "prompt_version": "eval_oracle_v1",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-14T00:08:16.930658+00:00",
+  "warnings": [],
+  "raw_response": "{\"events\":[{\"event_id\":\"bench_encounter\",\"start_sec\":148.7,\"end_sec\":162.2,\"granularity\":\"fine\",\"description\":\"The bench is encountered first, beside the leaf-covered trail in a dense wooded clearing surrounded by trees and underbrush.\",\"categories\":[\"location_or_scene\",\"temporal_transition\"],\"parent_event_ids\":[],\"query_roles\":[\"anchor\",\"answer_bearing\",\"evidence\"]},{\"event_id\":\"signpost_encounter\",\"start_sec\":348.0,\"end_sec\":358.2,\"granularity\":\"fine\",\"description\":\"Later, a slim signpost is encountered in a broad, exposed grassy field bordered by distant trees, unlike the enclosed woodland around the bench.\",\"categories\":[\"location_or_scene\",\"temporal_transition\"],\"parent_event_ids\":[],\"query_roles\":[\"anchor\",\"answer_bearing\",\"evidence\"]}],\"warnings\":[]}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_conditioned"
+}

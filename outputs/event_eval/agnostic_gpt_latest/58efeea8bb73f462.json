@@ -1,0 +1,59 @@
+{
+  "sample_id": "58efeea8bb73f462",
+  "video_id": "58efeea8bb73f462",
+  "video_path": "/scratch/fsw/portfolios/nemotron/projects/nemotron_omni_vision/users/pulkitk/tracking/datasets/egolongqa/egolongqa/val/58efeea8bb73f462.mp4",
+  "video_duration_sec": 618.2,
+  "query": "",
+  "events": [
+    {
+      "event_id": "e1",
+      "start_sec": 0.0,
+      "end_sec": 618.2,
+      "granularity": "coarse",
+      "description": "Seated around a dining table, the camera wearer and the person opposite play an extended game of chess, alternating board moves while the wearer repeatedly gathers and arranges captured gold pieces on the placemat.",
+      "categories": [
+        "action",
+        "agent_or_interaction",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e2",
+      "start_sec": 90.0,
+      "end_sec": 96.0,
+      "granularity": "fine",
+      "description": "The camera wearer briefly gives a thumbs-up gesture above the table.",
+      "categories": [
+        "action",
+        "agent_or_interaction"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e3",
+      "start_sec": 497.0,
+      "end_sec": 504.0,
+      "granularity": "fine",
+      "description": "The camera wearer briefly lifts the large plastic drink cup toward their face before returning it to the table.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/openai/openai/eccn-gpt-5.6-sol",
+  "prompt_version": "eval_agnostic_v3_gpt",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-12T22:05:08.452813+00:00",
+  "warnings": [
+    "The video is uniformly subsampled, so the exact boundaries of the two brief gestures are approximate."
+  ],
+  "raw_response": "{\"events\":[{\"event_id\":\"e1\",\"start_sec\":0,\"end_sec\":618.2,\"granularity\":\"coarse\",\"description\":\"Seated around a dining table, the camera wearer and the person opposite play an extended game of chess, alternating board moves while the wearer repeatedly gathers and arranges captured gold pieces on the placemat.\",\"categories\":[\"action\",\"agent_or_interaction\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e2\",\"start_sec\":90,\"end_sec\":96,\"granularity\":\"fine\",\"description\":\"The camera wearer briefly gives a thumbs-up gesture above the table.\",\"categories\":[\"action\",\"agent_or_interaction\"],\"parent_event_ids\":[]},{\"event_id\":\"e3\",\"start_sec\":497,\"end_sec\":504,\"granularity\":\"fine\",\"description\":\"The camera wearer briefly lifts the large plastic drink cup toward their face before returning it to the table.\",\"categories\":[\"action\"],\"parent_event_ids\":[]}],\"warnings\":[\"The video is uniformly subsampled, so the exact boundaries of the two brief gestures are approximate.\"]}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_agnostic"
+}

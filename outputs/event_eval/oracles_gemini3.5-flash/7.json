@@ -1,0 +1,46 @@
+{
+  "sample_id": "7",
+  "video_id": "032392866755963e",
+  "video_path": "/scratch/fsw/portfolios/nemotron/projects/nemotron_omni_vision/users/pulkitk/tracking/datasets/egolongqa/egolongqa/val/032392866755963e.mp4",
+  "video_duration_sec": 600.133333,
+  "query": "When I first arrived, I saw a red car parked alone near the museum building. Later, as I walked back toward the museum along a tree-lined path, I saw the same red car again. What was different about the red car\u2019s situation the second time?",
+  "events": [
+    {
+      "event_id": "red_car_first_appearance",
+      "start_sec": 354.1,
+      "end_sec": 384.1,
+      "granularity": "fine",
+      "description": "The red car is seen parked alone on the street in the distance.",
+      "categories": [
+        "location_or_scene"
+      ],
+      "query_roles": [
+        "anchor"
+      ],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "red_car_second_appearance",
+      "start_sec": 540.1,
+      "end_sec": 594.1,
+      "granularity": "fine",
+      "description": "The red car is seen again, this time parked directly in front of a dark-colored SUV.",
+      "categories": [
+        "location_or_scene"
+      ],
+      "query_roles": [
+        "answer_bearing"
+      ],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/gcp/google/eccn-gemini-3.5-flash",
+  "prompt_version": "eval_oracle_v1",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-13T23:31:29.295669+00:00",
+  "warnings": [],
+  "raw_response": "{\n  \"events\": [\n    {\n      \"event_id\": \"red_car_first_appearance\",\n      \"start_sec\": 354.1,\n      \"end_sec\": 384.1,\n      \"granularity\": \"fine\",\n      \"description\": \"The red car is seen parked alone on the street in the distance.\",\n      \"categories\": [\n        \"location_or_scene\"\n      ],\n      \"parent_event_ids\": [],\n      \"query_roles\": [\n        \"anchor\"\n      ]\n    },\n    {\n      \"event_id\": \"red_car_second_appearance\",\n      \"start_sec\": 540.1,\n      \"end_sec\": 594.1,\n      \"granularity\": \"fine\",\n      \"description\": \"The red car is seen again, this time parked directly in front of a dark-colored SUV.\",\n      \"categories\": [\n        \"location_or_scene\"\n      ],\n      \"parent_event_ids\": [],\n      \"query_roles\": [\n        \"answer_bearing\"\n      ]\n    }\n  ],\n  \"warnings\": []\n}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_conditioned"
+}

@@ -1,0 +1,122 @@
+{
+  "sample_id": "acb3d780d280f0b6",
+  "video_id": "acb3d780d280f0b6",
+  "video_path": "/scratch/fsw/portfolios/nemotron/projects/nemotron_omni_vision/users/pulkitk/tracking/datasets/egolongqa/egolongqa/val/acb3d780d280f0b6.mp4",
+  "video_duration_sec": 600.466667,
+  "query": "",
+  "events": [
+    {
+      "event_id": "event_0",
+      "start_sec": 0.0,
+      "end_sec": 36.0,
+      "granularity": "coarse",
+      "description": "Waiting at a traffic intersection on a bike, checking a smartwatch, and then riding across the crosswalk.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_1",
+      "start_sec": 36.0,
+      "end_sec": 162.0,
+      "granularity": "coarse",
+      "description": "Riding a bike along a paved park pathway at night, passing joggers, walkers, and dogs.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_2",
+      "start_sec": 162.0,
+      "end_sec": 180.0,
+      "granularity": "coarse",
+      "description": "Approaching a Citi Bike station, docking the bike, and preparing to walk.",
+      "categories": [
+        "action",
+        "state_change"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_3",
+      "start_sec": 180.0,
+      "end_sec": 246.0,
+      "granularity": "coarse",
+      "description": "Walking along a paved pathway in a park plaza past benches and a circular planter.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_4",
+      "start_sec": 246.0,
+      "end_sec": 294.0,
+      "granularity": "coarse",
+      "description": "Walking on a sidewalk next to parked cars and crossing an entrance ramp.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_5",
+      "start_sec": 294.0,
+      "end_sec": 366.0,
+      "granularity": "coarse",
+      "description": "Walking along the sidewalk next to a highway barrier and pausing to look at the view of the highway below.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_6",
+      "start_sec": 366.0,
+      "end_sec": 492.0,
+      "granularity": "coarse",
+      "description": "Walking past residential high-rise buildings and large concrete planters on a wide sidewalk.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_7",
+      "start_sec": 492.0,
+      "end_sec": 600.467,
+      "granularity": "coarse",
+      "description": "Continuing to walk along the sidewalk past apartment buildings and checking a smartwatch.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/gcp/google/eccn-gemini-3.5-flash",
+  "prompt_version": "eval_agnostic_v3_gpt",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-12T22:12:54.847999+00:00",
+  "warnings": [],
+  "raw_response": "{\n  \"events\": [\n    {\n      \"event_id\": \"event_0\",\n      \"start_sec\": 0.0,\n      \"end_sec\": 36.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Waiting at a traffic intersection on a bike, checking a smartwatch, and then riding across the crosswalk.\",\n      \"categories\": [\"action\", \"location_or_scene\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_1\",\n      \"start_sec\": 36.0,\n      \"end_sec\": 162.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Riding a bike along a paved park pathway at night, passing joggers, walkers, and dogs.\",\n      \"categories\": [\"action\", \"location_or_scene\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_2\",\n      \"start_sec\": 162.0,\n      \"end_sec\": 180.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Approaching a Citi Bike station, docking the bike, and preparing to walk.\",\n      \"categories\": [\"action\", \"state_change\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_3\",\n      \"start_sec\": 180.0,\n      \"end_sec\": 246.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking along a paved pathway in a park plaza past benches and a circular planter.\",\n      \"categories\": [\"action\", \"location_or_scene\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_4\",\n      \"start_sec\": 246.0,\n      \"end_sec\": 294.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking on a sidewalk next to parked cars and crossing an entrance ramp.\",\n      \"categories\": [\"action\", \"location_or_scene\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_5\",\n      \"start_sec\": 294.0,\n      \"end_sec\": 366.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking along the sidewalk next to a highway barrier and pausing to look at the view of the highway below.\",\n      \"categories\": [\"action\", \"location_or_scene\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_6\",\n      \"start_sec\": 366.0,\n      \"end_sec\": 492.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking past residential high-rise buildings and large concrete planters on a wide sidewalk.\",\n      \"categories\": [\"action\", \"location_or_scene\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_7\",\n      \"start_sec\": 492.0,\n      \"end_sec\": 600.467,\n      \"granularity\": \"coarse\",\n      \"description\": \"Continuing to walk along the sidewalk past apartment buildings and checking a smartwatch.\",\n      \"categories\": [\"action\", \"location_or_scene\"],\n      \"parent_event_ids\": []\n    }\n  ],\n  \"warnings\": []\n}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_agnostic"
+}

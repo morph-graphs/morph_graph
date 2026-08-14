@@ -1,0 +1,239 @@
+{
+  "sample_id": "a86f2f3570b7db44",
+  "video_id": "a86f2f3570b7db44",
+  "video_path": "/scratch/fsw/portfolios/nemotron/projects/nemotron_omni_vision/users/pulkitk/tracking/datasets/egolongqa/egolongqa/val/a86f2f3570b7db44.mp4",
+  "video_duration_sec": 602.2,
+  "query": "",
+  "events": [
+    {
+      "event_id": "event_1",
+      "start_sec": 0.0,
+      "end_sec": 36.1,
+      "granularity": "coarse",
+      "description": "Walking down a city sidewalk, passing parked taxis, pedestrians, and construction scaffolding.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_2",
+      "start_sec": 36.1,
+      "end_sec": 66.2,
+      "granularity": "coarse",
+      "description": "Crossing the street and walking along the sidewalk beside a SEPTA bus.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_3",
+      "start_sec": 66.2,
+      "end_sec": 90.3,
+      "granularity": "coarse",
+      "description": "Walking past a brick wall, yellow bollards, \"The Notary\" building, and entering a side street.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_4",
+      "start_sec": 90.3,
+      "end_sec": 132.5,
+      "granularity": "coarse",
+      "description": "Walking down a narrow alleyway/street past parked utility vehicles and garages.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_5",
+      "start_sec": 132.5,
+      "end_sec": 168.6,
+      "granularity": "coarse",
+      "description": "Crossing the street at a crosswalk and walking along the exterior of Philadelphia City Hall.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_6",
+      "start_sec": 168.6,
+      "end_sec": 198.7,
+      "granularity": "coarse",
+      "description": "Walking around the exterior corner of City Hall, crossing the street, and entering a public plaza.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_7",
+      "start_sec": 198.7,
+      "end_sec": 234.9,
+      "granularity": "coarse",
+      "description": "Walking through the plaza, passing a Ferris wheel and wooden holiday market booths.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_8",
+      "start_sec": 234.9,
+      "end_sec": 265.0,
+      "granularity": "coarse",
+      "description": "Walking along the side of the City Hall building, passing the statue of John Christian Bullitt.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_9",
+      "start_sec": 265.0,
+      "end_sec": 313.1,
+      "granularity": "coarse",
+      "description": "Walking past a large Christmas tree and a construction crane/cherry picker on the plaza.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_10",
+      "start_sec": 313.1,
+      "end_sec": 349.3,
+      "granularity": "coarse",
+      "description": "Crossing the street and walking towards one of the archway entrances of City Hall.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_11",
+      "start_sec": 349.3,
+      "end_sec": 391.4,
+      "granularity": "coarse",
+      "description": "Walking through the grand vaulted stone archway/portal of City Hall.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_12",
+      "start_sec": 391.4,
+      "end_sec": 451.6,
+      "granularity": "coarse",
+      "description": "Entering the inner courtyard of City Hall, walking towards and looking at a carousel.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_13",
+      "start_sec": 451.6,
+      "end_sec": 475.7,
+      "granularity": "coarse",
+      "description": "Standing near the carousel and observing its detailed painted figures.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_14",
+      "start_sec": 475.7,
+      "end_sec": 505.8,
+      "granularity": "coarse",
+      "description": "Walking around the inner courtyard of City Hall, passing closed wooden market cabins.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_15",
+      "start_sec": 505.8,
+      "end_sec": 536.0,
+      "granularity": "coarse",
+      "description": "Walking through a stone portal to exit the inner courtyard of City Hall.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_16",
+      "start_sec": 536.0,
+      "end_sec": 566.1,
+      "granularity": "coarse",
+      "description": "Walking along the outer sidewalk/plaza of City Hall past the construction equipment.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_17",
+      "start_sec": 566.1,
+      "end_sec": 602.2,
+      "granularity": "coarse",
+      "description": "Walking back into another arched entrance of City Hall and through its grand hallway.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/gcp/google/eccn-gemini-3.5-flash",
+  "prompt_version": "eval_agnostic_v3_gpt",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-12T22:16:33.744142+00:00",
+  "warnings": [],
+  "raw_response": "{\n  \"events\": [\n    {\n      \"event_id\": \"event_1\",\n      \"start_sec\": 0.0,\n      \"end_sec\": 36.1,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking down a city sidewalk, passing parked taxis, pedestrians, and construction scaffolding.\",\n      \"categories\": [\n        \"action\",\n        \"location_or_scene\"\n      ],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_2\",\n      \"start_sec\": 36.1,\n      \"end_sec\": 66.2,\n      \"granularity\": \"coarse\",\n      \"description\": \"Crossing the street and walking along the sidewalk beside a SEPTA bus.\",\n      \"categories\": [\n        \"action\",\n        \"location_or_scene\"\n      ],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_3\",\n      \"start_sec\": 66.2,\n      \"end_sec\": 90.3,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking past a brick wall, yellow bollards, \\\"The Notary\\\" building, and entering a side street.\",\n      \"categories\": [\n        \"action\",\n        \"location_or_scene\"\n      ],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_4\",\n      \"start_sec\": 90.3,\n      \"end_sec\": 132.5,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking down a narrow alleyway/street past parked utility vehicles and garages.\",\n      \"categories\": [\n        \"action\",\n        \"location_or_scene\"\n      ],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_5\",\n      \"start_sec\": 132.5,\n      \"end_sec\": 168.6,\n      \"granularity\": \"coarse\",\n      \"description\": \"Crossing the street at a crosswalk and walking along the exterior of Philadelphia City Hall.\",\n      \"categories\": [\n        \"action\",\n        \"location_or_scene\"\n      ],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_6\",\n      \"start_sec\": 168.6,\n      \"end_sec\": 198.7,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking around the exterior corner of City Hall, crossing the street, and entering a public plaza.\",\n      \"categories\": [\n        \"action\",\n        \"location_or_scene\"\n      ],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_7\",\n      \"start_sec\": 198.7,\n      \"end_sec\": 234.9,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking through the plaza, passing a Ferris wheel and wooden holiday market booths.\",\n      \"categories\": [\n        \"action\",\n        \"location_or_scene\"\n      ],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_8\",\n      \"start_sec\": 234.9,\n      \"end_sec\": 265.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking along the side of the City Hall building, passing the statue of John Christian Bullitt.\",\n      \"categories\": [\n        \"action\",\n        \"location_or_scene\"\n      ],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_9\",\n      \"start_sec\": 265.0,\n      \"end_sec\": 313.1,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking past a large Christmas tree and a construction crane/cherry picker on the plaza.\",\n      \"categories\": [\n        \"action\",\n        \"location_or_scene\"\n      ],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_10\",\n      \"start_sec\": 313.1,\n      \"end_sec\": 349.3,\n      \"granularity\": \"coarse\",\n      \"description\": \"Crossing the street and walking towards one of the archway entrances of City Hall.\",\n      \"categories\": [\n        \"action\",\n        \"location_or_scene\"\n      ],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_11\",\n      \"start_sec\": 349.3,\n      \"end_sec\": 391.4,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking through the grand vaulted stone archway/portal of City Hall.\",\n      \"categories\": [\n        \"action\",\n        \"location_or_scene\"\n      ],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_12\",\n      \"start_sec\": 391.4,\n      \"end_sec\": 451.6,\n      \"granularity\": \"coarse\",\n      \"description\": \"Entering the inner courtyard of City Hall, walking towards and looking at a carousel.\",\n      \"categories\": [\n        \"action\",\n        \"location_or_scene\"\n      ],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_13\",\n      \"start_sec\": 451.6,\n      \"end_sec\": 475.7,\n      \"granularity\": \"coarse\",\n      \"description\": \"Standing near the carousel and observing its detailed painted figures.\",\n      \"categories\": [\n        \"action\",\n        \"location_or_scene\"\n      ],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_14\",\n      \"start_sec\": 475.7,\n      \"end_sec\": 505.8,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking around the inner courtyard of City Hall, passing closed wooden market cabins.\",\n      \"categories\": [\n        \"action\",\n        \"location_or_scene\"\n      ],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_15\",\n      \"start_sec\": 505.8,\n      \"end_sec\": 536.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking through a stone portal to exit the inner courtyard of City Hall.\",\n      \"categories\": [\n        \"action\",\n        \"location_or_scene\"\n      ],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_16\",\n      \"start_sec\": 536.0,\n      \"end_sec\": 566.1,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking along the outer sidewalk/plaza of City Hall past the construction equipment.\",\n      \"categories\": [\n        \"action\",\n        \"location_or_scene\"\n      ],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_17\",\n      \"start_sec\": 566.1,\n      \"end_sec\": 602.2,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking back into another arched entrance of City Hall and through its grand hallway.\",\n      \"categories\": [\n        \"action\",\n        \"location_or_scene\"\n      ],\n      \"parent_event_ids\": []\n    }\n  ],\n  \"warnings\": []\n}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_agnostic"
+}
