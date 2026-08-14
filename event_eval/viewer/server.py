@@ -54,6 +54,30 @@ DEFAULT_PATHS = {
 }
 
 
+def _annotation_directory_options() -> dict[str, list[str]]:
+    """Return annotation directories available under outputs/event_eval."""
+    output_root = _MORPH_GRAPH_ROOT / "outputs" / "event_eval"
+    if not output_root.is_dir():
+        return {"oracle_dirs": [], "agnostic_dirs": []}
+
+    directories = sorted(
+        (path for path in output_root.iterdir() if path.is_dir()),
+        key=lambda path: path.name.lower(),
+    )
+
+    def relative_paths(prefix: str) -> list[str]:
+        return [
+            str(path.relative_to(_MORPH_GRAPH_ROOT))
+            for path in directories
+            if path.name.lower().startswith(prefix)
+        ]
+
+    return {
+        "oracle_dirs": relative_paths("oracle"),
+        "agnostic_dirs": relative_paths("agnostic"),
+    }
+
+
 def _resolve_path(raw: str | None, default_key: str) -> Path:
     text = (raw or "").strip() or DEFAULT_PATHS[default_key]
     path = Path(text).expanduser()
@@ -810,6 +834,7 @@ class ViewerHandler(BaseHTTPRequestHandler):
             self._send_json(
                 {
                     "paths": DEFAULT_PATHS,
+                    "directory_options": _annotation_directory_options(),
                     "morph_graph_root": str(_MORPH_GRAPH_ROOT),
                 }
             )

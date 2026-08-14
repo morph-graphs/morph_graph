@@ -46,8 +46,13 @@
 
   const el = {
     oracleDir: document.getElementById("oracle-dir"),
+    oracleDirSelect: document.getElementById("oracle-dir-select"),
     agnosticDir: document.getElementById("agnostic-dir"),
+    agnosticDirSelect: document.getElementById("agnostic-dir-select"),
     agnosticKimiDir: document.getElementById("agnostic-kimi-dir"),
+    agnosticKimiDirSelect: document.getElementById(
+      "agnostic-kimi-dir-select",
+    ),
     tsmDir: document.getElementById("tsm-dir"),
     eventGraphDir: document.getElementById("event-graph-dir"),
     questionsJsonl: document.getElementById("questions-jsonl"),
@@ -169,11 +174,48 @@
       event_graph_dirs: el.eventGraphDir.value.trim(),
       questions_jsonl: el.questionsJsonl.value.trim(),
     };
+    syncDirectorySelects();
+  }
+
+  function syncDirectorySelect(select, input) {
+    const current = input.value.trim();
+    const match = [...select.options].find(
+      (option) =>
+        option.value &&
+        (current === option.value || current.endsWith(`/${option.value}`)),
+    );
+    select.value = match ? match.value : "";
+  }
+
+  function syncDirectorySelects() {
+    syncDirectorySelect(el.oracleDirSelect, el.oracleDir);
+    syncDirectorySelect(el.agnosticDirSelect, el.agnosticDir);
+    syncDirectorySelect(el.agnosticKimiDirSelect, el.agnosticKimiDir);
+  }
+
+  function writeDirectoryOptions(options) {
+    const populate = (target, paths) => {
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = "Choose a discovered directory…";
+      const entries = (paths || []).map((path) => {
+        const option = document.createElement("option");
+        option.value = path;
+        option.textContent = path;
+        return option;
+      });
+      target.replaceChildren(placeholder, ...entries);
+    };
+    populate(el.oracleDirSelect, options.oracle_dirs);
+    populate(el.agnosticDirSelect, options.agnostic_dirs);
+    populate(el.agnosticKimiDirSelect, options.agnostic_dirs);
+    syncDirectorySelects();
   }
 
   async function loadDefaults() {
     const data = await fetchJSON("/api/defaults");
     writePathInputs(data.paths);
+    writeDirectoryOptions(data.directory_options || {});
     return data;
   }
 
@@ -1166,6 +1208,15 @@
 
   el.loadBtn.addEventListener("click", () => {
     loadSamples().catch((err) => setStatus(String(err.message || err), true));
+  });
+  [
+    [el.oracleDirSelect, el.oracleDir],
+    [el.agnosticDirSelect, el.agnosticDir],
+    [el.agnosticKimiDirSelect, el.agnosticKimiDir],
+  ].forEach(([select, input]) => {
+    select.addEventListener("change", () => {
+      if (select.value) input.value = select.value;
+    });
   });
   el.resetBtn.addEventListener("click", () => {
     loadDefaults()
