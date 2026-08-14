@@ -7,7 +7,7 @@ import json
 import re
 import time
 import traceback
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .claude import DEFAULT_MODEL as CLAUDE_DEFAULT_MODEL
@@ -65,6 +65,13 @@ def _load_egolongqa(
                 )
             )
     return samples
+
+
+def _relative_video_path(video_path: str) -> str:
+    """Keep two parent directories (e.g. ``egolongqa/val/<id>.mp4``) so saved
+    annotations stay portable across clusters; the viewer resolves them via
+    ``--video-root``."""
+    return "/".join(Path(video_path).parts[-3:])
 
 
 def _normalize_video_id(value: str) -> str:
@@ -313,6 +320,10 @@ def main() -> None:
                 video_path=sample.video_path,
                 question=sample.question,
                 annotation_mode=args.mode,
+            )
+            annotation = replace(
+                annotation,
+                video_path=_relative_video_path(annotation.video_path),
             )
             annotation.save(output_path)
             error_path.unlink(missing_ok=True)

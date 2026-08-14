@@ -1,7 +1,7 @@
 {
   "sample_id": "341",
   "video_id": "7593bd8121dcfd39",
-  "video_path": "/scratch/fsw/portfolios/nemotron/projects/nemotron_omni_vision/users/pulkitk/tracking/datasets/egolongqa/egolongqa/val/7593bd8121dcfd39.mp4",
+  "video_path": "egolongqa/val/7593bd8121dcfd39.mp4",
   "video_duration_sec": 600.133333,
   "query": "Which main structure did I assemble first according to the instruction manual, and what was the last step number I completed for it before switching to a new structure?",
   "events": [

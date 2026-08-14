@@ -1,7 +1,7 @@
 {
   "sample_id": "252",
   "video_id": "54a81d361b2a094f",
-  "video_path": "/scratch/fsw/portfolios/nemotron/projects/nemotron_omni_vision/users/pulkitk/tracking/datasets/egolongqa/egolongqa/val/54a81d361b2a094f.mp4",
+  "video_path": "egolongqa/val/54a81d361b2a094f.mp4",
   "video_duration_sec": 675.8,
   "query": "Which did I encounter first, the bench or the signpost, and how did the surrounding environment differ between the two locations?",
   "events": [

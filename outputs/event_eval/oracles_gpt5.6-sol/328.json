@@ -1,7 +1,7 @@
 {
   "sample_id": "328",
   "video_id": "6e4610f800b157a0",
-  "video_path": "/scratch/fsw/portfolios/nemotron/projects/nemotron_omni_vision/users/pulkitk/tracking/datasets/egolongqa/egolongqa/val/6e4610f800b157a0.mp4",
+  "video_path": "egolongqa/val/6e4610f800b157a0.mp4",
   "video_duration_sec": 600.066667,
   "query": "What was I working on right before I looked at the doorway, and what did I start working on right after I returned to the table?",
   "events": [

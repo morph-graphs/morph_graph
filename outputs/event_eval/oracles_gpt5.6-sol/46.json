@@ -1,7 +1,7 @@
 {
   "sample_id": "46",
   "video_id": "13aea9ab404e96a6",
-  "video_path": "/scratch/fsw/portfolios/nemotron/projects/nemotron_omni_vision/users/pulkitk/tracking/datasets/egolongqa/egolongqa/val/13aea9ab404e96a6.mp4",
+  "video_path": "egolongqa/val/13aea9ab404e96a6.mp4",
   "video_duration_sec": 620.733333,
   "query": "Earlier I saw a decorated jar from the Middle Predynastic period, and later a silver ewer from the Early Byzantine era. What is the approximate number of years between the creation of these two artifacts?",
   "events": [

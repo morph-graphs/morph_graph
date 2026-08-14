@@ -1,7 +1,7 @@
 {
   "sample_id": "0",
   "video_id": "00cdb8ca10c069f8",
-  "video_path": "/scratch/fsw/portfolios/nemotron/projects/nemotron_omni_vision/users/pulkitk/tracking/datasets/egolongqa/egolongqa/val/00cdb8ca10c069f8.mp4",
+  "video_path": "egolongqa/val/00cdb8ca10c069f8.mp4",
   "video_duration_sec": 604.533333,
   "query": "After I left the grassy trail that ran alongside the flooded marsh, what was the first man-made structure I encountered on the paved section of my walk?",
   "events": [

@@ -22,19 +22,16 @@ import json
 import random
 import time
 import traceback
+from dataclasses import replace
 from pathlib import Path
 
+from .annotate import _relative_video_path
 from .gpt import GPTOracleAnnotator
 from .schema import OracleAnnotation
 
 DEFAULT_VIDEO_DIR = Path(
     "/lustre/fsw/portfolios/nemotron/users/pulkitk/tracking/datasets/egolongqa/egolongqa/val"
 )
-
-
-def _relative_video_path(video_path: str) -> str:
-    """Keep two parent directories so paths port across clusters."""
-    return "/".join(Path(video_path).parts[-3:])
 
 
 def main() -> None:
@@ -108,6 +105,9 @@ def main() -> None:
             print(f"[{index}/{len(picked)}] {video_id} — FAILED")
             traceback.print_exc()
             continue
+        annotation = replace(
+            annotation, video_path=_relative_video_path(annotation.video_path)
+        )
         annotation.save(output_path)
         annotations.append(annotation)
         print(
@@ -119,9 +119,7 @@ def main() -> None:
         args.jsonl.parent.mkdir(parents=True, exist_ok=True)
         with args.jsonl.open("w") as fh:
             for annotation in annotations:
-                row = annotation.to_dict()
-                row["video_path"] = _relative_video_path(row["video_path"])
-                fh.write(json.dumps(row) + "\n")
+                fh.write(json.dumps(annotation.to_dict()) + "\n")
         print(f"JSONL (portable, relative paths): {args.jsonl}")
 
     print(f"Output dir (viewer format): {args.output_dir}  failed={failed}")

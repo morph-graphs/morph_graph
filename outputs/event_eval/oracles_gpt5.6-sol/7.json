@@ -1,9 +1,9 @@
 {
   "sample_id": "7",
   "video_id": "032392866755963e",
-  "video_path": "/scratch/fsw/portfolios/nemotron/projects/nemotron_omni_vision/users/pulkitk/tracking/datasets/egolongqa/egolongqa/val/032392866755963e.mp4",
+  "video_path": "egolongqa/val/032392866755963e.mp4",
   "video_duration_sec": 600.133333,
-  "query": "When I first arrived, I saw a red car parked alone near the museum building. Later, as I walked back toward the museum along a tree-lined path, I saw the same red car again. What was different about the red car\u2019s situation the second time?",
+  "query": "When I first arrived, I saw a red car parked alone near the museum building. Later, as I walked back toward the museum along a tree-lined path, I saw the same red car again. What was different about the red car’s situation the second time?",
   "events": [
     {
       "event_id": "first_red_car_observation",

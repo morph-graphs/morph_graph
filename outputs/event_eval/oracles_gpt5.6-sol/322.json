@@ -1,7 +1,7 @@
 {
   "sample_id": "322",
   "video_id": "6c34f96dae9476ce",
-  "video_path": "/scratch/fsw/portfolios/nemotron/projects/nemotron_omni_vision/users/pulkitk/tracking/datasets/egolongqa/egolongqa/val/6c34f96dae9476ce.mp4",
+  "video_path": "egolongqa/val/6c34f96dae9476ce.mp4",
   "video_duration_sec": 900.133333,
   "query": "What did I secure to the wooden gate with the power drill, and what modification did I make to the green fence afterward?",
   "events": [

@@ -1,7 +1,7 @@
 {
   "sample_id": "a86f2f3570b7db44",
   "video_id": "a86f2f3570b7db44",
-  "video_path": "/scratch/fsw/portfolios/nemotron/projects/nemotron_omni_vision/users/pulkitk/tracking/datasets/egolongqa/egolongqa/val/a86f2f3570b7db44.mp4",
+  "video_path": "egolongqa/val/a86f2f3570b7db44.mp4",
   "video_duration_sec": 602.2,
   "query": "",
   "events": [

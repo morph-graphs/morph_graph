@@ -1,7 +1,7 @@
 {
   "sample_id": "52",
   "video_id": "15ac76d47c8753f9",
-  "video_path": "/scratch/fsw/portfolios/nemotron/projects/nemotron_omni_vision/users/pulkitk/tracking/datasets/egolongqa/egolongqa/val/15ac76d47c8753f9.mp4",
+  "video_path": "egolongqa/val/15ac76d47c8753f9.mp4",
   "video_duration_sec": 604.333333,
   "query": "Why didn't the two people I saw on the concrete path later react to the snake I encountered earlier, and where was the snake in relation to the path?",
   "events": [
