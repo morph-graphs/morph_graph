@@ -9,6 +9,34 @@ Sibling design doc: `gemini_event_annotation_design.md`.
 
 ---
 
+## 0. Launching the viewer (with portable video roots)
+
+Annotation JSONs store **relative** `video_path`s with two parent directories
+kept (e.g. `egolongqa/val/<id>.mp4`) so the same files work on any cluster.
+The server resolves them against `--video-root` — the directory that
+*contains* that relative path (absolute `video_path`s in older files still
+work unchanged):
+
+```bash
+# from morph_graph/, any python3 ≥3.8 with ffmpeg on PATH
+# (e.g. source .venv/bin/activate after `python -m event_eval.setup_ffmpeg`)
+python -m event_eval.viewer \
+  --video-root /lustre/fsw/portfolios/nemotron/users/pulkitk/tracking/datasets/egolongqa \
+  --port 8765
+```
+
+Teammates on another cluster run the identical command with their own
+`--video-root`. Annotation directories (oracle / agnostic / TSM / EventGraph)
+default to `outputs/event_eval/*_latest` and are changeable in the UI —
+relative dir inputs resolve against `morph_graph/`. Without `--video-root`,
+relative video paths only resolve if they happen to exist under the CWD; the
+sample still loads but shows "video missing".
+
+From a laptop, tunnel to the host that runs the process (see §7):
+`ssh -L 8765:127.0.0.1:8765 <host>` then open `http://127.0.0.1:8765/`.
+
+---
+
 ## 1. Don’t rely on `<video>` for precise scrubbing
 
 **Problem.** Browser `<video>` + remote/NFS mp4s often stall, flash black, or

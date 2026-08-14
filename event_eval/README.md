@@ -196,8 +196,14 @@ For reusable design notes (why not `<video>`, ffmpeg warm/cache, SSH tunnels),
 see
 [`proj_context/proj_design/gemini_events/event_eval_viewer_tech_notes.md`](../proj_context/proj_design/gemini_events/event_eval_viewer_tech_notes.md).
 
+Annotation JSONs store **relative** `video_path`s (two parent dirs kept,
+e.g. `egolongqa/val/<id>.mp4`) so they are portable across clusters. Pass
+`--video-root` pointing at the directory that contains that relative path;
+absolute paths in older annotation files still work without it:
+
 ```bash
-python -m event_eval.viewer
+python -m event_eval.viewer \
+  --video-root /lustre/fsw/portfolios/nemotron/users/pulkitk/tracking/datasets/egolongqa
 # optional: --host 0.0.0.0 --port 8765
 ```
 
