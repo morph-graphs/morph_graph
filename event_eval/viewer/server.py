@@ -711,6 +711,7 @@ def build_sample_detail(
         "duration_sec": duration,
         "query": oracle.get("query", ""),
         "answer": answer,
+        "oracle_answer": oracle.get("answer"),
         "pred_answer": pred_answer,
         "qa_error": qa_error,
         "has_event_graph": any(run["has_event_graph"] for run in event_graph_runs),

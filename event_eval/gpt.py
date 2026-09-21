@@ -146,12 +146,13 @@ class GPTOracleAnnotator:
         sample_id: str,
         video_path: str | Path,
         question: str,
+        options: str | None = None,
         annotation_mode: str = "query_conditioned",
     ) -> OracleAnnotation:
         if annotation_mode == "query_conditioned":
             if not question.strip():
                 raise ValueError("query-conditioned annotation requires a question")
-            prompt_builder = lambda duration: build_prompt(question, duration)
+            prompt_builder = lambda duration: build_prompt(question, duration, options=options)
             prompt_version = PROMPT_VERSION_ORACLE
             query = question
         elif annotation_mode == "query_agnostic":
@@ -221,6 +222,11 @@ class GPTOracleAnnotator:
                     event_dicts.append(dict(value))
                     events.append(OracleEvent.from_dict(value))
                 last_parsed_events = event_dicts
+                answer = (
+                    str(generated["answer"]).strip()
+                    if "answer" in generated and generated["answer"] is not None
+                    else None
+                )
                 annotation = OracleAnnotation(
                     sample_id=str(sample_id),
                     video_id=path.stem,
@@ -233,6 +239,7 @@ class GPTOracleAnnotator:
                     video_fps=self.fps,
                     media_resolution=None,
                     generated_at=datetime.now(timezone.utc).isoformat(),
+                    answer=answer,
                     warnings=tuple(
                         str(value) for value in generated.get("warnings", [])
                     ),

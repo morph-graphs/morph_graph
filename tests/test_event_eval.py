@@ -141,8 +141,24 @@ class MetricTests(unittest.TestCase):
 class PromptTests(unittest.TestCase):
     def test_prompt_rejects_object_sighting_as_event(self) -> None:
         prompt = build_prompt("How many beds were visible?", 60.0)
-        self.assertIn("Mere visibility of an object is NOT an event", prompt)
+        self.assertIn("visibility of a random object is not an event", prompt)
         self.assertIn("minimal set of meaningful video events", prompt)
+        self.assertIn("Direct Answer", prompt)
+
+    def test_prompt_includes_mcq_options(self) -> None:
+        prompt = build_prompt(
+            "What did I see?",
+            60.0,
+            options="A. A tree B. A dog C. A car D. A plane",
+        )
+        self.assertIn("Multiple-choice options:", prompt)
+        self.assertIn("A. A tree B. A dog C. A car D. A plane", prompt)
+        self.assertIn("Multiple Choice", prompt)
+
+    def test_conditioned_schema_requires_answer(self) -> None:
+        schema = gemini_response_schema("query_conditioned")
+        self.assertIn("answer", schema["properties"])
+        self.assertIn("answer", schema["required"])
 
     def test_agnostic_prompt_has_no_query_roles(self) -> None:
         prompt = build_agnostic_prompt(60.0)

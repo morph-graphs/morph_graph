@@ -106,6 +106,8 @@ class OracleAnnotation:
     video_fps: float
     media_resolution: str | None
     generated_at: str
+    options: str | None = None
+    answer: str | None = None
     warnings: tuple[str, ...] = ()
     raw_response: str | None = field(default=None, repr=False)
     schema_version: str = SCHEMA_VERSION
@@ -129,6 +131,8 @@ class OracleAnnotation:
                 else None
             ),
             generated_at=str(raw["generated_at"]),
+            options=str(raw["options"]).strip() if raw.get("options") is not None else None,
+            answer=str(raw["answer"]).strip() if raw.get("answer") is not None else None,
             warnings=tuple(str(value) for value in raw.get("warnings", [])),
             raw_response=raw.get("raw_response"),
             schema_version=str(raw.get("schema_version", SCHEMA_VERSION)),
@@ -254,20 +258,31 @@ def gemini_response_schema(
             },
         }
         required.append("query_roles")
+
+    schema_properties: dict[str, Any] = {
+        "events": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": event_properties,
+                "required": required,
+                "additionalProperties": False,
+            },
+        },
+        "warnings": {"type": "array", "items": {"type": "string"}},
+    }
+    schema_required = ["events", "warnings"]
+
+    if annotation_mode == "query_conditioned":
+        schema_properties["answer"] = {
+            "type": "string",
+            "description": "Direct, concise answer to the question based on the identified events.",
+        }
+        schema_required.append("answer")
+
     return {
         "type": "object",
-        "properties": {
-            "events": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": event_properties,
-                    "required": required,
-                    "additionalProperties": False,
-                },
-            },
-            "warnings": {"type": "array", "items": {"type": "string"}},
-        },
-        "required": ["events", "warnings"],
+        "properties": schema_properties,
+        "required": schema_required,
         "additionalProperties": False,
     }

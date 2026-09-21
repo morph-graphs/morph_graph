@@ -36,6 +36,9 @@ class AnnotationSample:
     sample_id: str
     video_path: Path
     question: str
+    options: str | None = None
+    gt_answer: str | None = None
+    mcq_answer: str | None = None
 
 
 def _safe_id(value: str) -> str:
@@ -57,11 +60,19 @@ def _load_egolongqa(
             video_path = raw_video if raw_video.is_absolute() else video_dir / raw_video
             if not video_path.exists() and not raw_video.is_absolute():
                 video_path = video_dir / "val" / raw_video
+            
+            options = row.get("mcq_options") or row.get("options")
+            gt_ans = row.get("answer")
+            mcq_ans = row.get("mcq_answer")
+
             samples.append(
                 AnnotationSample(
                     sample_id=str(row.get("qid", row.get("id", index))),
                     video_path=video_path.resolve(),
                     question=str(row["question"]),
+                    options=str(options).strip() if options else None,
+                    gt_answer=str(gt_ans).strip() if gt_ans else None,
+                    mcq_answer=str(mcq_ans).strip() if mcq_ans else None,
                 )
             )
     return samples
@@ -229,6 +240,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Gemini media resolution (gemini only).",
     )
     parser.add_argument(
+        "--thinking-level",
+        choices=["low", "medium", "high"],
+        default=None,
+        help="Thinking level for Gemini reasoning models (e.g. 'high' for gemini-3.7-flash).",
+    )
+    parser.add_argument(
         "--max-output-tokens", type=int, default=32768,
         help="Gemini max output tokens (raise if JSON truncates on long videos)",
     )
@@ -261,6 +278,7 @@ def main() -> None:
             max_output_tokens=args.max_output_tokens,
             max_retries=args.max_retries,
             retry_delay_sec=args.retry_delay_sec,
+            thinking_level=args.thinking_level,
         )
     elif args.provider == "kimi":
         kimi_kwargs = {"base_url": args.base_url} if args.base_url else {}
@@ -319,6 +337,7 @@ def main() -> None:
                 sample_id=sample.sample_id,
                 video_path=sample.video_path,
                 question=sample.question,
+                options=sample.options,
                 annotation_mode=args.mode,
             )
             annotation = replace(
