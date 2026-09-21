@@ -1,0 +1,53 @@
+{
+  "sample_id": "52",
+  "video_id": "15ac76d47c8753f9",
+  "video_path": "egolongqa/val/15ac76d47c8753f9.mp4",
+  "video_duration_sec": 604.333333,
+  "query": "Why didn't the two people I saw on the concrete path later react to the snake I encountered earlier, and where was the snake in relation to the path?",
+  "events": [
+    {
+      "event_id": "snake_off_path",
+      "start_sec": 120.9,
+      "end_sec": 489.5,
+      "granularity": "coarse",
+      "description": "The snake is observed among the trees in the leaf-covered eucalyptus grove, well off the concrete path and partly screened by trunks and ground debris; the path is intermittently visible to the right.",
+      "categories": [
+        "location_or_scene",
+        "unexpected_or_interruption"
+      ],
+      "query_roles": [
+        "anchor",
+        "answer_bearing",
+        "evidence"
+      ],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "people_pass_without_reacting",
+      "start_sec": 489.5,
+      "end_sec": 501.6,
+      "granularity": "fine",
+      "description": "Two people later continue along the concrete path without stopping, turning, or otherwise reacting toward the snake's concealed location in the woods, indicating they likely did not see it.",
+      "categories": [
+        "action",
+        "agent_or_interaction",
+        "causal_transition",
+        "temporal_transition"
+      ],
+      "query_roles": [
+        "answer_bearing",
+        "evidence"
+      ],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/openai/openai/eccn-gpt-5.6-sol",
+  "prompt_version": "eval_oracle_v1",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-14T00:04:31.757399+00:00",
+  "warnings": [],
+  "raw_response": "{\"events\":[{\"event_id\":\"snake_off_path\",\"start_sec\":120.9,\"end_sec\":489.5,\"granularity\":\"coarse\",\"description\":\"The snake is observed among the trees in the leaf-covered eucalyptus grove, well off the concrete path and partly screened by trunks and ground debris; the path is intermittently visible to the right.\",\"categories\":[\"location_or_scene\",\"unexpected_or_interruption\"],\"parent_event_ids\":[],\"query_roles\":[\"anchor\",\"answer_bearing\",\"evidence\"]},{\"event_id\":\"people_pass_without_reacting\",\"start_sec\":489.5,\"end_sec\":501.6,\"granularity\":\"fine\",\"description\":\"Two people later continue along the concrete path without stopping, turning, or otherwise reacting toward the snake's concealed location in the woods, indicating they likely did not see it.\",\"categories\":[\"action\",\"agent_or_interaction\",\"causal_transition\",\"temporal_transition\"],\"parent_event_ids\":[],\"query_roles\":[\"answer_bearing\",\"evidence\"]}],\"warnings\":[]}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_conditioned"
+}

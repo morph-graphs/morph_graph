@@ -1,0 +1,213 @@
+{
+  "sample_id": "7caf4511de2b8bee",
+  "video_id": "7caf4511de2b8bee",
+  "video_path": "egolongqa/val/7caf4511de2b8bee.mp4",
+  "video_duration_sec": 600.533333,
+  "query": "",
+  "events": [
+    {
+      "event_id": "event_0",
+      "start_sec": 0.0,
+      "end_sec": 63.0,
+      "granularity": "coarse",
+      "description": "Walking from the parking lot to the sledding hill carrying sleds",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_1",
+      "start_sec": 63.0,
+      "end_sec": 140.0,
+      "granularity": "coarse",
+      "description": "Standing and waiting at the top of the hill while watching others sled",
+      "categories": [
+        "action",
+        "state_change"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_2",
+      "start_sec": 140.0,
+      "end_sec": 165.0,
+      "granularity": "coarse",
+      "description": "Sledding down the snow-covered hill",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_3",
+      "start_sec": 165.0,
+      "end_sec": 219.0,
+      "granularity": "coarse",
+      "description": "Walking back up to the top of the sledding hill",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_4",
+      "start_sec": 219.0,
+      "end_sec": 237.0,
+      "granularity": "coarse",
+      "description": "Preparing and standing at the top of the hill for the next turn",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_5",
+      "start_sec": 237.0,
+      "end_sec": 255.0,
+      "granularity": "coarse",
+      "description": "Sledding down the snow-covered hill for the second time",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_6",
+      "start_sec": 255.0,
+      "end_sec": 303.0,
+      "granularity": "coarse",
+      "description": "Walking back up to the top of the sledding hill",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_7",
+      "start_sec": 303.0,
+      "end_sec": 357.0,
+      "granularity": "coarse",
+      "description": "Sitting and resting at the top of the hill while a companion adjusts and ties their boots",
+      "categories": [
+        "action",
+        "agent_or_interaction"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_8",
+      "start_sec": 357.0,
+      "end_sec": 381.0,
+      "granularity": "coarse",
+      "description": "Sledding down the snow-covered hill for the third time",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_9",
+      "start_sec": 381.0,
+      "end_sec": 423.0,
+      "granularity": "coarse",
+      "description": "Walking back up to the top of the sledding hill",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_10",
+      "start_sec": 423.0,
+      "end_sec": 429.0,
+      "granularity": "coarse",
+      "description": "Standing at the top of the hill preparing for another run",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_11",
+      "start_sec": 429.0,
+      "end_sec": 459.0,
+      "granularity": "coarse",
+      "description": "Sledding down the snow-covered hill for the fourth time",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_12",
+      "start_sec": 459.0,
+      "end_sec": 495.0,
+      "granularity": "coarse",
+      "description": "Walking back up to the top of the sledding hill",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_13",
+      "start_sec": 495.0,
+      "end_sec": 519.0,
+      "granularity": "coarse",
+      "description": "Preparing and standing at the top of the hill for the fifth turn",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_14",
+      "start_sec": 519.0,
+      "end_sec": 549.0,
+      "granularity": "coarse",
+      "description": "Sledding down the snow-covered hill for the fifth time",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_15",
+      "start_sec": 549.0,
+      "end_sec": 600.533,
+      "granularity": "coarse",
+      "description": "Walking back up to the top of the sledding hill",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/gcp/google/eccn-gemini-3.5-flash",
+  "prompt_version": "eval_agnostic_v3_gpt",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-12T22:17:20.201938+00:00",
+  "warnings": [],
+  "raw_response": "{\n  \"events\": [\n    {\n      \"event_id\": \"event_0\",\n      \"start_sec\": 0.0,\n      \"end_sec\": 63.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking from the parking lot to the sledding hill carrying sleds\",\n      \"categories\": [\"action\", \"location_or_scene\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_1\",\n      \"start_sec\": 63.0,\n      \"end_sec\": 140.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Standing and waiting at the top of the hill while watching others sled\",\n      \"categories\": [\"action\", \"state_change\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_2\",\n      \"start_sec\": 140.0,\n      \"end_sec\": 165.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Sledding down the snow-covered hill\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_3\",\n      \"start_sec\": 165.0,\n      \"end_sec\": 219.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking back up to the top of the sledding hill\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_4\",\n      \"start_sec\": 219.0,\n      \"end_sec\": 237.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Preparing and standing at the top of the hill for the next turn\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_5\",\n      \"start_sec\": 237.0,\n      \"end_sec\": 255.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Sledding down the snow-covered hill for the second time\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_6\",\n      \"start_sec\": 255.0,\n      \"end_sec\": 303.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking back up to the top of the sledding hill\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_7\",\n      \"start_sec\": 303.0,\n      \"end_sec\": 357.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Sitting and resting at the top of the hill while a companion adjusts and ties their boots\",\n      \"categories\": [\"action\", \"agent_or_interaction\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_8\",\n      \"start_sec\": 357.0,\n      \"end_sec\": 381.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Sledding down the snow-covered hill for the third time\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_9\",\n      \"start_sec\": 381.0,\n      \"end_sec\": 423.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking back up to the top of the sledding hill\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_10\",\n      \"start_sec\": 423.0,\n      \"end_sec\": 429.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Standing at the top of the hill preparing for another run\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_11\",\n      \"start_sec\": 429.0,\n      \"end_sec\": 459.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Sledding down the snow-covered hill for the fourth time\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_12\",\n      \"start_sec\": 459.0,\n      \"end_sec\": 495.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking back up to the top of the sledding hill\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_13\",\n      \"start_sec\": 495.0,\n      \"end_sec\": 519.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Preparing and standing at the top of the hill for the fifth turn\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_14\",\n      \"start_sec\": 519.0,\n      \"end_sec\": 549.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Sledding down the snow-covered hill for the fifth time\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_15\",\n      \"start_sec\": 549.0,\n      \"end_sec\": 600.533,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking back up to the top of the sledding hill\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    }\n  ],\n  \"warnings\": []\n}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_agnostic"
+}

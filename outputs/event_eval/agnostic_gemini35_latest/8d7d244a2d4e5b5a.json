@@ -1,0 +1,240 @@
+{
+  "sample_id": "8d7d244a2d4e5b5a",
+  "video_id": "8d7d244a2d4e5b5a",
+  "video_path": "egolongqa/val/8d7d244a2d4e5b5a.mp4",
+  "video_duration_sec": 600.133333,
+  "query": "",
+  "events": [
+    {
+      "event_id": "event_1",
+      "start_sec": 0.0,
+      "end_sec": 45.0,
+      "granularity": "coarse",
+      "description": "Walking along the driveway of a resort, lined with palm trees and manicured gardens",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_2",
+      "start_sec": 45.0,
+      "end_sec": 85.0,
+      "granularity": "coarse",
+      "description": "Walking further along the resort entrance driveway towards the street intersection",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_3",
+      "start_sec": 85.0,
+      "end_sec": 105.0,
+      "granularity": "coarse",
+      "description": "Checking the phone map and reaching the main road intersection",
+      "categories": [
+        "action",
+        "goal_or_subgoal"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_4",
+      "start_sec": 105.0,
+      "end_sec": 135.0,
+      "granularity": "coarse",
+      "description": "Walking along the sidewalk of a main road",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_5",
+      "start_sec": 135.0,
+      "end_sec": 170.0,
+      "granularity": "coarse",
+      "description": "Walking down a paved path beside a parking lot",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_6",
+      "start_sec": 170.0,
+      "end_sec": 200.0,
+      "granularity": "coarse",
+      "description": "Checking the phone map while walking towards a park",
+      "categories": [
+        "action",
+        "goal_or_subgoal"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_7",
+      "start_sec": 200.0,
+      "end_sec": 225.0,
+      "granularity": "fine",
+      "description": "Stopping to examine a Tram Schedule map sign",
+      "categories": [
+        "action",
+        "agent_or_interaction"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_8",
+      "start_sec": 225.0,
+      "end_sec": 275.0,
+      "granularity": "coarse",
+      "description": "Walking towards and entering a pedestrian tunnel",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_9",
+      "start_sec": 275.0,
+      "end_sec": 325.0,
+      "granularity": "coarse",
+      "description": "Walking through the corrugated metal tunnel and checking the phone map near the exit",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_10",
+      "start_sec": 325.0,
+      "end_sec": 345.0,
+      "granularity": "coarse",
+      "description": "Exiting the tunnel and walking on a paved pathway in a park",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_11",
+      "start_sec": 345.0,
+      "end_sec": 355.0,
+      "granularity": "fine",
+      "description": "Pausing to look at a Sea Terrace Community Park rules sign",
+      "categories": [
+        "action",
+        "agent_or_interaction"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_12",
+      "start_sec": 355.0,
+      "end_sec": 370.0,
+      "granularity": "coarse",
+      "description": "Walking on the paved pathway through a grassy park area",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_13",
+      "start_sec": 370.0,
+      "end_sec": 435.0,
+      "granularity": "coarse",
+      "description": "Walking on a dirt path next to a wooden fence and fenced dog park",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_14",
+      "start_sec": 435.0,
+      "end_sec": 455.0,
+      "granularity": "coarse",
+      "description": "Rejoining the paved path and walking through the park",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_15",
+      "start_sec": 455.0,
+      "end_sec": 475.0,
+      "granularity": "fine",
+      "description": "Examining the Sea Terrace Park map and pointing at a location",
+      "categories": [
+        "action",
+        "agent_or_interaction",
+        "goal_or_subgoal"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_16",
+      "start_sec": 475.0,
+      "end_sec": 515.0,
+      "granularity": "coarse",
+      "description": "Walking past people and dogs on the park lawn",
+      "categories": [
+        "action",
+        "agent_or_interaction"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_17",
+      "start_sec": 515.0,
+      "end_sec": 600.133,
+      "granularity": "coarse",
+      "description": "Walking along the winding paved path surrounded by grassy hills and streetlights",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/gcp/google/eccn-gemini-3.5-flash",
+  "prompt_version": "eval_agnostic_v3_gpt",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-12T22:13:44.735314+00:00",
+  "warnings": [],
+  "raw_response": "{\n  \"events\": [\n    {\n      \"event_id\": \"event_1\",\n      \"start_sec\": 0.0,\n      \"end_sec\": 45.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking along the driveway of a resort, lined with palm trees and manicured gardens\",\n      \"categories\": [\"action\", \"location_or_scene\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_2\",\n      \"start_sec\": 45.0,\n      \"end_sec\": 85.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking further along the resort entrance driveway towards the street intersection\",\n      \"categories\": [\"action\", \"location_or_scene\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_3\",\n      \"start_sec\": 85.0,\n      \"end_sec\": 105.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Checking the phone map and reaching the main road intersection\",\n      \"categories\": [\"action\", \"goal_or_subgoal\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_4\",\n      \"start_sec\": 105.0,\n      \"end_sec\": 135.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking along the sidewalk of a main road\",\n      \"categories\": [\"action\", \"location_or_scene\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_5\",\n      \"start_sec\": 135.0,\n      \"end_sec\": 170.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking down a paved path beside a parking lot\",\n      \"categories\": [\"action\", \"location_or_scene\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_6\",\n      \"start_sec\": 170.0,\n      \"end_sec\": 200.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Checking the phone map while walking towards a park\",\n      \"categories\": [\"action\", \"goal_or_subgoal\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_7\",\n      \"start_sec\": 200.0,\n      \"end_sec\": 225.0,\n      \"granularity\": \"fine\",\n      \"description\": \"Stopping to examine a Tram Schedule map sign\",\n      \"categories\": [\"action\", \"agent_or_interaction\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_8\",\n      \"start_sec\": 225.0,\n      \"end_sec\": 275.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking towards and entering a pedestrian tunnel\",\n      \"categories\": [\"action\", \"location_or_scene\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_9\",\n      \"start_sec\": 275.0,\n      \"end_sec\": 325.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking through the corrugated metal tunnel and checking the phone map near the exit\",\n      \"categories\": [\"action\", \"location_or_scene\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_10\",\n      \"start_sec\": 325.0,\n      \"end_sec\": 345.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Exiting the tunnel and walking on a paved pathway in a park\",\n      \"categories\": [\"action\", \"location_or_scene\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_11\",\n      \"start_sec\": 345.0,\n      \"end_sec\": 355.0,\n      \"granularity\": \"fine\",\n      \"description\": \"Pausing to look at a Sea Terrace Community Park rules sign\",\n      \"categories\": [\"action\", \"agent_or_interaction\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_12\",\n      \"start_sec\": 355.0,\n      \"end_sec\": 370.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking on the paved pathway through a grassy park area\",\n      \"categories\": [\"action\", \"location_or_scene\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_13\",\n      \"start_sec\": 370.0,\n      \"end_sec\": 435.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking on a dirt path next to a wooden fence and fenced dog park\",\n      \"categories\": [\"action\", \"location_or_scene\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_14\",\n      \"start_sec\": 435.0,\n      \"end_sec\": 455.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Rejoining the paved path and walking through the park\",\n      \"categories\": [\"action\", \"location_or_scene\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_15\",\n      \"start_sec\": 455.0,\n      \"end_sec\": 475.0,\n      \"granularity\": \"fine\",\n      \"description\": \"Examining the Sea Terrace Park map and pointing at a location\",\n      \"categories\": [\"action\", \"agent_or_interaction\", \"goal_or_subgoal\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_16\",\n      \"start_sec\": 475.0,\n      \"end_sec\": 515.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking past people and dogs on the park lawn\",\n      \"categories\": [\"action\", \"agent_or_interaction\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_17\",\n      \"start_sec\": 515.0,\n      \"end_sec\": 600.133,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking along the winding paved path surrounded by grassy hills and streetlights\",\n      \"categories\": [\"action\", \"location_or_scene\"],\n      \"parent_event_ids\": []\n    }\n  ],\n  \"warnings\": []\n}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_agnostic"
+}

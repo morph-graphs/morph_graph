@@ -1,0 +1,200 @@
+{
+  "sample_id": "58efeea8bb73f462",
+  "video_id": "58efeea8bb73f462",
+  "video_path": "egolongqa/val/58efeea8bb73f462.mp4",
+  "video_duration_sec": 618.2,
+  "query": "",
+  "events": [
+    {
+      "event_id": "event_1",
+      "start_sec": 0.0,
+      "end_sec": 191.6,
+      "granularity": "coarse",
+      "description": "A person sitting at a table with friends manipulates and arranges gold chess pieces on a silver placemat.",
+      "categories": [
+        "action",
+        "agent_or_interaction"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_2",
+      "start_sec": 191.6,
+      "end_sec": 204.0,
+      "granularity": "fine",
+      "description": "The person reaches out and makes a move on the chessboard.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_3",
+      "start_sec": 204.0,
+      "end_sec": 265.8,
+      "granularity": "coarse",
+      "description": "The person continues to organize and play with the gold chess pieces on the placemat.",
+      "categories": [
+        "action",
+        "agent_or_interaction"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_4",
+      "start_sec": 265.8,
+      "end_sec": 278.2,
+      "granularity": "fine",
+      "description": "The person reaches over and moves a gold piece on the chessboard.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_5",
+      "start_sec": 278.2,
+      "end_sec": 327.6,
+      "granularity": "coarse",
+      "description": "The person fidgets with and arranges the gold chess pieces on the placemat.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_6",
+      "start_sec": 327.6,
+      "end_sec": 340.0,
+      "granularity": "fine",
+      "description": "The person moves a gold chess piece on the board.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_7",
+      "start_sec": 340.0,
+      "end_sec": 389.5,
+      "granularity": "coarse",
+      "description": "The person manipulates the gold chess pieces on the silver placemat.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_8",
+      "start_sec": 389.5,
+      "end_sec": 401.8,
+      "granularity": "fine",
+      "description": "The person reaches over and interacts with a chess piece on the board.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_9",
+      "start_sec": 401.8,
+      "end_sec": 451.3,
+      "granularity": "coarse",
+      "description": "The person reorganizes the gold chess pieces on the placemat.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_10",
+      "start_sec": 451.3,
+      "end_sec": 463.6,
+      "granularity": "fine",
+      "description": "The person makes another move on the chessboard.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_11",
+      "start_sec": 463.6,
+      "end_sec": 519.3,
+      "granularity": "coarse",
+      "description": "The person continues to play with and group the chess pieces on the placemat.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_12",
+      "start_sec": 519.3,
+      "end_sec": 531.7,
+      "granularity": "fine",
+      "description": "The person reaches out to move a piece on the board.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_13",
+      "start_sec": 531.7,
+      "end_sec": 562.6,
+      "granularity": "coarse",
+      "description": "The person rearranges the gold chess pieces on the placemat.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_14",
+      "start_sec": 562.6,
+      "end_sec": 574.9,
+      "granularity": "fine",
+      "description": "The person makes a final move on the chessboard.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_15",
+      "start_sec": 574.9,
+      "end_sec": 618.2,
+      "granularity": "coarse",
+      "description": "The person gathers and organizes the remaining gold chess pieces on the placemat.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/gcp/google/eccn-gemini-3.5-flash",
+  "prompt_version": "eval_agnostic_v3_gpt",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-12T22:09:48.947077+00:00",
+  "warnings": [],
+  "raw_response": "{\n  \"events\": [\n    {\n      \"event_id\": \"event_1\",\n      \"start_sec\": 0.0,\n      \"end_sec\": 191.6,\n      \"granularity\": \"coarse\",\n      \"description\": \"A person sitting at a table with friends manipulates and arranges gold chess pieces on a silver placemat.\",\n      \"categories\": [\"action\", \"agent_or_interaction\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_2\",\n      \"start_sec\": 191.6,\n      \"end_sec\": 204.0,\n      \"granularity\": \"fine\",\n      \"description\": \"The person reaches out and makes a move on the chessboard.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_3\",\n      \"start_sec\": 204.0,\n      \"end_sec\": 265.8,\n      \"granularity\": \"coarse\",\n      \"description\": \"The person continues to organize and play with the gold chess pieces on the placemat.\",\n      \"categories\": [\"action\", \"agent_or_interaction\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_4\",\n      \"start_sec\": 265.8,\n      \"end_sec\": 278.2,\n      \"granularity\": \"fine\",\n      \"description\": \"The person reaches over and moves a gold piece on the chessboard.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_5\",\n      \"start_sec\": 278.2,\n      \"end_sec\": 327.6,\n      \"granularity\": \"coarse\",\n      \"description\": \"The person fidgets with and arranges the gold chess pieces on the placemat.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_6\",\n      \"start_sec\": 327.6,\n      \"end_sec\": 340.0,\n      \"granularity\": \"fine\",\n      \"description\": \"The person moves a gold chess piece on the board.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_7\",\n      \"start_sec\": 340.0,\n      \"end_sec\": 389.5,\n      \"granularity\": \"coarse\",\n      \"description\": \"The person manipulates the gold chess pieces on the silver placemat.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_8\",\n      \"start_sec\": 389.5,\n      \"end_sec\": 401.8,\n      \"granularity\": \"fine\",\n      \"description\": \"The person reaches over and interacts with a chess piece on the board.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_9\",\n      \"start_sec\": 401.8,\n      \"end_sec\": 451.3,\n      \"granularity\": \"coarse\",\n      \"description\": \"The person reorganizes the gold chess pieces on the placemat.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_10\",\n      \"start_sec\": 451.3,\n      \"end_sec\": 463.6,\n      \"granularity\": \"fine\",\n      \"description\": \"The person makes another move on the chessboard.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_11\",\n      \"start_sec\": 463.6,\n      \"end_sec\": 519.3,\n      \"granularity\": \"coarse\",\n      \"description\": \"The person continues to play with and group the chess pieces on the placemat.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_12\",\n      \"start_sec\": 519.3,\n      \"end_sec\": 531.7,\n      \"granularity\": \"fine\",\n      \"description\": \"The person reaches out to move a piece on the board.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_13\",\n      \"start_sec\": 531.7,\n      \"end_sec\": 562.6,\n      \"granularity\": \"coarse\",\n      \"description\": \"The person rearranges the gold chess pieces on the placemat.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_14\",\n      \"start_sec\": 562.6,\n      \"end_sec\": 574.9,\n      \"granularity\": \"fine\",\n      \"description\": \"The person makes a final move on the chessboard.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_15\",\n      \"start_sec\": 574.9,\n      \"end_sec\": 618.2,\n      \"granularity\": \"coarse\",\n      \"description\": \"The person gathers and organizes the remaining gold chess pieces on the placemat.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    }\n  ],\n  \"warnings\": []\n}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_agnostic"
+}

@@ -1,0 +1,60 @@
+{
+  "sample_id": "0",
+  "video_id": "00cdb8ca10c069f8",
+  "video_path": "egolongqa/val/00cdb8ca10c069f8.mp4",
+  "video_duration_sec": 604.533333,
+  "query": "After I left the grassy trail that ran alongside the flooded marsh, what was the first man-made structure I encountered on the paved section of my walk?",
+  "events": [
+    {
+      "event_id": "grassy_trail_walk",
+      "start_sec": 0.0,
+      "end_sec": 259.9,
+      "granularity": "coarse",
+      "description": "Walking along the grassy trail that runs alongside the flooded marsh",
+      "categories": [
+        "location_or_scene"
+      ],
+      "query_roles": [
+        "anchor"
+      ],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "paved_path_walk",
+      "start_sec": 266.0,
+      "end_sec": 368.8,
+      "granularity": "coarse",
+      "description": "Walking on the paved section of the path after leaving the grassy trail",
+      "categories": [
+        "location_or_scene"
+      ],
+      "query_roles": [
+        "evidence"
+      ],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "park_bench_encounter",
+      "start_sec": 374.8,
+      "end_sec": 386.9,
+      "granularity": "fine",
+      "description": "The first man-made structure, a concrete park bench, comes into view next to the paved path",
+      "categories": [
+        "location_or_scene"
+      ],
+      "query_roles": [
+        "answer_bearing"
+      ],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/gcp/google/eccn-gemini-3.5-flash",
+  "prompt_version": "eval_oracle_v1",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-14T00:09:44.179576+00:00",
+  "warnings": [],
+  "raw_response": "{\n  \"events\": [\n    {\n      \"event_id\": \"grassy_trail_walk\",\n      \"start_sec\": 0.0,\n      \"end_sec\": 259.9,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking along the grassy trail that runs alongside the flooded marsh\",\n      \"categories\": [\"location_or_scene\"],\n      \"parent_event_ids\": [],\n      \"query_roles\": [\"anchor\"]\n    },\n    {\n      \"event_id\": \"paved_path_walk\",\n      \"start_sec\": 266.0,\n      \"end_sec\": 368.8,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking on the paved section of the path after leaving the grassy trail\",\n      \"categories\": [\"location_or_scene\"],\n      \"parent_event_ids\": [],\n      \"query_roles\": [\"evidence\"]\n    },\n    {\n      \"event_id\": \"park_bench_encounter\",\n      \"start_sec\": 374.8,\n      \"end_sec\": 386.9,\n      \"granularity\": \"fine\",\n      \"description\": \"The first man-made structure, a concrete park bench, comes into view next to the paved path\",\n      \"categories\": [\"location_or_scene\"],\n      \"parent_event_ids\": [],\n      \"query_roles\": [\"answer_bearing\"]\n    }\n  ],\n  \"warnings\": []\n}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_conditioned"
+}

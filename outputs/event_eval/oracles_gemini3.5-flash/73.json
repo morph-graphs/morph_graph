@@ -1,0 +1,46 @@
+{
+  "sample_id": "73",
+  "video_id": "1cc66eed89b44527",
+  "video_path": "egolongqa/val/1cc66eed89b44527.mp4",
+  "video_duration_sec": 600.666667,
+  "query": "What did I paint with the yellow paint immediately after I finished the large star on the right side of the canvas?",
+  "events": [
+    {
+      "event_id": "paint_large_star",
+      "start_sec": 12.0,
+      "end_sec": 180.2,
+      "granularity": "coarse",
+      "description": "Painting the large star on the right side of the canvas with yellow paint",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [
+        "anchor"
+      ],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "paint_small_stars",
+      "start_sec": 198.2,
+      "end_sec": 240.3,
+      "granularity": "fine",
+      "description": "Painting small stars near the large star with yellow paint",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [
+        "answer_bearing"
+      ],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/gcp/google/eccn-gemini-3.5-flash",
+  "prompt_version": "eval_oracle_v1",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-13T23:09:25.504173+00:00",
+  "warnings": [],
+  "raw_response": "{\n  \"events\": [\n    {\n      \"event_id\": \"paint_large_star\",\n      \"start_sec\": 12.0,\n      \"end_sec\": 180.2,\n      \"granularity\": \"coarse\",\n      \"description\": \"Painting the large star on the right side of the canvas with yellow paint\",\n      \"categories\": [\n        \"action\"\n      ],\n      \"parent_event_ids\": [],\n      \"query_roles\": [\n        \"anchor\"\n      ]\n    },\n    {\n      \"event_id\": \"paint_small_stars\",\n      \"start_sec\": 198.2,\n      \"end_sec\": 240.3,\n      \"granularity\": \"fine\",\n      \"description\": \"Painting small stars near the large star with yellow paint\",\n      \"categories\": [\n        \"action\"\n      ],\n      \"parent_event_ids\": [],\n      \"query_roles\": [\n        \"answer_bearing\"\n      ]\n    }\n  ],\n  \"warnings\": []\n}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_conditioned"
+}

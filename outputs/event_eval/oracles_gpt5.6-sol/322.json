@@ -1,0 +1,53 @@
+{
+  "sample_id": "322",
+  "video_id": "6c34f96dae9476ce",
+  "video_path": "egolongqa/val/6c34f96dae9476ce.mp4",
+  "video_duration_sec": 900.133333,
+  "query": "What did I secure to the wooden gate with the power drill, and what modification did I make to the green fence afterward?",
+  "events": [
+    {
+      "event_id": "e1",
+      "start_sec": 126.0,
+      "end_sec": 180.0,
+      "granularity": "fine",
+      "description": "Using a power drill, the person fastens a metal chain-latch/anchor bracket to the wooden gate; the chain is then shown attached to it.",
+      "categories": [
+        "action",
+        "agent_or_interaction",
+        "state_change"
+      ],
+      "query_roles": [
+        "anchor",
+        "answer_bearing",
+        "evidence"
+      ],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e2",
+      "start_sec": 756.1,
+      "end_sec": 819.1,
+      "granularity": "fine",
+      "description": "Afterward, the person uses scissors to cut and trim away part of the green plastic fence around the wooden gate opening.",
+      "categories": [
+        "action",
+        "state_change",
+        "temporal_transition"
+      ],
+      "query_roles": [
+        "answer_bearing",
+        "evidence"
+      ],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/openai/openai/eccn-gpt-5.6-sol",
+  "prompt_version": "eval_oracle_v1",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-14T00:06:15.520375+00:00",
+  "warnings": [],
+  "raw_response": "{\"events\":[{\"event_id\":\"e1\",\"start_sec\":126.0,\"end_sec\":180.0,\"granularity\":\"fine\",\"description\":\"Using a power drill, the person fastens a metal chain-latch/anchor bracket to the wooden gate; the chain is then shown attached to it.\",\"categories\":[\"action\",\"agent_or_interaction\",\"state_change\"],\"parent_event_ids\":[],\"query_roles\":[\"anchor\",\"answer_bearing\",\"evidence\"]},{\"event_id\":\"e2\",\"start_sec\":756.1,\"end_sec\":819.1,\"granularity\":\"fine\",\"description\":\"Afterward, the person uses scissors to cut and trim away part of the green plastic fence around the wooden gate opening.\",\"categories\":[\"action\",\"state_change\",\"temporal_transition\"],\"parent_event_ids\":[],\"query_roles\":[\"answer_bearing\",\"evidence\"]}],\"warnings\":[]}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_conditioned"
+}

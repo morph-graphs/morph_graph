@@ -54,6 +54,30 @@ DEFAULT_PATHS = {
 }
 
 
+def _annotation_directory_options() -> dict[str, list[str]]:
+    """Return annotation directories available under outputs/event_eval."""
+    output_root = _MORPH_GRAPH_ROOT / "outputs" / "event_eval"
+    if not output_root.is_dir():
+        return {"oracle_dirs": [], "agnostic_dirs": []}
+
+    directories = sorted(
+        (path for path in output_root.iterdir() if path.is_dir()),
+        key=lambda path: path.name.lower(),
+    )
+
+    def relative_paths(prefix: str) -> list[str]:
+        return [
+            str(path.relative_to(_MORPH_GRAPH_ROOT))
+            for path in directories
+            if path.name.lower().startswith(prefix)
+        ]
+
+    return {
+        "oracle_dirs": relative_paths("oracle"),
+        "agnostic_dirs": relative_paths("agnostic"),
+    }
+
+
 def _resolve_path(raw: str | None, default_key: str) -> Path:
     text = (raw or "").strip() or DEFAULT_PATHS[default_key]
     path = Path(text).expanduser()
@@ -316,8 +340,20 @@ def start_warm_frames(
     return warm_status(path, fps, max_width, duration_sec=duration)
 
 
+# Root for resolving *relative* video paths in annotation JSONs (portable
+# across clusters). Set via --video-root; None means relative paths only
+# resolve if they happen to exist relative to the CWD.
+VIDEO_ROOT: Path | None = None
+
+
+def _apply_video_root(path: Path) -> Path:
+    if not path.is_absolute() and VIDEO_ROOT is not None:
+        return VIDEO_ROOT / path
+    return path
+
+
 def _resolve_video_path(raw: str) -> Path:
-    path = Path(unquote(raw)).expanduser().resolve()
+    path = _apply_video_root(Path(unquote(raw)).expanduser()).resolve()
     if path.suffix.lower() not in _VIDEO_EXTS:
         raise ValueError("Unsupported video type")
     if not path.is_file():
@@ -665,7 +701,7 @@ def build_sample_detail(
 
     video_path = oracle.get("video_path")
     if video_path:
-        video_path = str(Path(video_path).expanduser())
+        video_path = str(_apply_video_root(Path(video_path).expanduser()))
 
     return {
         "sample_id": str(oracle.get("sample_id", sample_id)),
@@ -675,6 +711,7 @@ def build_sample_detail(
         "duration_sec": duration,
         "query": oracle.get("query", ""),
         "answer": answer,
+        "oracle_answer": oracle.get("answer"),
         "pred_answer": pred_answer,
         "qa_error": qa_error,
         "has_event_graph": any(run["has_event_graph"] for run in event_graph_runs),
@@ -798,6 +835,7 @@ class ViewerHandler(BaseHTTPRequestHandler):
             self._send_json(
                 {
                     "paths": DEFAULT_PATHS,
+                    "directory_options": _annotation_directory_options(),
                     "morph_graph_root": str(_MORPH_GRAPH_ROOT),
                 }
             )
@@ -1054,12 +1092,24 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument(
+        "--video-root",
+        type=Path,
+        default=None,
+        help="Directory that relative video_path values in annotation JSONs "
+        "resolve against (e.g. the dir containing egolongqa/val/).",
+    )
     args = parser.parse_args(argv)
+
+    if args.video_root is not None:
+        global VIDEO_ROOT
+        VIDEO_ROOT = args.video_root.expanduser().resolve()
 
     httpd = ThreadingHTTPServer((args.host, args.port), ViewerHandler)
     lines = [
         f"Event eval viewer: http://{args.host}:{args.port}/",
         f"Defaults rooted at {_MORPH_GRAPH_ROOT}",
+        f"  video_root:        {VIDEO_ROOT or '(none — relative paths resolve against CWD)'}",
         f"  oracle_dir:      {DEFAULT_PATHS['oracle_dir']}",
         f"  agnostic_dir:      {DEFAULT_PATHS['agnostic_dir']}",
         f"  agnostic_kimi_dir: {DEFAULT_PATHS['agnostic_kimi_dir']}",

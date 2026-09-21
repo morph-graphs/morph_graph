@@ -1,0 +1,51 @@
+{
+  "sample_id": "341",
+  "video_id": "7593bd8121dcfd39",
+  "video_path": "egolongqa/val/7593bd8121dcfd39.mp4",
+  "video_duration_sec": 600.133333,
+  "query": "Which main structure did I assemble first according to the instruction manual, and what was the last step number I completed for it before switching to a new structure?",
+  "events": [
+    {
+      "event_id": "assemble_wagon_carriage",
+      "start_sec": 126.0,
+      "end_sec": 564.1,
+      "granularity": "coarse",
+      "description": "Assembling the toy wagon, completing up to step 33 of the first build structure in the instruction manual.",
+      "categories": [
+        "action",
+        "goal_or_subgoal"
+      ],
+      "query_roles": [
+        "anchor",
+        "answer_bearing",
+        "evidence"
+      ],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "switch_to_new_structure",
+      "start_sec": 564.1,
+      "end_sec": 576.1,
+      "granularity": "fine",
+      "description": "Flipping the instruction manual page to start the second build structure (the campfire/shelter).",
+      "categories": [
+        "action",
+        "state_change"
+      ],
+      "query_roles": [
+        "anchor",
+        "evidence"
+      ],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/gcp/google/eccn-gemini-3.5-flash",
+  "prompt_version": "eval_oracle_v1",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-13T23:50:28.892658+00:00",
+  "warnings": [],
+  "raw_response": "{\n  \"events\": [\n    {\n      \"event_id\": \"assemble_wagon_carriage\",\n      \"start_sec\": 126.0,\n      \"end_sec\": 564.1,\n      \"granularity\": \"coarse\",\n      \"description\": \"Assembling the toy wagon, completing up to step 33 of the first build structure in the instruction manual.\",\n      \"categories\": [\n        \"action\",\n        \"goal_or_subgoal\"\n      ],\n      \"parent_event_ids\": [],\n      \"query_roles\": [\n        \"anchor\",\n        \"answer_bearing\",\n        \"evidence\"\n      ]\n    },\n    {\n      \"event_id\": \"switch_to_new_structure\",\n      \"start_sec\": 564.1,\n      \"end_sec\": 576.1,\n      \"granularity\": \"fine\",\n      \"description\": \"Flipping the instruction manual page to start the second build structure (the campfire/shelter).\",\n      \"categories\": [\n        \"action\",\n        \"state_change\"\n      ],\n      \"parent_event_ids\": [],\n      \"query_roles\": [\n        \"anchor\",\n        \"evidence\"\n      ]\n    }\n  ],\n  \"warnings\": []\n}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_conditioned"
+}

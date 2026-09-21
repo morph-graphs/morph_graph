@@ -1,0 +1,211 @@
+{
+  "sample_id": "91eb47c80caaa8bb",
+  "video_id": "91eb47c80caaa8bb",
+  "video_path": "egolongqa/val/91eb47c80caaa8bb.mp4",
+  "video_duration_sec": 600.8,
+  "query": "",
+  "events": [
+    {
+      "event_id": "event_1",
+      "start_sec": 0.0,
+      "end_sec": 10.0,
+      "granularity": "fine",
+      "description": "Preparing to peel the first onion",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_2",
+      "start_sec": 10.0,
+      "end_sec": 130.0,
+      "granularity": "fine",
+      "description": "Peeling the skin off the first yellow onion over a compost bin",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_3",
+      "start_sec": 130.0,
+      "end_sec": 220.0,
+      "granularity": "fine",
+      "description": "Chopping the first onion on a cutting board",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_4",
+      "start_sec": 220.0,
+      "end_sec": 238.0,
+      "granularity": "fine",
+      "description": "Opening the refrigerator to look for ingredients",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_5",
+      "start_sec": 238.0,
+      "end_sec": 268.0,
+      "granularity": "fine",
+      "description": "Spoon-scooping solid fat/lard from a glass jar into the cooking pot",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_6",
+      "start_sec": 268.0,
+      "end_sec": 280.0,
+      "granularity": "fine",
+      "description": "Scraping the chopped first onion from the board into the cooking pot",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_7",
+      "start_sec": 280.0,
+      "end_sec": 328.0,
+      "granularity": "fine",
+      "description": "Peeling the second yellow onion over the compost bin",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_8",
+      "start_sec": 328.0,
+      "end_sec": 362.0,
+      "granularity": "fine",
+      "description": "Chopping the second onion on the cutting board",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_9",
+      "start_sec": 362.0,
+      "end_sec": 370.0,
+      "granularity": "fine",
+      "description": "Scraping the chopped second onion into the pot",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_10",
+      "start_sec": 370.0,
+      "end_sec": 405.0,
+      "granularity": "fine",
+      "description": "Opening the refrigerator and pulling out a bag of green peppers",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_11",
+      "start_sec": 405.0,
+      "end_sec": 430.0,
+      "granularity": "fine",
+      "description": "Deseeding and preparing the green peppers over the compost bin",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_12",
+      "start_sec": 430.0,
+      "end_sec": 484.0,
+      "granularity": "fine",
+      "description": "Chopping the prepared green peppers into small pieces",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_13",
+      "start_sec": 484.0,
+      "end_sec": 495.0,
+      "granularity": "fine",
+      "description": "Scraping the chopped green peppers into the cooking pot",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_14",
+      "start_sec": 495.0,
+      "end_sec": 502.0,
+      "granularity": "fine",
+      "description": "Opening a plastic zip bag containing meat or frozen ingredients",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_15",
+      "start_sec": 502.0,
+      "end_sec": 525.0,
+      "granularity": "fine",
+      "description": "Adding various dry spices from containers into the pot",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_16",
+      "start_sec": 525.0,
+      "end_sec": 600.8,
+      "granularity": "fine",
+      "description": "Stirring the food mixture in the steaming pot with a ladle",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/gcp/google/eccn-gemini-3.5-flash",
+  "prompt_version": "eval_agnostic_v3_gpt",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-12T22:07:34.307943+00:00",
+  "warnings": [],
+  "raw_response": "{\n  \"events\": [\n    {\n      \"event_id\": \"event_1\",\n      \"start_sec\": 0.0,\n      \"end_sec\": 10.0,\n      \"granularity\": \"fine\",\n      \"description\": \"Preparing to peel the first onion\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_2\",\n      \"start_sec\": 10.0,\n      \"end_sec\": 130.0,\n      \"granularity\": \"fine\",\n      \"description\": \"Peeling the skin off the first yellow onion over a compost bin\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_3\",\n      \"start_sec\": 130.0,\n      \"end_sec\": 220.0,\n      \"granularity\": \"fine\",\n      \"description\": \"Chopping the first onion on a cutting board\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_4\",\n      \"start_sec\": 220.0,\n      \"end_sec\": 238.0,\n      \"granularity\": \"fine\",\n      \"description\": \"Opening the refrigerator to look for ingredients\",\n      \"categories\": [\"action\", \"location_or_scene\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_5\",\n      \"start_sec\": 238.0,\n      \"end_sec\": 268.0,\n      \"granularity\": \"fine\",\n      \"description\": \"Spoon-scooping solid fat/lard from a glass jar into the cooking pot\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_6\",\n      \"start_sec\": 268.0,\n      \"end_sec\": 280.0,\n      \"granularity\": \"fine\",\n      \"description\": \"Scraping the chopped first onion from the board into the cooking pot\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_7\",\n      \"start_sec\": 280.0,\n      \"end_sec\": 328.0,\n      \"granularity\": \"fine\",\n      \"description\": \"Peeling the second yellow onion over the compost bin\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_8\",\n      \"start_sec\": 328.0,\n      \"end_sec\": 362.0,\n      \"granularity\": \"fine\",\n      \"description\": \"Chopping the second onion on the cutting board\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_9\",\n      \"start_sec\": 362.0,\n      \"end_sec\": 370.0,\n      \"granularity\": \"fine\",\n      \"description\": \"Scraping the chopped second onion into the pot\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_10\",\n      \"start_sec\": 370.0,\n      \"end_sec\": 405.0,\n      \"granularity\": \"fine\",\n      \"description\": \"Opening the refrigerator and pulling out a bag of green peppers\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_11\",\n      \"start_sec\": 405.0,\n      \"end_sec\": 430.0,\n      \"granularity\": \"fine\",\n      \"description\": \"Deseeding and preparing the green peppers over the compost bin\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_12\",\n      \"start_sec\": 430.0,\n      \"end_sec\": 484.0,\n      \"granularity\": \"fine\",\n      \"description\": \"Chopping the prepared green peppers into small pieces\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_13\",\n      \"start_sec\": 484.0,\n      \"end_sec\": 495.0,\n      \"granularity\": \"fine\",\n      \"description\": \"Scraping the chopped green peppers into the cooking pot\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_14\",\n      \"start_sec\": 495.0,\n      \"end_sec\": 502.0,\n      \"granularity\": \"fine\",\n      \"description\": \"Opening a plastic zip bag containing meat or frozen ingredients\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_15\",\n      \"start_sec\": 502.0,\n      \"end_sec\": 525.0,\n      \"granularity\": \"fine\",\n      \"description\": \"Adding various dry spices from containers into the pot\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_16\",\n      \"start_sec\": 525.0,\n      \"end_sec\": 600.8,\n      \"granularity\": \"fine\",\n      \"description\": \"Stirring the food mixture in the steaming pot with a ladle\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    }\n  ],\n  \"warnings\": []\n}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_agnostic"
+}

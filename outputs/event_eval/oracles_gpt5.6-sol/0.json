@@ -1,0 +1,50 @@
+{
+  "sample_id": "0",
+  "video_id": "00cdb8ca10c069f8",
+  "video_path": "egolongqa/val/00cdb8ca10c069f8.mp4",
+  "video_duration_sec": 604.533333,
+  "query": "After I left the grassy trail that ran alongside the flooded marsh, what was the first man-made structure I encountered on the paved section of my walk?",
+  "events": [
+    {
+      "event_id": "E1",
+      "start_sec": 314.4,
+      "end_sec": 320.5,
+      "granularity": "fine",
+      "description": "The walker leaves the grassy marsh-side trail and steps onto a cracked paved path.",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "temporal_transition"
+      ],
+      "query_roles": [
+        "anchor",
+        "evidence"
+      ],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "E2",
+      "start_sec": 338.5,
+      "end_sec": 344.7,
+      "granularity": "fine",
+      "description": "The first man-made structure encountered on the paved path is a slender red metal post beside the right edge.",
+      "categories": [
+        "location_or_scene"
+      ],
+      "query_roles": [
+        "answer_bearing",
+        "evidence"
+      ],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/openai/openai/eccn-gpt-5.6-sol",
+  "prompt_version": "eval_oracle_v1",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-14T00:10:12.272463+00:00",
+  "warnings": [],
+  "raw_response": "{\"events\":[{\"event_id\":\"E1\",\"start_sec\":314.4,\"end_sec\":320.5,\"granularity\":\"fine\",\"description\":\"The walker leaves the grassy marsh-side trail and steps onto a cracked paved path.\",\"categories\":[\"action\",\"location_or_scene\",\"temporal_transition\"],\"parent_event_ids\":[],\"query_roles\":[\"anchor\",\"evidence\"]},{\"event_id\":\"E2\",\"start_sec\":338.5,\"end_sec\":344.7,\"granularity\":\"fine\",\"description\":\"The first man-made structure encountered on the paved path is a slender red metal post beside the right edge.\",\"categories\":[\"location_or_scene\"],\"parent_event_ids\":[],\"query_roles\":[\"answer_bearing\",\"evidence\"]}],\"warnings\":[]}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_conditioned"
+}

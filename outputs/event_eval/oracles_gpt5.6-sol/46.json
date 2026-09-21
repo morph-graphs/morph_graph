@@ -1,0 +1,50 @@
+{
+  "sample_id": "46",
+  "video_id": "13aea9ab404e96a6",
+  "video_path": "egolongqa/val/13aea9ab404e96a6.mp4",
+  "video_duration_sec": 620.733333,
+  "query": "Earlier I saw a decorated jar from the Middle Predynastic period, and later a silver ewer from the Early Byzantine era. What is the approximate number of years between the creation of these two artifacts?",
+  "events": [
+    {
+      "event_id": "middle_predynastic_jar",
+      "start_sec": 37.2,
+      "end_sec": 55.9,
+      "granularity": "fine",
+      "description": "A decorated jar and its label are closely observed; it is identified as Middle Predynastic, dating to roughly the mid-4th millennium BCE (about 3500 BCE).",
+      "categories": [
+        "location_or_scene"
+      ],
+      "query_roles": [
+        "anchor",
+        "evidence"
+      ],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "early_byzantine_silver_ewer",
+      "start_sec": 571.1,
+      "end_sec": 595.9,
+      "granularity": "fine",
+      "description": "A silver ewer and its label are closely observed; it dates to the Early Byzantine era, roughly the 6th century CE. Compared with the jar, it was created approximately 4,000 years later.",
+      "categories": [
+        "location_or_scene",
+        "temporal_transition"
+      ],
+      "query_roles": [
+        "anchor",
+        "evidence",
+        "answer_bearing"
+      ],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/openai/openai/eccn-gpt-5.6-sol",
+  "prompt_version": "eval_oracle_v1",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-14T00:09:04.708562+00:00",
+  "warnings": [],
+  "raw_response": "{\"events\":[{\"event_id\":\"middle_predynastic_jar\",\"start_sec\":37.2,\"end_sec\":55.9,\"granularity\":\"fine\",\"description\":\"A decorated jar and its label are closely observed; it is identified as Middle Predynastic, dating to roughly the mid-4th millennium BCE (about 3500 BCE).\",\"categories\":[\"location_or_scene\"],\"parent_event_ids\":[],\"query_roles\":[\"anchor\",\"evidence\"]},{\"event_id\":\"early_byzantine_silver_ewer\",\"start_sec\":571.1,\"end_sec\":595.9,\"granularity\":\"fine\",\"description\":\"A silver ewer and its label are closely observed; it dates to the Early Byzantine era, roughly the 6th century CE. Compared with the jar, it was created approximately 4,000 years later.\",\"categories\":[\"location_or_scene\",\"temporal_transition\"],\"parent_event_ids\":[],\"query_roles\":[\"anchor\",\"evidence\",\"answer_bearing\"]}],\"warnings\":[]}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_conditioned"
+}

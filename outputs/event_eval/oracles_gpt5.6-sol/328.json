@@ -1,0 +1,66 @@
+{
+  "sample_id": "328",
+  "video_id": "6e4610f800b157a0",
+  "video_path": "egolongqa/val/6e4610f800b157a0.mp4",
+  "video_duration_sec": 600.066667,
+  "query": "What was I working on right before I looked at the doorway, and what did I start working on right after I returned to the table?",
+  "events": [
+    {
+      "event_id": "e1",
+      "start_sec": 150.0,
+      "end_sec": 180.0,
+      "granularity": "coarse",
+      "description": "The person continues assembling and trimming the raised cardboard walls of a shoe-shaped tray or container.",
+      "categories": [
+        "action",
+        "goal_or_subgoal"
+      ],
+      "query_roles": [
+        "answer_bearing",
+        "evidence"
+      ],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e2",
+      "start_sec": 180.0,
+      "end_sec": 186.0,
+      "granularity": "fine",
+      "description": "The camera turns away from the craft table and looks toward the open doorway.",
+      "categories": [
+        "location_or_scene",
+        "temporal_transition"
+      ],
+      "query_roles": [
+        "anchor"
+      ],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e3",
+      "start_sec": 186.0,
+      "end_sec": 210.0,
+      "granularity": "coarse",
+      "description": "After returning to the table and briefly showing the completed shoe-shaped tray, the person starts working with a new scalloped cardboard base to make another raised-sided cardboard piece.",
+      "categories": [
+        "action",
+        "goal_or_subgoal",
+        "temporal_transition"
+      ],
+      "query_roles": [
+        "answer_bearing",
+        "evidence"
+      ],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/openai/openai/eccn-gpt-5.6-sol",
+  "prompt_version": "eval_oracle_v1",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-13T23:39:55.292935+00:00",
+  "warnings": [],
+  "raw_response": "{\"events\":[{\"event_id\":\"e1\",\"start_sec\":150.0,\"end_sec\":180.0,\"granularity\":\"coarse\",\"description\":\"The person continues assembling and trimming the raised cardboard walls of a shoe-shaped tray or container.\",\"categories\":[\"action\",\"goal_or_subgoal\"],\"parent_event_ids\":[],\"query_roles\":[\"answer_bearing\",\"evidence\"]},{\"event_id\":\"e2\",\"start_sec\":180.0,\"end_sec\":186.0,\"granularity\":\"fine\",\"description\":\"The camera turns away from the craft table and looks toward the open doorway.\",\"categories\":[\"location_or_scene\",\"temporal_transition\"],\"parent_event_ids\":[],\"query_roles\":[\"anchor\"]},{\"event_id\":\"e3\",\"start_sec\":186.0,\"end_sec\":210.0,\"granularity\":\"coarse\",\"description\":\"After returning to the table and briefly showing the completed shoe-shaped tray, the person starts working with a new scalloped cardboard base to make another raised-sided cardboard piece.\",\"categories\":[\"action\",\"goal_or_subgoal\",\"temporal_transition\"],\"parent_event_ids\":[],\"query_roles\":[\"answer_bearing\",\"evidence\"]}],\"warnings\":[]}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_conditioned"
+}

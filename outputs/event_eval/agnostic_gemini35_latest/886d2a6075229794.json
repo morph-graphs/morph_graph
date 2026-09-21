@@ -1,0 +1,200 @@
+{
+  "sample_id": "886d2a6075229794",
+  "video_id": "886d2a6075229794",
+  "video_path": "egolongqa/val/886d2a6075229794.mp4",
+  "video_duration_sec": 600.133333,
+  "query": "",
+  "events": [
+    {
+      "event_id": "event_1",
+      "start_sec": 0.0,
+      "end_sec": 15.0,
+      "granularity": "coarse",
+      "description": "Looking at the roasted bananas in the oven and walking around the kitchen.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_2",
+      "start_sec": 15.0,
+      "end_sec": 70.0,
+      "granularity": "coarse",
+      "description": "Scraping roasted bananas from the skillet into the blender.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_3",
+      "start_sec": 70.0,
+      "end_sec": 88.0,
+      "granularity": "coarse",
+      "description": "Walking to the oven to retrieve another baking pan of roasted bananas.",
+      "categories": [
+        "action",
+        "goal_or_subgoal"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_4",
+      "start_sec": 88.0,
+      "end_sec": 116.0,
+      "granularity": "coarse",
+      "description": "Scraping roasted bananas from the baking pan into the blender jar.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_5",
+      "start_sec": 116.0,
+      "end_sec": 142.0,
+      "granularity": "coarse",
+      "description": "Taking the empty baking pan to the sink and placing it inside.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_6",
+      "start_sec": 142.0,
+      "end_sec": 200.0,
+      "granularity": "coarse",
+      "description": "Plugging in the blender, securing the lid, and blending the bananas.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_7",
+      "start_sec": 200.0,
+      "end_sec": 218.0,
+      "granularity": "coarse",
+      "description": "Preparing the ice cream maker by inserting the paddle.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_8",
+      "start_sec": 218.0,
+      "end_sec": 242.0,
+      "granularity": "coarse",
+      "description": "Juicing a lemon and squeezing the juice into the blender jar.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_9",
+      "start_sec": 242.0,
+      "end_sec": 268.0,
+      "granularity": "coarse",
+      "description": "Stirring the mixture, putting the lid on the blender, and blending it again.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_10",
+      "start_sec": 268.0,
+      "end_sec": 310.0,
+      "granularity": "coarse",
+      "description": "Pouring and scraping the blended banana mixture into the ice cream maker bowl.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_11",
+      "start_sec": 310.0,
+      "end_sec": 334.0,
+      "granularity": "coarse",
+      "description": "Plugging in the ice cream maker and closing the oven door.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_12",
+      "start_sec": 334.0,
+      "end_sec": 368.0,
+      "granularity": "coarse",
+      "description": "Setting the timer on the ice cream maker.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_13",
+      "start_sec": 368.0,
+      "end_sec": 406.0,
+      "granularity": "coarse",
+      "description": "Adjusting the paddle, inserting the bowl, and putting the lid on the ice cream maker.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_14",
+      "start_sec": 406.0,
+      "end_sec": 478.0,
+      "granularity": "coarse",
+      "description": "Watching the ice cream maker churn and wiping down its exterior.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_15",
+      "start_sec": 478.0,
+      "end_sec": 600.133,
+      "granularity": "coarse",
+      "description": "Consulting the recipe book and laying out ingredients on the counter.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/gcp/google/eccn-gemini-3.5-flash",
+  "prompt_version": "eval_agnostic_v3_gpt",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-12T22:06:22.519768+00:00",
+  "warnings": [],
+  "raw_response": "{\n  \"events\": [\n    {\n      \"event_id\": \"event_1\",\n      \"start_sec\": 0.0,\n      \"end_sec\": 15.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Looking at the roasted bananas in the oven and walking around the kitchen.\",\n      \"categories\": [\"action\", \"location_or_scene\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_2\",\n      \"start_sec\": 15.0,\n      \"end_sec\": 70.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Scraping roasted bananas from the skillet into the blender.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_3\",\n      \"start_sec\": 70.0,\n      \"end_sec\": 88.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking to the oven to retrieve another baking pan of roasted bananas.\",\n      \"categories\": [\"action\", \"goal_or_subgoal\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_4\",\n      \"start_sec\": 88.0,\n      \"end_sec\": 116.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Scraping roasted bananas from the baking pan into the blender jar.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_5\",\n      \"start_sec\": 116.0,\n      \"end_sec\": 142.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Taking the empty baking pan to the sink and placing it inside.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_6\",\n      \"start_sec\": 142.0,\n      \"end_sec\": 200.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Plugging in the blender, securing the lid, and blending the bananas.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_7\",\n      \"start_sec\": 200.0,\n      \"end_sec\": 218.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Preparing the ice cream maker by inserting the paddle.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_8\",\n      \"start_sec\": 218.0,\n      \"end_sec\": 242.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Juicing a lemon and squeezing the juice into the blender jar.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_9\",\n      \"start_sec\": 242.0,\n      \"end_sec\": 268.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Stirring the mixture, putting the lid on the blender, and blending it again.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_10\",\n      \"start_sec\": 268.0,\n      \"end_sec\": 310.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Pouring and scraping the blended banana mixture into the ice cream maker bowl.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_11\",\n      \"start_sec\": 310.0,\n      \"end_sec\": 334.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Plugging in the ice cream maker and closing the oven door.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_12\",\n      \"start_sec\": 334.0,\n      \"end_sec\": 368.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Setting the timer on the ice cream maker.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_13\",\n      \"start_sec\": 368.0,\n      \"end_sec\": 406.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Adjusting the paddle, inserting the bowl, and putting the lid on the ice cream maker.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_14\",\n      \"start_sec\": 406.0,\n      \"end_sec\": 478.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Watching the ice cream maker churn and wiping down its exterior.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_15\",\n      \"start_sec\": 478.0,\n      \"end_sec\": 600.133,\n      \"granularity\": \"coarse\",\n      \"description\": \"Consulting the recipe book and laying out ingredients on the counter.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    }\n  ],\n  \"warnings\": []\n}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_agnostic"
+}

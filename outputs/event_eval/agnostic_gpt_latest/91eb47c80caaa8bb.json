@@ -1,0 +1,258 @@
+{
+  "sample_id": "91eb47c80caaa8bb",
+  "video_id": "91eb47c80caaa8bb",
+  "video_path": "egolongqa/val/91eb47c80caaa8bb.mp4",
+  "video_duration_sec": 600.8,
+  "query": "",
+  "events": [
+    {
+      "event_id": "e1",
+      "start_sec": 0.0,
+      "end_sec": 9.0,
+      "granularity": "fine",
+      "description": "The cook surveys the crowded stovetop workspace and reaches for a small paring knife.",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "goal_or_subgoal"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e2",
+      "start_sec": 9.0,
+      "end_sec": 123.0,
+      "granularity": "coarse",
+      "description": "The cook peels several onions with the paring knife, dropping skins and scraps into a lined bin beside the stove.",
+      "categories": [
+        "action",
+        "goal_or_subgoal",
+        "state_change"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e3",
+      "start_sec": 123.0,
+      "end_sec": 237.0,
+      "granularity": "coarse",
+      "description": "The peeled onions are placed on a cutting board and repeatedly sliced and diced with a chef's knife.",
+      "categories": [
+        "action",
+        "goal_or_subgoal",
+        "state_change"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e4",
+      "start_sec": 237.0,
+      "end_sec": 243.0,
+      "granularity": "fine",
+      "description": "The cook turns a stove control, activating a burner for the large pot.",
+      "categories": [
+        "action",
+        "causal_transition",
+        "state_change"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e5",
+      "start_sec": 243.0,
+      "end_sec": 258.0,
+      "granularity": "fine",
+      "description": "The cook opens the refrigerator and retrieves a jar containing solid white cooking fat.",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "goal_or_subgoal"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e6",
+      "start_sec": 258.0,
+      "end_sec": 288.0,
+      "granularity": "fine",
+      "description": "Several spoonfuls of the white cooking fat are scraped from the jar into the large pot.",
+      "categories": [
+        "action",
+        "state_change",
+        "goal_or_subgoal"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e7",
+      "start_sec": 288.0,
+      "end_sec": 303.0,
+      "granularity": "fine",
+      "description": "The cutting board is tipped over the pot to transfer the first batch of diced onions into the heated fat.",
+      "categories": [
+        "action",
+        "causal_transition",
+        "state_change"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e8",
+      "start_sec": 303.0,
+      "end_sec": 357.0,
+      "granularity": "coarse",
+      "description": "The cook returns to the scrap bin and peels another onion with the paring knife.",
+      "categories": [
+        "action",
+        "goal_or_subgoal",
+        "state_change"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e9",
+      "start_sec": 357.0,
+      "end_sec": 381.0,
+      "granularity": "coarse",
+      "description": "The additional peeled onion is sliced and diced on the cutting board.",
+      "categories": [
+        "action",
+        "goal_or_subgoal",
+        "state_change"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e10",
+      "start_sec": 381.0,
+      "end_sec": 393.0,
+      "granularity": "fine",
+      "description": "The second batch of chopped onion is added to the pot and stirred into the cooking mixture.",
+      "categories": [
+        "action",
+        "causal_transition",
+        "state_change"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e11",
+      "start_sec": 393.0,
+      "end_sec": 417.0,
+      "granularity": "fine",
+      "description": "The cook opens the refrigerator, retrieves a produce bag containing green peppers, and brings it to the stove.",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "goal_or_subgoal"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e12",
+      "start_sec": 417.0,
+      "end_sec": 483.0,
+      "granularity": "coarse",
+      "description": "Green peppers are trimmed, split lengthwise, cleaned of seeds and inner ribs over the scrap bin, then sliced and diced on the board.",
+      "categories": [
+        "action",
+        "goal_or_subgoal",
+        "state_change"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e13",
+      "start_sec": 483.0,
+      "end_sec": 495.0,
+      "granularity": "fine",
+      "description": "The chopped green pepper is transferred from the cutting board into the steaming onion pot and stirred in.",
+      "categories": [
+        "action",
+        "causal_transition",
+        "state_change"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e14",
+      "start_sec": 495.0,
+      "end_sec": 513.0,
+      "granularity": "fine",
+      "description": "The cook opens a zip-top bag of pale prepared pieces and adds some of its contents to the pot.",
+      "categories": [
+        "action",
+        "state_change",
+        "goal_or_subgoal"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e15",
+      "start_sec": 513.0,
+      "end_sec": 549.0,
+      "granularity": "coarse",
+      "description": "The cook selects seasonings from the cabinet and spice area, shakes one bottled seasoning and then a brown powdered seasoning into the steaming pot.",
+      "categories": [
+        "action",
+        "goal_or_subgoal",
+        "state_change"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e16",
+      "start_sec": 549.0,
+      "end_sec": 561.0,
+      "granularity": "fine",
+      "description": "A small saucepan is lifted and its cooked contents are poured into the large pot while the mixture is stirred.",
+      "categories": [
+        "action",
+        "causal_transition",
+        "state_change"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e17",
+      "start_sec": 561.0,
+      "end_sec": 600.8,
+      "granularity": "coarse",
+      "description": "The combined mixture is stirred and left to simmer vigorously in the large pot as heavy steam rises.",
+      "categories": [
+        "action",
+        "state_change",
+        "temporal_transition"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/openai/openai/eccn-gpt-5.6-sol",
+  "prompt_version": "eval_agnostic_v3_gpt",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-12T22:02:51.872070+00:00",
+  "warnings": [
+    "The video was represented by frames sampled about every six seconds, so event boundaries are approximate. The contents taken from the zip-top bag and small saucepan are not clearly identifiable from the sampled frames."
+  ],
+  "raw_response": "{\"events\":[{\"event_id\":\"e1\",\"start_sec\":0,\"end_sec\":9,\"granularity\":\"fine\",\"description\":\"The cook surveys the crowded stovetop workspace and reaches for a small paring knife.\",\"categories\":[\"action\",\"location_or_scene\",\"goal_or_subgoal\"],\"parent_event_ids\":[]},{\"event_id\":\"e2\",\"start_sec\":9,\"end_sec\":123,\"granularity\":\"coarse\",\"description\":\"The cook peels several onions with the paring knife, dropping skins and scraps into a lined bin beside the stove.\",\"categories\":[\"action\",\"goal_or_subgoal\",\"state_change\"],\"parent_event_ids\":[]},{\"event_id\":\"e3\",\"start_sec\":123,\"end_sec\":237,\"granularity\":\"coarse\",\"description\":\"The peeled onions are placed on a cutting board and repeatedly sliced and diced with a chef's knife.\",\"categories\":[\"action\",\"goal_or_subgoal\",\"state_change\"],\"parent_event_ids\":[]},{\"event_id\":\"e4\",\"start_sec\":237,\"end_sec\":243,\"granularity\":\"fine\",\"description\":\"The cook turns a stove control, activating a burner for the large pot.\",\"categories\":[\"action\",\"causal_transition\",\"state_change\"],\"parent_event_ids\":[]},{\"event_id\":\"e5\",\"start_sec\":243,\"end_sec\":258,\"granularity\":\"fine\",\"description\":\"The cook opens the refrigerator and retrieves a jar containing solid white cooking fat.\",\"categories\":[\"action\",\"location_or_scene\",\"goal_or_subgoal\"],\"parent_event_ids\":[]},{\"event_id\":\"e6\",\"start_sec\":258,\"end_sec\":288,\"granularity\":\"fine\",\"description\":\"Several spoonfuls of the white cooking fat are scraped from the jar into the large pot.\",\"categories\":[\"action\",\"state_change\",\"goal_or_subgoal\"],\"parent_event_ids\":[]},{\"event_id\":\"e7\",\"start_sec\":288,\"end_sec\":303,\"granularity\":\"fine\",\"description\":\"The cutting board is tipped over the pot to transfer the first batch of diced onions into the heated fat.\",\"categories\":[\"action\",\"causal_transition\",\"state_change\"],\"parent_event_ids\":[]},{\"event_id\":\"e8\",\"start_sec\":303,\"end_sec\":357,\"granularity\":\"coarse\",\"description\":\"The cook returns to the scrap bin and peels another onion with the paring knife.\",\"categories\":[\"action\",\"goal_or_subgoal\",\"state_change\"],\"parent_event_ids\":[]},{\"event_id\":\"e9\",\"start_sec\":357,\"end_sec\":381,\"granularity\":\"coarse\",\"description\":\"The additional peeled onion is sliced and diced on the cutting board.\",\"categories\":[\"action\",\"goal_or_subgoal\",\"state_change\"],\"parent_event_ids\":[]},{\"event_id\":\"e10\",\"start_sec\":381,\"end_sec\":393,\"granularity\":\"fine\",\"description\":\"The second batch of chopped onion is added to the pot and stirred into the cooking mixture.\",\"categories\":[\"action\",\"causal_transition\",\"state_change\"],\"parent_event_ids\":[]},{\"event_id\":\"e11\",\"start_sec\":393,\"end_sec\":417,\"granularity\":\"fine\",\"description\":\"The cook opens the refrigerator, retrieves a produce bag containing green peppers, and brings it to the stove.\",\"categories\":[\"action\",\"location_or_scene\",\"goal_or_subgoal\"],\"parent_event_ids\":[]},{\"event_id\":\"e12\",\"start_sec\":417,\"end_sec\":483,\"granularity\":\"coarse\",\"description\":\"Green peppers are trimmed, split lengthwise, cleaned of seeds and inner ribs over the scrap bin, then sliced and diced on the board.\",\"categories\":[\"action\",\"goal_or_subgoal\",\"state_change\"],\"parent_event_ids\":[]},{\"event_id\":\"e13\",\"start_sec\":483,\"end_sec\":495,\"granularity\":\"fine\",\"description\":\"The chopped green pepper is transferred from the cutting board into the steaming onion pot and stirred in.\",\"categories\":[\"action\",\"causal_transition\",\"state_change\"],\"parent_event_ids\":[]},{\"event_id\":\"e14\",\"start_sec\":495,\"end_sec\":513,\"granularity\":\"fine\",\"description\":\"The cook opens a zip-top bag of pale prepared pieces and adds some of its contents to the pot.\",\"categories\":[\"action\",\"state_change\",\"goal_or_subgoal\"],\"parent_event_ids\":[]},{\"event_id\":\"e15\",\"start_sec\":513,\"end_sec\":549,\"granularity\":\"coarse\",\"description\":\"The cook selects seasonings from the cabinet and spice area, shakes one bottled seasoning and then a brown powdered seasoning into the steaming pot.\",\"categories\":[\"action\",\"goal_or_subgoal\",\"state_change\"],\"parent_event_ids\":[]},{\"event_id\":\"e16\",\"start_sec\":549,\"end_sec\":561,\"granularity\":\"fine\",\"description\":\"A small saucepan is lifted and its cooked contents are poured into the large pot while the mixture is stirred.\",\"categories\":[\"action\",\"causal_transition\",\"state_change\"],\"parent_event_ids\":[]},{\"event_id\":\"e17\",\"start_sec\":561,\"end_sec\":600.8,\"granularity\":\"coarse\",\"description\":\"The combined mixture is stirred and left to simmer vigorously in the large pot as heavy steam rises.\",\"categories\":[\"action\",\"state_change\",\"temporal_transition\"],\"parent_event_ids\":[]}],\"warnings\":[\"The video was represented by frames sampled about every six seconds, so event boundaries are approximate. The contents taken from the zip-top bag and small saucepan are not clearly identifiable from the sampled frames.\"]}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_agnostic"
+}

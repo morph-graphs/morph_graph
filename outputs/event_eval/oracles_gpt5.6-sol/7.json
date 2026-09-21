@@ -1,0 +1,51 @@
+{
+  "sample_id": "7",
+  "video_id": "032392866755963e",
+  "video_path": "egolongqa/val/032392866755963e.mp4",
+  "video_duration_sec": 600.133333,
+  "query": "When I first arrived, I saw a red car parked alone near the museum building. Later, as I walked back toward the museum along a tree-lined path, I saw the same red car again. What was different about the red car’s situation the second time?",
+  "events": [
+    {
+      "event_id": "first_red_car_observation",
+      "start_sec": 0.0,
+      "end_sec": 6.0,
+      "granularity": "fine",
+      "description": "On initially arriving near the museum, the red car is parked by itself.",
+      "categories": [
+        "location_or_scene"
+      ],
+      "query_roles": [
+        "anchor",
+        "evidence"
+      ],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "second_red_car_observation",
+      "start_sec": 570.1,
+      "end_sec": 600.133,
+      "granularity": "fine",
+      "description": "While returning toward the museum along the tree-lined path, the same red car is visible with another dark-colored vehicle parked nearby, so it is no longer alone.",
+      "categories": [
+        "location_or_scene",
+        "temporal_transition"
+      ],
+      "query_roles": [
+        "answer_bearing",
+        "evidence"
+      ],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/openai/openai/eccn-gpt-5.6-sol",
+  "prompt_version": "eval_oracle_v1",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-13T23:31:31.797119+00:00",
+  "warnings": [
+    "The first red-car sighting is not clearly captured in the uniformly sampled frames; its interval is based on the question's stated initial-arrival context."
+  ],
+  "raw_response": "{\"events\":[{\"event_id\":\"first_red_car_observation\",\"start_sec\":0,\"end_sec\":6,\"granularity\":\"fine\",\"description\":\"On initially arriving near the museum, the red car is parked by itself.\",\"categories\":[\"location_or_scene\"],\"parent_event_ids\":[],\"query_roles\":[\"anchor\",\"evidence\"]},{\"event_id\":\"second_red_car_observation\",\"start_sec\":570.1,\"end_sec\":600.133,\"granularity\":\"fine\",\"description\":\"While returning toward the museum along the tree-lined path, the same red car is visible with another dark-colored vehicle parked nearby, so it is no longer alone.\",\"categories\":[\"location_or_scene\",\"temporal_transition\"],\"parent_event_ids\":[],\"query_roles\":[\"answer_bearing\",\"evidence\"]}],\"warnings\":[\"The first red-car sighting is not clearly captured in the uniformly sampled frames; its interval is based on the question's stated initial-arrival context.\"]}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_conditioned"
+}

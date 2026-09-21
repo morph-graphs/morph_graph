@@ -1,0 +1,239 @@
+{
+  "sample_id": "11dc8afb864c685a",
+  "video_id": "11dc8afb864c685a",
+  "video_path": "egolongqa/val/11dc8afb864c685a.mp4",
+  "video_duration_sec": 614.933333,
+  "query": "",
+  "events": [
+    {
+      "event_id": "event_1",
+      "start_sec": 0.0,
+      "end_sec": 30.7,
+      "granularity": "coarse",
+      "description": "Walking on the sandy beach while following a group of people.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_2",
+      "start_sec": 30.7,
+      "end_sec": 67.6,
+      "granularity": "coarse",
+      "description": "Continuing to walk along the sandy beach next to the dunes.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_3",
+      "start_sec": 67.6,
+      "end_sec": 73.8,
+      "granularity": "fine",
+      "description": "Pausing to look at the ocean waves.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_4",
+      "start_sec": 73.8,
+      "end_sec": 110.7,
+      "granularity": "coarse",
+      "description": "Resuming walking along the sandy beach.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_5",
+      "start_sec": 110.7,
+      "end_sec": 123.0,
+      "granularity": "fine",
+      "description": "Turning to look at the ocean waves.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_6",
+      "start_sec": 123.0,
+      "end_sec": 172.2,
+      "granularity": "coarse",
+      "description": "Walking along the sandy beach.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_7",
+      "start_sec": 172.2,
+      "end_sec": 184.5,
+      "granularity": "fine",
+      "description": "Pausing to look at the ocean waves.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_8",
+      "start_sec": 184.5,
+      "end_sec": 264.4,
+      "granularity": "coarse",
+      "description": "Walking along the sandy beach.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_9",
+      "start_sec": 264.4,
+      "end_sec": 276.7,
+      "granularity": "fine",
+      "description": "Looking out at the ocean waves.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_10",
+      "start_sec": 276.7,
+      "end_sec": 319.8,
+      "granularity": "coarse",
+      "description": "Walking along the sandy beach.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_11",
+      "start_sec": 319.8,
+      "end_sec": 332.1,
+      "granularity": "fine",
+      "description": "Interacting with and holding a piece of driftwood.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_12",
+      "start_sec": 332.1,
+      "end_sec": 375.1,
+      "granularity": "coarse",
+      "description": "Walking along the beach while carrying the piece of wood.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_13",
+      "start_sec": 375.1,
+      "end_sec": 430.5,
+      "granularity": "coarse",
+      "description": "Walking along the beach, passing some people with camera tripods.",
+      "categories": [
+        "action",
+        "agent_or_interaction"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_14",
+      "start_sec": 430.5,
+      "end_sec": 442.8,
+      "granularity": "fine",
+      "description": "Pausing to look out at the ocean waves.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_15",
+      "start_sec": 442.8,
+      "end_sec": 535.0,
+      "granularity": "coarse",
+      "description": "Walking further down the beach, passing another group of people with a camera tripod.",
+      "categories": [
+        "action",
+        "agent_or_interaction"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_16",
+      "start_sec": 535.0,
+      "end_sec": 547.3,
+      "granularity": "fine",
+      "description": "Looking at the ocean waves.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_17",
+      "start_sec": 547.3,
+      "end_sec": 584.2,
+      "granularity": "coarse",
+      "description": "Resuming walking along the sandy beach.",
+      "categories": [
+        "action"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "event_18",
+      "start_sec": 584.2,
+      "end_sec": 614.933,
+      "granularity": "coarse",
+      "description": "Walking towards the rock jetty at the end of the beach.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/gcp/google/eccn-gemini-3.5-flash",
+  "prompt_version": "eval_agnostic_v3_gpt",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-12T22:08:41.154455+00:00",
+  "warnings": [],
+  "raw_response": "{\n  \"events\": [\n    {\n      \"event_id\": \"event_1\",\n      \"start_sec\": 0.0,\n      \"end_sec\": 30.7,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking on the sandy beach while following a group of people.\",\n      \"categories\": [\"action\", \"location_or_scene\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_2\",\n      \"start_sec\": 30.7,\n      \"end_sec\": 67.6,\n      \"granularity\": \"coarse\",\n      \"description\": \"Continuing to walk along the sandy beach next to the dunes.\",\n      \"categories\": [\"action\", \"location_or_scene\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_3\",\n      \"start_sec\": 67.6,\n      \"end_sec\": 73.8,\n      \"granularity\": \"fine\",\n      \"description\": \"Pausing to look at the ocean waves.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_4\",\n      \"start_sec\": 73.8,\n      \"end_sec\": 110.7,\n      \"granularity\": \"coarse\",\n      \"description\": \"Resuming walking along the sandy beach.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_5\",\n      \"start_sec\": 110.7,\n      \"end_sec\": 123.0,\n      \"granularity\": \"fine\",\n      \"description\": \"Turning to look at the ocean waves.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_6\",\n      \"start_sec\": 123.0,\n      \"end_sec\": 172.2,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking along the sandy beach.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_7\",\n      \"start_sec\": 172.2,\n      \"end_sec\": 184.5,\n      \"granularity\": \"fine\",\n      \"description\": \"Pausing to look at the ocean waves.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_8\",\n      \"start_sec\": 184.5,\n      \"end_sec\": 264.4,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking along the sandy beach.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_9\",\n      \"start_sec\": 264.4,\n      \"end_sec\": 276.7,\n      \"granularity\": \"fine\",\n      \"description\": \"Looking out at the ocean waves.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_10\",\n      \"start_sec\": 276.7,\n      \"end_sec\": 319.8,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking along the sandy beach.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_11\",\n      \"start_sec\": 319.8,\n      \"end_sec\": 332.1,\n      \"granularity\": \"fine\",\n      \"description\": \"Interacting with and holding a piece of driftwood.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_12\",\n      \"start_sec\": 332.1,\n      \"end_sec\": 375.1,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking along the beach while carrying the piece of wood.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_13\",\n      \"start_sec\": 375.1,\n      \"end_sec\": 430.5,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking along the beach, passing some people with camera tripods.\",\n      \"categories\": [\"action\", \"agent_or_interaction\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_14\",\n      \"start_sec\": 430.5,\n      \"end_sec\": 442.8,\n      \"granularity\": \"fine\",\n      \"description\": \"Pausing to look out at the ocean waves.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_15\",\n      \"start_sec\": 442.8,\n      \"end_sec\": 535.0,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking further down the beach, passing another group of people with a camera tripod.\",\n      \"categories\": [\"action\", \"agent_or_interaction\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_16\",\n      \"start_sec\": 535.0,\n      \"end_sec\": 547.3,\n      \"granularity\": \"fine\",\n      \"description\": \"Looking at the ocean waves.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_17\",\n      \"start_sec\": 547.3,\n      \"end_sec\": 584.2,\n      \"granularity\": \"coarse\",\n      \"description\": \"Resuming walking along the sandy beach.\",\n      \"categories\": [\"action\"],\n      \"parent_event_ids\": []\n    },\n    {\n      \"event_id\": \"event_18\",\n      \"start_sec\": 584.2,\n      \"end_sec\": 614.933,\n      \"granularity\": \"coarse\",\n      \"description\": \"Walking towards the rock jetty at the end of the beach.\",\n      \"categories\": [\"action\", \"location_or_scene\"],\n      \"parent_event_ids\": []\n    }\n  ],\n  \"warnings\": []\n}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_agnostic"
+}

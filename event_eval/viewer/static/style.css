@@ -69,9 +69,13 @@ textarea.path-input {
   padding: 7px 10px;
 }
 
+input.path-input,
 textarea.path-input {
   font-family: var(--mono);
   font-size: 11px;
+}
+
+textarea.path-input {
   line-height: 1.45;
   resize: vertical;
   min-height: 3.6em;
@@ -86,6 +90,12 @@ select {
   border: 1px solid var(--stroke);
   border-radius: 6px;
   padding: 7px 10px;
+}
+
+select.directory-select {
+  margin-bottom: 5px;
+  font-family: var(--mono);
+  font-size: 11px;
 }
 
 #app {

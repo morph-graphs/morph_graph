@@ -1,0 +1,314 @@
+{
+  "sample_id": "8d7d244a2d4e5b5a",
+  "video_id": "8d7d244a2d4e5b5a",
+  "video_path": "egolongqa/val/8d7d244a2d4e5b5a.mp4",
+  "video_duration_sec": 600.133333,
+  "query": "",
+  "events": [
+    {
+      "event_id": "e01",
+      "start_sec": 0.0,
+      "end_sec": 90.0,
+      "granularity": "coarse",
+      "description": "Walking along a curving, palm-lined driveway bordered by manicured lawns, flowerbeds, and American flags.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e02",
+      "start_sec": 0.0,
+      "end_sec": 12.0,
+      "granularity": "fine",
+      "description": "A black Mazda approaches on the driveway and passes the camera.",
+      "categories": [
+        "agent_or_interaction",
+        "temporal_transition"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e03",
+      "start_sec": 24.0,
+      "end_sec": 36.0,
+      "granularity": "fine",
+      "description": "Looking toward a large light-colored resort-style building behind the hedges and trees.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e04",
+      "start_sec": 81.0,
+      "end_sec": 90.0,
+      "granularity": "fine",
+      "description": "Briefly consulting a navigation map on a smartphone while nearing the driveway exit.",
+      "categories": [
+        "action",
+        "goal_or_subgoal"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e05",
+      "start_sec": 90.0,
+      "end_sec": 144.0,
+      "granularity": "coarse",
+      "description": "Reaching the main road and continuing along the roadside sidewalk through an intersection with passing traffic.",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "temporal_transition"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e06",
+      "start_sec": 144.0,
+      "end_sec": 186.0,
+      "granularity": "coarse",
+      "description": "Walking downhill on a tree-lined sidewalk beside a large, busy parking lot.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e07",
+      "start_sec": 174.0,
+      "end_sec": 186.0,
+      "granularity": "fine",
+      "description": "Checking the phone's navigation map again at the parking-lot entrance.",
+      "categories": [
+        "action",
+        "goal_or_subgoal"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e08",
+      "start_sec": 186.0,
+      "end_sec": 228.0,
+      "granularity": "coarse",
+      "description": "Crossing internal parking-lot roads and proceeding toward a path leading beneath the roadway.",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "goal_or_subgoal"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e09",
+      "start_sec": 228.0,
+      "end_sec": 252.0,
+      "granularity": "fine",
+      "description": "Stopping at a posted tram-schedule map and moving close to examine its route information.",
+      "categories": [
+        "action",
+        "goal_or_subgoal",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e10",
+      "start_sec": 252.0,
+      "end_sec": 276.0,
+      "granularity": "coarse",
+      "description": "Leaving the tram map and following the descending access lane toward a concrete tunnel.",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "temporal_transition"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e11",
+      "start_sec": 276.0,
+      "end_sec": 318.0,
+      "granularity": "coarse",
+      "description": "Walking through the illuminated corrugated tunnel beneath the road and toward the park-side exit.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e12",
+      "start_sec": 282.0,
+      "end_sec": 306.0,
+      "granularity": "fine",
+      "description": "Passing other tunnel users, including a person traveling with a small dog.",
+      "categories": [
+        "agent_or_interaction"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e13",
+      "start_sec": 300.0,
+      "end_sec": 318.0,
+      "granularity": "fine",
+      "description": "Consulting the smartphone map while approaching and leaving the tunnel exit.",
+      "categories": [
+        "action",
+        "goal_or_subgoal"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e14",
+      "start_sec": 318.0,
+      "end_sec": 342.0,
+      "granularity": "coarse",
+      "description": "Emerging into a landscaped park and following a winding path among palms, flowers, and grassy slopes.",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "state_change"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e15",
+      "start_sec": 342.0,
+      "end_sec": 354.0,
+      "granularity": "fine",
+      "description": "Pausing beside a blue City of Dana Point park-rules sign and viewing it closely.",
+      "categories": [
+        "action",
+        "goal_or_subgoal"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e16",
+      "start_sec": 354.0,
+      "end_sec": 384.0,
+      "granularity": "coarse",
+      "description": "Continuing uphill through the landscaped park on a curving paved walkway.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e17",
+      "start_sec": 384.0,
+      "end_sec": 426.0,
+      "granularity": "coarse",
+      "description": "Walking beside fenced recreation courts and along an adjoining sandy path bordered by blue flowers and wooden rails.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e18",
+      "start_sec": 390.0,
+      "end_sec": 402.0,
+      "granularity": "fine",
+      "description": "Briefly checking phone navigation while alongside the fenced courts.",
+      "categories": [
+        "action",
+        "goal_or_subgoal"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e19",
+      "start_sec": 426.0,
+      "end_sec": 456.0,
+      "granularity": "coarse",
+      "description": "Leaving the court area and entering an open grassy park with broad views toward distant hills.",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "temporal_transition"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e20",
+      "start_sec": 456.0,
+      "end_sec": 480.0,
+      "granularity": "fine",
+      "description": "Stopping at the Sea Terrace Park information board, examining its aerial map, and pointing to a location on it.",
+      "categories": [
+        "action",
+        "goal_or_subgoal",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e21",
+      "start_sec": 480.0,
+      "end_sec": 504.0,
+      "granularity": "coarse",
+      "description": "Resuming the walk past park visitors with bicycles and several dogs playing across the grass.",
+      "categories": [
+        "action",
+        "agent_or_interaction",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e22",
+      "start_sec": 504.0,
+      "end_sec": 600.133,
+      "granularity": "coarse",
+      "description": "Continuing along a lamp-lined paved path beside a broad open lawn and landscaped slopes as evening approaches.",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "temporal_transition"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/openai/openai/eccn-gpt-5.6-sol",
+  "prompt_version": "eval_agnostic_v3_gpt",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-12T22:09:55.158514+00:00",
+  "warnings": [
+    "Event boundaries are approximate because the video was represented by frames sampled at 6-second intervals."
+  ],
+  "raw_response": "{\"events\":[{\"event_id\":\"e01\",\"start_sec\":0,\"end_sec\":90,\"granularity\":\"coarse\",\"description\":\"Walking along a curving, palm-lined driveway bordered by manicured lawns, flowerbeds, and American flags.\",\"categories\":[\"action\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e02\",\"start_sec\":0,\"end_sec\":12,\"granularity\":\"fine\",\"description\":\"A black Mazda approaches on the driveway and passes the camera.\",\"categories\":[\"agent_or_interaction\",\"temporal_transition\"],\"parent_event_ids\":[]},{\"event_id\":\"e03\",\"start_sec\":24,\"end_sec\":36,\"granularity\":\"fine\",\"description\":\"Looking toward a large light-colored resort-style building behind the hedges and trees.\",\"categories\":[\"action\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e04\",\"start_sec\":81,\"end_sec\":90,\"granularity\":\"fine\",\"description\":\"Briefly consulting a navigation map on a smartphone while nearing the driveway exit.\",\"categories\":[\"action\",\"goal_or_subgoal\"],\"parent_event_ids\":[]},{\"event_id\":\"e05\",\"start_sec\":90,\"end_sec\":144,\"granularity\":\"coarse\",\"description\":\"Reaching the main road and continuing along the roadside sidewalk through an intersection with passing traffic.\",\"categories\":[\"action\",\"location_or_scene\",\"temporal_transition\"],\"parent_event_ids\":[]},{\"event_id\":\"e06\",\"start_sec\":144,\"end_sec\":186,\"granularity\":\"coarse\",\"description\":\"Walking downhill on a tree-lined sidewalk beside a large, busy parking lot.\",\"categories\":[\"action\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e07\",\"start_sec\":174,\"end_sec\":186,\"granularity\":\"fine\",\"description\":\"Checking the phone's navigation map again at the parking-lot entrance.\",\"categories\":[\"action\",\"goal_or_subgoal\"],\"parent_event_ids\":[]},{\"event_id\":\"e08\",\"start_sec\":186,\"end_sec\":228,\"granularity\":\"coarse\",\"description\":\"Crossing internal parking-lot roads and proceeding toward a path leading beneath the roadway.\",\"categories\":[\"action\",\"location_or_scene\",\"goal_or_subgoal\"],\"parent_event_ids\":[]},{\"event_id\":\"e09\",\"start_sec\":228,\"end_sec\":252,\"granularity\":\"fine\",\"description\":\"Stopping at a posted tram-schedule map and moving close to examine its route information.\",\"categories\":[\"action\",\"goal_or_subgoal\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e10\",\"start_sec\":252,\"end_sec\":276,\"granularity\":\"coarse\",\"description\":\"Leaving the tram map and following the descending access lane toward a concrete tunnel.\",\"categories\":[\"action\",\"location_or_scene\",\"temporal_transition\"],\"parent_event_ids\":[]},{\"event_id\":\"e11\",\"start_sec\":276,\"end_sec\":318,\"granularity\":\"coarse\",\"description\":\"Walking through the illuminated corrugated tunnel beneath the road and toward the park-side exit.\",\"categories\":[\"action\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e12\",\"start_sec\":282,\"end_sec\":306,\"granularity\":\"fine\",\"description\":\"Passing other tunnel users, including a person traveling with a small dog.\",\"categories\":[\"agent_or_interaction\"],\"parent_event_ids\":[]},{\"event_id\":\"e13\",\"start_sec\":300,\"end_sec\":318,\"granularity\":\"fine\",\"description\":\"Consulting the smartphone map while approaching and leaving the tunnel exit.\",\"categories\":[\"action\",\"goal_or_subgoal\"],\"parent_event_ids\":[]},{\"event_id\":\"e14\",\"start_sec\":318,\"end_sec\":342,\"granularity\":\"coarse\",\"description\":\"Emerging into a landscaped park and following a winding path among palms, flowers, and grassy slopes.\",\"categories\":[\"action\",\"location_or_scene\",\"state_change\"],\"parent_event_ids\":[]},{\"event_id\":\"e15\",\"start_sec\":342,\"end_sec\":354,\"granularity\":\"fine\",\"description\":\"Pausing beside a blue City of Dana Point park-rules sign and viewing it closely.\",\"categories\":[\"action\",\"goal_or_subgoal\"],\"parent_event_ids\":[]},{\"event_id\":\"e16\",\"start_sec\":354,\"end_sec\":384,\"granularity\":\"coarse\",\"description\":\"Continuing uphill through the landscaped park on a curving paved walkway.\",\"categories\":[\"action\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e17\",\"start_sec\":384,\"end_sec\":426,\"granularity\":\"coarse\",\"description\":\"Walking beside fenced recreation courts and along an adjoining sandy path bordered by blue flowers and wooden rails.\",\"categories\":[\"action\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e18\",\"start_sec\":390,\"end_sec\":402,\"granularity\":\"fine\",\"description\":\"Briefly checking phone navigation while alongside the fenced courts.\",\"categories\":[\"action\",\"goal_or_subgoal\"],\"parent_event_ids\":[]},{\"event_id\":\"e19\",\"start_sec\":426,\"end_sec\":456,\"granularity\":\"coarse\",\"description\":\"Leaving the court area and entering an open grassy park with broad views toward distant hills.\",\"categories\":[\"action\",\"location_or_scene\",\"temporal_transition\"],\"parent_event_ids\":[]},{\"event_id\":\"e20\",\"start_sec\":456,\"end_sec\":480,\"granularity\":\"fine\",\"description\":\"Stopping at the Sea Terrace Park information board, examining its aerial map, and pointing to a location on it.\",\"categories\":[\"action\",\"goal_or_subgoal\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e21\",\"start_sec\":480,\"end_sec\":504,\"granularity\":\"coarse\",\"description\":\"Resuming the walk past park visitors with bicycles and several dogs playing across the grass.\",\"categories\":[\"action\",\"agent_or_interaction\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e22\",\"start_sec\":504,\"end_sec\":600.133,\"granularity\":\"coarse\",\"description\":\"Continuing along a lamp-lined paved path beside a broad open lawn and landscaped slopes as evening approaches.\",\"categories\":[\"action\",\"location_or_scene\",\"temporal_transition\"],\"parent_event_ids\":[]}],\"warnings\":[\"Event boundaries are approximate because the video was represented by frames sampled at 6-second intervals.\"]}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_agnostic"
+}

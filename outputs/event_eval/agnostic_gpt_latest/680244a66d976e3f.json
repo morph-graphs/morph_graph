@@ -1,0 +1,225 @@
+{
+  "sample_id": "680244a66d976e3f",
+  "video_id": "680244a66d976e3f",
+  "video_path": "egolongqa/val/680244a66d976e3f.mp4",
+  "video_duration_sec": 665.866667,
+  "query": "",
+  "events": [
+    {
+      "event_id": "e01",
+      "start_sec": 0.0,
+      "end_sec": 6.7,
+      "granularity": "coarse",
+      "description": "The camera wearer leaves a dirt area beside a fenced sports court and joins a paved park path.",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "state_change"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e02",
+      "start_sec": 6.7,
+      "end_sec": 119.9,
+      "granularity": "coarse",
+      "description": "Walking steadily along a leaf-strewn paved path between fences and trees, passing pedestrians, benches, and the sports court.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e03",
+      "start_sec": 119.9,
+      "end_sec": 179.8,
+      "granularity": "coarse",
+      "description": "Continuing through a broader, curving park junction with more pedestrians, benches, dogs, and small vendor setups.",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "agent_or_interaction"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e04",
+      "start_sec": 166.5,
+      "end_sec": 186.4,
+      "granularity": "fine",
+      "description": "Passing a table densely covered with colorful toys or balls beneath a large green inflatable balloon.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e05",
+      "start_sec": 179.8,
+      "end_sec": 219.7,
+      "granularity": "coarse",
+      "description": "Walking down toward a striped brick-and-stone underpass, entering its lit tunnel, and emerging on the other side.",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "temporal_transition"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e06",
+      "start_sec": 219.7,
+      "end_sec": 283.0,
+      "granularity": "coarse",
+      "description": "Climbing a gently rising wooded path toward a decorative rustic building with a pointed arch.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e07",
+      "start_sec": 283.0,
+      "end_sec": 343.0,
+      "granularity": "coarse",
+      "description": "Turning right near the rustic arch and walking along a busier tree-lined path as numerous pedestrians pass in both directions.",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "agent_or_interaction"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e08",
+      "start_sec": 343.0,
+      "end_sec": 372.9,
+      "granularity": "coarse",
+      "description": "Ascending a broad outdoor staircase to an elevated rustic pergola and seating area beside a brick building.",
+      "categories": [
+        "action",
+        "goal_or_subgoal",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e09",
+      "start_sec": 372.9,
+      "end_sec": 426.2,
+      "granularity": "coarse",
+      "description": "Walking around beneath the interwoven wooden pergola, passing picnic tables, benches, and seated visitors.",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "agent_or_interaction"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e10",
+      "start_sec": 426.2,
+      "end_sec": 492.7,
+      "granularity": "coarse",
+      "description": "Leaving the pergola via a long elevated switchback ramp, descending between black railings while overlooking the paths below.",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "temporal_transition"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e11",
+      "start_sec": 492.7,
+      "end_sec": 559.3,
+      "granularity": "coarse",
+      "description": "Walking downhill through a wooded section toward a broad, crowded open area, with lawns, rocks, and city towers visible ahead.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e12",
+      "start_sec": 559.3,
+      "end_sec": 599.3,
+      "granularity": "coarse",
+      "description": "Moving through increasing pedestrian traffic toward a crowded railing overlooking an ice rink.",
+      "categories": [
+        "action",
+        "goal_or_subgoal",
+        "agent_or_interaction",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e13",
+      "start_sec": 599.3,
+      "end_sec": 629.0,
+      "granularity": "coarse",
+      "description": "Stopping at the railing and watching many people skate on the large outdoor ice rink beneath the city skyline.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e14",
+      "start_sec": 629.0,
+      "end_sec": 636.0,
+      "granularity": "coarse",
+      "description": "Stepping away from the rink railing and walking briefly across the adjacent terrace with picnic tables and visitors.",
+      "categories": [
+        "action",
+        "location_or_scene",
+        "state_change"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    },
+    {
+      "event_id": "e15",
+      "start_sec": 636.0,
+      "end_sec": 665.867,
+      "granularity": "coarse",
+      "description": "Returning to the overlook and standing at the railing to continue watching the crowded ice rink, with a green bottle held in the foreground.",
+      "categories": [
+        "action",
+        "location_or_scene"
+      ],
+      "query_roles": [],
+      "parent_event_ids": []
+    }
+  ],
+  "model": "us/openai/openai/eccn-gpt-5.6-sol",
+  "prompt_version": "eval_agnostic_v3_gpt",
+  "video_fps": 1.0,
+  "media_resolution": null,
+  "generated_at": "2026-08-12T22:11:55.372316+00:00",
+  "warnings": [
+    "Timestamps are approximate because the video was represented by uniformly sampled frames about 6.7 seconds apart."
+  ],
+  "raw_response": "{\"events\":[{\"event_id\":\"e01\",\"start_sec\":0,\"end_sec\":6.7,\"granularity\":\"coarse\",\"description\":\"The camera wearer leaves a dirt area beside a fenced sports court and joins a paved park path.\",\"categories\":[\"action\",\"location_or_scene\",\"state_change\"],\"parent_event_ids\":[]},{\"event_id\":\"e02\",\"start_sec\":6.7,\"end_sec\":119.9,\"granularity\":\"coarse\",\"description\":\"Walking steadily along a leaf-strewn paved path between fences and trees, passing pedestrians, benches, and the sports court.\",\"categories\":[\"action\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e03\",\"start_sec\":119.9,\"end_sec\":179.8,\"granularity\":\"coarse\",\"description\":\"Continuing through a broader, curving park junction with more pedestrians, benches, dogs, and small vendor setups.\",\"categories\":[\"action\",\"location_or_scene\",\"agent_or_interaction\"],\"parent_event_ids\":[]},{\"event_id\":\"e04\",\"start_sec\":166.5,\"end_sec\":186.4,\"granularity\":\"fine\",\"description\":\"Passing a table densely covered with colorful toys or balls beneath a large green inflatable balloon.\",\"categories\":[\"action\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e05\",\"start_sec\":179.8,\"end_sec\":219.7,\"granularity\":\"coarse\",\"description\":\"Walking down toward a striped brick-and-stone underpass, entering its lit tunnel, and emerging on the other side.\",\"categories\":[\"action\",\"location_or_scene\",\"temporal_transition\"],\"parent_event_ids\":[]},{\"event_id\":\"e06\",\"start_sec\":219.7,\"end_sec\":283,\"granularity\":\"coarse\",\"description\":\"Climbing a gently rising wooded path toward a decorative rustic building with a pointed arch.\",\"categories\":[\"action\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e07\",\"start_sec\":283,\"end_sec\":343,\"granularity\":\"coarse\",\"description\":\"Turning right near the rustic arch and walking along a busier tree-lined path as numerous pedestrians pass in both directions.\",\"categories\":[\"action\",\"location_or_scene\",\"agent_or_interaction\"],\"parent_event_ids\":[]},{\"event_id\":\"e08\",\"start_sec\":343,\"end_sec\":372.9,\"granularity\":\"coarse\",\"description\":\"Ascending a broad outdoor staircase to an elevated rustic pergola and seating area beside a brick building.\",\"categories\":[\"action\",\"goal_or_subgoal\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e09\",\"start_sec\":372.9,\"end_sec\":426.2,\"granularity\":\"coarse\",\"description\":\"Walking around beneath the interwoven wooden pergola, passing picnic tables, benches, and seated visitors.\",\"categories\":[\"action\",\"location_or_scene\",\"agent_or_interaction\"],\"parent_event_ids\":[]},{\"event_id\":\"e10\",\"start_sec\":426.2,\"end_sec\":492.7,\"granularity\":\"coarse\",\"description\":\"Leaving the pergola via a long elevated switchback ramp, descending between black railings while overlooking the paths below.\",\"categories\":[\"action\",\"location_or_scene\",\"temporal_transition\"],\"parent_event_ids\":[]},{\"event_id\":\"e11\",\"start_sec\":492.7,\"end_sec\":559.3,\"granularity\":\"coarse\",\"description\":\"Walking downhill through a wooded section toward a broad, crowded open area, with lawns, rocks, and city towers visible ahead.\",\"categories\":[\"action\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e12\",\"start_sec\":559.3,\"end_sec\":599.3,\"granularity\":\"coarse\",\"description\":\"Moving through increasing pedestrian traffic toward a crowded railing overlooking an ice rink.\",\"categories\":[\"action\",\"goal_or_subgoal\",\"agent_or_interaction\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e13\",\"start_sec\":599.3,\"end_sec\":629,\"granularity\":\"coarse\",\"description\":\"Stopping at the railing and watching many people skate on the large outdoor ice rink beneath the city skyline.\",\"categories\":[\"action\",\"location_or_scene\"],\"parent_event_ids\":[]},{\"event_id\":\"e14\",\"start_sec\":629,\"end_sec\":636,\"granularity\":\"coarse\",\"description\":\"Stepping away from the rink railing and walking briefly across the adjacent terrace with picnic tables and visitors.\",\"categories\":[\"action\",\"location_or_scene\",\"state_change\"],\"parent_event_ids\":[]},{\"event_id\":\"e15\",\"start_sec\":636,\"end_sec\":665.867,\"granularity\":\"coarse\",\"description\":\"Returning to the overlook and standing at the railing to continue watching the crowded ice rink, with a green bottle held in the foreground.\",\"categories\":[\"action\",\"location_or_scene\"],\"parent_event_ids\":[]}],\"warnings\":[\"Timestamps are approximate because the video was represented by uniformly sampled frames about 6.7 seconds apart.\"]}",
+  "schema_version": "1.0",
+  "annotation_mode": "query_agnostic"
+}
