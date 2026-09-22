@@ -1,0 +1,74 @@
+{
+  "run": {
+    "tag": "gemini38flash-high",
+    "runs_root": "/fs/cfar-projects/mem_open_vocab/morph_graphs/anubhav/epic_eval_runs"
+  },
+  "code": {
+    "repo_url": "git@github.com:vatsalag99/morph_graph.git"
+  },
+  "questions": {
+    "repo_url": "git@github.com:vatsalag99/epic-morph.git",
+    "commit": "6c36d156b2de5fb3ce045bd74ba25621590149d6",
+    "glob": "outputs/questions/*_questions.json"
+  },
+  "paths": {
+    "video_dir": "/fs/cfar-projects/VPR/datasets/HD-EPIC/videos",
+    "python": "/fs/nexus-scratch/anubhav/anubhav_python3.13.7/bin/python",
+    "ffmpeg_module": "ffmpeg/7.1"
+  },
+  "media": {
+    "enabled": true,
+    "max_side": 1024,
+    "encode_fps": 2,
+    "crf": 26,
+    "preset": "veryfast",
+    "audio": false
+  },
+  "model": {
+    "backend": "gemini",
+    "name": "gemini-3.8-flash",
+    "api_version": null,
+    "api_key_env": "GEMINI_API_KEY",
+    "api_key_file": "~/.config/epic_eval/gemini_api_key",
+    "thinking_level": "HIGH",
+    "include_thoughts": true,
+    "temperature": null,
+    "seed": 0,
+    "max_output_tokens": 65536,
+    "fps": 1.0,
+    "media_resolution": "MEDIA_RESOLUTION_LOW",
+    "cache_min_questions": 2,
+    "cache_ttl_s": 7200,
+    "max_retries": 6,
+    "retry_delay_s": 10,
+    "upload_timeout_s": 1800
+  },
+  "slurm": {
+    "prep": {
+      "account": "vulcan-abhinav",
+      "partition": "vulcan-cpu",
+      "qos": "vulcan-cpu",
+      "cpus": 16,
+      "mem": "32G",
+      "time": "3:00:00",
+      "max_parallel": 4
+    },
+    "eval": {
+      "account": "vulcan-abhinav",
+      "partition": "vulcan-cpu",
+      "qos": "vulcan-cpu",
+      "cpus": 2,
+      "mem": "8G",
+      "time": "12:00:00",
+      "max_parallel": 4
+    },
+    "score": {
+      "account": "vulcan-abhinav",
+      "partition": "vulcan-cpu",
+      "qos": "vulcan-cpu",
+      "cpus": 1,
+      "mem": "4G",
+      "time": "0:30:00"
+    }
+  }
+}
