@@ -177,11 +177,41 @@ def test_text_only_sends_no_video():
         assert all(path is None and "not available" in si for path, si, _ in seen)
 
 
+def _max_luma(path) -> int:
+    import subprocess
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(path), "-f", "rawvideo", "-pix_fmt", "gray", "-"],
+                         capture_output=True, check=True).stdout
+    return max(raw) if raw else -1
+
+
+def test_clip_has_no_pixels_after_t_ask():
+    """Synthetic source: black before T, white from T on. Any white pixel in the clip is a leak."""
+    if not shutil.which("ffmpeg"):
+        print("  (skipped: no ffmpeg on PATH -- module load ffmpeg/7.1)")
+        return
+    import subprocess
+    from .prep_media import encode, expected_ok
+    T = 10.2  # between two 2-fps output ticks, where resampling could pull a later frame in
+    media = dict(CFG["media"], max_side=64)
+    with tempfile.TemporaryDirectory() as d:
+        src, clip, full, old = (Path(d) / n for n in ("src.mp4", "clip.mp4", "full.mp4", "old.mp4"))
+        subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", f"color=black:s=64x64:r=30:d={T}",
+                        "-f", "lavfi", "-i", "color=white:s=64x64:r=30:d=3",
+                        "-filter_complex", "[0][1]concat=n=2:v=1", "-c:v", "libx264", "-qp", "0", str(src)],
+                       check=True)
+        encode(src, clip, media, T)
+        assert _max_luma(clip) < 40, _max_luma(clip)  # all black: nothing at or after T
+        assert expected_ok(clip, T, media)[0], expected_ok(clip, T, media)
+        encode(src, full, media)  # the previous method: cut the fps-resampled full video
+        encode(full, old, media, T)
+        print(f"  new cut max luma {_max_luma(clip)}; old cut-from-full max luma {_max_luma(old)}")
+
+
 def test_media_trim_no_leak():
     if not shutil.which("ffprobe"):
         print("  (skipped: no ffprobe on PATH -- module load ffmpeg/7.1)")
         return
-    from .prep_media import has_audio, prep_video, probe_duration
+    from .prep_media import has_audio, last_frame_pts, prep_video, probe_duration
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)
         run = make_run(tmp, True)
@@ -196,6 +226,7 @@ def test_media_trim_no_leak():
             assert not has_audio(p)
             if cutoff is not None:
                 assert cutoff - 1.0 <= dur <= cutoff + tol, (p.name, dur, cutoff)
+                assert last_frame_pts(p) < cutoff
                 print(f"  {p.name}: t_ask={cutoff:.3f}s clip={dur:.3f}s")
             else:
                 print(f"  full.mp4: {dur:.3f}s, {p.stat().st_size / 1e6:.1f} MB")

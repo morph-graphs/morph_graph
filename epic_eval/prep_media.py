@@ -38,6 +38,15 @@ def has_audio(path) -> bool:
     return bool(out.stdout.strip())
 
 
+def last_frame_pts(path) -> float:
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "packet=pts_time",
+         "-of", "csv=p=0", str(path)],
+        capture_output=True, text=True, check=True,
+    )
+    return max(float(x) for x in out.stdout.split() if x.strip() not in ("", "N/A"))
+
+
 def expected_ok(path, target_s: float, media: dict) -> tuple[bool, str]:
     """A file is usable if it opens, has the right length, and has no audio unless asked for."""
     if not Path(path).exists() or Path(path).stat().st_size == 0:
@@ -52,6 +61,8 @@ def expected_ok(path, target_s: float, media: dict) -> tuple[bool, str]:
         return False, f"too long: {dur:.3f}s > {target_s:.3f}s (+{tol:.3f}) -- would leak"
     if dur < target_s - max(tol, 1.0):
         return False, f"truncated: {dur:.3f}s < {target_s:.3f}s"
+    if last_frame_pts(path) >= target_s:
+        return False, f"last frame at {last_frame_pts(path):.3f}s >= {target_s:.3f}s -- would leak"
     if audio != bool(media["audio"]):
         return False, f"audio={audio}, config wants {media['audio']}"
     return True, f"{dur:.3f}s"
@@ -62,9 +73,13 @@ def encode(src, dst, media: dict, duration_s: float | None = None) -> None:
     vf = [f"scale='if(gte(iw,ih),min({side},iw),-2)':'if(gte(iw,ih),-2,min({side},ih))'"]
     if media.get("encode_fps"):
         vf.append(f"fps={media['encode_fps']}")
-    cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(src)]
+    cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y"]
     if duration_s is not None:
-        cmd += ["-t", f"{duration_s:.3f}"]  # output-side -t: frame-accurate, re-encoded
+        # Input-side -t: source frames at or after t_ask are never decoded, so no output
+        # frame can carry them. (An output-side cut of an fps-resampled video can keep a
+        # frame whose pixels come from up to half a frame interval after t_ask.)
+        cmd += ["-t", f"{duration_s:.3f}"]
+    cmd += ["-i", str(src)]
     cmd += ["-vf", ",".join(vf), "-c:v", "libx264", "-preset", media.get("preset", "veryfast"),
             "-crf", str(media["crf"]), "-pix_fmt", "yuv420p", "-movflags", "+faststart"]
     cmd += ["-c:a", "aac", "-b:a", "64k"] if media["audio"] else ["-an"]
@@ -91,10 +106,7 @@ def prep_video(cfg: dict, video: str, force: bool = False) -> dict:
             print(f"  keep {dst.name} ({why})")
         else:
             t0 = time.time()
-            # Clips are cut from the already-downscaled full encode: cheaper, identical pixels.
-            base = media_path(media_dir, video, None)
-            encode(src if cutoff is None else base, dst, media,
-                   None if cutoff is None else cutoff)
+            encode(src, dst, media, cutoff)  # clips come from the source, never from full.mp4
             ok, why = expected_ok(dst, target, media)
             print(f"  wrote {dst.name} in {time.time() - t0:.0f}s ({why})")
             if not ok:

@@ -22,7 +22,8 @@
     "encode_fps": 2,
     "crf": 26,
     "preset": "veryfast",
-    "audio": false
+    "audio": false,
+    "clip_cut": "source_input_t"
   },
   "model": {
     "backend": "gemini",
