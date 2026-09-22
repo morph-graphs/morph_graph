@@ -18,8 +18,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
-from ..metrics import compare_annotation, compare_providers
+from ..metrics import compare_annotation
 from ..schema import OracleAnnotation
+from ..verify import DEFAULT_COVERAGE_THRESHOLD, decide_verdict
 
 _FRAME_CACHE_DIR = Path(tempfile.gettempdir()) / "event_eval_viewer_frames"
 _FRAME_CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -37,12 +38,12 @@ DEFAULT_PATHS = {
     "agnostic_dir": str(
         _MORPH_GRAPH_ROOT / "outputs" / "event_eval" / "agnostic_gemini_latest"
     ),
-    "agnostic_kimi_dir": str(
-        _MORPH_GRAPH_ROOT / "outputs" / "event_eval" / "agnostic_kimi_latest"
-    ),
     "tsm_dir": str(_MORPH_GRAPH_ROOT / "outputs" / "event_eval" / "tsm"),
     "event_graph_dir": str(
         _MORPH_GRAPH_ROOT / "outputs" / "event_eval" / "event_graph"
+    ),
+    "verification_dir": str(
+        _MORPH_GRAPH_ROOT / "outputs" / "event_eval" / "verification"
     ),
     "questions_jsonl": str(
         _MORPH_GRAPH_ROOT
@@ -454,6 +455,118 @@ def _format_agnostic_events(
     return events, agnostic.get("model"), str(agnostic.get("prompt_version") or "")
 
 
+def _load_verification(
+    verification_dir: Path | None, sample_id: str
+) -> dict[str, Any] | None:
+    """Load the span-sufficiency verification sidecar for one oracle sample."""
+    if not verification_dir or not sample_id or not verification_dir.is_dir():
+        return None
+    path = verification_dir / f"{sample_id}.json"
+    if not path.is_file():
+        return None
+    try:
+        data = _read_json(path)
+    except Exception:  # noqa: BLE001
+        return None
+    if not isinstance(data, dict) or "verdict" not in data:
+        return None
+    data["verification_json"] = str(path)
+    return data
+
+
+def _display_verdict(
+    verification: dict[str, Any] | None,
+    oracle_events: list[dict[str, Any]] | None = None,
+) -> dict[str, Any] | None:
+    """Recompute the current verdict for display without rewriting the sidecar."""
+    if not verification:
+        return None
+    cited = [
+        str(value)
+        for value in verification.get("supporting_event_ids") or []
+        if str(value)
+    ]
+    roles_by_id = {
+        str(event["event_id"]): list(event.get("query_roles") or [])
+        for event in (oracle_events or [])
+    }
+    unknown = [event_id for event_id in cited if event_id not in roles_by_id] if roles_by_id else list(
+        verification.get("unknown_event_ids") or []
+    )
+    cited_roles = list(
+        dict.fromkeys(
+            role for event_id in cited for role in roles_by_id.get(event_id, ())
+        )
+    )
+    cited_answer_bearing = "answer_bearing" in cited_roles if roles_by_id else bool(
+        verification.get("cited_answer_bearing")
+    )
+    threshold = float(
+        verification.get("coverage_threshold") or DEFAULT_COVERAGE_THRESHOLD
+    )
+    verification = dict(verification)
+    verification["cited_roles"] = cited_roles or list(verification.get("cited_roles") or [])
+    verification["cited_answer_bearing"] = cited_answer_bearing
+    verification["coverage_threshold"] = threshold
+    verification["verdict"] = decide_verdict(
+        correct=bool(verification.get("correct")),
+        sufficiency=str(verification.get("sufficiency") or ""),
+        cited=cited,
+        unknown=unknown,
+        coverage=float(verification.get("coverage_ratio") or 0.0),
+        cited_answer_bearing=cited_answer_bearing,
+        coverage_threshold=threshold,
+    )
+    return verification
+
+
+def _load_verification_summary(
+    verification_dir: Path | None,
+) -> dict[str, Any] | None:
+    if not verification_dir or not verification_dir.is_dir():
+        return None
+    path = verification_dir / "summary.json"
+    if not path.is_file():
+        return None
+    try:
+        return _read_json(path)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _summary_from_samples(samples: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Viewer summary from live verdicts, so old sidecars pick up current rules."""
+    verified = [sample for sample in samples if sample.get("has_verification")]
+    if not verified:
+        return None
+    counts = {"pass": 0, "uncertain": 0, "uninformative": 0, "fail": 0}
+    for sample in verified:
+        verdict = sample.get("verdict")
+        if verdict in counts:
+            counts[verdict] += 1
+    total = len(verified)
+    correct = [s for s in verified if s.get("verification_correct")]
+    informative = [
+        s
+        for s in verified
+        if (s.get("coverage_ratio") or 0)
+        < float(s.get("coverage_threshold") or DEFAULT_COVERAGE_THRESHOLD)
+    ]
+    informative_correct = [s for s in informative if s.get("verification_correct")]
+    mean_coverage = sum(float(s.get("coverage_ratio") or 0) for s in verified) / total
+    return {
+        "n_verified": total,
+        "verdicts": counts,
+        "accuracy": len(correct) / total,
+        "pass_rate": counts["pass"] / total,
+        "n_informative": len(informative),
+        "informative_accuracy": (
+            len(informative_correct) / len(informative) if informative else None
+        ),
+        "mean_coverage_ratio": mean_coverage,
+    }
+
+
 def _load_answer_index(questions_path: Path) -> dict[str, str]:
     """Map EgoLongQA sample_id -> ground-truth answer string."""
     if not questions_path.is_file():
@@ -498,8 +611,8 @@ def build_sample_list(
     tsm_dir: Path,
     questions_path: Path | None = None,
     agnostic_dir: Path | None = None,
-    agnostic_kimi_dir: Path | None = None,
     event_graph_dirs: list[tuple[str, Path]] | None = None,
+    verification_dir: Path | None = None,
 ) -> list[dict[str, Any]]:
     answer_index = _load_answer_index(questions_path) if questions_path else {}
     samples: list[dict[str, Any]] = []
@@ -513,29 +626,30 @@ def build_sample_list(
             if agnostic_dir and video_id
             else None
         )
-        agnostic_kimi = (
-            _load_agnostic(agnostic_kimi_dir, video_id)
-            if agnostic_kimi_dir and video_id
-            else None
-        )
         runs = [
             _event_graph_run(label, eg_dir, sample_id)
             for label, eg_dir in (event_graph_dirs or [])
         ]
         first = runs[0] if runs else None
+        verification = _display_verdict(
+            _load_verification(verification_dir, sample_id),
+            oracle.get("events", []),
+        )
         samples.append(
             {
                 "sample_id": sample_id,
                 "video_id": video_id,
                 "query": oracle.get("query", ""),
                 "answer": answer_index.get(sample_id),
+                "verdict": (verification or {}).get("verdict"),
+                "verification_correct": (verification or {}).get("correct"),
+                "coverage_ratio": (verification or {}).get("coverage_ratio"),
+                "coverage_threshold": (verification or {}).get("coverage_threshold"),
+                "has_verification": verification is not None,
                 "pred_answer": first.get("pred_answer") if first else None,
                 "n_oracle_events": len(oracle.get("events", [])),
                 "n_agnostic_events": (
                     len(agnostic.get("events", [])) if agnostic else 0
-                ),
-                "n_agnostic_kimi_events": (
-                    len(agnostic_kimi.get("events", [])) if agnostic_kimi else 0
                 ),
                 "n_tsm_events": (
                     len(tsm.get("events_sec", [])) if tsm else 0
@@ -544,10 +658,8 @@ def build_sample_list(
                 "n_event_graph_runs": len(runs),
                 "has_tsm": tsm is not None,
                 "has_agnostic": agnostic is not None,
-                "has_agnostic_kimi": agnostic_kimi is not None,
                 "has_event_graph": any(run["has_event_graph"] for run in runs),
                 "has_metrics": agnostic is not None and tsm is not None,
-                "has_metrics_kimi": agnostic_kimi is not None and tsm is not None,
                 "oracle_path": str(path),
             }
         )
@@ -560,8 +672,8 @@ def build_sample_detail(
     tsm_dir: Path,
     questions_path: Path | None = None,
     agnostic_dir: Path | None = None,
-    agnostic_kimi_dir: Path | None = None,
     event_graph_dirs: list[tuple[str, Path]] | None = None,
+    verification_dir: Path | None = None,
 ) -> dict[str, Any]:
     oracle_path = oracle_dir / f"{sample_id}.json"
     if not oracle_path.is_file():
@@ -586,11 +698,6 @@ def build_sample_detail(
         if agnostic_dir and video_id
         else None
     )
-    agnostic_kimi = (
-        _load_agnostic(agnostic_kimi_dir, video_id)
-        if agnostic_kimi_dir and video_id
-        else None
-    )
     sid = str(oracle.get("sample_id", sample_id))
     event_graph_runs = [
         _event_graph_run(label, eg_dir, sid)
@@ -598,9 +705,12 @@ def build_sample_detail(
     ]
     first_run = event_graph_runs[0] if event_graph_runs else None
     comparison = _comparison_for_video(agnostic_dir, video_id, tsm)
-    comparison_kimi = _comparison_for_video(agnostic_kimi_dir, video_id, tsm)
     answer_index = _load_answer_index(questions_path) if questions_path else {}
     answer = answer_index.get(sid)
+    verification = _display_verdict(
+        _load_verification(verification_dir, sid),
+        oracle.get("events", []),
+    )
     retrieved_events = first_run["events"] if first_run else []
     pred_answer = first_run.get("pred_answer") if first_run else None
     qa_error = first_run.get("qa_error") if first_run else None
@@ -613,11 +723,13 @@ def build_sample_detail(
     if duration <= 0 and oracle.get("events"):
         duration = max(float(e["end_sec"]) for e in oracle["events"])
 
+    cited_ids = set((verification or {}).get("supporting_event_ids") or [])
     events = []
     for event in oracle.get("events", []):
+        event_id = event["event_id"]
         events.append(
             {
-                "event_id": event["event_id"],
+                "event_id": event_id,
                 "start_sec": float(event["start_sec"]),
                 "end_sec": float(event["end_sec"]),
                 "granularity": event.get("granularity", ""),
@@ -625,6 +737,7 @@ def build_sample_detail(
                 "categories": event.get("categories", []),
                 "query_roles": event.get("query_roles", []),
                 "parent_event_ids": event.get("parent_event_ids", []),
+                "cited": event_id in cited_ids,
             }
         )
 
@@ -647,21 +760,6 @@ def build_sample_detail(
     agnostic_events, agnostic_model, agnostic_prompt = _format_agnostic_events(
         agnostic
     )
-    (
-        agnostic_kimi_events,
-        agnostic_kimi_model,
-        agnostic_kimi_prompt,
-    ) = _format_agnostic_events(agnostic_kimi)
-
-    provider_comparison = None
-    if agnostic is not None and agnostic_kimi is not None:
-        try:
-            provider_comparison = compare_providers(
-                OracleAnnotation.load(agnostic_dir / f"{video_id}.json"),
-                OracleAnnotation.load(agnostic_kimi_dir / f"{video_id}.json"),
-            )
-        except Exception:  # noqa: BLE001
-            provider_comparison = None
 
     video_path = oracle.get("video_path")
     if video_path:
@@ -677,6 +775,12 @@ def build_sample_detail(
         "answer": answer,
         "pred_answer": pred_answer,
         "qa_error": qa_error,
+        "verification": verification,
+        "verification_summary": _load_verification_summary(verification_dir),
+        # Free-form answer the annotator produced while watching the full video;
+        # a rough ceiling reading next to the verifier's clips-only answer.
+        "oracle_predicted_answer": oracle.get("predicted_answer"),
+        "oracle_answer_match": oracle.get("answer_match"),
         "has_event_graph": any(run["has_event_graph"] for run in event_graph_runs),
         "event_graph_runs": event_graph_runs,
         "oracle_events": events,
@@ -684,14 +788,9 @@ def build_sample_detail(
         "agnostic_events": agnostic_events,
         "agnostic_model": agnostic_model,
         "agnostic_prompt_version": agnostic_prompt,
-        "agnostic_kimi_events": agnostic_kimi_events,
-        "agnostic_kimi_model": agnostic_kimi_model,
-        "agnostic_kimi_prompt_version": agnostic_kimi_prompt,
         "tsm_events": tsm_events,
         "event_graph_events": retrieved_events,
         "comparison": comparison,
-        "comparison_kimi": comparison_kimi,
-        "provider_comparison": provider_comparison,
         "metrics_reference_mode": (comparison or {}).get(
             "reference_mode", "query_agnostic"
         ),
@@ -702,11 +801,6 @@ def build_sample_detail(
                 if agnostic_dir and video_id and agnostic is not None
                 else None
             ),
-            "agnostic_kimi_json": (
-                str(agnostic_kimi_dir / f"{video_id}.json")
-                if agnostic_kimi_dir and video_id and agnostic_kimi is not None
-                else None
-            ),
             "tsm_json": str(tsm_dir / f"{video_id}.json") if video_id else None,
             "event_graph_json": first_run.get("json_path") if first_run else None,
             "event_graph_jsons": [
@@ -715,6 +809,7 @@ def build_sample_detail(
             "questions_jsonl": (
                 str(questions_path) if questions_path and questions_path.is_file() else None
             ),
+            "verification_json": (verification or {}).get("verification_json"),
         },
     }
 
@@ -766,15 +861,15 @@ class ViewerHandler(BaseHTTPRequestHandler):
 
     def _paths_from_query(
         self,
-    ) -> tuple[Path, Path, Path, Path, list[tuple[str, Path]], Path]:
+    ) -> tuple[Path, Path, Path, list[tuple[str, Path]], Path, Path]:
         q = self._query()
         return (
             _resolve_path(q.get("oracle_dir"), "oracle_dir"),
             _resolve_path(q.get("agnostic_dir"), "agnostic_dir"),
-            _resolve_path(q.get("agnostic_kimi_dir"), "agnostic_kimi_dir"),
             _resolve_path(q.get("tsm_dir"), "tsm_dir"),
             _event_graph_dirs_from_query(q),
             _resolve_path(q.get("questions_jsonl"), "questions_jsonl"),
+            _resolve_path(q.get("verification_dir"), "verification_dir"),
         )
 
     def do_GET(self) -> None:  # noqa: N802
@@ -807,10 +902,10 @@ class ViewerHandler(BaseHTTPRequestHandler):
             (
                 oracle_dir,
                 agnostic_dir,
-                agnostic_kimi_dir,
                 tsm_dir,
                 event_graph_dirs,
                 questions_path,
+                verification_dir,
             ) = self._paths_from_query()
             try:
                 samples = build_sample_list(
@@ -818,8 +913,8 @@ class ViewerHandler(BaseHTTPRequestHandler):
                     tsm_dir,
                     questions_path,
                     agnostic_dir,
-                    agnostic_kimi_dir,
                     event_graph_dirs,
+                    verification_dir,
                 )
             except Exception as exc:  # noqa: BLE001
                 self._send_error_json(400, str(exc))
@@ -827,15 +922,16 @@ class ViewerHandler(BaseHTTPRequestHandler):
             self._send_json(
                 {
                     "samples": samples,
+                    "verification_summary": _summary_from_samples(samples),
                     "resolved": {
                         "oracle_dir": str(oracle_dir),
                         "agnostic_dir": str(agnostic_dir),
-                        "agnostic_kimi_dir": str(agnostic_kimi_dir),
                         "tsm_dir": str(tsm_dir),
                         "event_graph_dirs": "\n".join(
                             f"{label}|{path}" for label, path in event_graph_dirs
                         ),
                         "questions_jsonl": str(questions_path),
+                        "verification_dir": str(verification_dir),
                     },
                 }
             )
@@ -846,10 +942,10 @@ class ViewerHandler(BaseHTTPRequestHandler):
             (
                 oracle_dir,
                 agnostic_dir,
-                agnostic_kimi_dir,
                 tsm_dir,
                 event_graph_dirs,
                 questions_path,
+                verification_dir,
             ) = self._paths_from_query()
             try:
                 detail = build_sample_detail(
@@ -858,8 +954,8 @@ class ViewerHandler(BaseHTTPRequestHandler):
                     tsm_dir,
                     questions_path,
                     agnostic_dir,
-                    agnostic_kimi_dir,
                     event_graph_dirs,
+                    verification_dir,
                 )
             except FileNotFoundError as exc:
                 self._send_error_json(404, str(exc))
@@ -1062,9 +1158,9 @@ def main(argv: list[str] | None = None) -> None:
         f"Defaults rooted at {_MORPH_GRAPH_ROOT}",
         f"  oracle_dir:      {DEFAULT_PATHS['oracle_dir']}",
         f"  agnostic_dir:      {DEFAULT_PATHS['agnostic_dir']}",
-        f"  agnostic_kimi_dir: {DEFAULT_PATHS['agnostic_kimi_dir']}",
         f"  tsm_dir:           {DEFAULT_PATHS['tsm_dir']}",
         f"  event_graph_dir:   {DEFAULT_PATHS['event_graph_dir']}",
+        f"  verification_dir:  {DEFAULT_PATHS['verification_dir']}",
         f"  questions_jsonl:   {DEFAULT_PATHS['questions_jsonl']}",
         "  (TSM metrics computed on load; no report JSON required)",
     ]

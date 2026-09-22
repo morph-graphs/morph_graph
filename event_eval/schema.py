@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass, field
+import re
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,36 @@ EVENT_CATEGORIES = frozenset(
     }
 )
 QUERY_ROLES = frozenset({"anchor", "evidence", "answer_bearing"})
+
+
+def normalize_answer(text: str) -> str:
+    """Lowercase, strip punctuation, collapse whitespace for soft answer compare."""
+    cleaned = re.sub(r"[^\w\s]", " ", text.lower())
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
+def answers_match(predicted: str | None, gt: str | None) -> bool | None:
+    """Return True/False when both sides are non-empty; else None (unchecked)."""
+    if predicted is None or gt is None:
+        return None
+    pred_norm = normalize_answer(predicted)
+    gt_norm = normalize_answer(gt)
+    if not pred_norm or not gt_norm:
+        return None
+    return pred_norm == gt_norm
+
+
+def predicted_answer_from_response(
+    generated: dict[str, Any], *, annotation_mode: str
+) -> str | None:
+    """Pull model ``predicted_answer`` for conditioned mode only."""
+    if annotation_mode != "query_conditioned":
+        return None
+    raw = generated.get("predicted_answer")
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    return text or None
 
 
 @dataclass(frozen=True)
@@ -110,9 +141,16 @@ class OracleAnnotation:
     raw_response: str | None = field(default=None, repr=False)
     schema_version: str = SCHEMA_VERSION
     annotation_mode: str = "query_conditioned"
+    # Sufficiency check: model answers from its events; compared to EgoLongQA GT.
+    predicted_answer: str | None = None
+    gt_answer: str | None = None
+    answer_match: bool | None = None
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "OracleAnnotation":
+        predicted = raw.get("predicted_answer")
+        gt = raw.get("gt_answer")
+        match_raw = raw.get("answer_match")
         return cls(
             sample_id=str(raw["sample_id"]),
             video_id=str(raw["video_id"]),
@@ -133,6 +171,28 @@ class OracleAnnotation:
             raw_response=raw.get("raw_response"),
             schema_version=str(raw.get("schema_version", SCHEMA_VERSION)),
             annotation_mode=str(raw.get("annotation_mode", "query_conditioned")),
+            predicted_answer=None if predicted is None else str(predicted).strip() or None,
+            gt_answer=None if gt is None else str(gt).strip() or None,
+            answer_match=None if match_raw is None else bool(match_raw),
+        )
+
+    def with_answer_check(self, gt_answer: str | None) -> "OracleAnnotation":
+        """Attach GT answer and normalized match flag; warn on mismatch."""
+        gt = None if gt_answer is None else str(gt_answer).strip() or None
+        match = answers_match(self.predicted_answer, gt)
+        warnings = list(self.warnings)
+        if self.annotation_mode == "query_conditioned" and match is False:
+            note = (
+                "answer_check_failed: predicted_answer does not match gt_answer "
+                "(normalized compare); oracle events may be incomplete or wrong"
+            )
+            if note not in warnings:
+                warnings.append(note)
+        return replace(
+            self,
+            gt_answer=gt,
+            answer_match=match,
+            warnings=tuple(warnings),
         )
 
     def validate(self) -> list[str]:
@@ -254,20 +314,25 @@ def gemini_response_schema(
             },
         }
         required.append("query_roles")
+    properties: dict[str, Any] = {
+        "events": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": event_properties,
+                "required": required,
+                "additionalProperties": False,
+            },
+        },
+        "warnings": {"type": "array", "items": {"type": "string"}},
+    }
+    top_required = ["events", "warnings"]
+    if annotation_mode == "query_conditioned":
+        properties["predicted_answer"] = {"type": "string"}
+        top_required.append("predicted_answer")
     return {
         "type": "object",
-        "properties": {
-            "events": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": event_properties,
-                    "required": required,
-                    "additionalProperties": False,
-                },
-            },
-            "warnings": {"type": "array", "items": {"type": "string"}},
-        },
-        "required": ["events", "warnings"],
+        "properties": properties,
+        "required": top_required,
         "additionalProperties": False,
     }

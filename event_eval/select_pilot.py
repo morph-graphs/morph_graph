@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -113,18 +114,80 @@ def select_records(
             )
             add(record, taxonomy)
 
-    # Fill any missing slots by maximizing uncovered taxonomy values, then use
-    # source activity metadata only as a final diversity tie-breaker.
-    while len(selected) < count:
-        candidates = [
+    def _stratum(taxonomy: QueryTaxonomy) -> tuple[str, str]:
+        return (taxonomy.evidence_scope, taxonomy.answer_operation)
+
+    def _largest_remainder_targets(
+        counts: Counter[tuple[str, str]], slots: int
+    ) -> dict[tuple[str, str], int]:
+        total = sum(counts.values())
+        if slots <= 0 or total <= 0:
+            return {}
+        raw = {key: slots * counts[key] / total for key in counts}
+        floors = {key: int(raw[key]) for key in counts}
+        assigned = sum(floors.values())
+        remainders = sorted(
+            counts,
+            key=lambda key: (raw[key] - floors[key], counts[key], key),
+            reverse=True,
+        )
+        targets = dict(floors)
+        for key in remainders:
+            if assigned >= slots:
+                break
+            targets[key] += 1
+            assigned += 1
+        return targets
+
+    # Fill remaining slots so (evidence_scope, answer_operation) matches the
+    # leftover pool, instead of walking lowest source IDs once every taxonomy
+    # bucket has been seen once.
+    if len(selected) < count:
+        pool = [
             pair
             for pair in classified
             if str(pair[0]["video"]) not in selected_videos
         ]
-        if not candidates:
-            break
-        record, taxonomy = max(candidates, key=lambda pair: diversity_score(*pair))
-        add(record, taxonomy)
+        by_stratum: dict[tuple[str, str], list[tuple[dict[str, Any], QueryTaxonomy]]] = (
+            defaultdict(list)
+        )
+        for record, taxonomy in pool:
+            by_stratum[_stratum(taxonomy)].append((record, taxonomy))
+        remaining_targets = _largest_remainder_targets(
+            Counter({key: len(rows) for key, rows in by_stratum.items()}),
+            count - len(selected),
+        )
+        while len(selected) < count and any(remaining_targets.values()):
+            progressed = False
+            for key in sorted(remaining_targets):
+                if remaining_targets[key] <= 0 or len(selected) >= count:
+                    continue
+                candidates = [
+                    pair
+                    for pair in by_stratum[key]
+                    if str(pair[0]["video"]) not in selected_videos
+                ]
+                if not candidates:
+                    remaining_targets[key] = 0
+                    continue
+                record, taxonomy = max(
+                    candidates, key=lambda pair: diversity_score(*pair)
+                )
+                add(record, taxonomy)
+                remaining_targets[key] -= 1
+                progressed = True
+            if not progressed:
+                break
+        while len(selected) < count:
+            leftover = [
+                pair
+                for pair in classified
+                if str(pair[0]["video"]) not in selected_videos
+            ]
+            if not leftover:
+                break
+            record, taxonomy = max(leftover, key=lambda pair: diversity_score(*pair))
+            add(record, taxonomy)
     return selected
 
 

@@ -45,6 +45,16 @@ python -m event_eval.select_pilot \
   --output-json outputs/event_eval/pilot_ids.json
 ```
 
+Expanded 100-video set (same 8 profile seeds, remaining slots stratified by
+evidence-scope × answer-operation so it tracks the 700-question mix instead of
+taking the lowest source IDs):
+
+```bash
+python -m event_eval.select_pilot \
+  --count 100 \
+  --output-json outputs/event_eval/pilot_ids_100.json
+```
+
 Then run query-conditioned oracles (one per question):
 
 ```bash
@@ -54,6 +64,12 @@ python -m event_eval.annotate \
   --sample-ids-json outputs/event_eval/pilot_ids.json \
   --output-dir outputs/event_eval/oracles
 ```
+
+Conditioned oracles ask the model for `predicted_answer` derivable from the
+returned events alone, then compare it to the EgoLongQA GT answer (normalized
+string match). Results are stored as `predicted_answer`, `gt_answer`, and
+`answer_match` on each JSON; a mismatch adds a warning but does not fail the
+run. Re-run with `--overwrite` after prompt changes (`eval_oracle_v2`).
 
 And query-agnostic Gemini segmentations (one per unique video). Write the
 current iteration to `outputs/event_eval/agnostic_gemini_latest` (older versioned
@@ -108,6 +124,54 @@ providers.
 
 Self-hosting Kimi K2.5 (vs. the hosted API used here) needs ~8x H200 GPUs per
 Moonshot's own deployment guide; not attempted by this module yet.
+
+## 1b. Verify conditioned oracles (span sufficiency)
+
+`verify.py` re-answers each question's EgoLongQA multiple choice from **the
+video clipped to the oracle event intervals only** — never the full video and
+never the ground-truth answer:
+
+```bash
+python -m event_eval.verify \
+  --oracle-dir outputs/event_eval/oracles \
+  --output-dir outputs/event_eval/verification
+```
+
+The video is uploaded once and each **leaf** event (an event that does not
+temporally contain another) becomes one `VideoMetadata` start/end-offset clip.
+Coarse wrappers around fine children are dropped so they cannot inflate
+coverage or leak most of the video into the crop. Option letters are
+re-lettered in a deterministic per-sample shuffle and mapped back after, so the
+original letter cannot leak through position.
+
+**What this checks:** whether the oracle spans are sufficient and discriminative
+— if a retrieval system returned exactly these intervals, is the answer
+recoverable? **What it does not check:** boundary precision, role-label
+correctness, or over-segmentation. A shifted-but-semantically-right span passes.
+
+Per sample it writes `{sample_id}.json` with the selected option, the cited
+`supporting_event_ids`, a `sufficiency` label (`sufficient` / `partial` /
+`insufficient`), and `coverage_ratio` (union of **leaf** event spans / duration).
+
+| Verdict | Meaning |
+| --- | --- |
+| `fail` | Wrong option. |
+| `uninformative` | Right, but `coverage_ratio >= --coverage-threshold` (default `0.5`). The crop approximates the full video, so the answer does not evidence good spans. |
+| `pass` | Right, `sufficiency=sufficient`, and the cited events all exist and include an `answer_bearing` one. |
+| `uncertain` | Right but weakly justified — partial sufficiency, unknown event IDs, or justified only by `anchor` events. |
+
+The `answer_bearing` citation check catches a specific failure: the model
+answers confidently while citing only the anchor span, meaning the footage it
+pointed at does not contain what was asked for.
+
+Read coverage alongside accuracy — an oracle that keeps 80% of the video is
+nearly the full video, so passing means little. A good oracle passes at low
+coverage. `summary.json` reports `informative_accuracy` (accuracy restricted to
+crops below the threshold), which is the headline number, plus
+`mean_coverage_ratio_correct` and `n_correct_without_answer_bearing_citation`.
+
+Runs are resumable (existing outputs are skipped without `--overwrite`) and
+failures are written as `{sample_id}.error.json`.
 
 ## 2. Export TSM for oracle videos
 
@@ -171,10 +235,13 @@ would always be 100%.
 
 ## 4. HTML event viewer
 
-Browse oracle / query-agnostic Gemini / Kimi / TSM / EventGraph retrieval on the
+Browse oracle / query-agnostic Gemini / TSM / EventGraph retrieval on the
 actual videos (frame-by-frame scrubbing via ffmpeg JPEGs, side-by-side provider
 timelines, parent→child edges, per-event cover metrics). Paths default to
 `*_latest` annotation dirs; TSM vs reference metrics are computed on load.
+Span-sufficiency verification sidecars (`outputs/event_eval/verification`)
+show the MCQ verdict, coverage bar, and which oracle events the verifier
+cited.
 
 To populate the EventGraph track(s) (retrieved spans + predicted answer) for the
 pilot, run one or more exports (each into its own directory):
@@ -205,9 +272,9 @@ Open `http://127.0.0.1:8765/`. Defaults:
 
 - `outputs/event_eval/oracles` (query-conditioned Gemini)
 - `outputs/event_eval/agnostic_gemini_latest` (query-agnostic Gemini, current)
-- `outputs/event_eval/agnostic_kimi_latest` (query-agnostic Kimi, current)
 - `outputs/event_eval/tsm`
 - `outputs/event_eval/event_graph` (EventGraph retrieval + QA; optional)
+- `outputs/event_eval/verification` (span-sufficiency sidecars; optional)
 - `data/wearable-ai/egolongqa/wearable_ai_2026_egolongqa_val_700.jsonl`
   (ground-truth answers)
 

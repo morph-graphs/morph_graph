@@ -17,10 +17,11 @@ from .schema import (
     OracleAnnotation,
     OracleEvent,
     gemini_response_schema,
+    predicted_answer_from_response,
 )
 
 DEFAULT_MODEL = "gemini-3.6-flash"
-PROMPT_VERSION_ORACLE = "eval_oracle_v1"
+PROMPT_VERSION_ORACLE = "eval_oracle_v2"
 PROMPT_VERSION_AGNOSTIC = "eval_agnostic_v3"
 # Backward-compatible alias used by older tests/imports.
 PROMPT_VERSION = PROMPT_VERSION_ORACLE
@@ -76,6 +77,13 @@ Every returned event must have at least one query role:
 - anchor: establishes a reference in the question
 - evidence: is needed to connect or disambiguate the answer
 - answer_bearing: directly contains the requested answer
+
+Also return ``predicted_answer``: a concise answer to the question that must be
+derivable from the events you listed alone (their descriptions, times, and
+roles). Do not rely on video content outside those events. This is a sufficiency
+check on the oracle: if the events are incomplete, the answer will be wrong.
+If you cannot answer from the events alone, still give your best short answer
+and add a warning explaining what is missing.
 
 Allowed categories: {categories}
 Allowed query roles: {roles}
@@ -224,9 +232,9 @@ class GeminiOracleAnnotator:
             raise ValueError("fps must be positive")
         if media_resolution not in {None, "low", "medium"}:
             raise ValueError("video media_resolution must be low, medium, or None")
-        api_key = api_key or os.getenv("GOOGLE_API_KEY")
+        api_key = api_key or os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
         if not api_key:
-            raise ValueError("Set GOOGLE_API_KEY or pass api_key")
+            raise ValueError("Set GOOGLE_API_KEY or GEMINI_API_KEY, or pass api_key")
         try:
             from google import genai
             from google.genai import errors, types
@@ -362,6 +370,9 @@ class GeminiOracleAnnotator:
                     ),
                     raw_response=raw_text,
                     annotation_mode=annotation_mode,
+                    predicted_answer=predicted_answer_from_response(
+                        generated, annotation_mode=annotation_mode
+                    ),
                 )
                 return annotation.require_valid()
             except Exception as exc:

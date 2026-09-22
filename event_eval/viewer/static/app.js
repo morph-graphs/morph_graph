@@ -3,20 +3,19 @@
     paths: {
       oracle_dir: "",
       agnostic_dir: "",
-      agnostic_kimi_dir: "",
       tsm_dir: "",
       event_graph_dirs: "",
       questions_jsonl: "",
+      verification_dir: "",
     },
+    verificationSummary: null,
     samples: [],
     sample: null,
     activeEventId: null,
     activeAgnosticId: null,
-    activeAgnosticKimiId: null,
     activeEventGraphId: null,
     scrolledEventId: null,
     scrolledAgnosticId: null,
-    scrolledAgnosticKimiId: null,
     scrolledEventGraphId: null,
     videoPath: null,
     duration: 0,
@@ -38,6 +37,17 @@
 
   /** Same retrieved/seed colors for every EventGraph run (matches CSS vars). */
   const EG_EVENT_COLORS = { fill: "#c084fc", seed: "#f472b6" };
+  const VERDICT_MARKS = {
+    pass: "✓ ",
+    fail: "✗ ",
+    uninformative: "– ",
+    uncertain: "? ",
+  };
+
+  function pct(value) {
+    if (value == null || Number.isNaN(Number(value))) return "–";
+    return `${(Number(value) * 100).toFixed(1)}%`;
+  }
 
   function egRunHeaderHtml(run, fallbackIndex = 0) {
     const title = escapeHtml(run.label || `EG ${fallbackIndex + 1}`);
@@ -47,9 +57,9 @@
   const el = {
     oracleDir: document.getElementById("oracle-dir"),
     agnosticDir: document.getElementById("agnostic-dir"),
-    agnosticKimiDir: document.getElementById("agnostic-kimi-dir"),
     tsmDir: document.getElementById("tsm-dir"),
     eventGraphDir: document.getElementById("event-graph-dir"),
+    verificationDir: document.getElementById("verification-dir"),
     questionsJsonl: document.getElementById("questions-jsonl"),
     loadBtn: document.getElementById("load-btn"),
     resetBtn: document.getElementById("reset-btn"),
@@ -58,9 +68,9 @@
     status: document.getElementById("status"),
     query: document.getElementById("query"),
     answer: document.getElementById("answer"),
+    verification: document.getElementById("verification"),
     predAnswers: document.getElementById("pred-answers"),
     metrics: document.getElementById("metrics"),
-    providerMetrics: document.getElementById("provider-metrics"),
     frame: document.getElementById("frame"),
     scrubber: document.getElementById("scrubber"),
     scrubberTime: document.getElementById("scrubber-time"),
@@ -77,11 +87,8 @@
     eventGraphColumns: document.getElementById("event-graph-columns"),
     eventGraphCount: document.getElementById("event-graph-count"),
     agnosticList: document.getElementById("agnostic-list"),
-    agnosticKimiList: document.getElementById("agnostic-kimi-list"),
     agnosticCount: document.getElementById("agnostic-count"),
-    agnosticKimiCount: document.getElementById("agnostic-kimi-count"),
     agnosticMeta: document.getElementById("agnostic-meta"),
-    agnosticKimiMeta: document.getElementById("agnostic-kimi-meta"),
     oracleCount: document.getElementById("oracle-count"),
     graph: document.getElementById("graph"),
     resolved: document.getElementById("resolved"),
@@ -107,10 +114,10 @@
     const p = new URLSearchParams({
       oracle_dir: state.paths.oracle_dir,
       agnostic_dir: state.paths.agnostic_dir,
-      agnostic_kimi_dir: state.paths.agnostic_kimi_dir,
       tsm_dir: state.paths.tsm_dir,
       event_graph_dirs: state.paths.event_graph_dirs,
       questions_jsonl: state.paths.questions_jsonl,
+      verification_dir: state.paths.verification_dir,
     });
     return p.toString();
   }
@@ -146,28 +153,28 @@
     state.paths = {
       oracle_dir: el.oracleDir.value.trim(),
       agnostic_dir: el.agnosticDir.value.trim(),
-      agnostic_kimi_dir: el.agnosticKimiDir.value.trim(),
       tsm_dir: el.tsmDir.value.trim(),
       event_graph_dirs: el.eventGraphDir.value.trim(),
       questions_jsonl: el.questionsJsonl.value.trim(),
+      verification_dir: el.verificationDir.value.trim(),
     };
   }
 
   function writePathInputs(paths) {
     el.oracleDir.value = paths.oracle_dir || "";
     el.agnosticDir.value = paths.agnostic_dir || "";
-    el.agnosticKimiDir.value = paths.agnostic_kimi_dir || "";
     el.tsmDir.value = paths.tsm_dir || "";
     el.eventGraphDir.value =
       paths.event_graph_dirs || paths.event_graph_dir || "";
+    el.verificationDir.value = paths.verification_dir || "";
     el.questionsJsonl.value = paths.questions_jsonl || "";
     state.paths = {
       oracle_dir: el.oracleDir.value.trim(),
       agnostic_dir: el.agnosticDir.value.trim(),
-      agnostic_kimi_dir: el.agnosticKimiDir.value.trim(),
       tsm_dir: el.tsmDir.value.trim(),
       event_graph_dirs: el.eventGraphDir.value.trim(),
       questions_jsonl: el.questionsJsonl.value.trim(),
+      verification_dir: el.verificationDir.value.trim(),
     };
   }
 
@@ -186,12 +193,28 @@
     writePathInputs({
       oracle_dir: data.resolved.oracle_dir,
       agnostic_dir: data.resolved.agnostic_dir,
-      agnostic_kimi_dir: data.resolved.agnostic_kimi_dir,
       tsm_dir: data.resolved.tsm_dir,
       event_graph_dirs: data.resolved.event_graph_dirs,
       questions_jsonl: data.resolved.questions_jsonl,
+      verification_dir: data.resolved.verification_dir,
     });
-    el.resolved.textContent = "";
+    state.verificationSummary = data.verification_summary || null;
+    const summary = state.verificationSummary;
+    if (summary && summary.n_verified) {
+      const acc =
+        summary.informative_accuracy == null
+          ? "n/a"
+          : pct(summary.informative_accuracy);
+      el.resolved.textContent =
+        `verify n=${summary.n_verified} pass=${summary.verdicts?.pass || 0} ` +
+        `fail=${summary.verdicts?.fail || 0} ` +
+        `uninformative=${summary.verdicts?.uninformative || 0} ` +
+        `uncertain=${summary.verdicts?.uncertain || 0}\n` +
+        `informative accuracy ${acc} · mean coverage ` +
+        `${pct(summary.mean_coverage_ratio)}`;
+    } else {
+      el.resolved.textContent = "";
+    }
 
     el.sampleSelect.innerHTML = "";
     if (!state.samples.length) {
@@ -205,12 +228,28 @@
       const vid = s.video_id || "unknown";
       const egRuns = s.n_event_graph_runs || (s.has_event_graph ? 1 : 0);
       opt.textContent =
-        `${s.sample_id} · ${vid}.mp4 · ${s.n_oracle_events} oracle / ` +
-        `${s.n_agnostic_events || 0} gemini / ${s.n_agnostic_kimi_events || 0} kimi / ${s.n_tsm_events} TSM` +
-        (egRuns ? ` / ${egRuns} EG` : "");
+        `${VERDICT_MARKS[s.verdict] || ""}${s.sample_id} · ${vid}.mp4 · ${s.n_oracle_events} oracle / ` +
+        `${s.n_agnostic_events || 0} gemini / ${s.n_tsm_events} TSM` +
+        (egRuns ? ` / ${egRuns} EG` : "") +
+        (s.verdict ? ` · ${s.verdict} ${pct(s.coverage_ratio)}` : "");
       el.sampleSelect.appendChild(opt);
     }
-    setStatus(`${state.samples.length} samples loaded.`);
+    if (summary && summary.n_verified) {
+      const acc =
+        summary.informative_accuracy == null
+          ? "n/a"
+          : pct(summary.informative_accuracy);
+      setStatus(
+        `${state.samples.length} samples loaded · verify ` +
+          `pass=${summary.verdicts?.pass || 0} ` +
+          `fail=${summary.verdicts?.fail || 0} ` +
+          `uninformative=${summary.verdicts?.uninformative || 0} ` +
+          `uncertain=${summary.verdicts?.uncertain || 0} · ` +
+          `informative accuracy ${acc}`
+      );
+    } else {
+      setStatus(`${state.samples.length} samples loaded.`);
+    }
     await loadSample(state.samples[0].sample_id);
   }
 
@@ -221,7 +260,6 @@
     state.sample = detail;
     state.activeEventId = null;
     state.activeAgnosticId = null;
-    state.activeAgnosticKimiId = null;
     state.activeEventGraphKey = null;
     el.sampleSelect.value = detail.sample_id;
     const videoFile =
@@ -238,12 +276,11 @@
       el.answer.textContent = "(answer not found in questions JSONL)";
       el.answer.classList.add("muted");
     }
+    renderVerification(detail);
     renderPredAnswers(detail);
     renderMetrics(detail);
-    renderProviderMetrics(detail);
     renderGraph(detail);
-    renderAgnosticEvents(detail, "gemini");
-    renderAgnosticEvents(detail, "kimi");
+    renderAgnosticEvents(detail);
     renderEventGraphRuns(detail);
     renderEvents(detail);
     renderTracks(detail);
@@ -254,10 +291,80 @@
     const egN = runs.reduce((n, run) => n + (run.events?.length || 0), 0);
     setStatus(
       detail.video_exists
-        ? `Sample ${detail.sample_id} · ${videoFile || detail.video_id} · ${detail.oracle_events.length} oracle · ${detail.agnostic_events.length} gemini · ${(detail.agnostic_kimi_events || []).length} kimi · ${detail.tsm_events.length} TSM · ${runs.length} EG run(s) / ${egN} spans`
+        ? `Sample ${detail.sample_id} · ${videoFile || detail.video_id} · ${detail.oracle_events.length} oracle · ${detail.agnostic_events.length} gemini · ${detail.tsm_events.length} TSM · ${runs.length} EG run(s) / ${egN} spans`
         : `Sample ${detail.sample_id} loaded, but video file is missing: ${detail.video_path || "(none)"}`,
       !detail.video_exists
     );
+  }
+
+  function renderVerification(detail) {
+    const v = detail.verification;
+    if (!v) {
+      el.verification.innerHTML =
+        `<div class="muted" style="padding:4px 0">No verification for this sample. ` +
+        `Run <code>python -m event_eval.verify</code>, then Load.</div>`;
+      return;
+    }
+    const verdict = String(v.verdict || "");
+    const threshold = Number(v.coverage_threshold ?? 0.5);
+    const coverage = Number(v.coverage_ratio ?? 0);
+    const options = v.options || {};
+    const optionText = (letter) =>
+      letter && options[letter] ? `${letter}. ${options[letter]}` : letter || "–";
+    // Coverage is the confound: a near-full-video crop makes a correct answer cheap.
+    const coverageNote =
+      coverage >= threshold
+        ? `at or above the ${pct(threshold)} threshold — the crop approximates the full video`
+        : `below the ${pct(threshold)} threshold`;
+    const rows = [
+      ["Verifier picked", optionText(v.selected_option), v.correct ? "ok" : "bad"],
+      ["Ground truth", optionText(v.gt_option), ""],
+      ["Sufficiency", v.sufficiency || "–", v.sufficiency === "sufficient" ? "" : "warn"],
+      [
+        "Cited spans",
+        (v.supporting_event_ids || []).join(", ") || "(none)",
+        v.cited_answer_bearing ? "" : "warn",
+      ],
+    ];
+    if (!v.cited_answer_bearing) {
+      rows.push([
+        "Citation roles",
+        `${(v.cited_roles || []).join(", ") || "none"} — no answer_bearing span cited`,
+        "warn",
+      ]);
+    }
+    if (v.missing_evidence) {
+      rows.push(["Missing evidence", v.missing_evidence, "warn"]);
+    }
+    if (detail.oracle_predicted_answer) {
+      rows.push([
+        "Annotator (full video)",
+        detail.oracle_predicted_answer,
+        detail.oracle_answer_match === false ? "warn" : "",
+      ]);
+    }
+
+    const bar =
+      `<div class="coverage-bar" title="Union of oracle spans / video duration">` +
+      `<div class="coverage-fill${coverage >= threshold ? " over" : ""}" ` +
+      `style="width:${Math.min(100, coverage * 100).toFixed(1)}%"></div>` +
+      `<div class="coverage-mark" style="left:${(threshold * 100).toFixed(1)}%"></div>` +
+      `</div>`;
+
+    el.verification.innerHTML =
+      `<div class="verdict-row">` +
+      `<span class="verdict-badge ${verdict}">${escapeHtml(verdict)}</span>` +
+      `<span class="verdict-coverage">coverage ${pct(coverage)} · ${escapeHtml(coverageNote)}</span>` +
+      `</div>` +
+      bar +
+      rows
+        .map(
+          ([label, value, tone]) =>
+            `<div class="verify-row${tone ? " " + tone : ""}">` +
+            `<div class="verify-label">${escapeHtml(label)}</div>` +
+            `<div class="verify-value">${escapeHtml(String(value))}</div></div>`
+        )
+        .join("");
   }
 
   function renderPredAnswers(detail) {
@@ -361,55 +468,7 @@
   }
 
   function renderMetrics(detail) {
-    el.metrics.innerHTML =
-      metricCards(detail.comparison, "Gemini vs TSM") +
-      metricCards(detail.comparison_kimi, "Kimi vs TSM");
-  }
-
-  function renderProviderMetrics(detail) {
-    const pc = detail.provider_comparison;
-    if (!pc) {
-      el.providerMetrics.innerHTML =
-        `<div class="metric" style="grid-column:1/-1">` +
-        `<div class="label">Provider comparison</div>` +
-        `<div class="value muted">n/a</div>` +
-        `<div class="hint">Need both Gemini and Kimi agnostic annotations for this video.</div></div>`;
-      return;
-    }
-    const f1 = pc.boundary_f1 || {};
-    const modelA = pc.model_a || detail.agnostic_model || "Gemini";
-    const modelB = pc.model_b || detail.agnostic_kimi_model || "Kimi";
-    el.providerMetrics.innerHTML = [
-      [
-        "Events",
-        `${pc.n_events_a} / ${pc.n_events_b}`,
-        `${modelA} vs ${modelB} event counts.`,
-      ],
-      [
-        "F1@2s",
-        fmtF1(f1["2s"]?.f1),
-        `Boundary agreement within 2s (${modelB} pred vs ${modelA} ref).`,
-      ],
-      [
-        "F1@5s",
-        fmtF1(f1["5s"]?.f1),
-        "Boundary agreement within 5s.",
-      ],
-      [
-        "F1@10s",
-        fmtF1(f1["10s"]?.f1),
-        "Loose boundary agreement within 10s.",
-      ],
-    ]
-      .map(
-        ([label, value, hint]) =>
-          `<div class="metric">` +
-          `<div class="label">${label}</div>` +
-          `<div class="value">${value}</div>` +
-          `<div class="hint">${hint}</div>` +
-          `</div>`
-      )
-      .join("");
+    el.metrics.innerHTML = metricCards(detail.comparison, "Gemini vs TSM");
   }
 
   function readDisplayFps() {
@@ -674,30 +733,23 @@
     const t = currentTimeSec();
     const activeOracle = activeOracleAt(t);
     const activeAgnostic = activeAgnosticAt(t);
-    const activeAgnosticKimi = activeAgnosticKimiAt(t);
     const activeEventGraph = activeEventGraphAt(t);
     state.activeEventId = activeOracle ? activeOracle.event_id : null;
     state.activeAgnosticId = activeAgnostic ? activeAgnostic.event_id : null;
-    state.activeAgnosticKimiId = activeAgnosticKimi
-      ? activeAgnosticKimi.event_id
-      : null;
     state.activeEventGraphKey = activeEventGraph
       ? `${activeEventGraph.runIndex}:${activeEventGraph.event.event_id}`
       : null;
 
     const overlayEvent =
       activeAgnostic ||
-      activeAgnosticKimi ||
       activeOracle ||
       (activeEventGraph ? activeEventGraph.event : null);
     if (overlayEvent) {
       const kind = activeAgnostic
         ? "gemini"
-        : activeAgnosticKimi
-          ? "kimi"
-          : activeOracle
-            ? "oracle"
-            : `eg:${activeEventGraph.runIndex + 1}`;
+        : activeOracle
+          ? "oracle"
+          : `eg:${activeEventGraph.runIndex + 1}`;
       el.overlay.classList.remove("hidden");
       const ev = activeEventGraph ? activeEventGraph.event : overlayEvent;
       el.overlayTime.textContent =
@@ -717,12 +769,6 @@
         card.dataset.agnosticId === state.activeAgnosticId
       );
     });
-    document.querySelectorAll("#agnostic-kimi-list .event-card").forEach((card) => {
-      card.classList.toggle(
-        "active",
-        card.dataset.agnosticId === state.activeAgnosticKimiId
-      );
-    });
     document.querySelectorAll("#event-graph-columns .event-card").forEach((card) => {
       card.classList.toggle(
         "active",
@@ -738,15 +784,6 @@
       );
     } else {
       state.scrolledAgnosticId = null;
-    }
-    if (state.activeAgnosticKimiId) {
-      state.scrolledAgnosticKimiId = scrollActiveCard(
-        el.agnosticKimiList,
-        `#agnostic-kimi-list .event-card.active`,
-        state.scrolledAgnosticKimiId
-      );
-    } else {
-      state.scrolledAgnosticKimiId = null;
     }
     if (state.activeEventGraphKey) {
       state.scrolledEventGraphKey = scrollActiveCard(
@@ -834,36 +871,17 @@
     );
   }
 
-  function activeAgnosticKimiAt(t) {
-    const events = state.sample?.agnostic_kimi_events || [];
-    return (
-      events.find((e) => t >= e.start_sec && t < e.end_sec) ||
-      events.find((e) => Math.abs(t - e.start_sec) < 0.25) ||
-      null
-    );
-  }
-
-  function renderAgnosticEvents(detail, provider) {
-    const isKimi = provider === "kimi";
-    const events = isKimi
-      ? detail.agnostic_kimi_events || []
-      : detail.agnostic_events || [];
-    const listEl = isKimi ? el.agnosticKimiList : el.agnosticList;
-    const countEl = isKimi ? el.agnosticKimiCount : el.agnosticCount;
-    const metaEl = isKimi ? el.agnosticKimiMeta : el.agnosticMeta;
-    const comparison = isKimi ? detail.comparison_kimi : detail.comparison;
-    const cardClass = isKimi ? "event-card kimi" : "event-card agnostic";
-    const model = isKimi ? detail.agnostic_kimi_model : detail.agnostic_model;
-    const promptVer = isKimi
-      ? detail.agnostic_kimi_prompt_version
-      : detail.agnostic_prompt_version;
+  function renderAgnosticEvents(detail) {
+    const events = detail.agnostic_events || [];
+    const listEl = el.agnosticList;
+    const countEl = el.agnosticCount;
+    const metaEl = el.agnosticMeta;
+    const comparison = detail.comparison;
+    const model = detail.agnostic_model;
+    const promptVer = detail.agnostic_prompt_version;
 
     listEl.innerHTML = "";
-    if (isKimi) {
-      state.scrolledAgnosticKimiId = null;
-    } else {
-      state.scrolledAgnosticId = null;
-    }
+    state.scrolledAgnosticId = null;
     countEl.textContent = events.length ? `(${events.length})` : "(none)";
     if (model || promptVer) {
       metaEl.textContent = [model, promptVer].filter(Boolean).join(" · ");
@@ -872,7 +890,7 @@
     }
     if (!events.length) {
       listEl.innerHTML =
-        `<div class="muted" style="padding:4px 0">No ${isKimi ? "Kimi" : "Gemini"} agnostic annotation for this video.</div>`;
+        `<div class="muted" style="padding:4px 0">No Gemini agnostic annotation for this video.</div>`;
       return;
     }
     const metricsById = {};
@@ -895,7 +913,7 @@
         ? `overseg ${m.over_segmentation ?? Math.max(0, (m.fragmentation || 0) - 1)} · contam ${((m.contamination_ratio || 0) * 100).toFixed(0)}% · Δt ${(m.start_boundary_error_sec ?? 0).toFixed(1)}/${(m.end_boundary_error_sec ?? 0).toFixed(1)}s`
         : "";
       const card = document.createElement("div");
-      card.className = cardClass;
+      card.className = "event-card agnostic";
       card.dataset.agnosticId = e.event_id;
       card.innerHTML = `
         <div class="meta">
@@ -975,11 +993,13 @@
       const card = document.createElement("div");
       card.className = "event-card";
       if (e.query_roles.includes("answer_bearing")) card.classList.add("answer");
+      if (e.cited) card.classList.add("cited");
       card.dataset.id = e.event_id;
       const roles = e.query_roles.join(", ");
+      const citedTag = e.cited ? " · cited" : "";
       card.innerHTML = `
         <div class="meta">
-          <span>${i + 1}. ${escapeHtml(e.event_id)}</span>
+          <span>${i + 1}. ${escapeHtml(e.event_id)}${citedTag}</span>
           <span>${mmss(e.start_sec)} – ${mmss(e.end_sec)}</span>
         </div>
         <div class="title">${escapeHtml(e.granularity || "event")}${roles ? " · " + escapeHtml(roles) : ""
@@ -1022,7 +1042,11 @@
     }
     for (const n of nodes) {
       const answer = n.e.query_roles.includes("answer_bearing");
-      markup += `<circle cx="${n.x}" cy="${n.y}" r="10" fill="${answer ? "#3ecf8e" : "#5b8cff"}" />`;
+      const fill = answer ? "#3ecf8e" : "#5b8cff";
+      markup += `<circle cx="${n.x}" cy="${n.y}" r="10" fill="${fill}" />`;
+      if (n.e.cited) {
+        markup += `<circle cx="${n.x}" cy="${n.y}" r="14" fill="none" stroke="#f0c14b" stroke-width="2" />`;
+      }
       markup += `<text x="${n.x}" y="${n.y + 28}" text-anchor="middle" fill="#9aa3b5" font-size="10">${n.id}</text>`;
     }
     if (!edges.length) {
@@ -1039,24 +1063,21 @@
     const trackW = w - left - 8;
     const tsmY = 16;
     const gemY = 40;
-    const kimiY = 64;
-    const oraY = 88;
+    const oraY = 64;
     const runs = eventGraphRuns(detail);
-    const egStartY = 112;
+    const egStartY = 88;
     const rowStep = 24;
     const barH = 14;
-    const height = Math.max(170, egStartY + runs.length * rowStep + 34);
+    const height = Math.max(146, egStartY + runs.length * rowStep + 34);
     svg.setAttribute("viewBox", `0 0 ${w} ${height}`);
     svg.setAttribute("height", String(height));
 
     const oracle = detail.oracle_events || [];
     const agnostic = detail.agnostic_events || [];
-    const agnosticKimi = detail.agnostic_kimi_events || [];
-    const allAgnostic = [...agnostic, ...agnosticKimi];
     const covering = new Set();
     detail.tsm_events.forEach((seg, i) => {
       if (
-        allAgnostic.some((e) =>
+        agnostic.some((e) =>
           overlaps(seg.start_sec, seg.end_sec, e.start_sec, e.end_sec)
         )
       ) {
@@ -1067,11 +1088,9 @@
     let markup = "";
     markup += `<text x="0" y="${tsmY + 11}" fill="#9aa3b5" font-size="11">TSM</text>`;
     markup += `<text x="0" y="${gemY + 11}" fill="#9aa3b5" font-size="11">Gemini</text>`;
-    markup += `<text x="0" y="${kimiY + 11}" fill="#9aa3b5" font-size="11">Kimi</text>`;
     markup += `<text x="0" y="${oraY + 11}" fill="#9aa3b5" font-size="11">Oracle</text>`;
     markup += `<rect x="${left}" y="${tsmY}" width="${trackW}" height="${barH}" fill="#222632" />`;
     markup += `<rect x="${left}" y="${gemY}" width="${trackW}" height="${barH}" fill="#222632" />`;
-    markup += `<rect x="${left}" y="${kimiY}" width="${trackW}" height="${barH}" fill="#222632" />`;
     markup += `<rect x="${left}" y="${oraY}" width="${trackW}" height="${barH}" fill="#222632" />`;
     runs.forEach((run, runIndex) => {
       const y = egStartY + runIndex * rowStep;
@@ -1095,21 +1114,14 @@
       }
     });
 
-    agnosticKimi.forEach((e, i) => {
-      const x = left + (e.start_sec / duration) * trackW;
-      const ww = Math.max(2, ((e.end_sec - e.start_sec) / duration) * trackW);
-      markup += `<rect x="${x}" y="${kimiY}" width="${ww}" height="${barH}" fill="#17a2d4" stroke="#0d0f14" stroke-width="0.5" data-t="${e.start_sec}" rx="2" />`;
-      if (ww >= 12) {
-        markup += `<text x="${x + ww / 2}" y="${kimiY + 11}" text-anchor="middle" fill="#0b1020" font-size="9" font-weight="600">${i + 1}</text>`;
-      }
-    });
-
     oracle.forEach((e, i) => {
       const x = left + (e.start_sec / duration) * trackW;
       const ww = Math.max(2, ((e.end_sec - e.start_sec) / duration) * trackW);
       const answer = e.query_roles.includes("answer_bearing");
       const fill = answer ? "#3ecf8e" : "#5b8cff";
-      markup += `<rect x="${x}" y="${oraY}" width="${ww}" height="${barH}" fill="${fill}" data-t="${e.start_sec}" rx="2" />`;
+      const stroke = e.cited ? "#f0c14b" : "#0d0f14";
+      const strokeW = e.cited ? "2" : "0.5";
+      markup += `<rect x="${x}" y="${oraY}" width="${ww}" height="${barH}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeW}" data-t="${e.start_sec}" rx="2" />`;
       if (ww >= 14) {
         markup += `<text x="${x + ww / 2}" y="${oraY + 11}" text-anchor="middle" fill="#0b1020" font-size="10" font-weight="600">${i + 1}</text>`;
       }

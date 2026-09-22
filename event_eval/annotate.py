@@ -36,6 +36,7 @@ class AnnotationSample:
     sample_id: str
     video_path: Path
     question: str
+    answer: str = ""
 
 
 def _safe_id(value: str) -> str:
@@ -62,6 +63,7 @@ def _load_egolongqa(
                     sample_id=str(row.get("qid", row.get("id", index))),
                     video_path=video_path.resolve(),
                     question=str(row["question"]),
+                    answer=str(row.get("answer", "")),
                 )
             )
     return samples
@@ -153,6 +155,7 @@ def _jobs_for_mode(
                 sample_id=sample.video_path.stem,
                 video_path=sample.video_path,
                 question="",
+                answer="",
             )
     return list(by_video.values())
 
@@ -314,9 +317,17 @@ def main() -> None:
                 question=sample.question,
                 annotation_mode=args.mode,
             )
+            if args.mode == "query_conditioned":
+                annotation = annotation.with_answer_check(sample.answer or None)
             annotation.save(output_path)
             error_path.unlink(missing_ok=True)
             completed += 1
+            if args.mode == "query_conditioned":
+                print(
+                    f"  answer_match={annotation.answer_match} "
+                    f"predicted={annotation.predicted_answer!r} "
+                    f"gt={annotation.gt_answer!r}"
+                )
         except Exception as exc:
             failed += 1
             error = {

@@ -11,7 +11,7 @@
       <aside class="panel">
         <h1>Event eval viewer</h1>
         <div class="sub">
-          Gemini vs Kimi vs TSM vs EventGraph · annotations live in *_latest dirs
+          Gemini vs TSM vs EventGraph · span verification from oracle clips
         </div>
 
         <h2>Data paths</h2>
@@ -34,15 +34,6 @@
           ></textarea>
         </div>
         <div class="field">
-          <label for="agnostic-kimi-dir">Agnostic directory (Kimi, *_latest)</label>
-          <textarea
-            id="agnostic-kimi-dir"
-            class="path-input"
-            rows="3"
-            spellcheck="false"
-          ></textarea>
-        </div>
-        <div class="field">
           <label for="tsm-dir">TSM directory</label>
           <textarea
             id="tsm-dir"
@@ -59,6 +50,15 @@
             rows="4"
             spellcheck="false"
             placeholder="local|outputs/event_eval/event_graph&#10;qafd|outputs/event_eval/event_graph_qafd"
+          ></textarea>
+        </div>
+        <div class="field">
+          <label for="verification-dir">Verification directory (span sufficiency)</label>
+          <textarea
+            id="verification-dir"
+            class="path-input"
+            rows="3"
+            spellcheck="false"
           ></textarea>
         </div>
         <div class="field">
@@ -90,12 +90,17 @@
         <h2>Ground-truth answer</h2>
         <div id="answer" class="query-box answer-box muted">—</div>
 
+        <h2>
+          Span verification
+          <span class="h2-sub">(MCQ from oracle clips only)</span>
+        </h2>
+        <div id="verification" class="verification"></div>
+
         <h2>EventGraph predictions</h2>
         <div id="pred-answers" class="pred-columns"></div>
 
         <h2>Sample metrics</h2>
         <div id="metrics" class="metrics"></div>
-        <div id="provider-metrics" class="provider-metrics"></div>
       </aside>
 
       <main class="main">
@@ -125,9 +130,9 @@
             <span><i class="swatch tsm"></i>TSM</span>
             <span><i class="swatch tsm-hit"></i>TSM overlaps agnostic</span>
             <span><i class="swatch agnostic"></i>Gemini agnostic</span>
-            <span><i class="swatch kimi"></i>Kimi agnostic</span>
             <span><i class="swatch oracle"></i>Oracle (query-conditioned)</span>
             <span><i class="swatch answer"></i>answer-bearing</span>
+            <span><i class="swatch cited"></i>cited by verifier</span>
             <span><i class="swatch event-graph"></i>EventGraph retrieved</span>
             <span><i class="swatch event-graph-seed"></i>EventGraph seed</span>
             <span>dashed red = TSM cover of agnostic event (computed on load)</span>
@@ -140,19 +145,9 @@
         <h2>Parent → child <span class="h2-sub">(oracle)</span></h2>
         <svg id="graph"></svg>
 
-        <h2>Agnostic events <span class="h2-sub">(side-by-side)</span></h2>
-        <div class="agnostic-columns">
-          <div class="agnostic-col">
-            <h3>Gemini <span id="agnostic-count" class="h2-sub"></span></h3>
-            <div id="agnostic-meta" class="col-meta muted"></div>
-            <div id="agnostic-list" class="event-list"></div>
-          </div>
-          <div class="agnostic-col">
-            <h3>Kimi <span id="agnostic-kimi-count" class="h2-sub"></span></h3>
-            <div id="agnostic-kimi-meta" class="col-meta muted"></div>
-            <div id="agnostic-kimi-list" class="event-list"></div>
-          </div>
-        </div>
+        <h2>Agnostic events <span id="agnostic-count" class="h2-sub"></span></h2>
+        <div id="agnostic-meta" class="col-meta muted"></div>
+        <div id="agnostic-list" class="event-list"></div>
 
         <h2>EventGraph retrieved <span id="event-graph-count" class="h2-sub"></span></h2>
         <div id="event-graph-columns" class="event-graph-columns"></div>

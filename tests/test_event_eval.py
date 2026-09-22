@@ -15,8 +15,22 @@ from morph_graph.event_eval.metrics import (
     query_event_coverage,
 )
 from morph_graph.event_eval.query_taxonomy import classify_question
-from morph_graph.event_eval.schema import OracleAnnotation, OracleEvent, gemini_response_schema
+from morph_graph.event_eval.schema import (
+    OracleAnnotation,
+    OracleEvent,
+    answers_match,
+    gemini_response_schema,
+    normalize_answer,
+)
 from morph_graph.event_eval.select_pilot import select_records
+from morph_graph.event_eval.verify import (
+    build_verification_prompt,
+    coverage_ratio,
+    decide_verdict,
+    parse_mcq_options,
+    shuffled_options,
+    verification_response_schema,
+)
 from pathlib import Path
 
 
@@ -54,6 +68,27 @@ def _annotation(event: OracleEvent | None = None) -> OracleAnnotation:
 class SchemaTests(unittest.TestCase):
     def test_valid_annotation(self) -> None:
         self.assertEqual(_annotation().validate(), [])
+
+    def test_answer_check_match_and_mismatch(self) -> None:
+        matched = replace(
+            _annotation(), predicted_answer="The bedroom closet"
+        ).with_answer_check("the bedroom closet.")
+        self.assertTrue(matched.answer_match)
+        self.assertEqual(matched.gt_answer, "the bedroom closet.")
+        self.assertFalse(
+            any("answer_check_failed" in warning for warning in matched.warnings)
+        )
+
+        mismatched = replace(
+            _annotation(), predicted_answer="kitchen"
+        ).with_answer_check("bedroom")
+        self.assertFalse(mismatched.answer_match)
+        self.assertTrue(
+            any("answer_check_failed" in warning for warning in mismatched.warnings)
+        )
+        self.assertEqual(normalize_answer("A, B!"), "a b")
+        self.assertTrue(answers_match("Yes.", "yes"))
+        self.assertIsNone(answers_match(None, "yes"))
 
     def test_rejects_incorrrect_category_and_missing_role(self) -> None:
         event = _event(categories=("visible_object",), query_roles=())
@@ -139,16 +174,25 @@ class MetricTests(unittest.TestCase):
 
 
 class PromptTests(unittest.TestCase):
-    def test_prompt_rejects_object_sighting_as_event(self) -> None:
+    def test_prompt_asks_for_event_sufficient_answer(self) -> None:
         prompt = build_prompt("How many beds were visible?", 60.0)
-        self.assertIn("Mere visibility of an object is NOT an event", prompt)
         self.assertIn("minimal set of meaningful video events", prompt)
+        self.assertIn("predicted_answer", prompt)
+        self.assertIn("derivable from the events you listed alone", prompt)
+
+    def test_conditioned_schema_requires_predicted_answer(self) -> None:
+        conditioned = gemini_response_schema("query_conditioned")
+        self.assertIn("predicted_answer", conditioned["properties"])
+        self.assertIn("predicted_answer", conditioned["required"])
+        agnostic = gemini_response_schema("query_agnostic")
+        self.assertNotIn("predicted_answer", agnostic["properties"])
 
     def test_agnostic_prompt_has_no_query_roles(self) -> None:
         prompt = build_agnostic_prompt(60.0)
         self.assertIn("query-agnostic", prompt.lower())
         self.assertIn("Do not include query roles", prompt)
         self.assertNotIn("answer_bearing", prompt)
+        self.assertNotIn("predicted_answer", prompt)
 
     def test_agnostic_prompt_discourages_micro_tiling_and_fake_hierarchy(self) -> None:
         prompt = build_agnostic_prompt(600.0)
@@ -217,6 +261,35 @@ class PilotSelectionTests(unittest.TestCase):
         )
         self.assertEqual([record["video"] for record in selected], ["a.mp4", "b.mp4"])
 
+    def test_expanded_fill_follows_operation_mix(self) -> None:
+        records = [
+            {
+                "id": index,
+                "video": f"id{index}.mp4",
+                "question": "After leaving the trail, what structure did I encounter?",
+                "category": "A",
+            }
+            for index in range(20)
+        ] + [
+            {
+                "id": 100 + index,
+                "video": f"cmp{index}.mp4",
+                "question": "How was the same red car different the second time?",
+                "category": "B",
+            }
+            for index in range(10)
+        ]
+        selected = select_records(
+            records,
+            count=12,
+            profiles=("temporal_locator", "shared_entity_comparison"),
+        )
+        operations = [record["_taxonomy"].answer_operation for record in selected]
+        # Pool is 2/3 identify, 1/3 compare. Sequential-id fill would keep almost
+        # only identify after the two profile seeds.
+        self.assertGreaterEqual(operations.count("compare_change"), 3)
+        self.assertGreaterEqual(operations.count("identify"), 6)
+
 
 class AnnotateFilterTests(unittest.TestCase):
     def test_filter_by_sample_id_and_video_id(self) -> None:
@@ -283,6 +356,126 @@ class ProviderCliTests(unittest.TestCase):
         )
         self.assertEqual(args.provider, "kimi")
         self.assertEqual(args.model, "kimi-k2.6")
+
+
+class VerificationTests(unittest.TestCase):
+    OPTIONS = (
+        "A. A stone wall on the right side of the paved area near the parking lot. "
+        "B. A brown trash can on the left side of the path by the curved road. "
+        "C. A concrete bench on the left side of the path. "
+        "D. A wooden post standing at the edge of the paved walkway."
+    )
+
+    def test_parses_options_containing_periods(self) -> None:
+        options = parse_mcq_options(self.OPTIONS)
+        self.assertEqual(sorted(options), ["A", "B", "C", "D"])
+        self.assertEqual(options["C"], "A concrete bench on the left side of the path.")
+        self.assertTrue(options["A"].startswith("A stone wall"))
+
+    def test_shuffle_is_deterministic_and_reversible(self) -> None:
+        options = parse_mcq_options(self.OPTIONS)
+        presented, mapping = shuffled_options(options, seed="510")
+        self.assertEqual(presented, shuffled_options(options, seed="510")[0])
+        self.assertEqual(sorted(mapping.values()), ["A", "B", "C", "D"])
+        for letter, text in presented.items():
+            self.assertEqual(text, options[mapping[letter]])
+
+    def test_coverage_ratio_merges_overlapping_events(self) -> None:
+        first = _event(event_id="e1", start_sec=0.0, end_sec=10.0)
+        overlapping = _event(event_id="e2", start_sec=5.0, end_sec=12.0)
+        disjoint = _event(event_id="e3", start_sec=20.0, end_sec=23.0)
+        annotation = replace(_annotation(), events=(first, overlapping, disjoint))
+        # Union is [0,12) and [20,23) = 15s of a 30s video, not 10+7+3=20s.
+        self.assertAlmostEqual(coverage_ratio(annotation), 0.5, places=5)
+
+    def test_coverage_ratio_drops_umbrella_parents(self) -> None:
+        parent = _event(
+            event_id="coarse",
+            start_sec=0.0,
+            end_sec=30.0,
+            granularity="coarse",
+            query_roles=("evidence",),
+        )
+        child = _event(
+            event_id="fine",
+            start_sec=10.0,
+            end_sec=12.0,
+            granularity="fine",
+            query_roles=("answer_bearing",),
+        )
+        annotation = replace(_annotation(), events=(parent, child))
+        # Only the leaf [10,12) counts: 2s / 30s, not the 30s wrapper.
+        self.assertAlmostEqual(coverage_ratio(annotation), 2 / 30, places=5)
+
+    def test_verdict_requires_checkable_citations(self) -> None:
+        def verdict(**overrides):
+            values = {
+                "correct": True,
+                "sufficiency": "sufficient",
+                "cited": ["e1"],
+                "unknown": [],
+                "coverage": 0.05,
+                "cited_answer_bearing": True,
+            }
+            values.update(overrides)
+            return decide_verdict(**values)
+
+        self.assertEqual(verdict(), "pass")
+        self.assertEqual(verdict(sufficiency="partial"), "uncertain")
+        self.assertEqual(verdict(cited=["e9"], unknown=["e9"]), "uncertain")
+        self.assertEqual(verdict(correct=False), "fail")
+
+    def test_high_coverage_pass_is_uninformative(self) -> None:
+        # A crop covering most of the video approximates the full-video ceiling.
+        self.assertEqual(
+            decide_verdict(
+                correct=True,
+                sufficiency="sufficient",
+                cited=["e1"],
+                unknown=[],
+                coverage=0.92,
+                cited_answer_bearing=True,
+            ),
+            "uninformative",
+        )
+        # Coverage cannot rescue a wrong answer.
+        self.assertEqual(
+            decide_verdict(
+                correct=False,
+                sufficiency="sufficient",
+                cited=["e1"],
+                unknown=[],
+                coverage=0.92,
+                cited_answer_bearing=True,
+            ),
+            "fail",
+        )
+
+    def test_answer_from_anchor_only_citation_is_uncertain(self) -> None:
+        # Sample 73 pattern: answered confidently while citing only the anchor.
+        self.assertEqual(
+            decide_verdict(
+                correct=True,
+                sufficiency="sufficient",
+                cited=["event_1_large_star"],
+                unknown=[],
+                coverage=0.2,
+                cited_answer_bearing=False,
+            ),
+            "uncertain",
+        )
+
+    def test_response_schema_restricts_to_presented_letters(self) -> None:
+        schema = verification_response_schema(["A", "B", "C"])
+        self.assertEqual(schema["properties"]["selected_option"]["enum"], ["A", "B", "C"])
+        self.assertIn("supporting_event_ids", schema["required"])
+
+    def test_prompt_withholds_ground_truth(self) -> None:
+        options = parse_mcq_options(self.OPTIONS)
+        prompt = build_verification_prompt("Which structure?", options, n_clips=3)
+        self.assertIn("only the clips shown", prompt)
+        self.assertIn("sufficiency", prompt)
+        self.assertNotIn("ground truth", prompt.lower())
 
 
 if __name__ == "__main__":

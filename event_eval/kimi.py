@@ -24,7 +24,12 @@ from .gemini import (
     build_prompt,
     video_duration_sec,
 )
-from .schema import OracleAnnotation, OracleEvent, gemini_response_schema
+from .schema import (
+    OracleAnnotation,
+    OracleEvent,
+    gemini_response_schema,
+    predicted_answer_from_response,
+)
 
 DEFAULT_MODEL = "kimi-k2.6"
 DEFAULT_BASE_URL = "https://api.moonshot.ai/v1"
@@ -333,6 +338,9 @@ class KimiOracleAnnotator:
                         ),
                         raw_response=raw_text,
                         annotation_mode=annotation_mode,
+                        predicted_answer=predicted_answer_from_response(
+                            generated, annotation_mode=annotation_mode
+                        ),
                     )
                     return annotation.require_valid()
                 except Exception as exc:
