@@ -181,6 +181,8 @@ def main() -> None:
     cfg.pop("resolved", None)
     # slurm resources and runtime concurrency don't change answers, so they don't change the run
     hashed = {k: v for k, v in cfg.items() if k not in ("resolved", "slurm", "runtime")}
+    # where encoded clips live is a location, not a result: sharing another run's media keeps the hash
+    hashed["paths"] = {k: v for k, v in cfg["paths"].items() if k != "media_root"}
     env = a.env_name or f"{cfg['code']['commit'][:8]}_{cfg['run']['tag']}_cfg{config_hash(hashed)}"
     run_dir = runs_root / env
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -192,7 +194,8 @@ def main() -> None:
         "run_dir": str(run_dir),
         "code_dir": str(run_dir / "code_repo"),
         "questions_dir": str(run_dir / "questions_repo"),
-        "media_dir": str(runs_root / "media" / media_hash(cfg)) if cfg["media"]["enabled"] else None,
+        "media_dir": str(Path(cfg["paths"].get("media_root") or runs_root / "media") / media_hash(cfg))
+                     if cfg["media"]["enabled"] else None,
         "code_repo_url": code_url,
         "questions_repo_url": q_url,
     }

@@ -117,9 +117,15 @@ already cut, so a new model inherits the no-leak guarantee without any work.
 4. **Test** before a full run: `--videos P09-20240622-194642 --limit 2`, then
    open `answers/*.jsonl`.
 
-Leave `media` as it is to reuse the already-encoded clips (1024 px, 2 fps). If
-the model wants something else, change `media`: that gets its own media folder,
-and `prep` re-encodes for it.
+Leave `media` as it is and set
+`"paths": {"media_root": "/fs/cfar-projects/mem_open_vocab/morph_graphs/anubhav/epic_eval_runs/media", ...}`
+to read the already-encoded clips in place (1024 px, 2 fps; group `openvocab` can
+read them), with `run.runs_root` pointing at a directory you can write. Prep then
+finds every video ready and submits nothing. `media_root` is not part of the run
+hash. The shared folder is read-only for others, so a video not yet encoded there
+fails at prep; use your own `media_root` until all 12 are in. If the model wants
+different frames, change `media`: that gets its own media folder, and `prep`
+re-encodes for it.
 
 Nothing outside the backend is Gemini-specific except the API-key check in the
 orchestrator, which only runs when `model.backend == "gemini"`, and
