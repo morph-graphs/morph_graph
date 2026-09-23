@@ -238,6 +238,43 @@ def test_concurrency_is_bounded_and_complete():
         print(f"  peak in-flight requests {state['peak']}/8, open contexts {state['peak_open']}/3")
 
 
+def test_one_bad_reply_does_not_close_context_early():
+    import threading
+    import time
+    from . import run_eval
+    seen = []
+    install_fake_backend(seen)
+    fake = sys.modules["epic_eval.backends.fake"]
+    state = {"closed": set(), "late": 0, "calls": 0}
+    lock = threading.Lock()
+    fake.open_context = lambda client, mcfg, path, si, n: {"id": path.name, "si": si}
+    fake.close_context = lambda client, ctx: state["closed"].add(ctx["id"])
+
+    def ask(client, mcfg, ctx, prompt, n):
+        with lock:
+            state["calls"] += 1
+            first = state["calls"] == 1
+        if first:
+            return None  # malformed: row construction will raise
+        time.sleep(0.05)
+        if ctx["id"] in state["closed"]:
+            state["late"] += 1
+        return {"pred_letter": "A", "raw_text": "", "usage": {}, "cache_used": False}
+    fake.ask = ask
+    video = "P09-20240622-194642"  # 11 full-video questions share one context
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
+        run = make_run(tmp, True)
+        (tmp / "media" / video).mkdir(parents=True)
+        (tmp / "media" / video / "_done.json").write_text(json.dumps({"files": {}}))
+        ok, fail = run_eval.run_video(run, video)
+        n = len([r for r in bank() if r["video"] == video])
+        assert (ok, fail) == (n - 1, 1), (ok, fail)
+        assert state["late"] == 0  # nobody used a context after it was closed
+        errs = run_eval.read_jsonl(tmp / "errors" / f"{video}.jsonl")
+        assert len(errs) == 1 and errs[0]["stage"] == "ask"
+
+
 def _max_luma(path) -> int:
     import subprocess
     raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(path), "-f", "rawvideo", "-pix_fmt", "gray", "-"],

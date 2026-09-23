@@ -21,7 +21,7 @@ import sys
 import threading
 import time
 import traceback
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -90,19 +90,19 @@ def run_video(run_dir, video: str, limit: int | None = None, which: str = "all")
 
     def ask_one(r: dict, ctx: dict, cutoff, vpath, label: str) -> None:
         base = {"qid": r["qid"], "video": video, "cutoff_s": cutoff, "model": mcfg["name"], "time": now()}
-        try:
+        try:  # anything that goes wrong for one question stays with that question
             out = backend.ask(client, mcfg, ctx, build_prompt(r), len(r["options"]))
+            gt = LETTERS[r["answer_index"]]
+            row = {**base, **out, "gt_letter": gt,
+                   "correct": out["pred_letter"] == gt if out["pred_letter"] else None,
+                   "media_file": vpath.name if vpath else None,
+                   "media_duration_s": media_files.get(vpath.name, {}).get("duration_s") if vpath else None,
+                   "cache_tokens": ctx.get("cache_tokens"), "cache_error": ctx.get("cache_error")}
         except Exception as e:
             record(errors_path, {**base, "stage": "ask", "error": f"{type(e).__name__}: {e}",
                                  "traceback": traceback.format_exc()}, False)
             print(f"    [{label}] {r['qid']}: ask failed: {type(e).__name__}: {e}")
             return
-        gt = LETTERS[r["answer_index"]]
-        row = {**base, **out, "gt_letter": gt,
-               "correct": out["pred_letter"] == gt if out["pred_letter"] else None,
-               "media_file": vpath.name if vpath else None,
-               "media_duration_s": media_files.get(vpath.name, {}).get("duration_s") if vpath else None,
-               "cache_tokens": ctx.get("cache_tokens"), "cache_error": ctx.get("cache_error")}
         if out["pred_letter"]:
             record(answers_path, row, True)
         else:
@@ -123,9 +123,14 @@ def run_video(run_dir, video: str, limit: int | None = None, which: str = "all")
             print(f"    [{label}] context ready in {time.time() - t0:.0f}s "
                   f"(cache={'yes' if ctx.get('cache') else 'no'}, cache_tokens={ctx.get('cache_tokens')})")
             # every question of the group is in flight at once, bounded by the shared request pool;
-            # the context is closed only after all of them have returned
-            for f in [requests.submit(ask_one, r, ctx, cutoff, vpath, label) for r in group]:
-                f.result()
+            # wait for all of them (never stop at the first error) before the context is closed
+            futures = [requests.submit(ask_one, r, ctx, cutoff, vpath, label) for r in group]
+            wait(futures)
+            for f in futures:
+                if f.exception() is not None:  # ask_one records its own failures; this is a bug
+                    print(f"    [{label}] unexpected: {f.exception()!r}")
+                    with lock:
+                        counts["fail"] += 1
         except Exception as e:
             for r in group:
                 record(errors_path, {"qid": r["qid"], "video": video, "cutoff_s": cutoff, "stage": "context",
