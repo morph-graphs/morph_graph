@@ -52,7 +52,9 @@ $PY -m epic_eval.orchestrator --config ... --commit <sha> # submit prep -> eval 
 Rerunning the same command is the recovery path: prep skips videos whose
 `_done.json` matches the files on disk, eval skips questions with a parsed
 answer, and only failures are redone. Jobs are recorded with `nexrun launch`.
-Smoke test: `--videos P09-20240622-194642 --limit 2`.
+Smoke test: `--videos P09-20240622-194642 --limit 2`. Concurrency (`runtime.max_concurrent_groups`,
+`runtime.max_concurrent_requests`, per eval task) is excluded from the run hash, so it can be
+retuned without starting a new run; 429s are retried with exponential backoff.
 
 Before the main run, pick `model.media_resolution` / `model.fps` from measured
 token counts on the longest video (the 61-min one can overflow 1M tokens):

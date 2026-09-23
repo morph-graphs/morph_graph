@@ -179,7 +179,8 @@ def main() -> None:
     cfg["code"]["commit"] = resolve(code_mirror, a.commit)
     cfg["questions"]["commit"] = resolve(q_mirror, cfg["questions"]["commit"])
     cfg.pop("resolved", None)
-    hashed = {k: v for k, v in cfg.items() if k not in ("resolved", "slurm")}  # slurm knobs don't change results
+    # slurm resources and runtime concurrency don't change answers, so they don't change the run
+    hashed = {k: v for k, v in cfg.items() if k not in ("resolved", "slurm", "runtime")}
     env = a.env_name or f"{cfg['code']['commit'][:8]}_{cfg['run']['tag']}_cfg{config_hash(hashed)}"
     run_dir = runs_root / env
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -198,9 +199,9 @@ def main() -> None:
     if not (run_dir / "code_repo" / "epic_eval").is_dir():
         sys.exit(f"FATAL: commit {cfg['code']['commit'][:10]} has no epic_eval/ package")
     prev = run_dir / RUN_CONFIG
-    if prev.exists() and {k: v for k, v in load_json(prev).items() if k != "slurm"} != \
-            {k: v for k, v in cfg.items() if k != "slurm"}:
-        print(f"note: {prev} differs from this config outside 'slurm'; overwriting")
+    if prev.exists() and {k: v for k, v in load_json(prev).items() if k not in ("slurm", "runtime")} != \
+            {k: v for k, v in cfg.items() if k not in ("slurm", "runtime")}:
+        print(f"note: {prev} differs from this config outside 'slurm'/'runtime'; overwriting")
     prev.write_text(json.dumps(cfg, indent=2))
 
     questions = load_questions(cfg["resolved"]["questions_dir"], cfg["questions"]["glob"])

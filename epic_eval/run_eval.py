@@ -2,7 +2,9 @@
 
 Questions are grouped by what the model may see: the full video, or [0, t_ask]
 for streaming questions asked at t_ask. Each group gets one backend context
-(one upload + one cache for Gemini) and one query per question.
+(one upload + one cache for Gemini) and one query per question. Up to
+``runtime.max_concurrent_groups`` contexts are open at once and up to
+``runtime.max_concurrent_requests`` queries are in flight, shared across groups.
 
 Output: <run>/answers/<video>.jsonl, one row per answered question. A question
 counts as done only when its row has a parsed letter; failures go to
@@ -16,8 +18,10 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import threading
 import time
 import traceback
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -76,57 +80,70 @@ def run_video(run_dir, video: str, limit: int | None = None, which: str = "all")
     media_files = json.loads(media_done_marker(media_dir, video).read_text())["files"] if video_on else {}
 
     client = backend.make_client(mcfg)
-    n_ok = n_fail = 0
-    for cutoff, group in group_by_cutoff(todo).items():
-        streaming = cutoff is not None
+    lock = threading.Lock()
+    counts = {"ok": 0, "fail": 0}
+
+    def record(path, row: dict, ok: bool) -> None:
+        with lock:
+            append_jsonl(path, row)
+            counts["ok" if ok else "fail"] += 1
+
+    def ask_one(r: dict, ctx: dict, cutoff, vpath, label: str) -> None:
+        base = {"qid": r["qid"], "video": video, "cutoff_s": cutoff, "model": mcfg["name"], "time": now()}
+        try:
+            out = backend.ask(client, mcfg, ctx, build_prompt(r), len(r["options"]))
+        except Exception as e:
+            record(errors_path, {**base, "stage": "ask", "error": f"{type(e).__name__}: {e}",
+                                 "traceback": traceback.format_exc()}, False)
+            print(f"    [{label}] {r['qid']}: ask failed: {type(e).__name__}: {e}")
+            return
+        gt = LETTERS[r["answer_index"]]
+        row = {**base, **out, "gt_letter": gt,
+               "correct": out["pred_letter"] == gt if out["pred_letter"] else None,
+               "media_file": vpath.name if vpath else None,
+               "media_duration_s": media_files.get(vpath.name, {}).get("duration_s") if vpath else None,
+               "cache_tokens": ctx.get("cache_tokens"), "cache_error": ctx.get("cache_error")}
+        if out["pred_letter"]:
+            record(answers_path, row, True)
+        else:
+            record(errors_path, {**row, "stage": "parse"}, False)
+        print(f"    [{label}] {r['qid']} pred={out['pred_letter']} gt={gt} "
+              f"finish={out.get('finish_reason')} {out.get('latency_s')}s "
+              f"tok={out.get('usage', {}).get('total_token_count')}")
+
+    def run_group(cutoff, group: list[dict], requests: ThreadPoolExecutor) -> None:
         vpath = media_path(media_dir, video, cutoff) if video_on else None
-        sys_inst = system_instruction(streaming, video_on)
+        sys_inst = system_instruction(cutoff is not None, video_on)
         label = "full" if cutoff is None else f"t_ask={cutoff:.1f}s"
         print(f"  [{label}] {len(group)} questions, input={vpath.name if vpath else 'text-only'}")
         ctx = None
         try:
             t0 = time.time()
             ctx = backend.open_context(client, mcfg, vpath, sys_inst, len(group))
-            print(f"    context ready in {time.time() - t0:.0f}s (cache={'yes' if ctx.get('cache') else 'no'}, "
-                  f"cache_tokens={ctx.get('cache_tokens')})")
-            for r in group:
-                base = {"qid": r["qid"], "video": video, "cutoff_s": cutoff, "model": mcfg["name"],
-                        "time": now()}
-                try:
-                    out = backend.ask(client, mcfg, ctx, build_prompt(r), len(r["options"]))
-                except Exception as e:
-                    n_fail += 1
-                    append_jsonl(errors_path, {**base, "stage": "ask", "error": f"{type(e).__name__}: {e}",
-                                               "traceback": traceback.format_exc()})
-                    print(f"    {r['qid']}: ask failed: {type(e).__name__}: {e}")
-                    continue
-                gt = LETTERS[r["answer_index"]]
-                row = {**base, **out, "gt_letter": gt,
-                       "correct": out["pred_letter"] == gt if out["pred_letter"] else None,
-                       "media_file": vpath.name if vpath else None,
-                       "media_duration_s": media_files.get(vpath.name, {}).get("duration_s") if vpath else None,
-                       "cache_tokens": ctx.get("cache_tokens"), "cache_error": ctx.get("cache_error")}
-                if out["pred_letter"]:
-                    n_ok += 1
-                    append_jsonl(answers_path, row)
-                else:
-                    n_fail += 1
-                    append_jsonl(errors_path, {**row, "stage": "parse"})
-                print(f"    {r['qid']} pred={out['pred_letter']} gt={gt} "
-                      f"finish={out.get('finish_reason')} {out.get('latency_s')}s "
-                      f"tok={out.get('usage', {}).get('total_token_count')}")
+            print(f"    [{label}] context ready in {time.time() - t0:.0f}s "
+                  f"(cache={'yes' if ctx.get('cache') else 'no'}, cache_tokens={ctx.get('cache_tokens')})")
+            # every question of the group is in flight at once, bounded by the shared request pool;
+            # the context is closed only after all of them have returned
+            for f in [requests.submit(ask_one, r, ctx, cutoff, vpath, label) for r in group]:
+                f.result()
         except Exception as e:
-            n_fail += len(group)
             for r in group:
-                append_jsonl(errors_path, {"qid": r["qid"], "video": video, "cutoff_s": cutoff,
-                                           "stage": "context", "time": now(),
-                                           "error": f"{type(e).__name__}: {e}",
-                                           "traceback": traceback.format_exc()})
-            print(f"    context failed: {type(e).__name__}: {e}")
+                record(errors_path, {"qid": r["qid"], "video": video, "cutoff_s": cutoff, "stage": "context",
+                                     "time": now(), "error": f"{type(e).__name__}: {e}",
+                                     "traceback": traceback.format_exc()}, False)
+            print(f"    [{label}] context failed: {type(e).__name__}: {e}")
         finally:
             if ctx is not None:
                 backend.close_context(client, ctx)
-    return n_ok, n_fail
+
+    runtime = cfg.get("runtime", {})
+    n_groups = int(runtime.get("max_concurrent_groups", 1))
+    n_requests = int(runtime.get("max_concurrent_requests", 1))
+    print(f"  concurrency: {n_groups} contexts, {n_requests} requests in flight")
+    with ThreadPoolExecutor(n_requests) as requests, ThreadPoolExecutor(n_groups) as groups:
+        for f in [groups.submit(run_group, c, g, requests) for c, g in group_by_cutoff(todo).items()]:
+            f.result()
+    return counts["ok"], counts["fail"]
 
 
 def main() -> None:

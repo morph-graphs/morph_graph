@@ -177,6 +177,53 @@ def test_text_only_sends_no_video():
         assert all(path is None and "not available" in si for path, si, _ in seen)
 
 
+def test_concurrency_is_bounded_and_complete():
+    """Parallel groups/requests: every question answered once, never more in flight than allowed."""
+    import threading
+    import time
+    from . import run_eval
+    seen = []
+    install_fake_backend(seen)
+    fake = sys.modules["epic_eval.backends.fake"]
+    state = {"now": 0, "peak": 0, "open": 0, "peak_open": 0}
+    lock = threading.Lock()
+
+    def open_context(client, mcfg, path, si, n):
+        with lock:
+            state["open"] += 1
+            state["peak_open"] = max(state["peak_open"], state["open"])
+        return {"path": path, "si": si}
+
+    def close_context(client, ctx):
+        with lock:
+            state["open"] -= 1
+
+    def ask(client, mcfg, ctx, prompt, n):
+        with lock:
+            state["now"] += 1
+            state["peak"] = max(state["peak"], state["now"])
+        time.sleep(0.05)
+        with lock:
+            state["now"] -= 1
+        return {"pred_letter": "A", "raw_text": "", "usage": {}, "cache_used": False}
+    fake.open_context, fake.close_context, fake.ask = open_context, close_context, ask
+    video = "P09-20240622-150155"  # 91 questions, the largest video
+    with tempfile.TemporaryDirectory() as d:
+        run = make_run(Path(d), False)
+        cfg = json.loads((run / "reproducibility_config.json").read_text())
+        cfg["resolved"]["media_dir"] = None
+        cfg["runtime"] = {"max_concurrent_groups": 3, "max_concurrent_requests": 8}
+        (run / "reproducibility_config.json").write_text(json.dumps(cfg))
+        ok, fail = run_eval.run_video(run, video)
+        n = len([r for r in bank() if r["video"] == video])
+        rows = run_eval.read_jsonl(run / "answers" / f"{video}.jsonl")
+        assert (ok, fail) == (n, 0) and len(rows) == n and len({r["qid"] for r in rows}) == n
+        assert 1 < state["peak"] <= 8, state
+        assert 1 < state["peak_open"] <= 3, state
+        assert state["open"] == 0  # every context closed
+        print(f"  peak in-flight requests {state['peak']}/8, open contexts {state['peak_open']}/3")
+
+
 def _max_luma(path) -> int:
     import subprocess
     raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(path), "-f", "rawvideo", "-pix_fmt", "gray", "-"],

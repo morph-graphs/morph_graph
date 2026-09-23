@@ -44,6 +44,10 @@
     "retry_delay_s": 10,
     "upload_timeout_s": 1800
   },
+  "runtime": {
+    "max_concurrent_groups": 4,
+    "max_concurrent_requests": 16
+  },
   "slurm": {
     "prep": {
       "account": "vulcan-abhinav",
@@ -60,7 +64,7 @@
       "qos": "vulcan-cpu",
       "cpus": 2,
       "mem": "8G",
-      "time": "12:00:00",
+      "time": "4:00:00",
       "max_parallel": 4
     },
     "score": {
