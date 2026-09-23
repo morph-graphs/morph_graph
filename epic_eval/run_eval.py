@@ -45,6 +45,24 @@ def done_qids(path) -> set:
     return {r["qid"] for r in read_jsonl(path) if r.get("pred_letter")}
 
 
+def truncated_qids(errors_path) -> set:
+    """Questions whose reply hit the output-token cap before an answer (usually thinking).
+
+    Final unless runtime.retry_truncated: re-asking with the same settings mostly
+    truncates again, so these are left for a later run with a lower thinking level.
+    """
+    return {r["qid"] for r in read_jsonl(errors_path)
+            if r.get("stage") == "parse" and r.get("finish_reason") == "MAX_TOKENS"}
+
+
+def skip_qids(run_dir, video: str, cfg: dict) -> set:
+    run_dir = Path(run_dir)
+    skip = done_qids(run_dir / "answers" / f"{video}.jsonl")
+    if not cfg.get("runtime", {}).get("retry_truncated", False):
+        skip |= truncated_qids(run_dir / "errors" / f"{video}.jsonl")
+    return skip
+
+
 def append_jsonl(path, row: dict) -> None:
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     with open(path, "a") as f:
@@ -67,10 +85,13 @@ def run_video(run_dir, video: str, limit: int | None = None, which: str = "all")
     if which != "all":
         rows = [r for r in rows if r["streaming"] == (which == "streaming")]
     done = done_qids(answers_path)
-    todo = [r for r in rows if r["qid"] not in done]
+    skip = skip_qids(run_dir, video, cfg)
+    todo = [r for r in rows if r["qid"] not in skip]
     if limit is not None:
         todo = todo[:limit]
-    print(f"{video}: {len(rows)} questions, {len(done & {r['qid'] for r in rows})} done, {len(todo)} to run")
+    qids = {r["qid"] for r in rows}
+    print(f"{video}: {len(rows)} questions, {len(done & qids)} done, "
+          f"{len((skip - done) & qids)} truncated (not retried), {len(todo)} to run")
     if not todo:
         return 0, 0
 

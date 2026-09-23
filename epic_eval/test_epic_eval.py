@@ -275,6 +275,38 @@ def test_one_bad_reply_does_not_close_context_early():
         assert len(errs) == 1 and errs[0]["stage"] == "ask"
 
 
+def test_truncated_replies_are_not_retried():
+    from . import run_eval, score
+    seen = []
+    install_fake_backend(seen)
+    fake = sys.modules["epic_eval.backends.fake"]
+    calls = []
+
+    def ask(client, mcfg, ctx, prompt, n):
+        calls.append(prompt)
+        if len(calls) == 1:  # thinking ate the output budget: no answer text
+            return {"pred_letter": None, "raw_text": "", "finish_reason": "MAX_TOKENS", "usage": {},
+                    "cache_used": False}
+        return {"pred_letter": "A", "raw_text": "", "finish_reason": "STOP", "usage": {}, "cache_used": False}
+    fake.ask = ask
+    video = "P09-20240622-194642"
+    n = len([r for r in bank() if r["video"] == video])
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
+        run = make_run(tmp, False)
+        cfg = json.loads((run / "reproducibility_config.json").read_text())
+        cfg["resolved"]["media_dir"] = None
+        (run / "reproducibility_config.json").write_text(json.dumps(cfg))
+        assert run_eval.run_video(run, video) == (n - 1, 1)
+        assert run_eval.run_video(run, video) == (0, 0) and len(calls) == n  # not re-asked
+        res = score.score_run(run)
+        assert len(res["truncated_qids"]) == 1 and len(res["missing_qids"]) == 449 - n + 1
+        cfg["runtime"] = {"retry_truncated": True}
+        (run / "reproducibility_config.json").write_text(json.dumps(cfg))
+        assert run_eval.run_video(run, video) == (1, 0)  # opt-in retry
+        assert score.score_run(run)["truncated_qids"] == []
+
+
 def _max_luma(path) -> int:
     import subprocess
     raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(path), "-f", "rawvideo", "-pix_fmt", "gray", "-"],

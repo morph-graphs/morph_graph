@@ -20,7 +20,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from .common import load_run_config, questions_for_run
-from .run_eval import read_jsonl
+from .run_eval import read_jsonl, truncated_qids
 
 
 def summarize(rows: list[dict], answers: dict) -> dict:
@@ -51,6 +51,10 @@ def score_run(run_dir) -> dict:
                 answers[a["qid"]] = a  # last write wins
     known = {q["qid"] for q in questions}
     stray = sorted(set(answers) - known)
+    truncated = set()
+    for path in sorted((run_dir / "errors").glob("*.jsonl")):
+        truncated |= truncated_qids(path)
+    truncated -= set(answers)
 
     splits = {
         "all": questions,
@@ -77,6 +81,7 @@ def score_run(run_dir) -> dict:
         "by_video": by("video"),
         "by_options_model": by("options_model"),
         "missing_qids": sorted(known - set(answers)),
+        "truncated_qids": sorted(truncated & known),  # hit the output cap; counted as wrong in acc
         "stray_answer_qids": stray,
         "cache_used_frac": (sum(bool(a.get("cache_used")) for a in answers.values()) / len(answers)) if answers else None,
         "usage_totals": dict(usage),
@@ -116,7 +121,8 @@ def main() -> None:
         table("BY FORM", res["by_form"]),
         table("BY VIDEO", res["by_video"]),
         table("BY OPTIONS MODEL", res["by_options_model"]),
-        f"\nmissing: {len(res['missing_qids'])}  stray answers: {len(res['stray_answer_qids'])}  "
+        f"\nmissing: {len(res['missing_qids'])} (of which truncated at the output cap: "
+        f"{len(res['truncated_qids'])})  stray answers: {len(res['stray_answer_qids'])}  "
         f"cache_used_frac: {fmt(res['cache_used_frac'])}",
         f"usage: {res['usage_totals']}",
     ])

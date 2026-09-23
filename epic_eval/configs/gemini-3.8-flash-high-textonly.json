@@ -47,7 +47,8 @@
   "runtime": {
     "max_concurrent_groups": 8,
     "max_concurrent_requests": 32,
-    "prep_workers": 4
+    "prep_workers": 4,
+    "retry_truncated": false
   },
   "slurm": {
     "prep": {

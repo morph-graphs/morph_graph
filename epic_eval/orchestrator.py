@@ -30,7 +30,7 @@ from pathlib import Path
 
 from .common import (RUN_CONFIG, config_hash, load_json, load_questions, media_done_marker,
                      media_hash, media_path, group_by_cutoff)
-from .run_eval import done_qids
+from .run_eval import skip_qids
 
 NEXRUN = Path("~/.claude/bin/nexrun").expanduser()
 
@@ -240,9 +240,8 @@ def main() -> None:
                 if not a.dryrun:
                     sys.exit(f"FATAL: {msg}")
                 print(f"WARNING (dryrun): {msg}; a real submission would stop here")
-        answers = run_dir / "answers"
         todo = [v for v in videos
-                if a.limit or {q["qid"] for q in by_video[v]} - done_qids(answers / f"{v}.jsonl")]
+                if a.limit or {q["qid"] for q in by_video[v]} - skip_qids(run_dir, v, cfg)]
         print(f"\neval: {len(todo)}/{len(videos)} videos have unanswered questions")
         if todo:
             lim = f" --limit {a.limit}" if a.limit else ""

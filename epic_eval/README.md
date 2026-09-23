@@ -55,6 +55,10 @@ answer, and only failures are redone. Jobs are recorded with `nexrun launch`.
 Smoke test: `--videos P09-20240622-194642 --limit 2`. Concurrency (`runtime.max_concurrent_groups`,
 `runtime.max_concurrent_requests`, per eval task) is excluded from the run hash, so it can be
 retuned without starting a new run; 429s are retried with exponential backoff.
+A reply that hits the output-token cap before answering (`finish_reason: MAX_TOKENS`,
+usually HIGH thinking on long videos) is final: reruns skip it and `score` lists it
+under `truncated_qids` (counted wrong in `acc`). Set `runtime.retry_truncated: true`
+to re-ask them, e.g. after lowering `model.thinking_level`.
 
 Before the main run, pick `model.media_resolution` / `model.fps` from measured
 token counts on the longest video (the 61-min one can overflow 1M tokens):
