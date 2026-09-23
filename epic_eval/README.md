@@ -72,6 +72,31 @@ prompts and options, `media.enabled: false`. The gap between the two runs is
 how much the video is actually used — the options were written from narration
 transcripts, so text priors may carry a lot.
 
+## Looking at the answers: the run explorer
+
+```bash
+$PY -m epic_eval.explorer --runs <run_dir> [<run_dir> ...] \
+    --labels "Gemini video,Gemini text-only" --out <file>.html [--verdicts verdicts.json]
+```
+
+Writes one self-contained HTML file from any set of run folders: every question
+with its options, the correct answer, each run's pick and reasoning summary, and
+the narration evidence with timestamps. Filter by question type, video,
+streaming or full, yes/no, and outcome (e.g. "run A wrong, run B right");
+accuracy tables follow the filters. Questions are joined across runs by qid; if a
+later bank changed a question's options, each run keeps its own and the page
+says so.
+
+Each question takes a verdict (model wrong / bank answer wrong / question
+ambiguous / options give it away / other) and a note:
+- **Opened as a local file** (no Claude account needed): verdicts are kept in that
+  browser; *Export verdicts* saves them as JSON, and `--verdicts <file>` embeds
+  them in the next build, so they can travel through the run folder or git.
+- **Published as a claude.ai artifact with the `db` capability**: verdicts are
+  shared live between everyone the page is shared with (*Import verdicts* merges a
+  local export into the shared set). The Gemini 3.8 Flash runs on `04fb5d5` are
+  at `epic_eval_runs/_explorer/gemini38flash_04fb5d5.html`.
+
 ## Reading the scores
 
 `acc` divides by the whole bank (missing = wrong); `acc_answered` divides by

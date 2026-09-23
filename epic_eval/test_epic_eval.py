@@ -42,7 +42,7 @@ def test_bank_shape():
     assert sum(r["streaming"] for r in rows) == sum(bool(q["streaming"]) for q in raw)
     assert all(r["t_ask"] is not None for r in rows if r["streaming"])
     assert all(r["t_ask"] is None for r in rows if not r["streaming"])
-    assert all(len(r["options"]) == 4 for r in rows)
+    assert all(2 <= len(r["options"]) <= 4 for r in rows)  # 2 for yes/no and event_order from epic-morph a240b88
     assert len({r["qid"] for r in rows}) == len(rows)
     # the option we score as correct is the bank's answer, verbatim or as "<yes|no> - <reason>"
     for r in rows:
@@ -305,6 +305,50 @@ def test_truncated_replies_are_not_retried():
         (run / "reproducibility_config.json").write_text(json.dumps(cfg))
         assert run_eval.run_video(run, video) == (1, 0)  # opt-in retry
         assert score.score_run(run)["truncated_qids"] == []
+
+
+def test_explorer_joins_runs_and_keeps_verdicts():
+    """Two runs over one video: the explorer's per-run right/wrong must equal each run's answers."""
+    from . import explorer, run_eval
+    seen = []
+    install_fake_backend(seen)
+    fake = sys.modules["epic_eval.backends.fake"]
+    video = "P09-20240622-194642"
+    rows = [r for r in bank() if r["video"] == video]
+    with tempfile.TemporaryDirectory() as d:
+        runs = []
+        for k, pick in enumerate(("A", "B")):
+            fake.ask = lambda client, mcfg, ctx, prompt, n, pick=pick: {
+                "pred_letter": pick, "raw_text": "", "usage": {"thoughts_token_count": 7},
+                "cache_used": False, "thoughts": "because " * 400}
+            (Path(d) / f"run{k}").mkdir()
+            run = make_run(Path(d) / f"run{k}", False)
+            cfg = json.loads((run / "reproducibility_config.json").read_text())
+            cfg["resolved"]["media_dir"] = None
+            (run / "reproducibility_config.json").write_text(json.dumps(cfg))
+            assert run_eval.run_video(run, video) == (len(rows), 0)
+            runs.append(run)
+        data = explorer.build(runs, ["first", "second"], max_thought=100,
+                              verdicts={rows[0]["qid"]: {"verdict": "bank answer wrong", "note": "x"}})
+        # every bank question is listed (unanswered ones included); each run answered this video only
+        assert len(data["runs"]) == 2 and len(data["questions"]) == len(bank())
+        assert [r["answered"] for r in data["runs"]] == [len(rows), len(rows)]
+        by = {q["qid"]: q for q in data["questions"]}
+        for r in rows:
+            q = by[r["qid"]]
+            for k, pick in enumerate("AB"):
+                got = q["per"][str(k)]
+                assert got["pick"] == LETTERS.index(pick)
+                assert got["ok"] == (LETTERS[r["answer_index"]] == pick)
+                assert len(got["thoughts"]) <= 102
+            assert q["opts_by_run"] == {}          # same bank in both runs
+        html = explorer.render(data)
+        assert "<title>EPIC-Morph Run Explorer</title>" in html and "/*DATA*/" not in html
+        blob = html.split("const DATA = ", 1)[1].split(";\nconst RUNS", 1)[0]
+        assert json.loads(blob.replace("<\\/", "</"))["verdicts"][rows[0]["qid"]]["verdict"] == "bank answer wrong"
+        answered = [q for q in data["questions"] if q["per"]]
+        print(f"  {len(answered)} questions x 2 runs joined; A right on "
+              f"{sum(q['per']['0']['ok'] for q in answered)}, B right on {sum(q['per']['1']['ok'] for q in answered)}")
 
 
 def _max_luma(path) -> int:
