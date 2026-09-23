@@ -15,6 +15,7 @@ import json
 import os
 import subprocess
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from .common import (group_by_cutoff, load_run_config, media_done_marker, media_path,
@@ -68,12 +69,12 @@ def expected_ok(path, target_s: float, media: dict) -> tuple[bool, str]:
     return True, f"{dur:.3f}s"
 
 
-def encode(src, dst, media: dict, duration_s: float | None = None) -> None:
+def encode(src, dst, media: dict, duration_s: float | None = None, threads: int = 0) -> None:
     side = int(media["max_side"])
     vf = [f"scale='if(gte(iw,ih),min({side},iw),-2)':'if(gte(iw,ih),-2,min({side},ih))'"]
     if media.get("encode_fps"):
         vf.append(f"fps={media['encode_fps']}")
-    cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y"]
+    cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-threads", str(threads)]
     if duration_s is not None:
         # Input-side -t: source frames at or after t_ask are never decoded, so no output
         # frame can carry them. (An output-side cut of an fps-resampled video can keep a
@@ -81,7 +82,8 @@ def encode(src, dst, media: dict, duration_s: float | None = None) -> None:
         cmd += ["-t", f"{duration_s:.3f}"]
     cmd += ["-i", str(src)]
     cmd += ["-vf", ",".join(vf), "-c:v", "libx264", "-preset", media.get("preset", "veryfast"),
-            "-crf", str(media["crf"]), "-pix_fmt", "yuv420p", "-movflags", "+faststart"]
+            "-crf", str(media["crf"]), "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+            "-threads", str(threads)]
     cmd += ["-c:a", "aac", "-b:a", "64k"] if media["audio"] else ["-an"]
     tmp = Path(dst).with_suffix(".tmp.mp4")
     tmp.parent.mkdir(parents=True, exist_ok=True)
@@ -89,7 +91,7 @@ def encode(src, dst, media: dict, duration_s: float | None = None) -> None:
     os.replace(tmp, dst)  # atomic: a preempted encode never leaves a half file under the real name
 
 
-def prep_video(cfg: dict, video: str, force: bool = False) -> dict:
+def prep_video(cfg: dict, video: str, force: bool = False, workers: int = 1) -> dict:
     media, media_dir = cfg["media"], Path(cfg["resolved"]["media_dir"])
     rows = [r for r in questions_for_run(cfg) if r["video"] == video]
     if not rows:
@@ -97,22 +99,28 @@ def prep_video(cfg: dict, video: str, force: bool = False) -> dict:
     src = source_video(cfg, video)
     full_s = probe_duration(src)
     cutoffs = [c for c in group_by_cutoff(rows) if c is not None]
-    files = {}
-    targets = [(None, full_s)] + [(c, min(c, full_s)) for c in cutoffs]
-    for cutoff, target in targets:
+    # Longest first, so the long encodes start early and the pool finishes evenly.
+    targets = sorted([(None, full_s)] + [(c, min(c, full_s)) for c in cutoffs], key=lambda t: -t[1])
+    cpus = int(os.environ.get("SLURM_CPUS_PER_TASK", os.cpu_count() or 1))
+    threads = max(1, cpus // max(1, workers))
+
+    def one(cutoff, target):
         dst = media_path(media_dir, video, cutoff)
         ok, why = expected_ok(dst, target, media)
         if ok and not force:
             print(f"  keep {dst.name} ({why})")
         else:
             t0 = time.time()
-            encode(src, dst, media, cutoff)  # clips come from the source, never from full.mp4
+            encode(src, dst, media, cutoff, threads)  # clips come from the source, never from full.mp4
             ok, why = expected_ok(dst, target, media)
             print(f"  wrote {dst.name} in {time.time() - t0:.0f}s ({why})")
             if not ok:
                 raise RuntimeError(f"{dst} failed validation: {why}")
-        files[dst.name] = {"cutoff_s": cutoff, "duration_s": probe_duration(dst),
-                           "bytes": dst.stat().st_size}
+        return dst.name, {"cutoff_s": cutoff, "duration_s": probe_duration(dst), "bytes": dst.stat().st_size}
+
+    print(f"  {len(targets)} files, {workers} parallel encodes x {threads} threads")
+    with ThreadPoolExecutor(max(1, workers)) as pool:
+        files = dict(pool.map(lambda t: one(*t), targets))
     marker = media_done_marker(media_dir, video)
     marker.write_text(json.dumps({"video": video, "source": str(src), "source_duration_s": full_s,
                                   "media": media, "files": files}, indent=2))
@@ -127,7 +135,9 @@ def main() -> None:
     a = p.parse_args()
     cfg = load_run_config(a.run_dir)
     print(f"prep {a.video} -> {cfg['resolved']['media_dir']}")
-    files = prep_video(cfg, a.video, a.force)
+    t0 = time.time()
+    files = prep_video(cfg, a.video, a.force, int(cfg.get("runtime", {}).get("prep_workers", 1)))
+    print(f"prep wall time {time.time() - t0:.0f}s")
     print(f"done: {len(files)} files")
 
 

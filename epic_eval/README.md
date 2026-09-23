@@ -34,8 +34,8 @@ video part.
     scores.json  scores.txt
 ```
 
-The config hash covers everything except `slurm` (resources do not change
-results), with both commits resolved to full SHAs first.
+The config hash covers everything except `slurm` and `runtime` (resources and
+concurrency do not change answers), with both commits resolved to full SHAs first.
 
 ## Running
 
@@ -71,17 +71,59 @@ transcripts, so text priors may carry a lot.
 ## Reading the scores
 
 `acc` divides by the whole bank (missing = wrong); `acc_answered` divides by
-answered questions. Always quote `non_binary`: the 129 yes/no questions carry
-`caveat: binary_answer_format_cue` (the true answer is the only short option),
-so they are reported separately. `chance` and the bank's `majority_baseline`
+answered questions. Always quote `non_binary`. The 129 yes/no questions are
+reported separately (`binary_yes_no`) because their option layout has been a
+format cue in every bank version so far. At epic-morph `04fb5d5` each has one
+option with the true verdict, two with the opposite verdict, and
+"insufficient information", so "pick the verdict that appears once" is right
+129/129 without the video. `chance` and the bank's `majority_baseline`
 are printed beside every split.
 
-## Adding a model
+## Adding a model (e.g. Qwen3-VL)
 
-Write `backends/<name>.py` with `make_client`, `open_context`, `ask`,
-`close_context` (see `backends/__init__.py`), register it in `BACKENDS`, and add
-a config whose `slurm.eval` asks for a GPU if it needs one. Media prep is
-model-independent and is reused.
+Everything model-specific lives in one backend module. Prep, grouping, prompts,
+resume, scoring and the orchestrator are shared, and the `[0, t_ask]` clips are
+already cut, so a new model inherits the no-leak guarantee without any work.
+
+1. **`backends/qwen3_vl.py`** — four functions (contract in `backends/__init__.py`):
+
+   ```python
+   from ..common import parse_letter
+
+   def make_client(mcfg):                      # once per eval task: load weights onto the GPU
+       ...                                     # model_zoo/Qwen3-VL-8B-Instruct is on disk;
+                                               # video_models/qwen3_vl.py shows the loading code
+   def open_context(client, mcfg, video_path, system_instruction, n_questions):
+       # video_path is full.mp4 or upto_<t_ask>s.mp4 (None in text-only runs).
+       # Decode frames here, once per group (e.g. mcfg["fps"], mcfg["max_frames"]),
+       # optionally prefill the KV cache; everything returned is handed back to ask().
+       return {"frames": ..., "system_instruction": system_instruction}
+   def ask(client, mcfg, ctx, prompt, n_options):
+       text = ...                              # chat template: system + frames + prompt; generate
+       return {"pred_letter": parse_letter(text, n_options), "raw_text": text,
+               "usage": {...}, "cache_used": False}   # any extra keys land in answers/*.jsonl
+   def close_context(client, ctx):
+       pass                                    # free frames / KV
+   ```
+
+2. **Register it**: `BACKENDS["qwen3_vl"] = "epic_eval.backends.qwen3_vl"`.
+3. **Config**: copy `configs/gemini-3.8-flash-high.json` and change
+   - `run.tag`, and `model` to `{"backend": "qwen3_vl", ...}` with whatever
+     keys the backend reads (the Gemini-only keys can go);
+   - `paths.python` if the model needs a different environment;
+   - `slurm.eval` to a GPU tier, e.g. `vulcan-scavenger` with `"gres": "gpu:rtxa6000:1"`;
+   - `runtime.max_concurrent_groups` / `max_concurrent_requests` to `1` — the
+     worker threads share one model, so either keep them at 1 or lock inside `ask`.
+4. **Test** before a full run: `--videos P09-20240622-194642 --limit 2`, then
+   open `answers/*.jsonl`.
+
+Leave `media` as it is to reuse the already-encoded clips (1024 px, 2 fps). If
+the model wants something else, change `media`: that gets its own media folder,
+and `prep` re-encodes for it.
+
+Nothing outside the backend is Gemini-specific except the API-key check in the
+orchestrator, which only runs when `model.backend == "gemini"`, and
+`probe_tokens.py`.
 
 ## Tests
 

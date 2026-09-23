@@ -8,7 +8,7 @@
   },
   "questions": {
     "repo_url": "git@github.com:vatsalag99/epic-morph.git",
-    "commit": "6c36d156b2de5fb3ce045bd74ba25621590149d6",
+    "commit": "04fb5d5aee8d5f3872dd44f28da7a0257009f2ee",
     "glob": "outputs/questions/*_questions.json"
   },
   "paths": {
@@ -37,7 +37,7 @@
     "seed": 0,
     "max_output_tokens": 65536,
     "fps": 1.0,
-    "media_resolution": "MEDIA_RESOLUTION_LOW",
+    "media_resolution": "MEDIA_RESOLUTION_HIGH",
     "cache_min_questions": 2,
     "cache_ttl_s": 7200,
     "max_retries": 6,
@@ -45,8 +45,9 @@
     "upload_timeout_s": 1800
   },
   "runtime": {
-    "max_concurrent_groups": 4,
-    "max_concurrent_requests": 16
+    "max_concurrent_groups": 8,
+    "max_concurrent_requests": 32,
+    "prep_workers": 4
   },
   "slurm": {
     "prep": {

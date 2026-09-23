@@ -30,20 +30,30 @@ def bank():
     return load_questions(EPIC, GLOB)
 
 
+def _raw_questions():
+    return [q for f in sorted((EPIC / "outputs" / "questions").glob("*_questions.json"))
+            for q in json.loads(f.read_text())["questions"]]
+
+
 def test_bank_shape():
-    rows = bank()
-    assert len(rows) == 449, len(rows)
-    assert sum(r["streaming"] for r in rows) == 222
+    """Invariants, not counts: the bank is expected to change between commits."""
+    rows, raw = bank(), _raw_questions()
+    assert len(rows) == len(raw) > 0
+    assert sum(r["streaming"] for r in rows) == sum(bool(q["streaming"]) for q in raw)
     assert all(r["t_ask"] is not None for r in rows if r["streaming"])
     assert all(r["t_ask"] is None for r in rows if not r["streaming"])
     assert all(len(r["options"]) == 4 for r in rows)
     assert len({r["qid"] for r in rows}) == len(rows)
-    # the letter we score against is the bank's own answer text
-    assert all(r["options"][r["answer_index"]].strip().lower() == r["answer"].strip().lower() for r in rows)
+    # the option we score as correct is the bank's answer, verbatim or as "<yes|no> - <reason>"
+    for r in rows:
+        opt, ans = r["options"][r["answer_index"]].strip().lower(), r["answer"].strip().lower()
+        assert opt == ans or (r["binary"] and opt.startswith(ans + " - ")), (r["qid"], ans, opt)
+    print(f"  {len(rows)} questions, {sum(r['streaming'] for r in rows)} streaming, "
+          f"{sum(r['binary'] for r in rows)} yes/no")
 
 
 def test_grouping():
-    rows = bank()
+    rows, raw = bank(), _raw_questions()
     n_groups = 0
     for v in {r["video"] for r in rows}:
         g = group_by_cutoff([r for r in rows if r["video"] == v])
@@ -51,7 +61,11 @@ def test_grouping():
         for cutoff, members in g.items():
             assert all(m["t_ask"] == cutoff for m in members)
             assert all(m["streaming"] == (cutoff is not None) for m in members)
-    assert n_groups == 140 + 12, n_groups  # 140 distinct streaming cutoffs + 1 full group per video
+    # one context per distinct (video, t_ask) plus one full-video context per video with full questions
+    want = len({(q["video"], float(q["t_ask"])) for q in raw if q["streaming"]}) + \
+        len({q["video"] for q in raw if not q["streaming"]})
+    assert n_groups == want, (n_groups, want)
+    print(f"  {n_groups} contexts")
 
 
 def test_prompt():
@@ -66,7 +80,7 @@ def test_prompt():
 
 
 def test_parse_letter():
-    from .backends.gemini import parse_letter
+    from .common import parse_letter
     assert parse_letter('{"answer": "C"}', 4) == "C"
     assert parse_letter('{"answer": "c"}', 4) == "C"
     assert parse_letter('garbage "answer": "B" more', 4) == "B"
@@ -263,7 +277,7 @@ def test_media_trim_no_leak():
         tmp = Path(d)
         run = make_run(tmp, True)
         cfg = json.loads((run / "reproducibility_config.json").read_text())
-        files = prep_video(cfg, SHORT_VIDEO)
+        files = prep_video(cfg, SHORT_VIDEO, workers=3)  # parallel path
         rows = [r for r in bank() if r["video"] == SHORT_VIDEO]
         tol = 1.5 / cfg["media"]["encode_fps"]
         for cutoff in group_by_cutoff(rows):

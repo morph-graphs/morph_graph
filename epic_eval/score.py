@@ -4,9 +4,10 @@ Denominator is the question bank, not the answer files: a question with no
 parsed answer counts as wrong in ``acc`` (and is listed as missing), and
 ``acc_answered`` is reported beside it so coverage gaps cannot hide.
 
-Splits: streaming vs full video, binary yes/no questions (whose option layout
-is a known format cue -- ``caveat: binary_answer_format_cue``) vs the rest, by
-question form, and by who wrote the options.
+Splits: streaming vs full video, yes/no questions (answer text "yes"/"no") vs
+the rest, by question form, and by who wrote the options. Yes/no questions are
+kept apart because their option layout has been a format cue in every bank
+version so far (at 04fb5d5 the true verdict is the only option with that verdict).
 
     python -m epic_eval.score --run_dir <run>
 """
@@ -55,10 +56,10 @@ def score_run(run_dir) -> dict:
         "all": questions,
         "streaming": [q for q in questions if q["streaming"]],
         "full_video": [q for q in questions if not q["streaming"]],
-        "non_binary": [q for q in questions if not q["caveat"]],
-        "binary_format_cue": [q for q in questions if q["caveat"]],
-        "non_binary/streaming": [q for q in questions if not q["caveat"] and q["streaming"]],
-        "non_binary/full_video": [q for q in questions if not q["caveat"] and not q["streaming"]],
+        "non_binary": [q for q in questions if not q["binary"]],
+        "binary_yes_no": [q for q in questions if q["binary"]],
+        "non_binary/streaming": [q for q in questions if not q["binary"] and q["streaming"]],
+        "non_binary/full_video": [q for q in questions if not q["binary"] and not q["streaming"]],
     }
     by = lambda key: {k: summarize(v, answers) for k, v in sorted(_group(questions, key).items())}
     usage = defaultdict(int)

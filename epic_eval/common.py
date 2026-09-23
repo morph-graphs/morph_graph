@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 
 LETTERS = "ABCDEFGH"
@@ -59,6 +60,7 @@ def load_questions(questions_dir, pattern: str) -> list[dict]:
                 "form": q["form"],
                 "hops": q.get("hops"),
                 "caveat": mcq.get("caveat"),
+                "binary": str(q["answer"]).strip().lower() in ("yes", "no"),
                 "options_model": mcq.get("model"),
                 "guessable": q.get("guessable"),
                 "majority_baseline": q.get("majority_baseline"),
@@ -140,3 +142,18 @@ def build_prompt(row: dict) -> str:
     lines += [f"{LETTERS[i]}. {opt}" for i, opt in enumerate(row["options"])]
     lines += ["", 'Respond with JSON: {"answer": "<letter>"}.']
     return "\n".join(lines)
+
+
+def parse_letter(text: str | None, n_options: int) -> str | None:
+    """Letter from a model reply: JSON {"answer": "B"} first, then a bare letter. None if neither."""
+    if not text:
+        return None
+    valid = {chr(ord("A") + i) for i in range(n_options)}
+    try:
+        ans = str(json.loads(text).get("answer", "")).strip().upper()
+        if ans in valid:
+            return ans
+    except (json.JSONDecodeError, AttributeError):
+        pass
+    m = re.search(r'"answer"\s*:\s*"([A-Z])"', text) or re.fullmatch(r"\s*\(?([A-Z])\)?[.\s]*", text)
+    return m.group(1) if m and m.group(1) in valid else None

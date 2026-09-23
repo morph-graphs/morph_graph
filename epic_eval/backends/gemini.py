@@ -10,14 +10,14 @@ system instruction and video part; only where they live differs.
 
 from __future__ import annotations
 
-import json
 import os
-import re
 import time
 from pathlib import Path
 
 from google import genai
 from google.genai import errors, types
+
+from ..common import parse_letter
 
 RETRY_CODES = {408, 429, 500, 502, 503, 504}
 
@@ -131,20 +131,6 @@ def _generate_config(mcfg: dict, n_options: int, ctx: dict) -> types.GenerateCon
     else:
         cfg.system_instruction = ctx["system_instruction"]
     return cfg
-
-
-def parse_letter(text: str | None, n_options: int) -> str | None:
-    if not text:
-        return None
-    valid = {chr(ord("A") + i) for i in range(n_options)}
-    try:
-        ans = str(json.loads(text).get("answer", "")).strip().upper()
-        if ans in valid:
-            return ans
-    except (json.JSONDecodeError, AttributeError):
-        pass
-    m = re.search(r'"answer"\s*:\s*"([A-Z])"', text) or re.fullmatch(r"\s*\(?([A-Z])\)?[.\s]*", text)
-    return m.group(1) if m and m.group(1) in valid else None
 
 
 def ask(client, mcfg: dict, ctx: dict, prompt: str, n_options: int) -> dict:
