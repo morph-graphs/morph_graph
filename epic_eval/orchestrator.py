@@ -119,7 +119,8 @@ def write_array(cfg: dict, step: str, commands: list[str], dependency: str | Non
         "set -eo pipefail",
         'echo "host=$(hostname) job=${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID} restarts=${SLURM_RESTART_COUNT:-0}"',
         "source /etc/profile.d/modules.sh",
-        f"module load {cfg['paths']['ffmpeg_module']}",
+        # null when ffmpeg comes from elsewhere, e.g. inside the container paths.python runs
+        *([f"module load {cfg['paths']['ffmpeg_module']}"] if cfg["paths"].get("ffmpeg_module") else []),
         f"cd {cfg['resolved']['code_dir']}",
         "export PYTHONUNBUFFERED=1",
         f'CMD=$(sed -n "${{SLURM_ARRAY_TASK_ID}}p" {cmd_file})',
@@ -166,9 +167,21 @@ def main() -> None:
     p.add_argument("--questions_repo_url", help="override config questions.repo_url")
     p.add_argument("--env_name", help="override the auto-generated run directory name")
     p.add_argument("--note", default="", help="why this run exists (goes to the nexrun ledger)")
+    p.add_argument("--fps", type=float, help="override model.fps (required for qwen38_vl)")
+    p.add_argument("--max_frames", type=int, help="override model.max_frames (required for qwen38_vl)")
     a = p.parse_args()
 
     cfg = load_json(a.config)
+    if a.fps is not None:
+        cfg["model"]["fps"] = a.fps
+    if a.max_frames is not None:
+        cfg["model"]["max_frames"] = a.max_frames
+    if cfg["model"]["backend"] == "qwen38_vl":
+        # Video sampling is a sweep axis, so it is chosen per launch and named in the run dir.
+        fps, max_frames = cfg["model"].get("fps"), cfg["model"].get("max_frames")
+        if fps is None or max_frames is None:
+            sys.exit("FATAL: qwen38_vl needs --fps and --max_frames, e.g. --fps 1 --max_frames 768")
+        cfg["run"]["tag"] += f"-fps{fps:g}-f{max_frames}"
     runs_root = Path(cfg["run"]["runs_root"])
     code_url = a.code_repo_url or cfg["code"]["repo_url"]
     q_url = a.questions_repo_url or cfg["questions"]["repo_url"]
