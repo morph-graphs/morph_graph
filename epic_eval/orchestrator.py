@@ -6,6 +6,8 @@ Checks out the eval code (this repo) at ``--commit`` and the question bank
 
     prep   one task per video: encode full video + [0, t_ask] clips   (skipped if media valid)
     eval   one task per video: query the model, write answers/<video>.jsonl
+           (or, with slurm.eval.questions_per_task, one task per chunk of a video's
+           pending questions, each writing answers/<video>.<shard>.jsonl)
     score  one task: scores.json / scores.txt
 
 Every job runs from the checked-out code, never from the working tree. The
@@ -83,6 +85,24 @@ def media_ready(cfg: dict, video: str, cutoffs) -> bool:
     listed = json.loads(marker.read_text())["files"]
     want = [media_path(media_dir, video, c) for c in cutoffs]
     return all(p.name in listed and p.exists() and p.stat().st_size == listed[p.name]["bytes"] for p in want)
+
+
+def eval_chunks(run_dir: Path, videos: list[str], by_video: dict, cfg: dict, per_task: int,
+                limit: int | None) -> list[tuple[str, str, list[str]]]:
+    """(video, shard, qids) per eval task: each video's pending questions in chunks of per_task.
+
+    Chunks follow group order, so a task opens as few video contexts as possible. The
+    shard name carries a timestamp: a relaunch never reuses a file a running task writes.
+    """
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    chunks = []
+    for v in videos:
+        skip = skip_qids(run_dir, v, cfg)
+        pending = [q["qid"] for g in group_by_cutoff([q for q in by_video[v] if q["qid"] not in skip]).values()
+                   for q in g][:limit]
+        for i in range(0, len(pending), per_task):
+            chunks.append((v, f"{stamp}-{i // per_task:03d}", pending[i:i + per_task]))
+    return chunks
 
 
 # ---------------------------------------------------------------- slurm
@@ -253,12 +273,26 @@ def main() -> None:
                 if not a.dryrun:
                     sys.exit(f"FATAL: {msg}")
                 print(f"WARNING (dryrun): {msg}; a real submission would stop here")
-        todo = [v for v in videos
-                if a.limit or {q["qid"] for q in by_video[v]} - skip_qids(run_dir, v, cfg)]
-        print(f"\neval: {len(todo)}/{len(videos)} videos have unanswered questions")
-        if todo:
+        run_eval = f"{py} -m epic_eval.run_eval --run_dir {shlex.quote(str(run_dir))}"
+        per_task = cfg["slurm"]["eval"].get("questions_per_task")
+        if per_task:
+            chunks = eval_chunks(run_dir, videos, by_video, cfg, int(per_task), a.limit)
+            qid_dir = run_dir / "slurm" / "qids"
+            qid_dir.mkdir(parents=True, exist_ok=True)
+            cmds = []
+            for v, shard, qids in chunks:
+                qfile = qid_dir / f"{v}.{shard}.txt"
+                qfile.write_text("\n".join(qids) + "\n")
+                cmds.append(f"{run_eval} --video {v} --qids_file {shlex.quote(str(qfile))} --shard {shard}")
+            print(f"\neval: {sum(len(q) for _, _, q in chunks)} unanswered questions in {len(cmds)} tasks "
+                  f"of <= {per_task} over {len({v for v, _, _ in chunks})}/{len(videos)} videos")
+        else:
+            todo = [v for v in videos
+                    if a.limit or {q["qid"] for q in by_video[v]} - skip_qids(run_dir, v, cfg)]
+            print(f"\neval: {len(todo)}/{len(videos)} videos have unanswered questions")
             lim = f" --limit {a.limit}" if a.limit else ""
-            cmds = [f"{py} -m epic_eval.run_eval --run_dir {shlex.quote(str(run_dir))} --video {v}{lim}" for v in todo]
+            cmds = [f"{run_eval} --video {v}{lim}" for v in todo]
+        if cmds:
             dep = submit(cfg, "eval", write_array(cfg, "eval", cmds, dep),
                          len(cmds), note, a.dryrun) or dep
 

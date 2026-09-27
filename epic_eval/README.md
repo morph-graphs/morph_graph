@@ -30,7 +30,9 @@ video part.
     code_repo/  questions_repo/  reproducibility_config.json
     answers/<video>.jsonl        one row per answered question (letter, raw text, thoughts, usage)
     errors/<video>.jsonl         failures; retried by the next run
-    slurm/                       generated scripts, command lists, logs/%A_%a
+                                 (with slurm.eval.questions_per_task, one task per chunk of a
+                                 video's questions: answers|errors/<video>.<shard>.jsonl)
+    slurm/                       generated scripts, command lists, qids/ chunk lists, logs/%A_%a
     scores.json  scores.txt
 ```
 

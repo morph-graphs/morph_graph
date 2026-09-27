@@ -56,11 +56,12 @@
       "account": "abhinav2-prj-cmsc",
       "partition": "gpu",
       "qos": "normal",
-      "gres": "gpu:a100:2",
+      "gres": "gpu:h100:1",
       "cpus": 8,
       "mem": "64G",
-      "time": "12:00:00",
-      "max_parallel": 4
+      "time": "4:00:00",
+      "max_parallel": 10,
+      "questions_per_task": 8
     },
     "score": {
       "account": "abhinav2-prj-cmsc",
