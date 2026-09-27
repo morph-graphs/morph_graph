@@ -34,7 +34,7 @@ No GPU or host CUDA is needed to build. The CUDA 12.6 toolkit comes from the `nv
 
 ## The definition file
 
-`morph_graphs.def`:
+`morph_graphs.def`, next to this file (pinned versions in `pinned.txt`):
 
 ```singularity
 Bootstrap: docker
@@ -142,7 +142,7 @@ chmod +x micromamba
 export APPTAINER_CACHEDIR=/scratch/.../apptainer_cache
 export APPTAINER_TMPDIR=/scratch/.../apptainer_tmp
 
-taskset -c 0-3 apptainer build --fakeroot --notest --sandbox morph_graphs_sandbox/ morph_graphs.def
+taskset -c 0-3 apptainer build --fakeroot --notest --sandbox morph_graphs_sandbox/ <morph_graph checkout>/proj_context/setup/morph_graphs.def
 ```
 
 `--sandbox` produces a plain directory and skips mksquashfs, which can't run under the login node's thread limit. `taskset -c 0-3` pins the build to 4 cores so tools that size themselves to the visible core count stay small. `--notest` skips `%test`, which could fail on a node without a GPU even when the container is fine.
@@ -260,4 +260,4 @@ Apptainer forwards the host environment into the container by default. On this c
 2. `ezcolorlog` is now in the def. After rebuilding, drop `--env PYTHONPATH=...` from job scripts and delete `pyextra_morph_graphs/`.
 3. Trim `TORCH_CUDA_ARCH_LIST` to the GPUs actually in use (`nvidia-smi --query-gpu=name,compute_cap --format=csv`) to speed up any source compiles.
 4. For the SIF conversion, point `APPTAINER_TMPDIR` at node-local disk and request more cores, since the copy stage is I/O-bound and the compression stage scales with cores.
-5. Keep `morph_graphs.def` and `pinned.txt` next to the `.sif` so the image can be rebuilt or versions changed later.
+5. `proj_context/setup/morph_graphs.def` and `pinned.txt` are the source of truth for rebuilding the image or changing versions; update them in the repo along with any rebuild.

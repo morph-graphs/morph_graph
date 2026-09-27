@@ -23,7 +23,7 @@ source /etc/profile.d/modules.sh
 module load apptainer 2>/dev/null || true   # no-op if apptainer is already on PATH
 nvidia-smi --query-gpu=index,name,memory.total --format=csv
 
-# Built from morph_graphs.def (CUDA 12.6, torch 2.8, flash-attn, fla, ffmpeg all inside).
+# Built from proj_context/setup/morph_graphs.def (CUDA 12.6, torch 2.8, flash-attn, fla, ffmpeg all inside).
 # Override with: SIF=/path/to/other.sif sbatch ...
 SIF=${SIF:-/scratch/zt1/project/abhinav2-prj/user/vatsalag/morph_graph/morph_graphs.sif}
 # Pure-python packages missing from the image (e.g. ezcolorlog) live here so we don't
@@ -34,7 +34,7 @@ cd /home/vatsalag/scratch/morph_graph
 export PYTHONUNBUFFERED=1
 
 # --nv: expose host GPUs/driver. --cleanenv: keep host module/conda compiler vars out,
-# or Triton's runtime compile breaks (see proj_context/proj_docs/container_setup.md).
+# or Triton's runtime compile breaks (see proj_context/setup/container_setup.md).
 # /scratch is bound because ~/scratch symlinks into it (repo, model_hub, datasets).
 apptainer exec --nv --cleanenv --bind /scratch --env PYTHONPATH="$PYEXTRA" "$SIF" \
     python epic_eval/backends/smoke_qwen38.py "$@"
