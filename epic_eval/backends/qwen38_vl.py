@@ -110,10 +110,12 @@ def open_context(client: dict, mcfg: dict, video_path, system_instruction: str, 
         return_tensors="pt", add_generation_prompt=False,
         **_video_kwargs(mcfg), **_template_kwargs(mcfg), **mcfg.get("processor_kwargs", {}))
     ids = inputs["input_ids"][0]
+    # The processor wraps each timestamped temporal patch in its own vision_start/vision_end,
+    # so a video has one VISION_END per 2 frames; the video ends at the last one.
     hits = (ids == proc.tokenizer.convert_tokens_to_ids(VISION_END)).nonzero().flatten()
-    if len(hits) != 1:
-        raise RuntimeError(f"expected one {VISION_END} in the prompt, found {len(hits)}")
-    n, seq = int(hits[0]) + 1, ids.shape[0]
+    if len(hits) == 0:
+        raise RuntimeError(f"no {VISION_END} in the prompt")
+    n, seq = int(hits[-1]) + 1, ids.shape[0]
     # Per-token tensors (input_ids, attention_mask, mm_token_type_ids, ...) are cut after the
     # video; everything else (pixel_values_videos, video_grid_thw, ...) is kept whole.
     seq_keys = tuple(k for k, v in inputs.items() if torch.is_tensor(v) and v.dim() == 2 and v.shape == (1, seq))
