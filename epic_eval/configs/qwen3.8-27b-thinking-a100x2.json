@@ -10,7 +10,6 @@
   },
   "paths": {
     "video_dir": "/scratch/zt1/project/abhinav2-prj/user/vatsalag/datasets/HD-EPIC/videos",
-    "python": "apptainer exec --nv --cleanenv --bind /scratch --env PYTHONPATH=/scratch/zt1/project/abhinav2-prj/user/vatsalag/pyextra_morph_graphs /scratch/zt1/project/abhinav2-prj/user/vatsalag/morph_graph/morph_graphs.sif python",
     "ffmpeg_module": null
   },
   "container": {
