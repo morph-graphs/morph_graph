@@ -54,7 +54,7 @@
     },
     "eval": {
       "account": "abhinav2-prj-cmsc",
-      "partition": "gpu",
+      "partition": "gpu-h100",
       "qos": "normal",
       "gres": "gpu:h100:1",
       "cpus": 8,
