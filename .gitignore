@@ -223,3 +223,6 @@ data/
 outputs/
 model_zoo
 *.pt
+
+# Apptainer images
+*.sif
