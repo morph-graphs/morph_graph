@@ -26,8 +26,8 @@ with configs:
   `afterany`; `--dryrun` is there if you want to read the scripts first.
 - **Questions are chunked.** With `slurm.eval.questions_per_task` (8 in these
   configs), each video's pending questions are split, in group order, into
-  chunks; each chunk is one array task on one GPU allocation, and
-  `slurm.eval.max_parallel` caps how many run at once. A chunk's qids are frozen
+  chunks; each chunk is one array task on one GPU allocation. The array is not
+  throttled (add `slurm.eval.max_parallel` to cap how many run at once). A chunk's qids are frozen
   in `slurm/qids/`, and it writes its own `answers/<video>.<shard>.jsonl`, so
   tasks never share a file.
 - **One model per task.** Worker threads share it: `runtime.max_concurrent_groups`
@@ -71,7 +71,7 @@ python3 -m epic_eval.orchestrator --config epic_eval/configs/qwen3.8-27b-thinkin
 Output, one line per submitted step:
 
 ```
-eval: 57 task(s) -> job 22610000 (gpu-h100, gpu:h100:1, 8 cpu, 64G, 4:00:00, max 10 at once)
+eval: 57 task(s) -> job 22610000 (gpu-h100, gpu:h100:1, 8 cpu, 64G, 4:00:00)
 score: 1 task(s) -> job 22610001 (standard, no gpu, 1 cpu, 4G, 0:30:00)
 ```
 
@@ -87,7 +87,7 @@ A generated eval script reads like this:
 #SBATCH --job-name=ee-eval-qwen38-27b-thinking-fps1-f768
 #SBATCH --partition=gpu-h100
 #SBATCH --gres=gpu:h100:1
-#SBATCH --array=1-57%10
+#SBATCH --array=1-57
 #SBATCH --dependency=afterany:22609999
 ...
 RUN=<runs_root>/<sha8>_qwen38-27b-thinking-fps1-f768_cfg<hash>

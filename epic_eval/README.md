@@ -69,7 +69,7 @@ A config is one JSON file. Its sections:
 | `media` | clip encoding: `max_side`, `encode_fps`, `crf`, `audio`, `enabled` (false = text-only) | yes |
 | `model` | `backend` plus whatever that backend reads | yes |
 | `runtime` | concurrency inside an eval task, `retry_truncated` | no |
-| `slurm` | per-step account, partition, resources, `max_parallel` | no |
+| `slurm` | per-step account, partition, resources, optional `max_parallel` (array throttle) | no |
 
 The run folder is `<code sha8>_<tag>_cfg<hash>`, with both commits resolved to
 full SHAs before hashing. Resources and concurrency are left out of the hash, so
