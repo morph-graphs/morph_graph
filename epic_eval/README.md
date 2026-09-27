@@ -1,84 +1,156 @@
 # epic_eval — sandboxed MCQ evaluation on EPIC-Morph
 
-Poses the EPIC-Morph question bank (in `vatsalag99/epic-morph`,
-`outputs/questions/*_questions.json`) to a video model as 4-way multiple choice
-and scores it. Modeled on VidGram's `pipeline_orchestrator.py`: every run
-executes from fresh checkouts at pinned commits, never from a working tree.
+Poses the EPIC-Morph question bank (`vatsalag99/epic-morph`,
+`outputs/questions/*_questions.json`) to a video model as multiple choice and
+scores it. Modeled on VidGram's `pipeline_orchestrator.py`: every run executes
+from fresh checkouts at pinned commits, never from a working tree.
 
-## What the model sees
+This page covers what is shared by every model. Model-specific setup lives in:
 
-| question | video input | cached? |
+| | |
+|---|---|
+| [README_gemini.md](README_gemini.md) | API models (Gemini): keys, context caching, token budgets |
+| [README_local_models.md](README_local_models.md) | Models we host on our own GPUs (Qwen3.8): one-command launch, frame sampling, adding a backend |
+
+How to get a Python environment and submit jobs on each cluster is in
+[`proj_context/proj_docs/nexus.md`](../proj_context/proj_docs/nexus.md) and
+[`proj_context/proj_docs/zaratan.md`](../proj_context/proj_docs/zaratan.md).
+
+## Pipeline
+
+```
+orchestrator ──► prep ──► eval ──► score        (SLURM array jobs, chained with afterany)
+                                    │
+                                    └──► explorer  (run by hand, over any set of runs)
+```
+
+| step | module | one task = | writes |
+|---|---|---|---|
+| orchestrate | `orchestrator.py` | runs once, submits, exits | the run folder, code + question checkouts, job scripts |
+| prep | `prep_media.py` | one video | `full.mp4` + one `upto_<t_ask>s.mp4` clip per streaming cutoff |
+| eval | `run_eval.py` | one video, or one chunk of its questions | `answers/*.jsonl`, `errors/*.jsonl` |
+| score | `score.py` | the whole run | `scores.json`, `scores.txt` |
+| explore | `explorer.py` | — | one self-contained HTML page |
+
+Every step decides its work from what is on disk, so rerunning the same
+orchestrator command is also how a run is resumed after failures or preemption:
+prep skips videos whose `_done.json` matches the clips on disk, eval skips
+questions that already have a parsed answer, and only the rest is submitted.
+
+## Directory
+
+```
+epic_eval/
+  orchestrator.py        mirror/check out code + questions, build work lists, write + submit job scripts
+  prep_media.py          ffmpeg: encode the full video and the [0, t_ask] clips (validated with ffprobe)
+  run_eval.py            group questions by the video they see, open one context per group, ask, append answers
+  score.py               accuracy splits over the whole bank
+  explorer.py            HTML page over run folders (+ explorer_template.html)
+  probe_tokens.py        Gemini only: measure video token counts before a run
+  common.py              config/hash helpers, question loading, grouping, prompts, answer parsing
+  backends/              one module per model family (contract in backends/__init__.py)
+    gemini.py            API, with context caching
+    qwen38_vl.py         local Hugging Face model
+  configs/               one JSON per model setting
+  test_epic_eval.py      invariants that decide whether the numbers mean anything
+```
+
+## Configs
+
+A config is one JSON file. Its sections:
+
+| section | what it sets | in the run hash? |
 |---|---|---|
-| `streaming: false` (227) | the full recording | one cache per video, shared by all its full-video questions |
-| `streaming: true` (222) | `[0, t_ask]` only — a physical ffmpeg cut, validated by ffprobe to end at or before `t_ask` | one cache per distinct `(video, t_ask)` (140 of them, 61 shared by 2–10 questions) |
+| `run` | `tag` (names the run folder), `runs_root` | tag only via the folder name |
+| `code` | `repo_url` to mirror the eval code from; omit it to snapshot the local checkout (see README_local_models.md) | commit: yes |
+| `questions` | epic-morph `repo_url`, pinned `commit`, `glob` | yes |
+| `paths` | `video_dir`, `python` (interpreter for jobs), `ffmpeg_module`, optional `media_root` | yes, except `media_root` |
+| `container` | Apptainer image jobs run in, instead of `paths.python` | yes |
+| `media` | clip encoding: `max_side`, `encode_fps`, `crf`, `audio`, `enabled` (false = text-only) | yes |
+| `model` | `backend` plus whatever that backend reads | yes |
+| `runtime` | concurrency inside an eval task, `retry_truncated` | no |
+| `slurm` | per-step account, partition, resources, `max_parallel` | no |
 
-Options are `gemini_mcq.options` in bank order (already shuffled on a
-`video|question` seed; correct letter spread 100/116/112/121), answer is
-`gemini_mcq.answer_index`. The generator's own `options` field is not used.
-Groups with fewer than `model.cache_min_questions` questions, or whose cache
-creation fails, are asked directly with the identical system instruction and
-video part.
+The run folder is `<code sha8>_<tag>_cfg<hash>`, with both commits resolved to
+full SHAs before hashing. Resources and concurrency are left out of the hash, so
+they can be retuned without starting a new run.
+
+**Which Python runs what.** The orchestrator only needs a Python ≥ 3.10 with the
+standard library (plus `google-genai` for Gemini's key check). The jobs run
+`py -m epic_eval.<step>`, where `py` is defined once at the top of each job
+script: `paths.python` if the config has no `container` block (a conda env, a
+venv, or any interpreter path), otherwise `apptainer exec … <sif> python`.
+Whichever it is needs the backend's packages, and ffmpeg on `PATH` for prep
+(`paths.ffmpeg_module` is `module load`ed first when set).
+
+## Running
+
+From the `morph_graph/` directory:
+
+```bash
+python3 -m epic_eval.orchestrator --config epic_eval/configs/<config>.json [--commit <ref>] \
+    [--videos P09-20240622-194642 --limit 2]   # smoke test: one short video, two questions
+    [--steps prep,eval,score] [--dryrun] [--note "why this run exists"]
+```
+
+`--dryrun` checks everything out and prints the job scripts without submitting.
+Each submission is logged to `<run>/slurm/launches.jsonl`. The model READMEs
+give the exact commands.
 
 ## Layout of a run
 
 ```
 <runs_root>/
-  _mirrors/                      bare mirrors of both repos (fetched every run)
-  media/<media_hash>/<video>/    full.mp4, upto_<t_ask>s.mp4, _done.json   (shared across runs
-                                 with the same media settings)
+  _mirrors/                      bare mirrors of the repos (fetched unless the wanted full SHA is already there)
+  media/<media_hash>/<video>/    full.mp4, upto_<t_ask>s.mp4, _done.json
+                                 (shared by every run with the same media settings)
   <code sha8>_<tag>_cfg<hash>/   one run = one (code commit, config) pair
     code_repo/  questions_repo/  reproducibility_config.json
     answers/<video>.jsonl        one row per answered question (letter, raw text, thoughts, usage)
-    errors/<video>.jsonl         failures; retried by the next run
-                                 (with slurm.eval.questions_per_task, one task per chunk of a
-                                 video's questions: answers|errors/<video>.<shard>.jsonl)
-    slurm/                       generated scripts, command lists, qids/ chunk lists, logs/%A_%a
+    errors/<video>.jsonl         failures; retried by the next launch
+                                 (with slurm.eval.questions_per_task: answers|errors/<video>.<shard>.jsonl)
+    slurm/                       <step>_<stamp>.slurm, launches.jsonl, qids/ chunk lists, logs/<step>_%A_%a
     scores.json  scores.txt
 ```
 
-The config hash covers everything except `slurm` and `runtime` (resources and
-concurrency do not change answers), with both commits resolved to full SHAs first.
+## What the model sees
 
-## Running
+| question | video input |
+|---|---|
+| `streaming: false` | the full recording |
+| `streaming: true` | `[0, t_ask]` only — a physical ffmpeg cut, validated by ffprobe to end at or before `t_ask` |
 
-```bash
-PY=/fs/nexus-scratch/anubhav/anubhav_python3.13.7/bin/python
-cd <a morph_graph checkout>          # only the orchestrator runs from here
-# key: $GEMINI_API_KEY, or a 600-mode file at ~/.config/epic_eval/gemini_api_key
+Questions that see the same input form one group, and `run_eval` opens one
+backend context per group (one per video for full-video questions, one per
+distinct `(video, t_ask)` for streaming ones), so a new backend inherits the
+no-leak guarantee without any work.
 
-$PY -m epic_eval.orchestrator --config epic_eval/configs/gemini-3.8-flash-high.json \
-    --commit <pushed sha> --dryrun                        # show scripts + task counts
-$PY -m epic_eval.orchestrator --config ... --commit <sha> # submit prep -> eval -> score
-```
+Options are `gemini_mcq.options` in bank order (already shuffled on a
+`video|question` seed); the answer is `gemini_mcq.answer_index`. The
+generator's own `options` field is not used.
 
-Rerunning the same command is the recovery path: prep skips videos whose
-`_done.json` matches the files on disk, eval skips questions with a parsed
-answer, and only failures are redone. Jobs are recorded with `nexrun launch`.
-Smoke test: `--videos P09-20240622-194642 --limit 2`. Concurrency (`runtime.max_concurrent_groups`,
-`runtime.max_concurrent_requests`, per eval task) is excluded from the run hash, so it can be
-retuned without starting a new run; 429s are retried with exponential backoff.
-A reply that hits the output-token cap before answering (`finish_reason: MAX_TOKENS`,
-usually HIGH thinking on long videos) is final: reruns skip it and `score` lists it
-under `truncated_qids` (counted wrong in `acc`). Set `runtime.retry_truncated: true`
-to re-ask them, e.g. after lowering `model.thinking_level`.
+A reply that hits the output cap before answering (`finish_reason:
+MAX_TOKENS`, usually long thinking) is final: reruns skip it and `score` lists
+it under `truncated_qids` (counted wrong in `acc`). Set
+`runtime.retry_truncated: true` to re-ask them, e.g. after lowering the
+thinking budget.
 
-Before the main run, pick `model.media_resolution` / `model.fps` from measured
-token counts on the longest video (the 61-min one can overflow 1M tokens):
+## Reading the scores
 
-```bash
-$PY -m epic_eval.probe_tokens --run_dir <run> --video P09-20240623-120359 --fps 1 0.5
-```
-
-`configs/gemini-3.8-flash-high-textonly.json` is the no-video control: same
-prompts and options, `media.enabled: false`. The gap between the two runs is
-how much the video is actually used — the options were written from narration
-transcripts, so text priors may carry a lot.
+`acc` divides by the whole bank (missing = wrong); `acc_answered` divides by
+answered questions. Always quote `non_binary`. The yes/no questions are
+reported separately (`binary_yes_no`) because their option layout has been a
+format cue in every bank version so far. At epic-morph `04fb5d5` each has one
+option with the true verdict, two with the opposite verdict, and
+"insufficient information", so "pick the verdict that appears once" is right
+on all of them without the video. `chance` and the bank's `majority_baseline`
+are printed beside every split.
 
 ## Looking at the answers: the run explorer
 
 ```bash
-$PY -m epic_eval.explorer --runs <run_dir> [<run_dir> ...] \
-    --labels "Gemini video,Gemini text-only" --out <file>.html [--verdicts verdicts.json]
+python -m epic_eval.explorer --runs <run_dir> [<run_dir> ...] \
+    --labels "run A,run B" --out <file>.html [--verdicts verdicts.json]
 ```
 
 Writes one self-contained HTML file from any set of run folders: every question
@@ -91,84 +163,21 @@ says so.
 
 Each question takes a verdict (model wrong / bank answer wrong / question
 ambiguous / options give it away / other) and a note:
-- **Opened as a local file** (no Claude account needed): verdicts are kept in that
-  browser; *Export verdicts* saves them as JSON, and `--verdicts <file>` embeds
-  them in the next build, so they can travel through the run folder or git.
+- **Opened as a local file**: verdicts are kept in that browser; *Export
+  verdicts* saves them as JSON, and `--verdicts <file>` embeds them in the next
+  build, so they can travel through the run folder or git.
 - **Published as a claude.ai artifact with the `db` capability**: verdicts are
   shared live between everyone the page is shared with (*Import verdicts* merges a
-  local export into the shared set). The Gemini 3.8 Flash runs on `04fb5d5` are
-  at `epic_eval_runs/_explorer/gemini38flash_04fb5d5.html`.
-
-## Reading the scores
-
-`acc` divides by the whole bank (missing = wrong); `acc_answered` divides by
-answered questions. Always quote `non_binary`. The 129 yes/no questions are
-reported separately (`binary_yes_no`) because their option layout has been a
-format cue in every bank version so far. At epic-morph `04fb5d5` each has one
-option with the true verdict, two with the opposite verdict, and
-"insufficient information", so "pick the verdict that appears once" is right
-129/129 without the video. `chance` and the bank's `majority_baseline`
-are printed beside every split.
-
-## Adding a model (e.g. Qwen3-VL)
-
-Everything model-specific lives in one backend module. Prep, grouping, prompts,
-resume, scoring and the orchestrator are shared, and the `[0, t_ask]` clips are
-already cut, so a new model inherits the no-leak guarantee without any work.
-
-1. **`backends/qwen3_vl.py`** — four functions (contract in `backends/__init__.py`):
-
-   ```python
-   from ..common import parse_letter
-
-   def make_client(mcfg):                      # once per eval task: load weights onto the GPU
-       ...                                     # model_zoo/Qwen3-VL-8B-Instruct is on disk;
-                                               # video_models/qwen3_vl.py shows the loading code
-   def open_context(client, mcfg, video_path, system_instruction, n_questions):
-       # video_path is full.mp4 or upto_<t_ask>s.mp4 (None in text-only runs).
-       # Decode frames here, once per group (e.g. mcfg["fps"], mcfg["max_frames"]),
-       # optionally prefill the KV cache; everything returned is handed back to ask().
-       return {"frames": ..., "system_instruction": system_instruction}
-   def ask(client, mcfg, ctx, prompt, n_options):
-       text = ...                              # chat template: system + frames + prompt; generate
-       return {"pred_letter": parse_letter(text, n_options), "raw_text": text,
-               "usage": {...}, "cache_used": False}   # any extra keys land in answers/*.jsonl
-   def close_context(client, ctx):
-       pass                                    # free frames / KV
-   ```
-
-2. **Register it**: `BACKENDS["qwen3_vl"] = "epic_eval.backends.qwen3_vl"`.
-3. **Config**: copy `configs/gemini-3.8-flash-high.json` and change
-   - `run.tag`, and `model` to `{"backend": "qwen3_vl", ...}` with whatever
-     keys the backend reads (the Gemini-only keys can go);
-   - `paths.python` if the model needs a different environment;
-   - `slurm.eval` to a GPU tier, e.g. `vulcan-scavenger` with `"gres": "gpu:rtxa6000:1"`;
-   - `runtime.max_concurrent_groups` / `max_concurrent_requests` to `1` — the
-     worker threads share one model, so either keep them at 1 or lock inside `ask`.
-4. **Test** before a full run: `--videos P09-20240622-194642 --limit 2`, then
-   open `answers/*.jsonl`.
-
-Leave `media` as it is and set
-`"paths": {"media_root": "/fs/cfar-projects/mem_open_vocab/morph_graphs/anubhav/epic_eval_runs/media", ...}`
-to read the already-encoded clips in place (1024 px, 2 fps; group `openvocab` can
-read them), with `run.runs_root` pointing at a directory you can write. Prep then
-finds every video ready and submits nothing. `media_root` is not part of the run
-hash. The shared folder is read-only for others, so a video not yet encoded there
-fails at prep; use your own `media_root` until all 12 are in. If the model wants
-different frames, change `media`: that gets its own media folder, and `prep`
-re-encodes for it.
-
-Nothing outside the backend is Gemini-specific except the API-key check in the
-orchestrator, which only runs when `model.backend == "gemini"`, and
-`probe_tokens.py`.
+  local export into the shared set).
 
 ## Tests
 
 ```bash
-module load ffmpeg/7.1 && $PY -m epic_eval.test_epic_eval
+EPIC_MORPH_DIR=<epic-morph checkout> python -m epic_eval.test_epic_eval   # ffmpeg on PATH for the media tests
 ```
 
-Checks the bank shape (449 / 222 streaming / unique ids / answer text matches
-the scored letter), grouping (140 + 12 contexts), that each streaming group is
-sent its own `[0, t_ask]` clip, resume, scoring denominators, and a real encode
-of a 6-min video whose clips must end at or before `t_ask` with no audio.
+Checks the bank shape (unique ids, streaming questions have a `t_ask`, the
+scored letter's text matches the bank answer), grouping, that each streaming
+group is sent its own `[0, t_ask]` clip, resume, concurrency, truncation
+handling, scoring denominators, the explorer's join, and a real encode of a
+6-min video whose clips must end at or before `t_ask` with no audio.
