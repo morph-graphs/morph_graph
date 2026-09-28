@@ -145,7 +145,10 @@ def python_fn(cfg: dict) -> list[str]:
     flags = ["--nv", "--cleanenv", *(f"--bind {shlex.quote(b)}" for b in c.get("binds", []))]
     if c.get("pythonpath"):
         flags.append(f"--env PYTHONPATH={shlex.quote(c['pythonpath'])}")
-    return [f"SIF={shlex.quote(c['sif'])}",
+    # Zaratan ships apptainer as a module; without this a job only finds it if the
+    # submitting shell happened to have it loaded (sbatch exports that environment).
+    return ["command -v apptainer >/dev/null || module load apptainer",
+            f"SIF={shlex.quote(c['sif'])}",
             f'py() {{ apptainer exec {" ".join(flags)} "$SIF" python "$@"; }}']
 
 
