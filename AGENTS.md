@@ -50,33 +50,32 @@ is run from the repo root as `python -m epic_eval.<module>`.
 
 ## Zaratan (UMD)
 
+Full reference (hardware, QoS caps, billing, example submissions, refresh
+commands): `proj_context/proj_docs/zaratan.md`. What to always follow:
+
+- **Account:** always `-A abhinav2-prj-cmsc`. `abhinav2-prj-aac` only with the
+  user's explicit permission, never as a silent fallback. The SU budget is
+  limited (cmsc 300 kSU); avoid oversized, duplicate or idle jobs.
+- **QoS:** `normal` for every GPU job; `scavenger` is rejected for GPU (CPU only).
+- **Always set `-t`** (GPU partitions default to 15 min). Debug/interactive jobs ≤ 4 h,
+  and exit them when done.
+- **Test new environments on a MIG slice first:** `-p gpu-a100_1g.5gb --gres=gpu:a100_1g.5gb:1`
+  (7 SU/hr vs 48 for an A100, 144 for an H100).
+- **GPU choice:** A100 = 40 GB, H100 = 80 GB. Over 40 GB, prefer **2+ A100s**
+  (2× A100 = 96 SU/hr vs 1× H100 = 144). H100s only when A100s are scarce, and say
+  that SU usage goes up. Check free GPUs, the pending queue, and estimated starts
+  (`sbatch --test-only`) before recommending a type; commands in `zaratan.md`.
+- **Billing is MAX_TRES:** stay within the free CPU/memory per GPU (A100: 32 cores,
+  128 GB; H100: 24 cores, 128 GB) or those set the rate instead.
+- **Per-user caps:** 38 A100s, 16 H100s, 10 MIG slices, 40 GPUs total, however many
+  array tasks are queued. `-p gpu` is rerouted to the per-type partition.
 - **Network:** only login nodes reach the internet. Compute nodes (including the
-  one an agent session usually runs on) cannot fetch/push git or download models.
-- **Accounts:** default `--account=abhinav2-prj-cmsc`. `abhinav2-prj-aac` has
-  higher priority but a small budget: last resort, only when a needed run is
-  queue-blocked. The budget is limited; avoid oversized or duplicate runs.
-- **QoS:** GPU jobs must use `--qos=normal`; `scavenger` is rejected for GPU
-  (valid only for CPU jobs).
-- **Partitions:** `standard` (CPU, default); `gpu-a100` (4× A100 40 GB per node);
-  `gpu-h100` (4× H100 80 GB per node); `gpu` spans all GPU nodes and routes by
-  `--gres` (`gpu:a100:N`, `gpu:h100:N`). Max time 7 days.
-- **Queue waits:** fairshare on cmsc is low, and `gpu-h100` can be days out.
-  Before committing to a GPU type, compare estimated starts without submitting:
-  `sbatch --test-only -A abhinav2-prj-cmsc -p gpu --qos=normal --gres=gpu:a100:2 -c 8 --mem=64G -t 4:00:00 x.sh`.
-- **Containers:** jobs run in Apptainer. `apptainer` is a module, not on `PATH`
-  by default: scripts must `module load apptainer` (sbatch copies the submitting
-  shell's environment, so a script can work from one shell and fail from another).
-  Always `apptainer exec --nv --cleanenv --bind /scratch …`; `--cleanenv` keeps host
-  compiler/module variables from breaking Triton, so pass variables with `--env`.
-  Image: `/scratch/zt1/project/abhinav2-prj/user/vatsalag/morph_graph/morph_graphs.sif`,
-  built from `proj_context/setup/morph_graphs.def` (how: `proj_context/setup/container_setup.md`).
-  Pure-Python extras missing from the image live in
-  `/scratch/zt1/project/abhinav2-prj/user/vatsalag/pyextra_morph_graphs` (on `PYTHONPATH` via `--env`).
-- **ffmpeg** is inside the container; on the host it's `module load ffmpeg/6.0/gcc/11.3.0/`.
-- **Paths** (`~/scratch` = `/scratch/zt1/project/abhinav2-prj/user/vatsalag`):
-  models `~/scratch/model_hub/` (Qwen3.8-27B, Qwen3-VL-8B-Instruct, perception_models);
-  HD-EPIC videos `~/scratch/datasets/HD-EPIC/videos/P0x/`;
-  epic_eval runs `~/scratch/epic_eval_runs/` (encoded clips shared under `media/`).
+  one an agent session usually runs on) cannot fetch/push git, pip install or
+  download models.
+- **Containers:** `apptainer` is a module (`module load apptainer`; sbatch copies
+  the submitting shell's environment, so never rely on it being loaded). Run with
+  `apptainer exec --nv --cleanenv --bind /scratch …` and pass variables with `--env`.
+  Image, extras and data paths: `zaratan.md` §6.
 - Heavy imports (torch) from scratch can take minutes; run them in the background
   rather than inside a 2-minute tool call.
 
