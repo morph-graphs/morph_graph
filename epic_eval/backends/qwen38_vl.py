@@ -73,7 +73,11 @@ def make_client(mcfg: dict) -> dict:
 
     t0 = time.time()
     processor = AutoProcessor.from_pretrained(mcfg["path"])
-    model = AutoModelForMultimodalLM.from_pretrained(
+    # sample_frames caps at the video processor's own max_frames (768 by default) and ignores
+    # a max_frames passed per call, so the cap has to be set here; fps per call is honored.
+    if mcfg.get("max_frames") is not None:
+        processor.video_processor.max_frames = int(mcfg["max_frames"])
+    model =AutoModelForMultimodalLM.from_pretrained(
         mcfg["path"], dtype=torch.bfloat16, device_map="auto",
         attn_implementation=mcfg.get("attn_implementation", "flash_attention_2"),
     ).eval()
