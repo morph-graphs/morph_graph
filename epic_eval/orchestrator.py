@@ -142,11 +142,14 @@ def submit(cfg: dict, step: str, script: Path, n_tasks: int, note: str, dryrun: 
     if dryrun:
         return f"DRYRUN-{step}"
     run_dir = cfg["resolved"]["run_dir"]
-    out = subprocess.run([str(NEXRUN), "launch", "--tag", f"{cfg['run']['tag']}-{step}", "--out", run_dir,
-                          "--note", note, "--", "sbatch", str(script)],
-                         capture_output=True, text=True)
+    if NEXRUN.is_file():
+        out = subprocess.run([str(NEXRUN), "launch", "--tag", f"{cfg['run']['tag']}-{step}", "--out", run_dir,
+                              "--note", note, "--", "sbatch", str(script)],
+                             capture_output=True, text=True)
+    else:  # no nexrun ledger on this account: plain sbatch, the run dir is the record
+        out = subprocess.run(["sbatch", str(script)], capture_output=True, text=True)
     print(out.stdout.strip(), out.stderr.strip())
-    m = re.search(r"submitted (\d+)", out.stdout)
+    m = re.search(r"[Ss]ubmitted (?:batch job )?(\d+)", out.stdout)
     if out.returncode != 0 or not m:
         sys.exit(f"FATAL: submission of {step} failed")
     return m.group(1)
