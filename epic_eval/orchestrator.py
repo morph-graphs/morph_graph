@@ -4,7 +4,8 @@ Checks out the eval code (this repo) at ``--commit`` and the question bank
 (epic-morph) at the commit pinned in the config into a run directory named
 ``<code sha8>_<tag>_cfg<confighash>``, then submits up to three array jobs:
 
-    prep   one task per video: encode full video + [0, t_ask] clips   (skipped if media valid)
+    prep   one task per video: encode full video + [0, t_ask] clips, or the
+           per-question evidence files in evidence mode            (skipped if media valid)
     eval   one task per video: query the model, write answers/<video>.jsonl
     score  one task: scores.json / scores.txt
 
@@ -28,8 +29,8 @@ import sys
 import time
 from pathlib import Path
 
-from .common import (RUN_CONFIG, config_hash, load_json, load_questions, media_done_marker,
-                     media_hash, media_path, group_by_cutoff)
+from .common import (RUN_CONFIG, config_hash, evidence_spans, group_questions, load_json, load_questions,
+                     media_done_marker, media_hash, media_mode, media_path)
 from .run_eval import skip_qids
 
 NEXRUN = Path("~/.claude/bin/nexrun").expanduser()
@@ -75,14 +76,19 @@ def checkout(mirror_path: Path, sha: str, dest: Path) -> None:
 
 # ---------------------------------------------------------------- work lists
 
-def media_ready(cfg: dict, video: str, cutoffs) -> bool:
-    media_dir = Path(cfg["resolved"]["media_dir"])
+def media_ready(cfg: dict, video: str, rows: list) -> bool:
+    media_dir, mode = Path(cfg["resolved"]["media_dir"]), media_mode(cfg)
     marker = media_done_marker(media_dir, video)
     if not marker.exists():
         return False
     listed = json.loads(marker.read_text())["files"]
-    want = [media_path(media_dir, video, c) for c in cutoffs]
-    return all(p.name in listed and p.exists() and p.stat().st_size == listed[p.name]["bytes"] for p in want)
+    groups = group_questions(rows, mode)
+    want = [media_path(media_dir, video, k, mode) for k in groups]
+    if not all(p.name in listed and p.exists() and p.stat().st_size == listed[p.name]["bytes"] for p in want):
+        return False
+    # an evidence file is only reusable if the bank still gives that question the same clips
+    return mode != "evidence" or all(listed[media_path(media_dir, video, k, mode).name]["clips"] ==
+                                     evidence_spans(g[0]) for k, g in groups.items())
 
 
 # ---------------------------------------------------------------- slurm
@@ -229,7 +235,7 @@ def main() -> None:
     dep = None
 
     if "prep" in steps and cfg["media"]["enabled"]:
-        todo = [v for v in videos if not media_ready(cfg, v, group_by_cutoff(by_video[v]).keys())]
+        todo = [v for v in videos if not media_ready(cfg, v, by_video[v])]
         print(f"\nprep: {len(todo)}/{len(videos)} videos need media -> {cfg['resolved']['media_dir']}")
         if todo:
             cmds = [f"{py} -m epic_eval.prep_media --run_dir {shlex.quote(str(run_dir))} --video {v}" for v in todo]

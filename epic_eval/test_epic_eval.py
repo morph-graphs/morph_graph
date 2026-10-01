@@ -17,8 +17,8 @@ import types
 from pathlib import Path
 
 from . import backends
-from .common import (LETTERS, build_prompt, group_by_cutoff, load_questions, media_path,
-                     system_instruction)
+from .common import (LETTERS, build_prompt, group_by_cutoff, group_questions, load_questions, media_hash,
+                     media_path, system_instruction)
 
 EPIC = Path(os.environ.get("EPIC_MORPH_DIR", "/fs/cfar-projects/mem_open_vocab/morph_graphs/anubhav/epic-morph"))
 GLOB = "outputs/questions/*_questions.json"
@@ -360,6 +360,104 @@ def test_media_trim_no_leak():
                 print(f"  {p.name}: t_ask={cutoff:.3f}s clip={dur:.3f}s")
             else:
                 print(f"  full.mp4: {dur:.3f}s, {p.stat().st_size / 1e6:.1f} MB")
+
+
+# ---------------------------------------------------------------- evidence mode
+
+EV_VIDEO = "P00-20990101-000000"
+
+
+def make_evidence_run(tmp: Path) -> tuple[Path, dict]:
+    """A 12 s source, black inside [2, 4) and [6, 9) and white elsewhere, and a two-question bank.
+
+    q1 has two clips inside the black spans, listed out of order; q2 has one clip that
+    runs from black into white past its t_ask (9.0), so only [8.3, 9.0] may be shown.
+    Any white pixel in an evidence file is footage from outside its clips.
+    """
+    import subprocess
+    src = tmp / "videos" / "P00" / f"{EV_VIDEO}.mp4"
+    src.parent.mkdir(parents=True)
+    segs = [("white", 2), ("black", 2), ("white", 2), ("black", 3), ("white", 3)]
+    cmd = ["ffmpeg", "-v", "error"]
+    for color, d in segs:
+        cmd += ["-f", "lavfi", "-i", f"color={color}:s=64x64:r=30:d={d}"]
+    cmd += ["-filter_complex", "".join(f"[{i}]" for i in range(len(segs))) + f"concat=n={len(segs)}:v=1",
+            "-c:v", "libx264", "-qp", "0", str(src)]
+    subprocess.run(cmd, check=True)
+
+    def q(text, t_ask, clips):
+        return {"q": text, "video": EV_VIDEO, "form": "test", "answer": "a", "streaming": True, "t_ask": t_ask,
+                "evidence": {"events": [], "clips": [{"event_id": f"EV{i}", "clip": c} for i, c in enumerate(clips)]},
+                "gemini_mcq": {"options": ["a", "b", "c", "d"], "answer_index": 0}}
+    bank_dir = tmp / "bank"
+    bank_dir.mkdir()
+    (bank_dir / f"{EV_VIDEO}_questions.json").write_text(json.dumps({"questions": [
+        q("first?", 11.0, [[6.3, 7.9], [2.2, 3.7]]), q("second?", 9.0, [[8.3, 10.5]])]}))
+    cfg = json.loads(json.dumps(CFG))
+    cfg["media"].update(mode="evidence", max_side=64)
+    cfg["paths"]["video_dir"] = str(tmp / "videos")
+    cfg["questions"]["glob"] = "*_questions.json"
+    cfg["model"]["backend"] = "fake"
+    cfg["resolved"] = {"run_dir": str(tmp), "code_dir": str(Path(__file__).parents[1]),
+                       "questions_dir": str(bank_dir), "media_dir": str(tmp / "media")}
+    (tmp / "reproducibility_config.json").write_text(json.dumps(cfg))
+    return tmp, cfg
+
+
+def _n_frames(path) -> int:
+    import subprocess
+    out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-count_packets",
+                          "-show_entries", "stream=nb_read_packets", "-of", "csv=p=0", str(path)],
+                         capture_output=True, text=True, check=True).stdout
+    return int(out.strip())
+
+
+def test_evidence_file_holds_only_the_clips():
+    if not shutil.which("ffprobe"):
+        print("  (skipped: no ffprobe on PATH -- module load ffmpeg/7.1)")
+        return
+    from .prep_media import has_audio, prep_video, probe_duration
+    from .run_eval import run_video
+    with tempfile.TemporaryDirectory() as d:
+        run, cfg = make_evidence_run(Path(d))
+        rows = load_questions(cfg["resolved"]["questions_dir"], cfg["questions"]["glob"])
+        groups = group_questions(rows, "evidence")
+        assert sorted(groups) == sorted(r["qid"] for r in rows) and all(len(g) == 1 for g in groups.values())
+
+        files = prep_video(cfg, EV_VIDEO, workers=2)
+        fps = cfg["media"]["encode_fps"]
+        want = {"first?": [[2.2, 3.7], [6.3, 7.9]], "second?": [[8.3, 9.0]]}
+        for r in rows:
+            p = media_path(run / "media", EV_VIDEO, r["qid"], "evidence")
+            spans = files[p.name]["clips"]
+            total = sum(b - a for a, b in spans)
+            dur, n = probe_duration(p), _n_frames(p)
+            assert spans == want[r["question"]], spans  # sorted, and cut at t_ask
+            assert abs(dur - total) <= 0.3, (p.name, dur, total)
+            assert abs(n - total * fps) <= 1, (p.name, n, total * fps)
+            assert _max_luma(p) < 40, _max_luma(p)  # all black: no frame from outside the clips
+            assert not has_audio(p)
+            print(f"  {r['question']} clips={spans} -> {dur:.2f}s, {n} frames, max luma {_max_luma(p)}")
+
+        # the model is handed exactly that question's evidence file, with the evidence instruction
+        seen = []
+        install_fake_backend(seen)
+        fake = sys.modules["epic_eval.backends.fake"]
+        fake.ask = lambda client, mcfg, ctx, prompt, n: {"pred_letter": "A", "raw_text": "", "usage": {},
+                                                         "cache_used": False}
+        assert run_video(run, EV_VIDEO) == (2, 0)
+        assert sorted(p.name for p, _, _ in seen) == sorted(f"evidence_{r['qid']}.mp4" for r in rows)
+        assert all(si == system_instruction(True, True, "evidence") and n == 1 for _, si, n in seen)
+
+
+def test_evidence_mode_instruction_and_media_folder():
+    si = system_instruction(True, True, "evidence").lower()
+    for word in ("cutoff", "t_ask", "ends at", "moment the question", "whole recording", "after", "omitted"):
+        assert word not in si, word
+    assert "excerpts" in si and "chronological" in si
+    ev = json.loads(json.dumps(CFG))
+    ev["media"]["mode"] = "evidence"
+    assert media_hash(ev) != media_hash(CFG)  # evidence files never land in the cutoff media folder
 
 
 if __name__ == "__main__":

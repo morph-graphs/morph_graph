@@ -65,6 +65,9 @@ def load_questions(questions_dir, pattern: str) -> list[dict]:
                 "guessable": q.get("guessable"),
                 "majority_baseline": q.get("majority_baseline"),
                 "source_file": path.name,
+                # V2 banks: evidence = {events, clips: [{event_id, clip: [t0, t1]}]}; V1 evidence is a list
+                "evidence_clips": [[float(t) for t in c["clip"]] for c in q["evidence"]["clips"]]
+                                  if isinstance(q.get("evidence"), dict) else [],
             })
     qids = [r["qid"] for r in rows]
     if len(qids) != len(set(qids)):
@@ -91,9 +94,46 @@ def group_by_cutoff(rows: list[dict]) -> dict:
     return dict(sorted(groups.items(), key=lambda kv: (kv[0] is not None, kv[0] or 0.0)))
 
 
+def group_by_qid(rows: list[dict]) -> dict:
+    """{qid: [row]}: evidence mode, where every question has its own video input."""
+    return {r["qid"]: [r] for r in sorted(rows, key=lambda r: (r["t_ask"] or 0.0, r["qid"]))}
+
+
+def group_questions(rows: list[dict], mode: str) -> dict:
+    return group_by_qid(rows) if mode == "evidence" else group_by_cutoff(rows)
+
+
+def evidence_spans(row: dict) -> list[list[float]]:
+    """The time spans an evidence-mode question is shown: its clips, sorted, merged, ending by t_ask.
+
+    Overlapping clips are merged so no moment is shown twice. A clip is cut at t_ask
+    (dropped if it starts there or later): some banks list evidence events of the
+    object after the ask time, which would show the model the future.
+    """
+    end = row["t_ask"] if row["t_ask"] is not None else float("inf")
+    spans = []
+    for t0, t1 in sorted((max(0.0, a), min(b, end)) for a, b in row["evidence_clips"]):
+        if t1 <= t0:
+            continue
+        if spans and t0 <= spans[-1][1]:
+            spans[-1][1] = max(spans[-1][1], t1)
+        else:
+            spans.append([t0, t1])
+    if not spans:
+        raise ValueError(f"{row['qid']}: no evidence clips before t_ask ({row['evidence_clips']}, t_ask={row['t_ask']})")
+    return [[round(a, 3), round(b, 3)] for a, b in spans]
+
+
 # ---------------------------------------------------------------- media
 
+def media_mode(cfg: dict) -> str:
+    """Either "cutoff" (full video / [0, t_ask]) or "evidence" (only the question's evidence clips)."""
+    return cfg["media"].get("mode", "cutoff")
+
+
 def media_hash(cfg: dict) -> str:
+    # "mode" is a media key, so evidence media get their own folder; cutoff configs
+    # without the key keep the hash (and folder) they always had
     return config_hash({"media": cfg["media"], "video_dir": cfg["paths"]["video_dir"]})
 
 
@@ -101,8 +141,11 @@ def source_video(cfg: dict, video: str) -> Path:
     return Path(cfg["paths"]["video_dir"]) / video.split("-")[0] / f"{video}.mp4"
 
 
-def media_path(media_dir, video: str, cutoff) -> Path:
-    name = "full.mp4" if cutoff is None else f"upto_{float(cutoff):09.3f}s.mp4"
+def media_path(media_dir, video: str, key, mode: str = "cutoff") -> Path:
+    """key is the group key: a cutoff (None = full video), or a qid in evidence mode."""
+    if mode == "evidence":
+        return Path(media_dir) / video / f"evidence_{key}.mp4"
+    name = "full.mp4" if key is None else f"upto_{float(key):09.3f}s.mp4"
     return Path(media_dir) / video / name
 
 
@@ -123,6 +166,13 @@ TIMING_STREAMING = (
     "that has happened so far and nothing after."
 )
 TIMING_FULL = "The question is asked after the whole recording has ended."
+SYSTEM_EVIDENCE = (
+    "You are watching excerpts from an egocentric video recorded by a head-mounted camera. "
+    "The camera wearer is the person asking the question: 'I', 'me' and 'my' refer to the "
+    "camera wearer. You are shown only a few short excerpts from the recording, joined "
+    "together in chronological order. Answer the multiple-choice question using what is "
+    "shown in these excerpts, then report only the letter of the single best option."
+)
 SYSTEM_TEXT_ONLY = (
     "You will be asked a multiple-choice question about an egocentric video recorded "
     "by a head-mounted camera; 'I', 'me' and 'my' refer to the camera wearer. The video "
@@ -131,9 +181,11 @@ SYSTEM_TEXT_ONLY = (
 )
 
 
-def system_instruction(streaming: bool, video_enabled: bool) -> str:
+def system_instruction(streaming: bool, video_enabled: bool, mode: str = "cutoff") -> str:
     if not video_enabled:
         return SYSTEM_TEXT_ONLY
+    if mode == "evidence":
+        return SYSTEM_EVIDENCE
     return SYSTEM_VIDEO.format(timing=TIMING_STREAMING if streaming else TIMING_FULL)
 
 

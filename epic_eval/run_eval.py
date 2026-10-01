@@ -1,7 +1,8 @@
 """Answer every question of one video with the configured model; resumable.
 
 Questions are grouped by what the model may see: the full video, or [0, t_ask]
-for streaming questions asked at t_ask. Each group gets one backend context
+for streaming questions asked at t_ask; in evidence mode every question is its
+own group (its evidence file is seconds long, so nothing is cached). Each group gets one backend context
 (one upload + one cache for Gemini) and one query per question. Up to
 ``runtime.max_concurrent_groups`` contexts are open at once and up to
 ``runtime.max_concurrent_requests`` queries are in flight, shared across groups.
@@ -26,7 +27,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .backends import get_backend
-from .common import (LETTERS, build_prompt, group_by_cutoff, load_run_config, media_done_marker,
+from .common import (LETTERS, build_prompt, group_questions, load_run_config, media_done_marker, media_mode,
                      media_path, questions_for_run, system_instruction)
 
 
@@ -77,7 +78,7 @@ def now() -> str:
 def run_video(run_dir, video: str, limit: int | None = None, which: str = "all") -> tuple[int, int]:
     run_dir = Path(run_dir)
     cfg = load_run_config(run_dir)
-    mcfg, video_on = cfg["model"], cfg["media"]["enabled"]
+    mcfg, video_on, mode = cfg["model"], cfg["media"]["enabled"], media_mode(cfg)
     backend = get_backend(mcfg["backend"])
     answers_path, errors_path = run_dir / "answers" / f"{video}.jsonl", run_dir / "errors" / f"{video}.jsonl"
 
@@ -111,6 +112,8 @@ def run_video(run_dir, video: str, limit: int | None = None, which: str = "all")
 
     def ask_one(r: dict, ctx: dict, cutoff, vpath, label: str) -> None:
         base = {"qid": r["qid"], "video": video, "cutoff_s": cutoff, "model": mcfg["name"], "time": now()}
+        if mode == "evidence":
+            base["evidence_clips"] = media_files.get(vpath.name, {}).get("clips") if vpath else None
         try:  # anything that goes wrong for one question stays with that question
             out = backend.ask(client, mcfg, ctx, build_prompt(r), len(r["options"]))
             gt = LETTERS[r["answer_index"]]
@@ -132,10 +135,12 @@ def run_video(run_dir, video: str, limit: int | None = None, which: str = "all")
               f"finish={out.get('finish_reason')} {out.get('latency_s')}s "
               f"tok={out.get('usage', {}).get('total_token_count')}")
 
-    def run_group(cutoff, group: list[dict], requests: ThreadPoolExecutor) -> None:
-        vpath = media_path(media_dir, video, cutoff) if video_on else None
-        sys_inst = system_instruction(cutoff is not None, video_on)
-        label = "full" if cutoff is None else f"t_ask={cutoff:.1f}s"
+    def run_group(key, group: list[dict], requests: ThreadPoolExecutor) -> None:
+        # key: the cutoff (None = full video), or the qid in evidence mode
+        cutoff = group[0]["t_ask"]
+        vpath = media_path(media_dir, video, key, mode) if video_on else None
+        sys_inst = system_instruction(cutoff is not None, video_on, mode)
+        label = key if mode == "evidence" else "full" if cutoff is None else f"t_ask={cutoff:.1f}s"
         print(f"  [{label}] {len(group)} questions, input={vpath.name if vpath else 'text-only'}")
         ctx = None
         try:
@@ -167,7 +172,7 @@ def run_video(run_dir, video: str, limit: int | None = None, which: str = "all")
     n_requests = int(runtime.get("max_concurrent_requests", 1))
     print(f"  concurrency: {n_groups} contexts, {n_requests} requests in flight")
     with ThreadPoolExecutor(n_requests) as requests, ThreadPoolExecutor(n_groups) as groups:
-        for f in [groups.submit(run_group, c, g, requests) for c, g in group_by_cutoff(todo).items()]:
+        for f in [groups.submit(run_group, c, g, requests) for c, g in group_questions(todo, mode).items()]:
             f.result()
     return counts["ok"], counts["fail"]
 

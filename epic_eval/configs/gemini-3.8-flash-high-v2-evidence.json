@@ -1,0 +1,86 @@
+{
+  "run": {
+    "tag": "gemini38flash-high-v2-evidence",
+    "runs_root": "/fs/cfar-projects/mem_open_vocab/morph_graphs/epic_eval_runs_v2"
+  },
+  "code": {
+    "repo_url": "git@github.com:vatsalag99/morph_graph.git"
+  },
+  "questions": {
+    "repo_url": "git@github.com:vatsalag99/epic-morph.git",
+    "commit": "0fc07adaf0379ed5f7a5847997a966daba9cfec6",
+    "glob": "outputs/v2/*/questions_eval/*_questions.json"
+  },
+  "paths": {
+    "video_dir": "/fs/cfar-projects/VPR/datasets/HD-EPIC/videos",
+    "python": "/fs/cfar-projects/mem_open_vocab/miniconda3/envs/morph_graphs_qwen3_cu126/bin/python",
+    "ffmpeg_module": "ffmpeg/7.1",
+    "media_root": "/fs/cfar-projects/mem_open_vocab/morph_graphs/epic_eval_runs_v2/media"
+  },
+  "media": {
+    "enabled": true,
+    "max_side": 1024,
+    "encode_fps": 2,
+    "crf": 26,
+    "preset": "veryfast",
+    "audio": false,
+    "clip_cut": "source_input_t",
+    "mode": "evidence"
+  },
+  "model": {
+    "backend": "gemini",
+    "name": "gemini-3.8-flash",
+    "api_version": null,
+    "api_key_env": "GEMINI_API_KEY",
+    "api_key_file": "~/.config/epic_eval/gemini_api_key",
+    "thinking_level": "HIGH",
+    "include_thoughts": true,
+    "temperature": null,
+    "seed": 0,
+    "max_output_tokens": 65536,
+    "fps": 1.0,
+    "media_resolution": "MEDIA_RESOLUTION_HIGH",
+    "cache_min_questions": 2,
+    "cache_ttl_s": 7200,
+    "max_retries": 6,
+    "retry_delay_s": 10,
+    "upload_timeout_s": 1800
+  },
+  "runtime": {
+    "max_concurrent_groups": 8,
+    "max_concurrent_requests": 32,
+    "prep_workers": 4,
+    "retry_truncated": false
+  },
+  "slurm": {
+    "prep": {
+      "account": "scavenger",
+      "partition": "scavenger",
+      "qos": "scavenger",
+      "cpus": 8,
+      "mem": "32G",
+      "time": "3:00:00",
+      "max_parallel": 4,
+      "gres": "gpu:rtxa4000:1"
+    },
+    "eval": {
+      "account": "scavenger",
+      "partition": "scavenger",
+      "qos": "scavenger",
+      "cpus": 8,
+      "mem": "32G",
+      "time": "12:00:00",
+      "max_parallel": 4,
+      "gres": "gpu:rtxa4000:1"
+    },
+    "score": {
+      "account": "scavenger",
+      "partition": "scavenger",
+      "qos": "scavenger",
+      "cpus": 2,
+      "mem": "8G",
+      "time": "0:30:00",
+      "gres": "gpu:rtxa4000:1"
+    }
+  }
+}
