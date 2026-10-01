@@ -53,30 +53,33 @@
   },
   "slurm": {
     "prep": {
-      "account": "vulcan-abhinav",
-      "partition": "vulcan-cpu",
-      "qos": "vulcan-cpu",
-      "cpus": 16,
+      "account": "scavenger",
+      "partition": "scavenger",
+      "qos": "scavenger",
+      "cpus": 8,
       "mem": "32G",
       "time": "3:00:00",
-      "max_parallel": 4
+      "max_parallel": 4,
+      "gres": "gpu:rtxa4000:1"
     },
     "eval": {
-      "account": "vulcan-abhinav",
-      "partition": "vulcan-cpu",
-      "qos": "vulcan-cpu",
-      "cpus": 2,
-      "mem": "8G",
-      "time": "4:00:00",
-      "max_parallel": 4
+      "account": "scavenger",
+      "partition": "scavenger",
+      "qos": "scavenger",
+      "cpus": 8,
+      "mem": "32G",
+      "time": "12:00:00",
+      "max_parallel": 4,
+      "gres": "gpu:rtxa4000:1"
     },
     "score": {
-      "account": "vulcan-abhinav",
-      "partition": "vulcan-cpu",
-      "qos": "vulcan-cpu",
-      "cpus": 1,
-      "mem": "4G",
-      "time": "0:30:00"
+      "account": "scavenger",
+      "partition": "scavenger",
+      "qos": "scavenger",
+      "cpus": 2,
+      "mem": "8G",
+      "time": "0:30:00",
+      "gres": "gpu:rtxa4000:1"
     }
   }
 }
