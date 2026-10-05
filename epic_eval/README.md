@@ -97,6 +97,28 @@ python3 -m epic_eval.orchestrator --config epic_eval/configs/<config>.json [--co
 Each submission is logged to `<run>/slurm/launches.jsonl`. The model READMEs
 give the exact commands.
 
+## Evidence-only mode
+
+`media.mode: "evidence"` (default `"cutoff"`, everything above) shows each
+question only its own evidence: the bank's `evidence.clips` (`[t0, t1]` per
+event). `configs/gemini-3.8-flash-high-v2-evidence.json` is the V2 config with
+this mode. The gap to the cutoff run separates finding the moments in a long
+video from reasoning over them.
+
+- **Media**: one `evidence_<qid>.mp4` per question. Clips are sorted, overlapping
+  ones merged (nothing is shown twice), and cut at `t_ask` (some V2 checklist
+  questions list later events of the object; those would show the future). Each
+  clip is cut from the source with input-side `-ss/-t`, never from `full.mp4`,
+  and all are concatenated in one encode with the same `max_side`/`encode_fps`/`crf`;
+  the file's length is the summed clip length to within a frame. `_done.json`
+  lists each file's clip bounds; a file is re-encoded when the bank's clips change.
+  A question without evidence is an error. `mode` is part of the media hash, so
+  these files get their own media folder.
+- **Grouping**: one context per question, no caching (the files are seconds long).
+- **Prompt**: the system instruction says the model sees a few short excerpts in
+  chronological order and must answer from them; it does not mention `t_ask` or
+  what was left out. Question, options and scoring are the cutoff mode's.
+
 ## Layout of a run
 
 ```
@@ -180,4 +202,8 @@ Checks the bank shape (unique ids, streaming questions have a `t_ask`, the
 scored letter's text matches the bank answer), grouping, that each streaming
 group is sent its own `[0, t_ask]` clip, resume, concurrency, truncation
 handling, scoring denominators, the explorer's join, and a real encode of a
-6-min video whose clips must end at or before `t_ask` with no audio.
+6-min video whose clips must end at or before `t_ask` with no audio. Evidence
+mode: on a synthetic black/white source, each evidence file's duration and frame
+count match its clips (±0.3 s, ±1 frame) and it contains no white pixel (nothing
+from outside the clips or after `t_ask`); one context per qid; the instruction never
+mentions a cutoff.

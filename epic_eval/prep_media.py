@@ -1,9 +1,12 @@
-"""Encode the model inputs for one video: the full recording plus one [0, t_ask] clip per streaming cutoff.
+"""Encode the model inputs for one video: the full recording plus one [0, t_ask] clip per streaming cutoff,
+or, with ``media.mode: "evidence"``, one ``evidence_<qid>.mp4`` per question holding only its evidence clips.
 
 Streaming clips are a physical re-encoded cut (``-t t_ask``), not an API-side
 offset, so "the model saw nothing after t_ask" is checkable with ffprobe and the
-same clip can be reused by local models. Every output is validated by probing its
-duration; ``_done.json`` is written only when all of a video's files pass.
+same clip can be reused by local models. An evidence file is the question's
+clips (sorted, merged, cut at t_ask; see ``common.evidence_spans``), each cut from
+the source with input-side ``-ss/-t`` and concatenated in one encode. Every output
+is validated by probing its duration; ``_done.json`` is written only when all of a video's files pass.
 
     python -m epic_eval.prep_media --run_dir <run> --video P09-20240621-093545
 """
@@ -18,8 +21,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from .common import (group_by_cutoff, load_run_config, media_done_marker, media_path,
-                     questions_for_run, source_video)
+from .common import (evidence_spans, group_by_cutoff, load_run_config, media_done_marker, media_mode,
+                     media_path, questions_for_run, source_video)
 
 
 def probe_duration(path) -> float:
@@ -69,11 +72,29 @@ def expected_ok(path, target_s: float, media: dict) -> tuple[bool, str]:
     return True, f"{dur:.3f}s"
 
 
-def encode(src, dst, media: dict, duration_s: float | None = None, threads: int = 0) -> None:
+def video_filters(media: dict) -> list[str]:
     side = int(media["max_side"])
     vf = [f"scale='if(gte(iw,ih),min({side},iw),-2)':'if(gte(iw,ih),-2,min({side},ih))'"]
     if media.get("encode_fps"):
         vf.append(f"fps={media['encode_fps']}")
+    return vf
+
+
+def output_args(media: dict, threads: int) -> list[str]:
+    return (["-c:v", "libx264", "-preset", media.get("preset", "veryfast"), "-crf", str(media["crf"]),
+             "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-threads", str(threads)]
+            + (["-c:a", "aac", "-b:a", "64k"] if media["audio"] else ["-an"]))
+
+
+def run_to(cmd: list[str], dst) -> None:
+    tmp = Path(dst).with_suffix(".tmp.mp4")
+    tmp.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(cmd + [str(tmp)], check=True)
+    os.replace(tmp, dst)  # atomic: a preempted encode never leaves a half file under the real name
+
+
+def encode(src, dst, media: dict, duration_s: float | None = None, threads: int = 0) -> None:
+    vf = video_filters(media)
     cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-threads", str(threads)]
     if duration_s is not None:
         # Input-side -t: source frames at or after t_ask are never decoded, so no output
@@ -81,14 +102,24 @@ def encode(src, dst, media: dict, duration_s: float | None = None, threads: int 
         # frame whose pixels come from up to half a frame interval after t_ask.)
         cmd += ["-t", f"{duration_s:.3f}"]
     cmd += ["-i", str(src)]
-    cmd += ["-vf", ",".join(vf), "-c:v", "libx264", "-preset", media.get("preset", "veryfast"),
-            "-crf", str(media["crf"]), "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-            "-threads", str(threads)]
-    cmd += ["-c:a", "aac", "-b:a", "64k"] if media["audio"] else ["-an"]
-    tmp = Path(dst).with_suffix(".tmp.mp4")
-    tmp.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(cmd + [str(tmp)], check=True)
-    os.replace(tmp, dst)  # atomic: a preempted encode never leaves a half file under the real name
+    run_to(cmd + ["-vf", ",".join(vf)] + output_args(media, threads), dst)
+
+
+def encode_evidence(src, dst, spans: list, media: dict, threads: int = 0) -> None:
+    """Concatenate the source's [t0, t1) spans, in the order given, into one file.
+
+    Each span is its own input with input-side -ss/-t, so frames outside the spans
+    are never decoded. Scale and fps run once on the joined stream, so the output
+    is on one frame grid and its length is the summed span length to within a frame.
+    """
+    cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-threads", str(threads)]
+    for t0, t1 in spans:
+        cmd += ["-ss", f"{t0:.3f}", "-t", f"{t1 - t0:.3f}", "-i", str(src)]
+    n = len(spans)
+    # concat wants every segment to start at timestamp 0
+    graph = "".join(f"[{i}:v]setpts=PTS-STARTPTS[s{i}];" for i in range(n))
+    graph += "".join(f"[s{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=0," + ",".join(video_filters(media)) + "[v]"
+    run_to(cmd + ["-filter_complex", graph, "-map", "[v]"] + output_args(media, threads), dst)
 
 
 def prep_video(cfg: dict, video: str, force: bool = False, workers: int = 1) -> dict:
@@ -98,6 +129,8 @@ def prep_video(cfg: dict, video: str, force: bool = False, workers: int = 1) -> 
         raise ValueError(f"no questions for {video}")
     src = source_video(cfg, video)
     full_s = probe_duration(src)
+    if media_mode(cfg) == "evidence":
+        return prep_evidence(cfg, video, rows, src, full_s, force, workers)
     cutoffs = [c for c in group_by_cutoff(rows) if c is not None]
     # Longest first, so the long encodes start early and the pool finishes evenly.
     targets = sorted([(None, full_s)] + [(c, min(c, full_s)) for c in cutoffs], key=lambda t: -t[1])
@@ -122,6 +155,37 @@ def prep_video(cfg: dict, video: str, force: bool = False, workers: int = 1) -> 
     with ThreadPoolExecutor(max(1, workers)) as pool:
         files = dict(pool.map(lambda t: one(*t), targets))
     marker = media_done_marker(media_dir, video)
+    marker.write_text(json.dumps({"video": video, "source": str(src), "source_duration_s": full_s,
+                                  "media": media, "files": files}, indent=2))
+    return files
+
+
+def prep_evidence(cfg: dict, video: str, rows: list, src, full_s: float, force: bool, workers: int) -> dict:
+    media, media_dir = cfg["media"], Path(cfg["resolved"]["media_dir"])
+    marker = media_done_marker(media_dir, video)
+    old = json.loads(marker.read_text())["files"] if marker.exists() else {}
+    cpus = int(os.environ.get("SLURM_CPUS_PER_TASK", os.cpu_count() or 1))
+    threads = max(1, cpus // max(1, workers))
+
+    def one(r):
+        spans = evidence_spans(r)  # raises on a question without evidence
+        target = sum(b - a for a, b in spans)
+        dst = media_path(media_dir, video, r["qid"], "evidence")
+        ok, why = expected_ok(dst, target, media)
+        if ok and not force and old.get(dst.name, {}).get("clips") == spans:
+            print(f"  keep {dst.name} ({why})")
+        else:
+            encode_evidence(src, dst, spans, media, threads)
+            ok, why = expected_ok(dst, target, media)
+            print(f"  wrote {dst.name}: {len(spans)} clips, {target:.1f}s ({why})")
+            if not ok:
+                raise RuntimeError(f"{dst} failed validation: {why}")
+        return dst.name, {"qid": r["qid"], "t_ask": r["t_ask"], "clips": spans, "clips_s": round(target, 3),
+                          "duration_s": probe_duration(dst), "bytes": dst.stat().st_size}
+
+    print(f"  {len(rows)} evidence files, {workers} parallel encodes x {threads} threads")
+    with ThreadPoolExecutor(max(1, workers)) as pool:
+        files = dict(pool.map(one, rows))
     marker.write_text(json.dumps({"video": video, "source": str(src), "source_duration_s": full_s,
                                   "media": media, "files": files}, indent=2))
     return files
