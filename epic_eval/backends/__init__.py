@@ -11,7 +11,10 @@ Add a local VLM by writing e.g. ``qwen3_vl.py`` with those functions (its
 
 import importlib
 
-BACKENDS = {"gemini": "epic_eval.backends.gemini"}
+BACKENDS = {
+    "gemini": "epic_eval.backends.gemini",
+    "qwen38_vl": "epic_eval.backends.qwen38_vl",
+}
 
 
 def get_backend(name: str):

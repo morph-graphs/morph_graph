@@ -1,0 +1,75 @@
+Bootstrap: docker
+From: nvidia/cuda:12.6.3-devel-ubuntu22.04
+
+%environment
+    export PATH=/opt/env/bin:$PATH
+    export CUDA_HOME=/usr/local/cuda
+    export HF_HOME=${HF_HOME:-$HOME/.cache/huggingface}
+
+%files
+    /scratch/zt1/project/abhinav2-prj/user/vatsalag/micromamba /usr/local/bin/micromamba
+
+%post
+    # Stay under the login node's 256-process limit -- must come FIRST
+    export MAMBA_EXTRACT_THREADS=1
+    export MAMBA_DOWNLOAD_THREADS=2
+    export MAX_JOBS=2
+    export OMP_NUM_THREADS=1
+
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update && apt-get install -y --no-install-recommends \
+        curl ca-certificates bzip2 git build-essential && \
+        rm -rf /var/lib/apt/lists/*
+
+    # micromamba (copied in via %files)
+    chmod +x /usr/local/bin/micromamba
+    micromamba --version
+
+    # Conda layer first: python + ffmpeg (shared libs for torchcodec)
+    micromamba create -y -p /opt/env -c conda-forge python=3.11 "ffmpeg=6.1.2"
+    micromamba clean --all --yes
+
+    export PATH=/opt/env/bin:$PATH
+    export CUDA_HOME=/usr/local/cuda
+    # A100=8.0, A6000/A5000=8.6, L40S/4090=8.9, H100=9.0 -- trim to what your cluster has
+    export TORCH_CUDA_ARCH_LIST="8.0;8.6;8.9;9.0"
+
+    # Constraints stop later installs from silently swapping torch/triton
+    cat > /opt/constraints.txt <<'EOF'
+torch==2.8.0+cu126
+torchvision==0.23.0+cu126
+torchaudio==2.8.0+cu126
+torchcodec==0.7.0+cu126
+triton==3.4.0
+EOF
+
+    # PyTorch stack (cu126 wheels)
+    pip install --no-cache-dir \
+        torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 torchcodec==0.7.0 triton==3.4.0 \
+        --index-url https://download.pytorch.org/whl/cu126
+
+    # HF stack
+    pip install --no-cache-dir -c /opt/constraints.txt \
+        transformers==5.8.0 \
+        accelerate==1.15.0 \
+        huggingface_hub==1.32.0 \
+        datasets==5.0.1 \
+        qwen-vl-utils==0.0.14 \
+        ezcolorlog
+
+    # Build deps for the CUDA extensions
+    pip install --no-cache-dir ninja packaging psutil wheel
+
+    # CUDA extensions (try prebuilt wheels first, fall back to source build)
+    pip install --no-cache-dir -c /opt/constraints.txt flash-attn==2.8.3 --no-build-isolation
+    pip install --no-cache-dir -c /opt/constraints.txt causal-conv1d==1.7.0 --no-build-isolation
+
+    # Gated DeltaNet kernels
+    pip install --no-cache-dir -c /opt/constraints.txt \
+        fla-core==0.5.2 flash-linear-attention==0.5.2
+
+%test
+    python -c "import torch, triton, transformers, flash_attn, fla, causal_conv1d, torchcodec; \
+print('torch', torch.__version__, 'cuda', torch.version.cuda); \
+print('triton', triton.__version__, 'transformers', transformers.__version__); \
+print('flash_attn', flash_attn.__version__)"

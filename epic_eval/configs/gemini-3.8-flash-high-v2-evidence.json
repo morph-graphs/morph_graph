@@ -8,7 +8,7 @@
   },
   "questions": {
     "repo_url": "git@github.com:vatsalag99/epic-morph.git",
-    "commit": "8d17468af3be02ac6943867deb3fab801b5e9642",
+    "commit": "7206fbf",
     "glob": "outputs/v2/*/questions_eval/*_questions.json"
   },
   "paths": {

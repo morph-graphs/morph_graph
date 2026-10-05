@@ -11,6 +11,10 @@ Output: <run>/answers/<video>.jsonl, one row per answered question. A question
 counts as done only when its row has a parsed letter; failures go to
 <run>/errors/<video>.jsonl and are retried on the next run.
 
+With --qids_file/--shard (the orchestrator's chunk mode, slurm.eval.questions_per_task)
+a task answers only the listed questions and writes answers/<video>.<shard>.jsonl, so
+tasks on the same video never append to one file. Resume reads every file of a video.
+
     python -m epic_eval.run_eval --run_dir <run> --video P09-20240621-093545 [--limit 2]
 """
 
@@ -42,6 +46,12 @@ def read_jsonl(path) -> list[dict]:
     return rows
 
 
+def video_files(folder, video: str) -> list[Path]:
+    """<video>.jsonl plus the per-task shards <video>.<shard>.jsonl."""
+    folder = Path(folder)
+    return [folder / f"{video}.jsonl", *sorted(folder.glob(f"{video}.*.jsonl"))]
+
+
 def done_qids(path) -> set:
     return {r["qid"] for r in read_jsonl(path) if r.get("pred_letter")}
 
@@ -58,9 +68,9 @@ def truncated_qids(errors_path) -> set:
 
 def skip_qids(run_dir, video: str, cfg: dict) -> set:
     run_dir = Path(run_dir)
-    skip = done_qids(run_dir / "answers" / f"{video}.jsonl")
+    skip = set().union(*map(done_qids, video_files(run_dir / "answers", video)))
     if not cfg.get("runtime", {}).get("retry_truncated", False):
-        skip |= truncated_qids(run_dir / "errors" / f"{video}.jsonl")
+        skip |= set().union(*map(truncated_qids, video_files(run_dir / "errors", video)))
     return skip
 
 
@@ -75,23 +85,30 @@ def now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def run_video(run_dir, video: str, limit: int | None = None, which: str = "all") -> tuple[int, int]:
+def run_video(run_dir, video: str, limit: int | None = None, which: str = "all",
+              qids: set | None = None, shard: str | None = None) -> tuple[int, int]:
     run_dir = Path(run_dir)
     cfg = load_run_config(run_dir)
     mcfg, video_on, mode = cfg["model"], cfg["media"]["enabled"], media_mode(cfg)
     backend = get_backend(mcfg["backend"])
-    answers_path, errors_path = run_dir / "answers" / f"{video}.jsonl", run_dir / "errors" / f"{video}.jsonl"
+    name = f"{video}.{shard}" if shard else video
+    answers_path, errors_path = run_dir / "answers" / f"{name}.jsonl", run_dir / "errors" / f"{name}.jsonl"
 
     rows = [r for r in questions_for_run(cfg) if r["video"] == video]
+    if qids is not None:
+        unknown = qids - {r["qid"] for r in rows}
+        if unknown:
+            raise ValueError(f"{len(unknown)} qids not in {video}'s questions, e.g. {sorted(unknown)[0]}")
+        rows = [r for r in rows if r["qid"] in qids]
     if which != "all":
         rows = [r for r in rows if r["streaming"] == (which == "streaming")]
-    done = done_qids(answers_path)
+    done = set().union(*map(done_qids, video_files(run_dir / "answers", video)))
     skip = skip_qids(run_dir, video, cfg)
     todo = [r for r in rows if r["qid"] not in skip]
     if limit is not None:
         todo = todo[:limit]
     qids = {r["qid"] for r in rows}
-    print(f"{video}: {len(rows)} questions, {len(done & qids)} done, "
+    print(f"{name}: {len(rows)} questions, {len(done & qids)} done, "
           f"{len((skip - done) & qids)} truncated (not retried), {len(todo)} to run")
     if not todo:
         return 0, 0
@@ -183,8 +200,11 @@ def main() -> None:
     p.add_argument("--video", required=True)
     p.add_argument("--limit", type=int, help="answer at most this many pending questions (smoke tests)")
     p.add_argument("--which", choices=["all", "full", "streaming"], default="all")
+    p.add_argument("--qids_file", help="answer only these questions (one qid per line)")
+    p.add_argument("--shard", help="write answers/<video>.<shard>.jsonl instead of answers/<video>.jsonl")
     a = p.parse_args()
-    n_ok, n_fail = run_video(a.run_dir, a.video, a.limit, a.which)
+    qids = set(Path(a.qids_file).read_text().split()) if a.qids_file else None
+    n_ok, n_fail = run_video(a.run_dir, a.video, a.limit, a.which, qids, a.shard)
     print(f"done: {n_ok} answered, {n_fail} failed")
     if n_fail:
         sys.exit(1)  # surfaces as FAILED in sacct; rerunning retries only the failures

@@ -1,0 +1,350 @@
+<title>EPIC-Morph Run Explorer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root {
+  --ground: #f5f7fa; --surface: #ffffff; --ink: #141820; --ink-2: #474f5e; --muted: #737b8a;
+  --rule: #dde2ea; --soft: #eef3fb; --a: #2a78d6; --b: #eb6834;
+  --good-bg: #e6f4ec; --good-ink: #1d6b3b; --bad-bg: #fbe9e7; --bad-ink: #9b2c1f; --warn-bg: #fdf1e3; --warn-ink: #8a4a00;
+  --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --ground: #101318; --surface: #171b21; --ink: #eef1f5; --ink-2: #b9c0cc; --muted: #8b93a1; --rule: #2b313b; --soft: #1b2433;
+    --a: #3987e5; --b: #d95926; --good-bg: #16301f; --good-ink: #8fd6a8; --bad-bg: #3a1b17; --bad-ink: #f3a497; --warn-bg: #3a2a14; --warn-ink: #f3c88f;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ground: #101318; --surface: #171b21; --ink: #eef1f5; --ink-2: #b9c0cc; --muted: #8b93a1; --rule: #2b313b; --soft: #1b2433;
+  --a: #3987e5; --b: #d95926; --good-bg: #16301f; --good-ink: #8fd6a8; --bad-bg: #3a1b17; --bad-ink: #f3a497; --warn-bg: #3a2a14; --warn-ink: #f3c88f;
+}
+* { box-sizing: border-box; }
+body { background: var(--ground); color: var(--ink); font: 14px/1.5 var(--body); }
+.page { max-width: 1180px; margin: 0 auto; padding-inline: 18px; padding-block: 28px 64px; display: grid; gap: 18px; }
+h1 { font: 700 26px/1.15 var(--display); margin: 0; letter-spacing: -0.01em; }
+h2 { font: 600 16px/1.3 var(--display); margin: 0; }
+.sub { color: var(--ink-2); max-width: 90ch; }
+code, .mono { font-family: var(--mono); font-size: 0.92em; }
+.panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; display: grid; gap: 10px; }
+.runs { display: grid; gap: 6px; }
+.run { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; font-size: 13px; color: var(--ink-2); }
+.run b { color: var(--ink); font-weight: 600; }
+.tag { display: inline-flex; align-items: center; gap: 6px; font: 500 12px/1.4 var(--mono); padding: 1px 8px; border-radius: 999px; background: var(--soft); color: var(--ink-2); white-space: nowrap; }
+.dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; background: var(--muted); }
+.dot.a { background: var(--a); } .dot.b { background: var(--b); }
+.controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+label.f { display: grid; gap: 3px; font: 500 11px/1.2 var(--mono); letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+select, input[type="search"], textarea { font: 14px var(--body); color: var(--ink); background: var(--surface); border: 1px solid var(--rule); border-radius: 7px; padding: 6px 8px; width: 100%; }
+select:focus, input:focus, textarea:focus, button:focus { outline: 2px solid var(--a); outline-offset: 1px; }
+button { font: 500 13px var(--body); color: var(--ink); background: var(--soft); border: 1px solid var(--rule); border-radius: 7px; padding: 6px 11px; cursor: pointer; }
+button:disabled { opacity: .5; cursor: default; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 6px 9px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+th { font: 500 11px var(--mono); letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+td.n, th.n { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+tr.clickable { cursor: pointer; } tr.clickable:hover td { background: var(--soft); }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; }
+.count { color: var(--ink-2); font-size: 13px; }
+.cards { display: grid; gap: 12px; }
+.card { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; display: grid; gap: 10px; }
+.card .meta { display: flex; flex-wrap: wrap; gap: 6px; }
+.card .q { font-size: 15px; font-weight: 500; }
+.opts { display: grid; gap: 5px; margin: 0; padding: 0; list-style: none; }
+.opt { display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; align-items: start; padding: 5px 8px; border-radius: 7px; }
+.opt.correct { background: var(--good-bg); }
+.opt .L { font: 500 13px var(--mono); color: var(--muted); }
+.opt.correct .L, .opt.correct .t { color: var(--good-ink); font-weight: 500; }
+.picks { display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; }
+.pick { font: 500 11px/1.5 var(--mono); padding: 0 7px; border-radius: 999px; color: #fff; white-space: nowrap; }
+.pick.r0 { background: var(--a); } .pick.r1 { background: var(--b); } .pick.rx { background: var(--ink-2); }
+.res { display: flex; flex-wrap: wrap; gap: 6px; }
+.ok { background: var(--good-bg); color: var(--good-ink); } .no { background: var(--bad-bg); color: var(--bad-ink); } .warn { background: var(--warn-bg); color: var(--warn-ink); }
+details { border-top: 1px solid var(--rule); padding-top: 8px; }
+details summary { cursor: pointer; color: var(--ink-2); font-size: 13px; }
+.thought { white-space: pre-wrap; font-size: 13px; color: var(--ink-2); background: var(--ground); border-radius: 7px; padding: 8px 10px; margin-top: 6px; max-height: 280px; overflow: auto; }
+.ev { display: grid; grid-template-columns: 62px 1fr; gap: 4px 10px; font-size: 13px; margin-top: 6px; }
+.ev .t { font-family: var(--mono); color: var(--muted); }
+.verdict { display: grid; grid-template-columns: minmax(170px, 230px) 1fr; gap: 8px; align-items: start; }
+.verdict textarea { min-height: 34px; resize: vertical; }
+.store { font-size: 12px; color: var(--muted); }
+.pager { display: flex; gap: 8px; align-items: center; justify-content: center; }
+.empty { color: var(--muted); padding: 24px; text-align: center; }
+@media (max-width: 560px) { .verdict { grid-template-columns: 1fr; } .opt { grid-template-columns: 22px 1fr; } .picks { grid-column: 2; justify-content: flex-start; } }
+</style>
+
+<div class="page">
+  <header style="display:grid;gap:6px">
+    <h1>EPIC-Morph Run Explorer</h1>
+    <p class="sub">Every question, every run's answer, side by side. Filter to a slice, compare two runs, and mark what went wrong. The summary tables follow the filters.</p>
+  </header>
+
+  <div class="panel"><h2>Runs in this file</h2><div class="runs" id="runs"></div></div>
+
+  <div class="panel">
+    <div class="controls">
+      <label class="f">Run A<select id="f-a"></select></label>
+      <label class="f">Run B<select id="f-b"></select></label>
+      <label class="f">Question type<select id="f-form"></select></label>
+      <label class="f">Video<select id="f-video"></select></label>
+      <label class="f">Video input<select id="f-stream"><option value="all">all</option><option value="streaming">streaming (up to t_ask)</option><option value="full">full video</option></select></label>
+      <label class="f">Yes/no<select id="f-yn"><option value="all">all</option><option value="no">exclude yes/no</option><option value="only">only yes/no</option></select></label>
+      <label class="f">Outcome<select id="f-out">
+        <option value="all">all</option><option value="a-wrong">A wrong</option><option value="a-right">A right</option>
+        <option value="a-wrong-b-right">A wrong, B right</option><option value="a-right-b-wrong">A right, B wrong</option>
+        <option value="both-wrong">both wrong</option><option value="disagree">A and B disagree</option><option value="unanswered">A unanswered</option></select></label>
+      <label class="f">Verdict<select id="f-ver"></select></label>
+      <label class="f" style="grid-column: span 2">Search question text<input type="search" id="f-q" placeholder="e.g. saucepan, bowl, salt"></label>
+    </div>
+    <div class="row"><span class="count" id="count"></span><button id="reset" type="button">Clear filters</button></div>
+  </div>
+
+  <div class="two">
+    <div class="panel"><h2>Accuracy on this slice</h2><div class="table-wrap" id="summary"></div></div>
+    <div class="panel"><h2>By question type (click a row to filter)</h2><div class="table-wrap" id="byform"></div></div>
+  </div>
+
+  <div class="panel">
+    <div class="row" style="justify-content:space-between"><h2>Verdicts</h2><span class="store" id="store"></span></div>
+    <div class="row" id="vtools">
+      <button id="v-export" type="button">Export verdicts (JSON)</button>
+      <label class="f" style="text-transform:none;letter-spacing:0">Import verdicts<input type="file" id="v-import" accept="application/json,.json"></label>
+      <span class="count" id="vcount"></span>
+    </div>
+  </div>
+
+  <div class="cards" id="cards"></div>
+  <div class="pager"><button id="prev" type="button">Previous</button><span class="count" id="pageinfo"></span><button id="next" type="button">Next</button></div>
+</div>
+
+<script>
+const DATA = /*DATA*/;
+const RUNS = DATA.runs, QS = DATA.questions, L = "ABCDEFGH", PAGE = 25;
+const VERDICTS = ["", "model wrong", "bank answer wrong", "question ambiguous", "options give it away", "other"];
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+const pct = (k, n) => n ? (100 * k / n).toFixed(1) + "%" : "–";
+let state = {a: "0", b: RUNS.length > 1 ? "1" : "", form: "", video: "", stream: "all", yn: "all", out: "all", ver: "", q: "", page: 0};
+
+/* ---------- verdict store: shared db when published with db, else this browser ---------- */
+const LS_KEY = "epic-explorer-verdicts";
+/* store document ids allow letters, digits and _ - . ~ : @ + only; the real qid stays in the body */
+const docId = qid => String(qid).replace(/[^A-Za-z0-9_\-.~:@]/g, c => "+" + c.charCodeAt(0).toString(16) + "+").slice(0, 200);
+const V = {
+  data: Object.assign({}, DATA.verdicts || {}), db: null, mode: "local",
+  loadLocal() { try { Object.assign(this.data, JSON.parse(localStorage.getItem(LS_KEY) || "{}")); } catch (e) {} },
+  saveLocal() { try { localStorage.setItem(LS_KEY, JSON.stringify(this.data)); } catch (e) {} },
+  async set(qid, patch) {
+    const stamp = {updated: new Date().toISOString()};
+    this.data[qid] = Object.assign({qid, verdict: "", note: ""}, this.data[qid] || {}, patch, stamp);
+    if (this.db) {
+      /* write only the changed field, so a reviewer editing the note never resets someone
+         else's verdict (and vice versa); update() needs the doc, so create it on first write */
+      const ref = this.db.collection("verdicts").doc(docId(qid));
+      try {
+        try { await ref.update(Object.assign({}, patch, stamp)); }
+        catch (e) {
+          if (e && e.code !== "invalid_argument") throw e;
+          await ref.set(Object.assign({qid, verdict: "", note: ""}, patch, stamp));
+        }
+      } catch (e) { $("store").textContent = "Could not save to the shared store (" + (e && e.code || "error") + "). Your change is kept in this browser only."; this.saveLocal(); }
+    } else this.saveLocal();
+    renderVcount();
+  },
+  get(qid) { return this.data[qid] || {verdict: "", note: ""}; }
+};
+V.loadLocal();
+function initShared() {
+  const use = window.claude && window.claude.use;
+  if (!use) { renderStore(); return; }
+  window.claude.use("db").then(db => {
+    if (!db) { renderStore(); return; }
+    V.db = db; V.mode = "shared"; renderStore();
+    db.collection("verdicts").onSnapshot(snap => {
+      let changed = false;
+      snap.docChanges().forEach(ch => {
+        if (ch.type === "removed") return;
+        const d = ch.doc.data(); if (d && d.qid) { V.data[d.qid] = d; changed = true; }
+      });
+      if (changed) { renderVcount(); refreshVisibleVerdicts(); }
+    }, err => { $("store").textContent = "Shared verdicts unavailable (" + (err && err.code) + "); showing this browser's copy."; });
+  }).catch(() => renderStore());
+}
+function renderStore() {
+  /* Export is for the local file only: the claude.ai viewer never grants downloads (shared verdicts are read there directly) */
+  $("v-export").hidden = !!(window.claude && window.claude.use);
+  $("store").textContent = V.mode === "shared"
+    ? "Shared: everyone who can open this page sees and edits the same verdicts."
+    : "Saved in this browser only. Export to share them, or pass the file to explorer.py --verdicts.";
+}
+function renderVcount() {
+  const n = Object.values(V.data).filter(r => r.verdict).length;
+  $("vcount").textContent = n + " question" + (n === 1 ? "" : "s") + " with a verdict";
+}
+
+/* ---------- filters ---------- */
+function res(q, r) { return r === "" ? null : q.per[r] || null; }
+function optsFor(q, r) { return (r !== "" && q.opts_by_run[r]) || {options: q.options, gt: q.gt}; }
+function passes(q) {
+  if (state.form && q.form !== state.form) return false;
+  if (state.video && q.video !== state.video) return false;
+  if (state.stream === "streaming" && !q.streaming) return false;
+  if (state.stream === "full" && q.streaming) return false;
+  if (state.yn === "no" && q.binary) return false;
+  if (state.yn === "only" && !q.binary) return false;
+  if (state.ver) { const v = V.get(q.qid).verdict || ""; if (state.ver === "(any)" ? !v : state.ver === "(none)" ? !!v : v !== state.ver) return false; }
+  if (state.q && !q.q.toLowerCase().includes(state.q.toLowerCase())) return false;
+  const A = res(q, state.a), B = res(q, state.b);
+  const aok = A && A.ok, bok = B && B.ok;
+  switch (state.out) {
+    case "a-wrong": return !!A && !aok;
+    case "a-right": return !!aok;
+    case "a-wrong-b-right": return !!A && !aok && !!bok;
+    case "a-right-b-wrong": return !!aok && !!B && !bok;
+    case "both-wrong": return !!A && !aok && !!B && !bok;
+    case "disagree": return !!A && !!B && A.pick !== B.pick;
+    case "unanswered": return !A || A.pick == null;
+  }
+  return true;
+}
+
+/* ---------- summaries ---------- */
+function summary(list) {
+  let rows = RUNS.map((r, i) => {
+    const got = list.map(q => q.per[i]).filter(x => x && x.pick != null);
+    const ok = got.filter(x => x.ok).length;
+    return `<tr><td><span class="dot ${i == state.a ? "a" : i == state.b ? "b" : ""}"></span> ${esc(r.label)}</td><td class="n">${list.length}</td><td class="n">${got.length}</td><td class="n">${pct(ok, list.length)}</td><td class="n">${pct(ok, got.length)}</td></tr>`;
+  }).join("");
+  const chance = list.length ? (100 * list.reduce((s, q) => s + 1 / q.options.length, 0) / list.length).toFixed(1) + "%" : "–";
+  $("summary").innerHTML = `<table><thead><tr><th>Run</th><th class="n">Questions</th><th class="n">Answered</th><th class="n">Accuracy</th><th class="n">Acc. answered</th></tr></thead><tbody>${rows}</tbody></table><p class="count" style="margin:6px 0 0">Chance on this slice: ${chance}. Unanswered questions count as wrong in "Accuracy".</p>`;
+  const forms = {};
+  list.forEach(q => (forms[q.form] ||= []).push(q));
+  const A = state.a, B = state.b;
+  const fr = Object.entries(forms).map(([f, qs]) => {
+    const a = qs.filter(q => q.per[A] && q.per[A].ok).length, b = B !== "" ? qs.filter(q => q.per[B] && q.per[B].ok).length : null;
+    return {f, n: qs.length, a: 100 * a / qs.length, b: b == null ? null : 100 * b / qs.length};
+  }).sort((x, y) => x.a - y.a);
+  $("byform").innerHTML = `<table><thead><tr><th>Type</th><th class="n">n</th><th class="n"><span class="dot a"></span> A</th>${B !== "" ? '<th class="n"><span class="dot b"></span> B</th>' : ""}</tr></thead><tbody>` +
+    fr.map(r => `<tr class="clickable" data-form="${esc(r.f)}" tabindex="0"><td><code>${esc(r.f)}</code></td><td class="n">${r.n}</td><td class="n">${r.a.toFixed(1)}%</td>${B !== "" ? `<td class="n">${r.b.toFixed(1)}%</td>` : ""}</tr>`).join("") + "</tbody></table>";
+  $("byform").querySelectorAll("tr.clickable").forEach(tr => {
+    const go = () => { state.form = state.form === tr.dataset.form ? "" : tr.dataset.form; $("f-form").value = state.form; state.page = 0; render(); };
+    tr.addEventListener("click", go); tr.addEventListener("keydown", e => { if (e.key === "Enter") go(); });
+  });
+}
+
+/* ---------- cards ---------- */
+/* A run's pick, as a position in the option list being shown. Runs on another bank
+   commit may have other options for the same question: map by option text. */
+function pickOn(q, r, base) {
+  const x = res(q, r);
+  if (!x || x.pick == null) return null;
+  const own = optsFor(q, r);
+  if (own === base || own.options === base.options) return x.pick;
+  const i = base.options.indexOf(own.options[x.pick]);
+  return i >= 0 ? i : null;
+}
+function card(q) {
+  const runsShown = [state.a, state.b].filter(r => r !== "");
+  const base = optsFor(q, state.a);
+  const optRows = base.options.map((o, k) => {
+    const picks = runsShown.map((r, j) => { const x = res(q, r); return x && pickOn(q, r, base) === k ? `<span class="pick r${j}" title="${esc(RUNS[r].label)}">${j ? "B" : "A"}</span>` : ""; }).join("");
+    return `<li class="opt ${k === base.gt ? "correct" : ""}"><span class="L">${L[k]}</span><span class="t">${esc(o)}${k === base.gt ? " ✓" : ""}</span><span class="picks">${picks}</span></li>`;
+  }).join("");
+  const resTags = runsShown.map((r, j) => {
+    const x = res(q, r), name = esc(RUNS[r].label);
+    if (!x) return `<span class="tag warn">${j ? "B" : "A"} · ${name}: no answer</span>`;
+    if (x.pick == null) return `<span class="tag warn">${j ? "B" : "A"} · ${name}: ${esc(x.error)}</span>`;
+    const own = optsFor(q, r), off = pickOn(q, r, base) == null ? ` (“${esc(own.options[x.pick])}”, not in the options shown)` : "";
+    return `<span class="tag ${x.ok ? "ok" : "no"}">${j ? "B" : "A"} · ${name}: ${L[x.pick]} ${x.ok ? "right" : "wrong"}${off}${x.think != null ? " · " + (x.think / 1000).toFixed(1) + "k thinking" : ""}</span>`;
+  }).join("");
+  const differs = runsShown.some(r => q.opts_by_run[r]) ? `<span class="tag warn">options differ between runs; showing run A's</span>` : "";
+  const thoughts = runsShown.map((r, j) => { const x = res(q, r); return x && x.thoughts ? `<details><summary>${j ? "B" : "A"} · ${esc(RUNS[r].label)}: reasoning summary</summary><div class="thought">${esc(x.thoughts)}</div></details>` : ""; }).join("");
+  const ev = q.evidence && q.evidence.length ? `<details><summary>Narration evidence (${q.evidence.length})</summary><div class="ev">${q.evidence.map(e => `<span class="t">${esc(e.t || "?")}</span><span>${esc(e.text || e.id)}</span>`).join("")}</div></details>` : "";
+  const v = V.get(q.qid);
+  return `<article class="card" data-qid="${esc(q.qid)}">
+    <div class="meta"><span class="tag">${esc(q.video)}</span><span class="tag"><code>${esc(q.form)}</code></span>${q.payoff_form ? `<span class="tag">wraps ${esc(q.payoff_form)}</span>` : ""}
+      <span class="tag">${q.streaming ? "streaming · asked at " + esc(q.asked_at) : "full video"}</span>${q.hops != null ? `<span class="tag">${q.hops} hop${q.hops > 1 ? "s" : ""}</span>` : ""}${differs}</div>
+    <div class="q">${esc(q.q)}</div>
+    <ul class="opts">${optRows}</ul>
+    <div class="res">${resTags}</div>
+    ${thoughts}${ev}
+    <div class="verdict">
+      <select aria-label="Verdict" id="v-${esc(q.qid)}">${VERDICTS.map(o => `<option value="${esc(o)}" ${o === (v.verdict || "") ? "selected" : ""}>${o ? esc(o) : "no verdict"}</option>`).join("")}</select>
+      <textarea aria-label="Note" id="n-${esc(q.qid)}" placeholder="Note: what the video shows, which option should be right…">${esc(v.note || "")}</textarea>
+    </div>
+    <div class="store mono">${esc(q.qid)}</div>
+  </article>`;
+}
+function bindCards() {
+  document.querySelectorAll(".card").forEach(c => {
+    const qid = c.dataset.qid, sel = c.querySelector("select"), ta = c.querySelector("textarea");
+    sel.addEventListener("change", () => V.set(qid, {verdict: sel.value}));
+    ta.addEventListener("change", () => { if ((V.get(qid).note || "") !== ta.value) V.set(qid, {note: ta.value}); });
+  });
+}
+function refreshVisibleVerdicts() {
+  document.querySelectorAll(".card").forEach(c => {
+    const v = V.get(c.dataset.qid), sel = c.querySelector("select"), ta = c.querySelector("textarea");
+    if (document.activeElement !== sel && sel.value !== (v.verdict || "")) sel.value = v.verdict || "";
+    if (document.activeElement !== ta && ta.value !== (v.note || "")) ta.value = v.note || "";
+  });
+}
+
+/* ---------- render ---------- */
+function render() {
+  const list = QS.filter(passes);
+  $("count").textContent = `${list.length} of ${QS.length} questions`;
+  summary(list);
+  const pages = Math.max(1, Math.ceil(list.length / PAGE));
+  state.page = Math.min(state.page, pages - 1);
+  const slice = list.slice(state.page * PAGE, (state.page + 1) * PAGE);
+  $("cards").innerHTML = slice.length ? slice.map(card).join("") : `<div class="empty">No questions match these filters.</div>`;
+  bindCards();
+  $("pageinfo").textContent = `Page ${state.page + 1} of ${pages}`;
+  $("prev").disabled = state.page === 0; $("next").disabled = state.page >= pages - 1;
+  try { localStorage.setItem("epic-explorer-state", JSON.stringify(state)); } catch (e) {}
+}
+
+function setup() {
+  $("runs").innerHTML = RUNS.map((r, i) => `<div class="run"><b>${esc(r.label)}</b><span>${esc(r.model)} · ${r.video ? "video" : "no video"}${r.thinking ? " · thinking " + esc(r.thinking) : ""}${r.video && r.media_resolution ? " · " + esc(String(r.media_resolution).replace("MEDIA_RESOLUTION_", "media ")) : ""}</span><span class="mono">code ${esc(r.code)} · questions ${esc(r.questions)}</span><span>${r.answered}/${r.n} answered</span></div>`).join("");
+  const runOpts = RUNS.map((r, i) => `<option value="${i}">${esc(r.label)}</option>`).join("");
+  $("f-a").innerHTML = runOpts; $("f-b").innerHTML = `<option value="">(none)</option>` + runOpts;
+  const uniq = k => [...new Set(QS.map(q => q[k]))].sort();
+  $("f-form").innerHTML = `<option value="">all</option>` + uniq("form").map(f => `<option>${esc(f)}</option>`).join("");
+  $("f-video").innerHTML = `<option value="">all</option>` + uniq("video").map(v => `<option>${esc(v)}</option>`).join("");
+  $("f-ver").innerHTML = `<option value="">all</option><option value="(any)">has a verdict</option><option value="(none)">no verdict</option>` + VERDICTS.filter(Boolean).map(v => `<option>${esc(v)}</option>`).join("");
+  try { const s = JSON.parse(localStorage.getItem("epic-explorer-state") || "null"); if (s) state = Object.assign(state, s, {page: 0}); } catch (e) {}
+  if (!RUNS[state.a]) state.a = "0";
+  if (state.b !== "" && !RUNS[state.b]) state.b = "";
+  const bind = (id, key, ev = "change") => { const el = $(id); el.value = state[key]; el.addEventListener(ev, () => { state[key] = el.value; state.page = 0; render(); }); };
+  bind("f-a", "a"); bind("f-b", "b"); bind("f-form", "form"); bind("f-video", "video"); bind("f-stream", "stream"); bind("f-yn", "yn"); bind("f-out", "out"); bind("f-ver", "ver"); bind("f-q", "q", "input");
+  $("reset").addEventListener("click", () => { Object.assign(state, {form: "", video: "", stream: "all", yn: "all", out: "all", ver: "", q: "", page: 0}); ["f-form", "f-video", "f-q", "f-ver"].forEach(i => $(i).value = ""); $("f-stream").value = "all"; $("f-yn").value = "all"; $("f-out").value = "all"; render(); });
+  $("prev").addEventListener("click", () => { state.page--; render(); scrollTo(0, $("cards").offsetTop - 20); });
+  $("next").addEventListener("click", () => { state.page++; render(); scrollTo(0, $("cards").offsetTop - 20); });
+  $("v-export").addEventListener("click", () => {
+    const blob = new Blob([JSON.stringify({exported: new Date().toISOString(), verdicts: V.data}, null, 1)], {type: "application/json"});
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "verdicts.json"; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  });
+  $("v-import").addEventListener("change", e => {
+    const f = e.target.files && e.target.files[0]; if (!f) return;
+    const rd = new FileReader();
+    rd.onload = async () => {
+      try {
+        const doc = JSON.parse(rd.result), v = doc.verdicts || doc;
+        for (const [qid, r] of Object.entries(v)) if (r && typeof r === "object") await V.set(qid, {verdict: r.verdict || "", note: r.note || ""});
+        render();
+      } catch (err) { $("vcount").textContent = "That file is not a verdicts export."; }
+    };
+    rd.readAsText(f);
+  });
+  renderVcount(); renderStore(); render(); initShared();
+}
+setup();
+</script>

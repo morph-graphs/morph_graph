@@ -4,18 +4,26 @@ Checks out the eval code (this repo) at ``--commit`` and the question bank
 (epic-morph) at the commit pinned in the config into a run directory named
 ``<code sha8>_<tag>_cfg<confighash>``, then submits up to three array jobs:
 
-    prep   one task per video: encode full video + [0, t_ask] clips, or the
-           per-question evidence files in evidence mode            (skipped if media valid)
+    prep   one task per video: encode full video + [0, t_ask] clips   (skipped if media valid)
     eval   one task per video: query the model, write answers/<video>.jsonl
+           (or, with slurm.eval.questions_per_task, one task per chunk of a video's
+           pending questions, each writing answers/<video>.<shard>.jsonl)
     score  one task: scores.json / scores.txt
 
 Every job runs from the checked-out code, never from the working tree. The
-orchestrator submits and exits; there is no login-node polling. Rerunning the
-same command recomputes the work list from disk and submits only what is
-missing, so it is also the recovery path after preemption or failures.
+code comes from a mirror of ``code.repo_url`` or, when the config has none (the
+local-model configs), from the clean checkout this orchestrator runs in, so
+nothing has to be pushed first. The steps are chained with afterany
+dependencies and submitted with sbatch (through nexrun where it exists); each
+submission is logged to ``slurm/launches.jsonl``. The orchestrator submits and
+exits; there is no login-node polling. Rerunning the same command recomputes
+the work list from disk and submits only what is missing, so it is also the
+recovery path after preemption or failures.
 
+    python3 -m epic_eval.orchestrator --config epic_eval/configs/qwen3.8-27b-thinking.json \\
+        --fps 1 --max_frames 768                       # HEAD of this checkout, all three steps
     python -m epic_eval.orchestrator --config epic_eval/configs/gemini-3.8-flash-high.json \\
-        --commit <sha> --dryrun
+        --commit <pushed sha> --dryrun                 # print the scripts, submit nothing
 """
 
 from __future__ import annotations
@@ -29,8 +37,8 @@ import sys
 import time
 from pathlib import Path
 
-from .common import (RUN_CONFIG, config_hash, evidence_spans, group_questions, load_json, load_questions,
-                     media_done_marker, media_hash, media_mode, media_path)
+from .common import (RUN_CONFIG, config_hash, load_json, load_questions, media_done_marker,
+                     media_hash, media_path, group_by_cutoff)
 from .run_eval import skip_qids
 
 NEXRUN = Path("~/.claude/bin/nexrun").expanduser()
@@ -40,25 +48,43 @@ def git(*args, cwd=None) -> str:
     return subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()
 
 
-def mirror(runs_root: Path, url: str) -> Path:
-    """One bare mirror per repo under <runs_root>/_mirrors, fetched on every run."""
+def mirror(runs_root: Path, url: str, ref: str) -> Path:
+    """One bare mirror per repo under <runs_root>/_mirrors, fetched unless it already has `ref`.
+
+    A full SHA already in the mirror needs no network, so a pinned question bank works
+    from nodes that cannot reach GitHub. Any other ref (a branch) is always refetched.
+    """
     name = re.sub(r"[^A-Za-z0-9_.-]", "_", url.rstrip("/").split("/")[-1].split(":")[-1])
     path = runs_root / "_mirrors" / name
     if not path.exists():
         print(f"mirroring {url} -> {path}")
         path.parent.mkdir(parents=True, exist_ok=True)
         git("clone", "--mirror", url, str(path))
-    else:
+    elif not (re.fullmatch(r"[0-9a-f]{40}", ref) and has_commit(path, ref)):
         git("remote", "set-url", "origin", url, cwd=path)
         git("fetch", "--prune", "origin", cwd=path)
     return path
 
 
-def resolve(mirror_path: Path, ref: str) -> str:
+def has_commit(repo: Path, ref: str) -> bool:
+    return subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"],
+                          cwd=repo, capture_output=True).returncode == 0
+
+
+def local_repo() -> Path:
+    """The checkout this orchestrator runs from; refuses uncommitted changes to tracked files."""
+    top = Path(git("rev-parse", "--show-toplevel", cwd=Path(__file__).resolve().parent))
+    dirty = git("status", "--porcelain", "--untracked-files=no", cwd=top)
+    if dirty:
+        sys.exit(f"FATAL: {top} has uncommitted changes; commit them first (jobs run a clean checkout):\n{dirty}")
+    return top
+
+
+def resolve(repo: Path, ref: str) -> str:
     try:
-        return git("rev-parse", "--verify", f"{ref}^{{commit}}", cwd=mirror_path)
+        return git("rev-parse", "--verify", f"{ref}^{{commit}}", cwd=repo)
     except subprocess.CalledProcessError:
-        sys.exit(f"FATAL: {ref!r} is not a commit in {mirror_path} -- is it pushed?")
+        sys.exit(f"FATAL: {ref!r} is not a commit in {repo}")
 
 
 def checkout(mirror_path: Path, sha: str, dest: Path) -> None:
@@ -76,31 +102,61 @@ def checkout(mirror_path: Path, sha: str, dest: Path) -> None:
 
 # ---------------------------------------------------------------- work lists
 
-def media_ready(cfg: dict, video: str, rows: list) -> bool:
-    media_dir, mode = Path(cfg["resolved"]["media_dir"]), media_mode(cfg)
+def media_ready(cfg: dict, video: str, cutoffs) -> bool:
+    media_dir = Path(cfg["resolved"]["media_dir"])
     marker = media_done_marker(media_dir, video)
     if not marker.exists():
         return False
     listed = json.loads(marker.read_text())["files"]
-    groups = group_questions(rows, mode)
-    want = [media_path(media_dir, video, k, mode) for k in groups]
-    if not all(p.name in listed and p.exists() and p.stat().st_size == listed[p.name]["bytes"] for p in want):
-        return False
-    # an evidence file is only reusable if the bank still gives that question the same clips
-    return mode != "evidence" or all(listed[media_path(media_dir, video, k, mode).name]["clips"] ==
-                                     evidence_spans(g[0]) for k, g in groups.items())
+    want = [media_path(media_dir, video, c) for c in cutoffs]
+    return all(p.name in listed and p.exists() and p.stat().st_size == listed[p.name]["bytes"] for p in want)
+
+
+def eval_chunks(run_dir: Path, videos: list[str], by_video: dict, cfg: dict, per_task: int,
+                limit: int | None) -> list[tuple[str, str, list[str]]]:
+    """(video, shard, qids) per eval task: each video's pending questions in chunks of per_task.
+
+    Chunks follow group order, so a task opens as few video contexts as possible. The
+    shard name carries a timestamp: a relaunch never reuses a file a running task writes.
+    """
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    chunks = []
+    for v in videos:
+        skip = skip_qids(run_dir, v, cfg)
+        pending = [q["qid"] for g in group_by_cutoff([q for q in by_video[v] if q["qid"] not in skip]).values()
+                   for q in g][:limit]
+        for i in range(0, len(pending), per_task):
+            chunks.append((v, f"{stamp}-{i // per_task:03d}", pending[i:i + per_task]))
+    return chunks
 
 
 # ---------------------------------------------------------------- slurm
 
+def python_fn(cfg: dict) -> list[str]:
+    """Bash lines defining `py`, the interpreter every task command calls.
+
+    With a `container` block, py runs python inside the Apptainer image. --cleanenv keeps the
+    host's module/compiler variables out (Triton breaks on them), so PYTHONPATH goes in via --env.
+    Without one, py is `paths.python`.
+    """
+    c = cfg.get("container")
+    if not c:
+        return [f'py() {{ {cfg["paths"]["python"]} "$@"; }}']
+    flags = ["--nv", "--cleanenv", *(f"--bind {shlex.quote(b)}" for b in c.get("binds", []))]
+    if c.get("pythonpath"):
+        flags.append(f"--env PYTHONPATH={shlex.quote(c['pythonpath'])}")
+    return [f"SIF={shlex.quote(c['sif'])}",
+            f'py() {{ apptainer exec {" ".join(flags)} "$SIF" python "$@"; }}']
+
+
 def write_array(cfg: dict, step: str, commands: list[str], dependency: str | None) -> Path:
+    """One array job whose task i runs commands[i-1], spelled out in a case statement.
+
+    Commands can use $RUN (the run directory) and py (see python_fn).
+    """
     run_dir, s = Path(cfg["resolved"]["run_dir"]), cfg["slurm"][step]
     slurm_dir, log_dir = run_dir / "slurm", run_dir / "slurm" / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
-    stamp = time.strftime("%Y%m%d-%H%M%S")
-    # Timestamped: a pending array from an earlier submission keeps reading its own list.
-    cmd_file = slurm_dir / f"{step}_{stamp}_commands.txt"
-    cmd_file.write_text("\n".join(commands) + "\n")
     array = f"1-{len(commands)}" + (f"%{s['max_parallel']}" if s.get("max_parallel") else "")
     lines = [
         "#!/bin/bash",
@@ -125,40 +181,52 @@ def write_array(cfg: dict, step: str, commands: list[str], dependency: str | Non
         "set -eo pipefail",
         'echo "host=$(hostname) job=${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID} restarts=${SLURM_RESTART_COUNT:-0}"',
         "source /etc/profile.d/modules.sh",
-        f"module load {cfg['paths']['ffmpeg_module']}",
-        f"cd {cfg['resolved']['code_dir']}",
+        # null when ffmpeg comes from elsewhere, e.g. inside the container
+        *([f"module load {cfg['paths']['ffmpeg_module']}"] if cfg["paths"].get("ffmpeg_module") else []),
         "export PYTHONUNBUFFERED=1",
-        f'CMD=$(sed -n "${{SLURM_ARRAY_TASK_ID}}p" {cmd_file})',
-        'echo "$CMD"',
-        'eval "$CMD"',
+        "",
+        f"RUN={shlex.quote(str(run_dir))}",
+        *python_fn(cfg),
+        'cd "$RUN/code_repo"',
+        "",
+        'case "$SLURM_ARRAY_TASK_ID" in',
+        *(f"  {i}) {cmd} ;;" for i, cmd in enumerate(commands, 1)),
+        '  *) echo "no task $SLURM_ARRAY_TASK_ID" >&2; exit 2 ;;',
+        "esac",
         "",
     ]
-    script = slurm_dir / f"{step}_{stamp}.slurm"
+    # Timestamped: a pending array from an earlier submission keeps its own script.
+    script = slurm_dir / f"{step}_{time.strftime('%Y%m%d-%H%M%S')}.slurm"
     script.write_text("\n".join(lines))
     return script
 
 
 def submit(cfg: dict, step: str, script: Path, n_tasks: int, note: str, dryrun: bool) -> str | None:
+    """sbatch the script (via nexrun where it exists) and log it to slurm/launches.jsonl."""
     s = cfg["slurm"][step]
-    print(f"\n=== {step}: {n_tasks} task(s) | {s['partition']}/{s['qos']} {s['cpus']}cpu {s['mem']} "
-          f"{s.get('gres') or 'no-gpu'} {s['time']} | {script}")
-    print(script.read_text())
-    cmds = Path(re.search(r"sed -n \S+ (\S+)\)", script.read_text()).group(1)).read_text().splitlines()
-    print(f"--- commands ({len(cmds)}), first: {cmds[0]}")
+    res = (f"{s['partition']}, {s.get('gres') or 'no gpu'}, {s['cpus']} cpu, {s['mem']}, {s['time']}"
+           + (f", max {s['max_parallel']} at once" if s.get("max_parallel") else ""))
     if dryrun:
+        print(f"\n=== {step}: {n_tasks} task(s) ({res}) | {script}\n{script.read_text()}")
         return f"DRYRUN-{step}"
-    run_dir = cfg["resolved"]["run_dir"]
-    if NEXRUN.is_file():
-        out = subprocess.run([str(NEXRUN), "launch", "--tag", f"{cfg['run']['tag']}-{step}", "--out", run_dir,
-                              "--note", note, "--", "sbatch", str(script)],
-                             capture_output=True, text=True)
-    else:  # no nexrun ledger on this account: plain sbatch, the run dir is the record
-        out = subprocess.run(["sbatch", str(script)], capture_output=True, text=True)
-    print(out.stdout.strip(), out.stderr.strip())
-    m = re.search(r"[Ss]ubmitted (?:batch job )?(\d+)", out.stdout)
+    run_dir = Path(cfg["resolved"]["run_dir"])
+    if NEXRUN.exists():
+        cmd = [str(NEXRUN), "launch", "--tag", f"{cfg['run']['tag']}-{step}", "--out", str(run_dir),
+               "--note", note, "--", "sbatch", str(script)]
+        pattern = r"submitted (\d+)"
+    else:
+        cmd, pattern = ["sbatch", "--parsable", str(script)], r"^(\d+)"
+    out = subprocess.run(cmd, capture_output=True, text=True)
+    m = re.search(pattern, out.stdout.strip())
     if out.returncode != 0 or not m:
-        sys.exit(f"FATAL: submission of {step} failed")
-    return m.group(1)
+        sys.exit(f"FATAL: submission of {step} failed:\n{out.stdout}{out.stderr}")
+    job = m.group(1)
+    print(f"{step}: {n_tasks} task(s) -> job {job} ({res})")
+    with open(run_dir / "slurm" / "launches.jsonl", "a") as f:
+        f.write(json.dumps({"time": time.strftime("%Y-%m-%dT%H:%M:%S"), "step": step, "job": job,
+                            "n_tasks": n_tasks, "script": str(script), "commit": cfg["code"]["commit"],
+                            "argv": sys.argv, "note": note}) + "\n")
+    return job
 
 
 # ---------------------------------------------------------------- main
@@ -166,7 +234,9 @@ def submit(cfg: dict, step: str, script: Path, n_tasks: int, note: str, dryrun: 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--config", required=True)
-    p.add_argument("--commit", required=True, help="eval-code commit (any ref the mirror can resolve)")
+    p.add_argument("--commit", default="HEAD",
+                   help="eval-code ref (default HEAD): resolved in this checkout, which must be clean, "
+                        "or in a mirror of code.repo_url if the config has one")
     p.add_argument("--dryrun", action="store_true", help="check out and write scripts, but submit nothing")
     p.add_argument("--steps", default="prep,eval,score")
     p.add_argument("--videos", help="comma-separated subset (smoke tests)")
@@ -174,18 +244,35 @@ def main() -> None:
     p.add_argument("--code_repo_url", help="override config code.repo_url (e.g. a local path for testing)")
     p.add_argument("--questions_repo_url", help="override config questions.repo_url")
     p.add_argument("--env_name", help="override the auto-generated run directory name")
-    p.add_argument("--note", default="", help="why this run exists (goes to the nexrun ledger)")
+    p.add_argument("--note", default="", help="why this run exists (goes to slurm/launches.jsonl)")
+    p.add_argument("--fps", type=float, help="override model.fps (required for qwen38_vl)")
+    p.add_argument("--max_frames", type=int, help="override model.max_frames (required for qwen38_vl)")
     a = p.parse_args()
 
     cfg = load_json(a.config)
+    if a.fps is not None:
+        cfg["model"]["fps"] = a.fps
+    if a.max_frames is not None:
+        cfg["model"]["max_frames"] = a.max_frames
+    if cfg["model"]["backend"] == "qwen38_vl":
+        # Video sampling is a sweep axis, so it is chosen per launch and named in the run dir.
+        fps, max_frames = cfg["model"].get("fps"), cfg["model"].get("max_frames")
+        if fps is None or max_frames is None:
+            sys.exit("FATAL: qwen38_vl needs --fps and --max_frames, e.g. --fps 1 --max_frames 768")
+        cfg["run"]["tag"] += f"-fps{fps:g}-f{max_frames}"
     runs_root = Path(cfg["run"]["runs_root"])
-    code_url = a.code_repo_url or cfg["code"]["repo_url"]
+    code_url = a.code_repo_url or cfg.get("code", {}).get("repo_url")
     q_url = a.questions_repo_url or cfg["questions"]["repo_url"]
 
     # Resolve both commits to full SHAs *before* hashing, so a short and a long
     # spelling of the same commit land in the same run directory.
-    code_mirror, q_mirror = mirror(runs_root, code_url), mirror(runs_root, q_url)
-    cfg["code"]["commit"] = resolve(code_mirror, a.commit)
+    local = not code_url
+    code_src = local_repo() if local else mirror(runs_root, code_url, a.commit)
+    code_url = code_url or str(code_src)
+    cfg.setdefault("code", {})["commit"] = resolve(code_src, a.commit)
+    if local and not git("branch", "-r", "--contains", cfg["code"]["commit"], cwd=code_src):
+        print(f"note: {cfg['code']['commit'][:10]} is not on any remote branch; push it to keep the run reproducible")
+    q_mirror = mirror(runs_root, q_url, cfg["questions"]["commit"])
     cfg["questions"]["commit"] = resolve(q_mirror, cfg["questions"]["commit"])
     cfg.pop("resolved", None)
     # slurm resources and runtime concurrency don't change answers, so they don't change the run
@@ -197,7 +284,7 @@ def main() -> None:
     run_dir.mkdir(parents=True, exist_ok=True)
     print(f"run dir: {run_dir}")
 
-    checkout(code_mirror, cfg["code"]["commit"], run_dir / "code_repo")
+    checkout(code_src, cfg["code"]["commit"], run_dir / "code_repo")
     checkout(q_mirror, cfg["questions"]["commit"], run_dir / "questions_repo")
     cfg["resolved"] = {
         "run_dir": str(run_dir),
@@ -230,15 +317,14 @@ def main() -> None:
           f" @ epic-morph {cfg['questions']['commit'][:10]}")
 
     steps = a.steps.split(",")
-    py = cfg["paths"]["python"]
     note = a.note or f"EPIC-Morph MCQ eval, {cfg['model']['name']}, video={cfg['media']['enabled']}"
     dep = None
 
     if "prep" in steps and cfg["media"]["enabled"]:
-        todo = [v for v in videos if not media_ready(cfg, v, by_video[v])]
+        todo = [v for v in videos if not media_ready(cfg, v, group_by_cutoff(by_video[v]).keys())]
         print(f"\nprep: {len(todo)}/{len(videos)} videos need media -> {cfg['resolved']['media_dir']}")
         if todo:
-            cmds = [f"{py} -m epic_eval.prep_media --run_dir {shlex.quote(str(run_dir))} --video {v}" for v in todo]
+            cmds = [f'py -m epic_eval.prep_media --run_dir "$RUN" --video {v}' for v in todo]
             dep = submit(cfg, "prep", write_array(cfg, "prep", cmds, None), len(cmds), note, a.dryrun)
 
     if "eval" in steps:
@@ -249,17 +335,31 @@ def main() -> None:
                 if not a.dryrun:
                     sys.exit(f"FATAL: {msg}")
                 print(f"WARNING (dryrun): {msg}; a real submission would stop here")
-        todo = [v for v in videos
-                if a.limit or {q["qid"] for q in by_video[v]} - skip_qids(run_dir, v, cfg)]
-        print(f"\neval: {len(todo)}/{len(videos)} videos have unanswered questions")
-        if todo:
+        run_eval = 'py -m epic_eval.run_eval --run_dir "$RUN"'
+        per_task = cfg["slurm"]["eval"].get("questions_per_task")
+        if per_task:
+            chunks = eval_chunks(run_dir, videos, by_video, cfg, int(per_task), a.limit)
+            qid_dir = run_dir / "slurm" / "qids"
+            qid_dir.mkdir(parents=True, exist_ok=True)
+            cmds = []
+            for v, shard, qids in chunks:
+                qfile = qid_dir / f"{v}.{shard}.txt"
+                qfile.write_text("\n".join(qids) + "\n")
+                cmds.append(f'{run_eval} --video {v} --qids_file "$RUN/{qfile.relative_to(run_dir)}" --shard {shard}')
+            print(f"\neval: {sum(len(q) for _, _, q in chunks)} unanswered questions in {len(cmds)} tasks "
+                  f"of <= {per_task} over {len({v for v, _, _ in chunks})}/{len(videos)} videos")
+        else:
+            todo = [v for v in videos
+                    if a.limit or {q["qid"] for q in by_video[v]} - skip_qids(run_dir, v, cfg)]
+            print(f"\neval: {len(todo)}/{len(videos)} videos have unanswered questions")
             lim = f" --limit {a.limit}" if a.limit else ""
-            cmds = [f"{py} -m epic_eval.run_eval --run_dir {shlex.quote(str(run_dir))} --video {v}{lim}" for v in todo]
+            cmds = [f"{run_eval} --video {v}{lim}" for v in todo]
+        if cmds:
             dep = submit(cfg, "eval", write_array(cfg, "eval", cmds, dep),
                          len(cmds), note, a.dryrun) or dep
 
     if "score" in steps:
-        cmds = [f"{py} -m epic_eval.score --run_dir {shlex.quote(str(run_dir))}"]
+        cmds = ['py -m epic_eval.score --run_dir "$RUN"']
         submit(cfg, "score", write_array(cfg, "score", cmds, dep),
                1, note, a.dryrun)
 
