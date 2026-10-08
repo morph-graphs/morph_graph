@@ -2,6 +2,8 @@
 
 This documents how the `morph_graphs_qwen38_cu126` conda environment was turned into a SIF container, the cluster-specific problems that came up, and how to run it. The short version: build a sandbox on the login node (the only place with internet), convert it to a `.sif` on a compute node, and always run with `--cleanenv`.
 
+For a generic version of this recipe (any conda, uv or venv environment), see [environment_setup.md](environment_setup.md).
+
 ## Environment being containerized
 
 The container reproduces this working conda env, with versions taken from `pip freeze`:
