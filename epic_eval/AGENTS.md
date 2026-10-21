@@ -44,16 +44,15 @@ else's directories yourself.
    themselves run inside the image). The system `python3` is 3.6, too old.
    `module load python/3.10.10` works (no conda needed); confirm with
    `python3 -c "import epic_eval.orchestrator"` from the repo root.
-3. **Let git work in the shared repos.** The epic-morph mirror and existing run folders
-   are owned by Vatsal, and git refuses repos owned by another user ("detected dubious
-   ownership"). Zaratan's git (2.43) only accepts exact repo paths here, no prefixes.
-   Mark the question-bank mirror as safe, once (every launch reads it):
-   ```bash
-   git config --global --add safe.directory $S/morph_graphs/epic_eval_runs/_mirrors/epic-morph.git
-   ```
-   Run folders you create are yours and need nothing. To resume a run Vatsal created, also
-   add that run's `<run>/code_repo` and `<run>/questions_repo`. (`safe.directory '*'`
-   turns the check off for every repo, which is simpler but less safe.)
+3. **Point the launcher at your own epic-morph clone:** add
+   `export EPIC_MORPH_DIR=<your epic-morph clone>` to `~/.bashrc`. Launches then read the
+   questions from your clone (any branch checked out; it only has to contain the bank's
+   commit, so `git fetch` it on a login node when a new bank is added), and
+   `python3 -m epic_eval.bank` uses it by default. Without it, launches read the shared
+   copy in the runs root, which is owned by Vatsal and which your git refuses.
+   Resuming a run Vatsal created also needs that run's `<run>/code_repo` and
+   `<run>/questions_repo` added with `git config --global --add safe.directory <path>`
+   (Zaratan's git 2.43 takes exact paths only).
 4. **`umask 002`** in every shell that launches (put it in `~/.bashrc`), so the files your
    runs create stay group-writable and both of you can resume each other's runs.
 
@@ -72,7 +71,7 @@ python3 -m epic_eval.orchestrator --config epic_eval/configs/qwen3.8-27b-thinkin
   (`/fs/cfar-projects/…`); don't launch them on Zaratan until they are updated.
 - **Which questions:** every config names a bank (`"questions": {"bank": "v2-150155-82"}`,
   82 streaming questions on P09-20240622-150155). To see them:
-  `python3 -m epic_eval.bank v2-150155-82 --repo $S/morph_graphs/epic_eval_runs/_mirrors/epic-morph.git --csv q.csv`.
+  `python3 -m epic_eval.bank v2-150155-82 --csv q.csv` (reads `$EPIC_MORPH_DIR`).
 - **Account:** the configs use `abhinav2-prj-cmsc`. Never switch to `abhinav2-prj-aac`
   without the user's explicit permission. You share cmsc's fairshare and budget with
   Vatsal: check the queue and estimates (`sbatch --test-only`) before big launches, and
