@@ -190,11 +190,11 @@ Rough budget comparison:
 
   | what | where |
   |---|---|
-  | image | `~/scratch/morph_graph/morph_graphs.sif` |
+  | image | `~/scratch/morph_graphs/morph_graph/morph_graphs.sif` |
   | extra pure-Python packages | `~/scratch/pyextra_morph_graphs` |
   | model weights | `~/scratch/model_hub/` (Qwen3.8-27B, Qwen3-VL-8B-Instruct, perception_models) |
   | HD-EPIC videos | `~/scratch/datasets/HD-EPIC/videos/P0x/` |
-  | epic_eval runs + shared encoded clips | `~/scratch/epic_eval_runs/` (`media/` holds the clips) |
+  | epic_eval runs + shared encoded clips | `~/scratch/morph_graphs/epic_eval_runs/` (`media/` holds the clips) |
 
 ---
 

@@ -29,7 +29,7 @@ is run from the repo root as `python -m epic_eval.<module>`.
 - **Pushing happens from a login node.** Agent sessions usually run on a compute
   node with no route to GitHub (ssh 22, 443 and HTTPS all time out). Commit
   locally, then hand the user the exact command:
-  `cd /scratch/zt1/project/abhinav2-prj/user/vatsalag/morph_graph && git push origin <branch>`.
+  `cd /scratch/zt1/project/abhinav2-prj/user/vatsalag/morph_graphs/morph_graph && git push origin <branch>`.
   The user may review first by pulling this checkout onto their own machine.
 - A `git pull` here is a rebase: finish an interrupted one with `git rebase --continue`,
   not a plain `git commit`.

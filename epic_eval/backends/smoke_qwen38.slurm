@@ -9,10 +9,10 @@
 #SBATCH --mem=64G
 #SBATCH --time=01:00:00
 #SBATCH --requeue
-#SBATCH --output=/home/vatsalag/scratch/morph_graph/output/logs/smoke_qwen38_%j.out
-#SBATCH --error=/home/vatsalag/scratch/morph_graph/output/err/smoke_qwen38_%j.err
+#SBATCH --output=/home/vatsalag/scratch/morph_graphs/morph_graph/output/logs/smoke_qwen38_%j.out
+#SBATCH --error=/home/vatsalag/scratch/morph_graphs/morph_graph/output/err/smoke_qwen38_%j.err
 
-# Usage (from ~/scratch/morph_graph; extra args go to the smoke script):
+# Usage (from ~/scratch/morph_graphs/morph_graph; extra args go to the smoke script):
 #   sbatch epic_eval/backends/smoke_qwen38.slurm
 #   sbatch epic_eval/backends/smoke_qwen38.slurm --attn sdpa
 #   sbatch epic_eval/backends/smoke_qwen38.slurm --video /path/clip.mp4
@@ -25,12 +25,12 @@ nvidia-smi --query-gpu=index,name,memory.total --format=csv
 
 # Built from proj_context/setup/morph_graphs.def (CUDA 12.6, torch 2.8, flash-attn, fla, ffmpeg all inside).
 # Override with: SIF=/path/to/other.sif sbatch ...
-SIF=${SIF:-/scratch/zt1/project/abhinav2-prj/user/vatsalag/morph_graph/morph_graphs.sif}
+SIF=${SIF:-/scratch/zt1/project/abhinav2-prj/user/vatsalag/morph_graphs/morph_graph/morph_graphs.sif}
 # Pure-python packages missing from the image (e.g. ezcolorlog) live here so we don't
 # need a rebuild. One-time, from a login node:
 #   apptainer exec --cleanenv --bind /scratch "$SIF" pip install --target "$PYEXTRA" ezcolorlog
 PYEXTRA=${PYEXTRA:-/scratch/zt1/project/abhinav2-prj/user/vatsalag/pyextra_morph_graphs}
-cd /home/vatsalag/scratch/morph_graph
+cd /home/vatsalag/scratch/morph_graphs/morph_graph
 export PYTHONUNBUFFERED=1
 
 # --nv: expose host GPUs/driver. --cleanenv: keep host module/conda compiler vars out,

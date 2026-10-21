@@ -209,7 +209,7 @@ The `.sif` is read-only, so a package missing from the def can't be installed in
 A full rebuild takes hours because of the flash-attn and causal-conv1d compiles. For **pure-Python packages**, install them into a directory on scratch instead and put it on `PYTHONPATH` at run time. Run this on the login node, the only node with internet:
 
 ```bash
-SIF=/scratch/zt1/project/abhinav2-prj/user/vatsalag/morph_graph/morph_graphs.sif
+SIF=/scratch/zt1/project/abhinav2-prj/user/vatsalag/morph_graphs/morph_graph/morph_graphs.sif
 PYEXTRA=/scratch/zt1/project/abhinav2-prj/user/vatsalag/pyextra_morph_graphs
 
 apptainer exec --cleanenv --bind /scratch "$SIF" pip install --target "$PYEXTRA" ezcolorlog
