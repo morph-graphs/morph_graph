@@ -37,8 +37,8 @@ import sys
 import time
 from pathlib import Path
 
-from .common import (RUN_CONFIG, config_hash, load_json, load_questions, media_done_marker,
-                     media_hash, media_path, group_by_cutoff)
+from .common import (BANKS, RUN_CONFIG, config_hash, load_json, load_questions, media_done_marker,
+                     media_hash, media_path, group_by_cutoff, resolve_bank)
 from .run_eval import skip_qids
 
 NEXRUN = Path("~/.claude/bin/nexrun").expanduser()
@@ -253,6 +253,10 @@ def main() -> None:
     a = p.parse_args()
 
     cfg = load_json(a.config)
+    try:
+        cfg["questions"], bank = resolve_bank(cfg["questions"])
+    except ValueError as e:
+        sys.exit(f"FATAL: {e}")
     if a.fps is not None:
         cfg["model"]["fps"] = a.fps
     if a.max_frames is not None:
@@ -297,6 +301,7 @@ def main() -> None:
                      if cfg["media"]["enabled"] else None,
         "code_repo_url": code_url,
         "questions_repo_url": q_url,
+        **({"bank": bank} if bank else {}),
     }
     if not (run_dir / "code_repo" / "epic_eval").is_dir():
         sys.exit(f"FATAL: commit {cfg['code']['commit'][:10]} has no epic_eval/ package")
@@ -307,6 +312,10 @@ def main() -> None:
     prev.write_text(json.dumps(cfg, indent=2))
 
     questions = load_questions(cfg["resolved"]["questions_dir"], cfg["questions"]["glob"])
+    want = load_json(BANKS)[bank].get("questions") if bank else None
+    if want is not None and len(questions) != want:
+        sys.exit(f"FATAL: bank {bank} should hold {want} questions, found {len(questions)} "
+                 f"at {cfg['questions']['commit'][:10]} -- check banks.json")
     videos = sorted({q["video"] for q in questions})
     if a.videos:
         wanted = a.videos.split(",")

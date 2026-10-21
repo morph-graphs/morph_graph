@@ -33,15 +33,60 @@ def make_qid(video: str, question: str, t_ask) -> str:
     return f"{video}__{hashlib.sha1(key.encode()).hexdigest()[:10]}"
 
 
+BANKS = Path(__file__).with_name("banks.json")
+
+
+def resolve_bank(questions: dict) -> tuple[dict, str | None]:
+    """(questions section, bank name) for a config's ``questions``.
+
+    ``{"bank": "<name>"}`` is looked up in banks.json and becomes exactly the
+    ``{repo_url, commit, glob}`` an explicit config would hold, so run hashes do not
+    depend on which spelling a config uses. An explicit section passes through.
+    """
+    if "bank" not in questions:
+        return questions, None
+    name = questions["bank"]
+    if set(questions) != {"bank"}:
+        raise ValueError(f"questions: give either a bank name or repo_url/commit/glob, not both: {sorted(questions)}")
+    banks = load_json(BANKS)
+    if name not in banks:
+        raise ValueError(f"unknown question bank {name!r}; known: {', '.join(banks)}")
+    b = banks[name]
+    return {"repo_url": b["repo_url"], "commit": b["commit"], "glob": b["glob"]}, name
+
+
+def bank_files_at(repo, commit: str, pattern: str) -> list[str]:
+    """Files in ``repo`` at ``commit`` matching ``pattern`` the way Path.glob would (no **)."""
+    import fnmatch
+    import subprocess
+    out = subprocess.run(["git", "ls-tree", "-r", "--name-only", commit], cwd=repo,
+                         capture_output=True, text=True, check=True).stdout.split()
+    want = pattern.split("/")
+    return sorted(f for f in out if len(f.split("/")) == len(want)
+                  and all(fnmatch.fnmatchcase(p, w) for p, w in zip(f.split("/"), want)))
+
+
+def load_questions_at(repo, commit: str, pattern: str) -> list[dict]:
+    """load_questions, read straight from git at ``commit`` (works on a bare mirror or any clone)."""
+    import subprocess
+    banks = [(Path(f), json.loads(subprocess.run(["git", "show", f"{commit}:{f}"], cwd=repo, capture_output=True,
+                                                   text=True, check=True).stdout))
+             for f in bank_files_at(repo, commit, pattern)]
+    return _rows(banks)
+
+
 def load_questions(questions_dir, pattern: str) -> list[dict]:
     """Flatten every ``questions`` list into rows the eval consumes.
 
     Options come from ``gemini_mcq`` (always 4, answer at ``answer_index``);
     the generator's own ``options`` field is ignored.
     """
+    return _rows((path, load_json(path)) for path in sorted(Path(questions_dir).glob(pattern)))
+
+
+def _rows(banks) -> list[dict]:
     rows = []
-    for path in sorted(Path(questions_dir).glob(pattern)):
-        bank = load_json(path)
+    for path, bank in banks:
         for q in bank["questions"]:
             mcq = q["gemini_mcq"]
             streaming = bool(q["streaming"])
