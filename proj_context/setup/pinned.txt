@@ -1,0 +1,14 @@
+accelerate==1.15.0
+causal_conv1d==1.7.0
+datasets==5.0.1
+fla-core==0.5.2
+flash-linear-attention==0.5.2
+flash_attn==2.8.3
+huggingface_hub==1.32.0
+qwen-vl-utils==0.0.14
+torch==2.8.0+cu126
+torchaudio==2.8.0+cu126
+torchcodec==0.7.0+cu126
+torchvision==0.23.0+cu126
+transformers==5.8.0
+triton==3.4.0
