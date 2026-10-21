@@ -87,6 +87,9 @@ on Zaratan. Details: `proj_context/proj_docs/nexus.md`.
 
 ## Running epic_eval
 
+Running from someone else's account on Zaratan (shared scratch, permissions, coordination):
+[epic_eval/AGENTS.md](epic_eval/AGENTS.md).
+
 Question banks are named in `epic_eval/banks.json` (`v1-449`, `v2-150155-82`) and configs
 refer to them as `"questions": {"bank": "<name>"}`; inspect one with
 `python3 -m epic_eval.bank <name> --repo <epic-morph clone or mirror> [--csv f]`.
