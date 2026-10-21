@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shlex
 import subprocess
@@ -279,7 +280,16 @@ def main() -> None:
     cfg.setdefault("code", {})["commit"] = resolve(code_src, a.commit)
     if local and not git("branch", "-r", "--contains", cfg["code"]["commit"], cwd=code_src):
         print(f"note: {cfg['code']['commit'][:10]} is not on any remote branch; push it to keep the run reproducible")
-    q_mirror = mirror(runs_root, q_url, cfg["questions"]["commit"])
+    # $EPIC_MORPH_DIR: read the questions from your own epic-morph clone (any branch checked
+    # out; it only has to contain the commit) instead of the shared mirror in the runs root.
+    q_local = None if a.questions_repo_url else os.environ.get("EPIC_MORPH_DIR")
+    if q_local:
+        q_mirror, q_url = Path(q_local), q_local
+        if not has_commit(q_mirror, cfg["questions"]["commit"]):
+            sys.exit(f"FATAL: question commit {cfg['questions']['commit'][:10]} is not in EPIC_MORPH_DIR={q_local}; "
+                     f"run `git fetch` there on a login node")
+    else:
+        q_mirror = mirror(runs_root, q_url, cfg["questions"]["commit"])
     cfg["questions"]["commit"] = resolve(q_mirror, cfg["questions"]["commit"])
     cfg.pop("resolved", None)
     # slurm resources and runtime concurrency don't change answers, so they don't change the run
