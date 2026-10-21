@@ -2,8 +2,9 @@
 
 The shared pipeline, run layout and scoring are in [README.md](README.md); this
 page covers what is specific to `backends/gemini.py`. Configs:
-`configs/gemini-3.8-flash-high.json` (video) and
-`configs/gemini-3.8-flash-high-textonly.json` (the no-video control).
+`configs/gemini-3.8-flash-high-v2.json` (video), `configs/gemini-3.8-flash-high-v2-textonly.json`
+(the no-video control) and `configs/gemini-3.8-flash-high-v2-evidence.json` (evidence clips only),
+all on the V2 bank `v2-150155-82`.
 
 ## Setup
 
@@ -24,13 +25,13 @@ Cluster-specific paths (interpreter, `runs_root`, partitions, shared media) are 
 From the `morph_graph/` directory:
 
 ```bash
-python -m epic_eval.orchestrator --config epic_eval/configs/gemini-3.8-flash-high.json \
+python -m epic_eval.orchestrator --config epic_eval/configs/gemini-3.8-flash-high-v2.json \
     --commit <pushed sha> --dryrun                        # show scripts + task counts
-python -m epic_eval.orchestrator --config epic_eval/configs/gemini-3.8-flash-high.json \
+python -m epic_eval.orchestrator --config epic_eval/configs/gemini-3.8-flash-high-v2.json \
     --commit <pushed sha>                                 # submit prep -> eval -> score
 ```
 
-Smoke test first: add `--videos P09-20240622-194642 --limit 2` and read
+Smoke test first: add `--videos P09-20240622-150155 --limit 2` and read
 `answers/*.jsonl`. Rerunning the same command resumes the run.
 
 Eval tasks need no GPU; one task per video, and within a task
@@ -42,10 +43,10 @@ errors are retried with exponential backoff (`model.max_retries`,
 ## Choosing fps and resolution
 
 Pick `model.media_resolution` / `model.fps` from measured token counts on the
-longest video before the main run (the 61-min one can overflow 1M tokens):
+longest video before the main run (long recordings can overflow 1M tokens):
 
 ```bash
-python -m epic_eval.probe_tokens --run_dir <run> --video P09-20240623-120359 --fps 1 0.5
+python -m epic_eval.probe_tokens --run_dir <run> --video P09-20240622-150155 --fps 1 0.5
 ```
 
 ## Model keys
@@ -72,7 +73,7 @@ videos) is not retried by default; see README.md for `runtime.retry_truncated`.
 
 ## The text-only control
 
-`configs/gemini-3.8-flash-high-textonly.json` is the same prompts and options with
+`configs/gemini-3.8-flash-high-v2-textonly.json` is the same prompts and options with
 `media.enabled: false`. The gap between the two runs is how much the video is
 actually used — the options were written from narration transcripts, so text
 priors may carry a lot.

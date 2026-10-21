@@ -95,7 +95,7 @@ See `epic_eval/README.md` and `README_local_models.md`. The short version for a
 local model on Zaratan, from a clean checkout at the repo root:
 
 ```bash
-python -m epic_eval.orchestrator --config epic_eval/configs/qwen3.8-27b-thinking.json --fps 1 --max_frames 768
+python -m epic_eval.orchestrator --config epic_eval/configs/qwen3.8-27b-thinking-v2.json --fps 1 --max_frames 2048
 ```
 
 - One command submits prep → eval → score with `afterany` dependencies; no dry run

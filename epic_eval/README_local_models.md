@@ -7,9 +7,10 @@ with configs:
 
 | config | mode | eval GPUs |
 |---|---|---|
-| `configs/qwen3.8-27b-thinking.json` | thinking | 1× H100 |
-| `configs/qwen3.8-27b-instruct.json` | instruct | 1× H100 |
-| `configs/qwen3.8-27b-thinking-a100x2.json` | thinking | 2× A100 40 GB (speed comparison) |
+| `configs/qwen3.8-27b-thinking-v2.json` | thinking | 2× A100 40 GB |
+| `configs/qwen3.8-27b-instruct-v2.json` | instruct | 2× A100 40 GB |
+
+Both score the V2 bank `v2-150155-82` (82 streaming questions on P09-20240622-150155).
 
 27B in bf16 is ~54 GB of weights: one 80 GB GPU, or two 40 GB GPUs
 (`device_map="auto"` splits the layers across whatever the task was given).
@@ -60,11 +61,11 @@ From the `morph_graph/` directory, after committing your changes:
 
 ```bash
 # smoke test: one short video, two questions
-python3 -m epic_eval.orchestrator --config epic_eval/configs/qwen3.8-27b-thinking.json \
-    --fps 1 --max_frames 768 --videos P09-20240622-194642 --limit 2
+python3 -m epic_eval.orchestrator --config epic_eval/configs/qwen3.8-27b-thinking-v2.json \
+    --fps 1 --max_frames 768 --videos P09-20240622-150155 --limit 2
 
 # full run
-python3 -m epic_eval.orchestrator --config epic_eval/configs/qwen3.8-27b-thinking.json \
+python3 -m epic_eval.orchestrator --config epic_eval/configs/qwen3.8-27b-thinking-v2.json \
     --fps 1 --max_frames 768 --note "why this run exists"
 ```
 
@@ -96,7 +97,7 @@ py() { apptainer exec --nv --cleanenv --bind /scratch --env PYTHONPATH=<pyextra>
 cd "$RUN/code_repo"
 
 case "$SLURM_ARRAY_TASK_ID" in
-  1) py -m epic_eval.run_eval --run_dir "$RUN" --video P09-20240622-194642 --qids_file "$RUN/slurm/qids/P09-20240622-194642.<shard>.txt" --shard <shard> ;;
+  1) py -m epic_eval.run_eval --run_dir "$RUN" --video P09-20240622-150155 --qids_file "$RUN/slurm/qids/P09-20240622-150155.<shard>.txt" --shard <shard> ;;
   2) ...
 esac
 ```
@@ -170,7 +171,7 @@ already cut.
 3. **Config**: copy a Qwen config; change `run.tag`, `model` (`backend` plus the
    keys your module reads), the environment (`container` or `paths.python`), and
    `slurm.eval` (partition, `gres`, `questions_per_task`).
-4. **Smoke test** with `--videos P09-20240622-194642 --limit 2`, then read
+4. **Smoke test** with `--videos P09-20240622-150155 --limit 2`, then read
    `answers/*.jsonl` and `errors/*.jsonl`.
 
 `--fps` / `--max_frames` are currently enforced only for `qwen38_vl`; a new

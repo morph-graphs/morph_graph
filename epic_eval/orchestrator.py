@@ -20,9 +20,9 @@ exits; there is no login-node polling. Rerunning the same command recomputes
 the work list from disk and submits only what is missing, so it is also the
 recovery path after preemption or failures.
 
-    python3 -m epic_eval.orchestrator --config epic_eval/configs/qwen3.8-27b-thinking.json \\
+    python3 -m epic_eval.orchestrator --config epic_eval/configs/qwen3.8-27b-thinking-v2.json \\
         --fps 1 --max_frames 768                       # HEAD of this checkout, all three steps
-    python -m epic_eval.orchestrator --config epic_eval/configs/gemini-3.8-flash-high.json \\
+    python -m epic_eval.orchestrator --config epic_eval/configs/gemini-3.8-flash-high-v2.json \\
         --commit <pushed sha> --dryrun                 # print the scripts, submit nothing
 """
 

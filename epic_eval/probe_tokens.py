@@ -6,7 +6,7 @@ video + one clip per streaming cutoff). Use it to pick ``model.media_resolution`
 and ``model.fps`` before the main run -- and on the longest video, since that is
 the one that can overflow the context window.
 
-    python -m epic_eval.probe_tokens --run_dir <run> --video P09-20240623-120359
+    python -m epic_eval.probe_tokens --run_dir <run> --video P09-20240622-150155
 """
 
 from __future__ import annotations

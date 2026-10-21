@@ -106,7 +106,7 @@ From the `morph_graph/` directory:
 
 ```bash
 python3 -m epic_eval.orchestrator --config epic_eval/configs/<config>.json [--commit <ref>] \
-    [--videos P09-20240622-194642 --limit 2]   # smoke test: one short video, two questions
+    [--videos P09-20240622-150155 --limit 2]   # smoke test: one short video, two questions
     [--steps prep,eval,score] [--dryrun] [--note "why this run exists"]
 ```
 

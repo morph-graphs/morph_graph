@@ -22,7 +22,9 @@ from .common import (LETTERS, build_prompt, group_by_cutoff, group_questions, lo
 
 EPIC = Path(os.environ.get("EPIC_MORPH_DIR", "/fs/cfar-projects/mem_open_vocab/morph_graphs/anubhav/epic-morph"))
 GLOB = "outputs/questions/*_questions.json"
-CFG = json.loads((Path(__file__).parent / "configs" / "gemini-3.8-flash-high.json").read_text())
+CFG = json.loads((Path(__file__).parent / "configs" / "gemini-3.8-flash-high-v2.json").read_text())
+# The tests are written against the V1 bank at EPIC_MORPH_DIR, so they read it directly.
+CFG["questions"] = {"repo_url": "", "commit": "test", "glob": GLOB}
 SHORT_VIDEO = "P09-20240622-194642"  # 6.3 min, 13 questions incl. 2 streaming
 
 
