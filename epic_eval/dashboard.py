@@ -1,11 +1,15 @@
-"""Build the run dashboard: one self-contained page comparing any set of runs.
+"""Build a run dashboard: one self-contained page comparing any set of runs.
 
-    python -m epic_eval.dashboard --registry <dir>/runs.json --out <dir>
+    python3 -m epic_eval.dashboard --registry epic_eval/dashboards/v2/runs.json --out <dir>
 
-runs.json lists the runs to show, in column order:
-    [{"id": "q768", "label": "Qwen3.8-27B · think · 1fps/768f", "run_dir": "..."}, ...]
+A registry (epic_eval/dashboards/<name>/runs.json) gives the page title and the runs to
+show, in column order:
+    {"title": "EPIC-Morph V2 Scoreboard",
+     "runs": [{"id": "q768", "label": "Qwen3.8-27B · think · 1fps/768f", "run_dir": "...", "note": "..."}]}
+(a bare list of runs also works). To add a run to a page, add it to the registry and commit.
 
-Fills <out>/template.html into <out>/index.html with everything inline: the index (runs,
+Fills epic_eval/dashboard_template.html (or --template) into <out>/index.html, the file to
+publish, with everything inline: the index (runs,
 config essentials, scores, questions, every run's pick) as JSON, and each run's full
 thinking + reply as gzip+base64, unpacked by the page when a question is first opened.
 Nothing is fetched at view time (the artifact viewer does not serve fetch() of sibling files).
@@ -17,6 +21,7 @@ from __future__ import annotations
 import argparse
 import base64
 import gzip
+import html
 import json
 import statistics
 from collections import defaultdict
@@ -73,7 +78,10 @@ def essentials(cfg: dict, run_dir: Path, rows: list[dict]) -> dict:
     }
 
 
-def build(registry: list[dict], out: Path) -> dict:
+TEMPLATE = Path(__file__).with_name("dashboard_template.html")
+
+
+def build(registry: list[dict], out: Path, title: str = "EPIC-Morph Scoreboard", template: Path = TEMPLATE) -> dict:
     runs, questions, picks, thoughts = [], {}, defaultdict(dict), {}
     for r in registry:
         run_dir = Path(r["run_dir"])
@@ -113,18 +121,22 @@ def build(registry: list[dict], out: Path) -> dict:
     index = {"runs": runs, "questions": qlist, "letters": LETTERS}
     # "<" only occurs inside JSON strings, where \\u003c is the same character, so no "</script>"
     blob = json.dumps(index, separators=(",", ":")).replace("<", "\\u003c")
-    page = (out / "template.html").read_text()
+    page = Path(template).read_text().replace("__TITLE__", html.escape(title))
     page = page.replace("/*DATA*/", blob).replace("/*THOUGHTS*/", json.dumps(thoughts))
+    out.mkdir(parents=True, exist_ok=True)
     (out / "index.html").write_text(page)
     return index
 
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--registry", required=True, help="runs.json: [{id, label, run_dir, note?}, ...]")
-    p.add_argument("--out", required=True, help="folder holding template.html; index.html is written there")
+    p.add_argument("--registry", required=True, help='runs.json: {"title": ..., "runs": [{id, label, run_dir, note?}, ...]}')
+    p.add_argument("--out", required=True, help="folder to write index.html into (e.g. one under your home, to publish)")
+    p.add_argument("--template", default=str(TEMPLATE), help="page template (default: epic_eval/dashboard_template.html)")
     a = p.parse_args()
-    index = build(json.loads(Path(a.registry).read_text()), Path(a.out))
+    reg = json.loads(Path(a.registry).read_text())
+    runs, title = (reg, "EPIC-Morph Scoreboard") if isinstance(reg, list) else (reg["runs"], reg.get("title", "EPIC-Morph Scoreboard"))
+    index = build(runs, Path(a.out), title, Path(a.template))
     for r in index["runs"]:
         print(f"{r['id']}: {r['progress']['answered']}/{r['progress']['n']} answered, "
               f"acc {r['splits']['all']['acc']:.3f}")

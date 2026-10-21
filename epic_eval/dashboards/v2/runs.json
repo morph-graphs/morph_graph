@@ -1,0 +1,11 @@
+{
+  "title": "EPIC-Morph V2 Scoreboard",
+  "runs": [
+    {
+      "id": "v2_q27b_2048",
+      "label": "Qwen3.8-27B \u00b7 thinking \u00b7 2048 frames \u00b7 16k cap",
+      "run_dir": "/scratch/zt1/project/abhinav2-prj/user/vatsalag/morph_graphs/epic_eval_runs/3a298f14_qwen38-27b-thinking-v2-fps1-f2048_cfga32dc780",
+      "note": "V2 bank (epic-morph 4014a10): 82 streaming questions on P09-20240622-150155. 1 fps, max 2048 frames, 2\u00d7 A100."
+    }
+  ]
+}

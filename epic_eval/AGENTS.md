@@ -14,7 +14,7 @@ account (check: `id -nG`, `sacctmgr -nP show assoc where user=$USER format=accou
 
 | what | path | access |
 |---|---|---|
-| runs root (run folders, `media/`, `_mirrors/`) | `$S/morph_graphs/epic_eval_runs` | read; **write needed to launch** (see prerequisite) |
+| runs root (run folders, `media/`, `_mirrors/`) | `$S/morph_graphs/epic_eval_runs` | read + write (group) |
 | Apptainer image | `$S/morph_graphs/morph_graph/morph_graphs.sif` | read + run |
 | extra pure-Python packages | `$S/pyextra_morph_graphs` | read |
 | model weights | `$S/model_hub/` (Qwen3.8-27B, Qwen3.5-4B/9B, …) | read |
@@ -25,10 +25,10 @@ These paths are written into the Qwen configs; don't edit them to point elsewher
 unless you mean to (`run.runs_root`, `container.sif` and `model.path` are part of the run
 hash, so a changed value means different run folders).
 
-**Prerequisite (owner action, once):** the runs root is group read-only. Before your
-first launch, check `test -w $S/morph_graphs/epic_eval_runs && echo writable`. If it is
-not, ask Vatsal to run `chmod -R g+w $S/morph_graphs/epic_eval_runs`. Do not try to
-change permissions on someone else's directories yourself.
+**Check before your first launch:** `test -w $S/morph_graphs/epic_eval_runs && echo writable`.
+The runs root has been made group-writable; if that check fails, ask Vatsal to run
+`chmod -R g+w $S/morph_graphs/epic_eval_runs`. Do not change permissions on someone
+else's directories yourself.
 
 ## Setup (once)
 
@@ -37,7 +37,7 @@ change permissions on someone else's directories yourself.
    ```bash
    cd /scratch/zt1/project/abhinav2-prj/user/$USER
    git clone git@github.com:vatsalag99/morph_graph.git && cd morph_graph
-   git checkout epic-eval          # or main, once epic-eval is merged
+   git checkout main
    ```
    Clone, pull and push on a **login node**; compute nodes have no route to GitHub.
 2. **A Python ≥ 3.10 for the orchestrator** (it only needs the standard library; the jobs
@@ -84,6 +84,26 @@ python3 -m epic_eval.orchestrator --config epic_eval/configs/qwen3.8-27b-thinkin
 - **Question-bank changes go through epic-morph** (edit `questions_llm/bank.jsonl`,
   re-export, commit, push), then add or bump a named bank in `banks.json`. Don't edit
   the files inside a run folder's `questions_repo/`: that is the run's record.
+
+## Updating the shared dashboard
+
+The V2 scoreboard (https://claude.ai/artifact/MVRTeCNbD5psFx6M2dq7vX) is generated from
+the repo: the run list is `epic_eval/dashboards/v2/runs.json`, the page layout is
+`epic_eval/dashboard_template.html`, and the scores are recomputed from the run folders.
+
+1. **Add the run** to `epic_eval/dashboards/v2/runs.json` (`id`, `label`, `run_dir`, `note`)
+   and commit, so the other person's next rebuild includes it too.
+2. **Rebuild** into a folder under your home (claude.ai can only publish from there):
+   `python3 -m epic_eval.dashboard --registry epic_eval/dashboards/v2/runs.json --out ~/epic_eval_dashboard_v2`.
+   It prints each run's answered count and the page size (limit 16 MB).
+3. **Publish to the same URL** with the Artifact tool: `url` = the link above,
+   `file_path` = `~/epic_eval_dashboard_v2/index.html` (read the artifact first if this
+   session hasn't published it). You need edit access to the artifact; the owner grants it
+   from the page's Share menu. If the publish is refused because someone published a
+   newer version, rebuild from the latest `runs.json` and publish again; the page is
+   fully generated, so nothing is lost.
+
+Only runs on the same bank belong on one page (this one: `v2-150155-82`).
 
 ## Monitoring
 

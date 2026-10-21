@@ -1,0 +1,389 @@
+<title>__TITLE__</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ground:#f4f5f2; --surface:#ffffff; --sunk:#eceee9; --line:#d9ddd5; --ink:#1b1f24; --muted:#5d6673;
+  --accent:#3547a8; --accent-soft:#e6e9f7; --ok:#2f7d4f; --ok-soft:#e3f1e8; --bad:#b83a3a; --bad-soft:#f7e4e3;
+  --warn:#a36a12; --warn-soft:#f6ecd9; --bar:#3547a8;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --ground:#14171b; --surface:#1c2026; --sunk:#232830; --line:#323843; --ink:#e7e9ec; --muted:#9aa3ae;
+    --accent:#9aa8f0; --accent-soft:#252b45; --ok:#6cc08d; --ok-soft:#1d3226; --bad:#e58b86; --bad-soft:#3a2223;
+    --warn:#dcae5f; --warn-soft:#382d18; --bar:#8a99ea;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --ground:#14171b; --surface:#1c2026; --sunk:#232830; --line:#323843; --ink:#e7e9ec; --muted:#9aa3ae;
+  --accent:#9aa8f0; --accent-soft:#252b45; --ok:#6cc08d; --ok-soft:#1d3226; --bad:#e58b86; --bad-soft:#3a2223;
+  --warn:#dcae5f; --warn-soft:#382d18; --bar:#8a99ea;
+}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font:14px/1.5 var(--sans);padding-inline:16px;padding-block:0 48px}
+.wrap{max-width:1180px;margin:0 auto}
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--ground);border-bottom:1px solid var(--line);padding-block:14px 0;margin-bottom:20px}
+.brand{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 14px}
+h1{font-size:20px;font-weight:600;margin:0;letter-spacing:-.01em}
+.sub{color:var(--muted);font-size:13px}
+nav{display:flex;gap:4px;margin-top:10px}
+nav button{font:500 13px var(--sans);color:var(--muted);background:none;border:0;border-bottom:2px solid transparent;padding:8px 12px;cursor:pointer}
+nav button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+nav button:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h2{font-size:15px;font-weight:600;margin:28px 0 10px;text-wrap:balance}
+h2:first-child{margin-top:0}
+.lede{color:var(--muted);max-width:68ch;margin:0 0 14px}
+.mono,.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.tablebox{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:7px 12px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--line)}
+tbody tr:last-child td{border-bottom:0}
+thead th{font-weight:600;color:var(--muted);font-size:12px;background:var(--sunk);vertical-align:bottom}
+thead th .runhead{display:block;color:var(--ink);font-weight:600;white-space:normal;min-width:150px;max-width:220px}
+td.sec{background:var(--sunk);color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+td.label{font-family:var(--mono);font-size:12.5px}
+.cell{display:grid;grid-template-columns:52px 90px auto;align-items:center;gap:8px}
+.meter{height:6px;background:var(--sunk);border-radius:3px;position:relative;overflow:hidden}
+.meter i{position:absolute;inset:0 auto 0 0;background:var(--bar);border-radius:3px}
+.meter b{position:absolute;top:-2px;bottom:-2px;width:1px;background:var(--muted);left:25%}
+.small{color:var(--muted);font-size:11.5px}
+.best{font-weight:600;color:var(--accent)}
+.pill{display:inline-flex;align-items:center;gap:4px;font:500 11.5px var(--sans);padding:1px 8px;border-radius:999px;background:var(--sunk);color:var(--muted);white-space:nowrap}
+.pill.run{background:var(--accent-soft);color:var(--accent)}
+.pill.ok{background:var(--ok-soft);color:var(--ok)}
+.pill.bad{background:var(--bad-soft);color:var(--bad)}
+.pill.warn{background:var(--warn-soft);color:var(--warn)}
+.runs-pick{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
+.chip{font:500 13px var(--sans);padding:6px 12px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--ink);cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:18px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+.stat .v{font:500 24px var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.stat .k{color:var(--muted);font-size:12px}
+.conf{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:0 24px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 16px;margin-bottom:6px}
+.conf div{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px dashed var(--line);font-size:13px}
+.conf dt{color:var(--muted)}
+.conf dd{margin:0;font-family:var(--mono);font-size:12.5px;text-align:right;overflow-wrap:anywhere}
+.path{font-family:var(--mono);font-size:11.5px;color:var(--muted);overflow-wrap:anywhere}
+.twocol{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media (max-width:900px){.twocol{grid-template-columns:1fr}}
+.filters{display:flex;flex-wrap:wrap;gap:10px;align-items:end;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+.filters label{display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--muted);font-weight:500;letter-spacing:.02em}
+select,input[type=search]{font:13px var(--sans);color:var(--ink);background:var(--ground);border:1px solid var(--line);border-radius:6px;padding:6px 8px;min-width:0;max-width:100%}
+input[type=search]{width:220px}
+.runfilters{display:flex;flex-direction:column;gap:6px;width:100%;padding-top:8px;border-top:1px dashed var(--line)}
+.rf{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.rf .name{font-size:12.5px;min-width:0;flex:1 1 200px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{font:500 12px var(--sans);padding:4px 10px;background:var(--surface);color:var(--muted);border:0;border-left:1px solid var(--line);cursor:pointer}
+.seg button:first-child{border-left:0}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--surface)}
+.count{margin:14px 0 8px;color:var(--muted);font-size:13px}
+.qlist{display:flex;flex-direction:column;gap:8px}
+details.q{background:var(--surface);border:1px solid var(--line);border-radius:8px}
+details.q>summary{list-style:none;cursor:pointer;padding:10px 14px;display:grid;grid-template-columns:1fr auto;gap:6px 16px;align-items:start}
+details.q>summary::-webkit-details-marker{display:none}
+.qtext{font-weight:500;text-wrap:pretty}
+.qmeta{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.picks{display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end;max-width:360px}
+.qbody{padding:4px 14px 14px;border-top:1px solid var(--line)}
+.opts{list-style:none;padding:0;margin:10px 0;display:flex;flex-direction:column;gap:4px}
+.opts li{display:grid;grid-template-columns:22px 1fr auto;gap:8px;padding:6px 8px;border-radius:6px;background:var(--ground)}
+.opts li.gt{background:var(--ok-soft)}
+.opts .L{font-family:var(--mono);font-weight:500}
+.opts .who{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}
+.ev{margin:8px 0 12px;padding-left:0;list-style:none;font-size:12.5px;color:var(--muted)}
+.ev li{display:grid;grid-template-columns:64px 1fr;gap:8px}
+.tabs{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0}
+.think{white-space:pre-wrap;font:12.5px/1.55 var(--mono);background:var(--ground);border:1px solid var(--line);border-radius:6px;padding:10px 12px;max-height:420px;overflow:auto}
+.more{margin:10px auto 4px;display:block}
+details.fsec{display:flex;flex-direction:column}
+details.fsec>summary{list-style:none;cursor:pointer;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;padding:10px 2px 8px;border-bottom:1px solid var(--line);margin-bottom:8px}
+details.fsec>summary::-webkit-details-marker{display:none}
+details.fsec>summary::before{content:"▸";color:var(--muted);font-size:11px;width:10px}
+details.fsec[open]>summary::before{content:"▾"}
+.fname{font:600 14px var(--mono)}
+.fcount{color:var(--muted);font-size:12.5px}
+.facc{display:flex;flex-wrap:wrap;gap:4px 10px;font:12px var(--mono);font-variant-numeric:tabular-nums;color:var(--muted);margin-left:auto}
+.facc b{color:var(--ink);font-weight:500}
+.fsec .qlist{margin-bottom:14px}
+.empty{color:var(--muted);padding:20px;text-align:center;background:var(--surface);border:1px dashed var(--line);border-radius:8px}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <h1>__TITLE__</h1>
+      <span class="sub" id="bankline">loading…</span>
+    </div>
+    <nav role="tablist" aria-label="Views">
+      <button role="tab" id="tab-compare" aria-selected="true" data-view="compare">Compare</button>
+      <button role="tab" id="tab-runs" aria-selected="false" data-view="runs">Runs</button>
+      <button role="tab" id="tab-questions" aria-selected="false" data-view="questions">Questions</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="view-compare"></section>
+    <section id="view-runs" hidden></section>
+    <section id="view-questions" hidden>
+      <div class="filters" id="filters">
+        <label for="f-form">Form<select id="f-form"><option value="">All forms</option></select></label>
+        <label for="f-video">Video<select id="f-video"><option value="">All videos</option></select></label>
+        <label for="f-stream">Input<select id="f-stream"><option value="">Full + streaming</option><option value="full">Full video</option><option value="stream">Streaming [0, t_ask]</option></select></label>
+        <label for="f-bin">Type<select id="f-bin"><option value="">All</option><option value="nb">Non-binary</option><option value="b">Yes/no</option></select></label>
+        <label for="f-q">Search<input type="search" id="f-q" placeholder="words in question or options"></label>
+        <div class="runfilters" id="runfilters"></div>
+      </div>
+      <div class="count" id="count"></div>
+      <div id="qlist"></div>
+    </section>
+  </main>
+</div>
+
+<script type="application/json" id="dash-data">/*DATA*/</script>
+<script type="application/json" id="dash-thoughts">/*THOUGHTS*/</script>
+<script>
+const $ = s => document.querySelector(s);
+const pct = x => x == null ? "—" : (100 * x).toFixed(1);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const SPLIT_LABEL = {"all":"All questions","non_binary":"Non-binary","binary_yes_no":"Yes/no","streaming":"Streaming",
+  "full_video":"Full video","non_binary/streaming":"Non-binary · streaming","non_binary/full_video":"Non-binary · full video"};
+let D, runFilter = {}, expanded = {}, closedForms = {}, thoughtCache = {};
+const PER_SECTION = 20;
+
+function store(k, v){ try{ v === undefined ? (localStorage.getItem(k)) : localStorage.setItem(k, v) }catch(e){} }
+function load(k){ try{ return localStorage.getItem(k) }catch(e){ return null } }
+
+function meter(acc){
+  const w = acc == null ? 0 : Math.max(0, Math.min(1, acc)) * 100;
+  return `<span class="meter" title="dash marks 25% chance"><i style="width:${w}%"></i><b></b></span>`;
+}
+function cell(t, best){
+  if (!t || !t.n) return `<span class="small">—</span>`;
+  const partial = t.answered < t.n ? ` <span class="small">${t.answered}/${t.n}</span>` : ` <span class="small">n=${t.n}</span>`;
+  return `<span class="cell"><span class="num ${best ? "best" : ""}">${pct(t.acc)}</span>${meter(t.acc)}${partial}</span>`;
+}
+function status(r){
+  const p = r.progress;
+  if (p.answered + p.truncated + p.errors === 0) return `<span class="pill">queued</span>`;
+  if (p.answered + p.truncated + p.errors < p.n) return `<span class="pill warn">running · ${p.answered}/${p.n}</span>`;
+  return `<span class="pill ok">complete</span>`;
+}
+
+function renderCompare(){
+  const runs = D.runs;
+  const forms = [...new Set(runs.flatMap(r => Object.keys(r.by_form)))].sort();
+  const bestOf = (get) => { const v = runs.map(r => get(r)?.acc ?? -1); const m = Math.max(...v); return v.map(x => runs.length > 1 && x === m && m >= 0) };
+  let rows = `<tr><td class="sec" colspan="${runs.length + 1}">Splits</td></tr>`;
+  for (const s of Object.keys(SPLIT_LABEL)){
+    const b = bestOf(r => r.splits[s]);
+    rows += `<tr><td class="label">${SPLIT_LABEL[s]}</td>${runs.map((r,i) => `<td>${cell(r.splits[s], b[i])}</td>`).join("")}</tr>`;
+  }
+  rows += `<tr><td class="sec" colspan="${runs.length + 1}">By question form</td></tr>`;
+  for (const f of forms){
+    const b = bestOf(r => r.by_form[f]);
+    rows += `<tr><td class="label">${esc(f)}</td>${runs.map((r,i) => `<td>${cell(r.by_form[f], b[i])}</td>`).join("")}</tr>`;
+  }
+  $("#view-compare").innerHTML = `
+    <p class="lede">Accuracy per run over the whole bank: an unanswered question (truncated, failed or not yet asked) counts as wrong, so runs still in progress read low until they finish. Quote <b>non-binary</b>: the yes/no options at this bank commit give the answer away. Chance is 25%; the best run in each row is highlighted.</p>
+    <div class="tablebox"><table>
+      <thead><tr><th>Split / form</th>${runs.map(r => `<th><span class="runhead">${esc(r.label)}</span>${status(r)}</th>`).join("")}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+}
+
+function renderRuns(sel){
+  sel = sel || load("dash-run") || D.runs[0].id;
+  if (!D.runs.find(r => r.id === sel)) sel = D.runs[0].id;
+  const r = D.runs.find(x => x.id === sel), c = r.config, p = r.progress, s = r.splits;
+  const conf = [
+    ["Model", c.model], ["Mode", c.mode], ["Frame sampling", `${c.fps} fps · max ${c.max_frames}`],
+    ["Frames used (max)", c.frames_used_max ?? "—"], ["Video tokens (median)", c.video_tokens_median ?? "—"],
+    ["Output cap", c.max_new_tokens ? `${c.max_new_tokens.toLocaleString()} tok` : "—"],
+    ["Clips", c.media], ["GPUs", `${c.gpus} (${c.partition})`],
+    ["Code / bank", `${c.code} / ${c.questions}`], ["Latency (median)", c.latency_median_s ? `${Math.round(c.latency_median_s)} s` : "—"],
+    ["Thinking (median)", c.thinking_median_tok ? `${Math.round(c.thinking_median_tok).toLocaleString()} tok` : "—"],
+    ["Launched", c.launched ? c.launched.replace("T", " ") : "—"],
+  ];
+  const splitRows = Object.keys(SPLIT_LABEL).map(k => `<tr><td class="label">${SPLIT_LABEL[k]}</td><td>${cell(s[k])}</td><td class="num">${s[k].correct}/${s[k].answered}</td><td class="num">${pct(s[k].acc_answered)}</td></tr>`).join("");
+  const formRows = Object.entries(r.by_form).sort((a,b) => b[1].n - a[1].n).map(([f,t]) => `<tr><td class="label">${esc(f)}</td><td>${cell(t)}</td><td class="num">${t.correct}/${t.answered}</td></tr>`).join("");
+  $("#view-runs").innerHTML = `
+    <div class="runs-pick" role="group" aria-label="Run">${D.runs.map(x => `<button class="chip" data-run="${x.id}" aria-pressed="${x.id === sel}">${esc(x.label)}</button>`).join("")}</div>
+    <div class="stats">
+      <div class="stat"><div class="v">${pct(s.all.acc)}%</div><div class="k">overall (unanswered = wrong)</div></div>
+      <div class="stat"><div class="v">${pct(s.non_binary.acc)}%</div><div class="k">non-binary</div></div>
+      <div class="stat"><div class="v">${pct(s.all.acc_answered)}%</div><div class="k">of answered</div></div>
+      <div class="stat"><div class="v">${p.answered}<span class="small">/${p.n}</span></div><div class="k">answered ${status(r)}</div></div>
+      <div class="stat"><div class="v">${p.truncated}</div><div class="k">hit the output cap${p.errors ? ` · ${p.errors} other errors` : ""}</div></div>
+    </div>
+    ${r.note ? `<p class="lede">${esc(r.note)}</p>` : ""}
+    <h2>Config</h2>
+    <dl class="conf">${conf.map(([k,v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl>
+    <div class="path">${esc(c.run_dir)}</div>
+    <div class="twocol">
+      <div><h2>Splits</h2><div class="tablebox"><table><thead><tr><th>Split</th><th>Accuracy</th><th>Correct</th><th>Acc | answered</th></tr></thead><tbody>${splitRows}</tbody></table></div></div>
+      <div><h2>By question form</h2><div class="tablebox"><table><thead><tr><th>Form</th><th>Accuracy</th><th>Correct</th></tr></thead><tbody>${formRows}</tbody></table></div></div>
+    </div>`;
+  $("#view-runs").querySelectorAll("[data-run]").forEach(b => b.onclick = () => { store("dash-run", b.dataset.run); renderRuns(b.dataset.run) });
+}
+
+function outcome(q, id){
+  const x = q.per[id];
+  if (!x) return "none";
+  if (x.pick == null) return x.error === "MAX_TOKENS" ? "trunc" : "none";
+  return x.ok ? "right" : "wrong";
+}
+function pickPill(q, r){
+  const o = outcome(q, r.id), x = q.per[r.id], L = D.letters;
+  const short = r.label.split("·").slice(-2).join("·").trim();
+  if (o === "right") return `<span class="pill ok" title="${esc(r.label)}">✓ ${L[x.pick]} · ${esc(short)}</span>`;
+  if (o === "wrong") return `<span class="pill bad" title="${esc(r.label)}">✗ ${L[x.pick]} · ${esc(short)}</span>`;
+  if (o === "trunc") return `<span class="pill warn" title="${esc(r.label)}">cap hit · ${esc(short)}</span>`;
+  return `<span class="pill" title="${esc(r.label)}">— · ${esc(short)}</span>`;
+}
+
+function setupQuestions(){
+  const forms = [...new Set(D.questions.map(q => q.form))].sort();
+  const videos = [...new Set(D.questions.map(q => q.video))].sort();
+  $("#f-form").insertAdjacentHTML("beforeend", forms.map(f => `<option>${esc(f)}</option>`).join(""));
+  $("#f-video").insertAdjacentHTML("beforeend", videos.map(v => `<option>${esc(v)}</option>`).join(""));
+  $("#runfilters").innerHTML = D.runs.map(r => `
+    <div class="rf"><span class="name">${esc(r.label)}</span>
+      <span class="seg" role="group" aria-label="${esc(r.label)} outcome">${[["any","Any"],["right","Right"],["wrong","Wrong"],["unanswered","No answer"]].map(([v,t]) =>
+        `<button data-run="${r.id}" data-v="${v}" aria-pressed="${v === "any"}">${t}</button>`).join("")}</span></div>`).join("");
+  D.runs.forEach(r => runFilter[r.id] = "any");
+  $("#runfilters").querySelectorAll("button").forEach(b => b.onclick = () => {
+    runFilter[b.dataset.run] = b.dataset.v;
+    b.parentElement.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b));
+    expanded = {}; renderQuestions();
+  });
+  ["#f-form","#f-video","#f-stream","#f-bin"].forEach(s => $(s).onchange = () => { expanded = {}; renderQuestions() });
+  $("#f-q").oninput = () => { expanded = {}; renderQuestions() };
+}
+
+function filtered(){
+  const f = $("#f-form").value, v = $("#f-video").value, st = $("#f-stream").value, bn = $("#f-bin").value, s = $("#f-q").value.trim().toLowerCase();
+  return D.questions.filter(q => {
+    if (f && q.form !== f) return false;
+    if (v && q.video !== v) return false;
+    if (st === "full" && q.streaming) return false;
+    if (st === "stream" && !q.streaming) return false;
+    if (bn === "nb" && q.binary) return false;
+    if (bn === "b" && !q.binary) return false;
+    if (s && !(q.q + " " + q.options.join(" ")).toLowerCase().includes(s)) return false;
+    for (const [id, want] of Object.entries(runFilter)){
+      if (want === "any") continue;
+      const o = outcome(q, id);
+      if (want === "right" && o !== "right") return false;
+      if (want === "wrong" && o !== "wrong") return false;
+      if (want === "unanswered" && (o === "right" || o === "wrong")) return false;
+    }
+    return true;
+  });
+}
+
+function card(q){
+  const L = D.letters;
+  return `
+    <details class="q" data-qid="${q.qid}">
+      <summary>
+        <div><div class="qtext">${esc(q.q)}</div>
+          <div class="qmeta"><span class="pill">${esc(q.form)}</span><span class="pill">${q.streaming ? `streaming · asked at ${esc(q.asked_at)}` : "full video"}</span>${q.binary ? `<span class="pill">yes/no</span>` : ""}<span class="pill mono">${esc(q.video)}</span></div></div>
+        <div class="picks">${D.runs.map(r => pickPill(q, r)).join("")}</div>
+      </summary>
+      <div class="qbody">
+        <ol class="opts">${q.options.map((o,i) => `<li class="${i === q.gt ? "gt" : ""}"><span class="L">${L[i]}</span><span>${esc(o)}${i === q.gt ? ` <span class="pill ok">correct</span>` : ""}</span><span class="who">${D.runs.filter(r => q.per[r.id]?.pick === i).map(r => `<span class="pill run">${esc(r.label.split("·").slice(-2).join("·").trim())}</span>`).join("")}</span></li>`).join("")}</ol>
+        ${q.evidence?.length ? `<div class="small">Narration evidence</div><ul class="ev">${q.evidence.map(e => `<li><span class="mono">${esc(e.t ?? "")}</span><span>${esc(e.text)}</span></li>`).join("")}</ul>` : ""}
+        <div class="small">Thinking</div>
+        <div class="tabs" role="group" aria-label="Run thinking">${D.runs.map((r,i) => `<button class="chip" data-think="${r.id}" aria-pressed="${i === 0}">${esc(r.label)}</button>`).join("")}</div>
+        <div class="think">Open a run above to load its thinking.</div>
+      </div>
+    </details>`;
+}
+
+// short run tag for section headers: the distinguishing tail of the label, e.g. "768 frames · 16k cap"
+const runTag = r => r.label.split("·").slice(-2).join("·").trim();
+
+function renderQuestions(){
+  const list = filtered();
+  $("#count").textContent = `${list.length} of ${D.questions.length} questions · grouped by question form, largest form first`;
+  if (!list.length){ $("#qlist").innerHTML = `<div class="empty">No questions match these filters.</div>`; return }
+  // stable section order: forms with the most questions in the whole bank first, ties alphabetical
+  const size = {};
+  D.questions.forEach(q => size[q.form] = (size[q.form] || 0) + 1);
+  const groups = {};
+  list.forEach(q => (groups[q.form] = groups[q.form] || []).push(q));
+  const forms = Object.keys(groups).sort((a, b) => size[b] - size[a] || a.localeCompare(b));
+  $("#qlist").innerHTML = forms.map(f => {
+    const qs = groups[f], all = expanded[f], visible = all ? qs : qs.slice(0, PER_SECTION);
+    const acc = D.runs.map(r => {
+      const ans = qs.filter(q => q.per[r.id]?.pick != null), ok = ans.filter(q => q.per[r.id].ok).length;
+      return `<span title="${esc(r.label)}: correct / answered among the ${qs.length} matching">${esc(runTag(r))} <b>${ok}/${ans.length}</b></span>`;
+    }).join("");
+    return `
+    <details class="fsec" data-form="${esc(f)}" ${closedForms[f] ? "" : "open"}>
+      <summary><span class="fname">${esc(f)}</span><span class="fcount">${qs.length} of ${size[f]} match</span><span class="facc">${acc}</span></summary>
+      <div class="qlist">${visible.map(card).join("")}</div>
+      ${qs.length > PER_SECTION && !all ? `<button class="chip more" data-all="${esc(f)}">Show all ${qs.length}</button>` : ""}
+    </details>`;
+  }).join("");
+  $("#qlist").querySelectorAll("details.fsec").forEach(d => d.addEventListener("toggle", () => { closedForms[d.dataset.form] = !d.open }));
+  $("#qlist").querySelectorAll("[data-all]").forEach(b => b.onclick = () => { expanded[b.dataset.all] = true; renderQuestions() });
+  $("#qlist").querySelectorAll("details.q").forEach(d => d.addEventListener("toggle", () => { if (d.open) showThought(d, D.runs[0].id) }, {once: true}));
+  $("#qlist").querySelectorAll("[data-think]").forEach(b => b.onclick = e => {
+    const d = b.closest("details.q"); b.parentElement.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); showThought(d, b.dataset.think);
+  });
+}
+
+async function showThought(d, runId){
+  const q = D.questions.find(x => x.qid === d.dataset.qid), box = d.querySelector(".think"), x = q.per[runId];
+  if (!x){ box.textContent = "This run has not asked this question yet."; return }
+  if (x.pick == null && x.error){ box.textContent = x.error === "MAX_TOKENS" ? "No answer: thinking ran into the output-token cap before the model answered." : `No answer (${x.error}).`; }
+  box.textContent = "Loading…";
+  try{
+    const t = ((await runThoughts(runId))[q.video] || {})[q.qid];
+    if (!t){ box.textContent = x.error === "MAX_TOKENS" ? "No answer: thinking ran into the output-token cap before the model answered." : "No thinking saved for this question."; return }
+    box.textContent = `${t.thoughts || "(no thinking text)"}\n\n── reply ──\n${t.reply}\n\n${t.frames ? t.frames + " frames · " : ""}${t.latency ? Math.round(t.latency) + " s" : ""}`;
+  }catch(e){ box.textContent = "Could not unpack this run's thinking. Reload the page to try again." }
+}
+
+// thinking ships inline as gzip+base64 per run and is unpacked on first use
+let TH = null;
+async function runThoughts(id){
+  if (!thoughtCache[id]){
+    TH = TH || JSON.parse(document.getElementById("dash-thoughts").textContent);
+    const b64 = TH[id];
+    if (!b64){ thoughtCache[id] = {}; return thoughtCache[id] }
+    const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
+    thoughtCache[id] = JSON.parse(await new Response(stream).text());
+  }
+  return thoughtCache[id];
+}
+
+function show(view){
+  document.querySelectorAll("nav button").forEach(b => b.setAttribute("aria-selected", b.dataset.view === view));
+  ["compare","runs","questions"].forEach(v => $("#view-" + v).hidden = v !== view);
+  store("dash-view", view);
+}
+
+(async function start(){
+  try{
+    D = JSON.parse(document.getElementById("dash-data").textContent);
+  }catch(e){ $("#view-compare").innerHTML = `<div class="empty">Could not load the run data. Reload the page to try again.</div>`; return }
+  const n = D.questions.length, vids = new Set(D.questions.map(q => q.video)).size;
+  const bank = [...new Set(D.runs.map(r => r.config.questions))].join(", ");
+  $("#bankline").textContent = `${n} questions · ${vids} videos · epic-morph ${bank} · ${D.runs.length} run${D.runs.length === 1 ? "" : "s"}`;
+  renderCompare(); renderRuns(); setupQuestions(); renderQuestions();
+  document.querySelectorAll("nav button").forEach(b => b.onclick = () => show(b.dataset.view));
+  const h = location.hash.slice(1);
+  show(["compare","runs","questions"].includes(h) ? h : (load("dash-view") || "compare"));
+})();
+</script>

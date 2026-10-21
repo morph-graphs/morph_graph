@@ -63,6 +63,9 @@ def load_run(run_dir: Path, label: str | None, max_thought: int) -> tuple[dict, 
     """(run meta, {qid: question row}, {qid: this run's result})."""
     cfg = load_run_config(run_dir)
     qdir = Path(cfg["resolved"]["questions_dir"])
+    if not qdir.is_dir():  # run folder moved since it was made: its own checkout moved with it
+        qdir = Path(run_dir) / "questions_repo"
+        cfg["resolved"]["questions_dir"] = str(qdir)
     rows = questions_for_run(cfg)
     raw = {}
     for path in sorted(qdir.glob(cfg["questions"]["glob"])):
