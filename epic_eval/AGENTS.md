@@ -41,10 +41,20 @@ else's directories yourself.
    ```
    Clone, pull and push on a **login node**; compute nodes have no route to GitHub.
 2. **A Python ≥ 3.10 for the orchestrator** (it only needs the standard library; the jobs
-   themselves run inside the image). The system `python3` is 3.6, too old. Use a module,
-   e.g. `module load python/3.10.10`, or any interpreter you already have. Confirm with
+   themselves run inside the image). The system `python3` is 3.6, too old.
+   `module load python/3.10.10` works (no conda needed); confirm with
    `python3 -c "import epic_eval.orchestrator"` from the repo root.
-3. **`umask 002`** in every shell that launches (put it in `~/.bashrc`), so the files your
+3. **Let git work in the shared repos.** The epic-morph mirror and existing run folders
+   are owned by Vatsal, and git refuses repos owned by another user ("detected dubious
+   ownership"). Zaratan's git (2.43) only accepts exact repo paths here, no prefixes.
+   Mark the question-bank mirror as safe, once (every launch reads it):
+   ```bash
+   git config --global --add safe.directory $S/morph_graphs/epic_eval_runs/_mirrors/epic-morph.git
+   ```
+   Run folders you create are yours and need nothing. To resume a run Vatsal created, also
+   add that run's `<run>/code_repo` and `<run>/questions_repo`. (`safe.directory '*'`
+   turns the check off for every repo, which is simpler but less safe.)
+4. **`umask 002`** in every shell that launches (put it in `~/.bashrc`), so the files your
    runs create stay group-writable and both of you can resume each other's runs.
 
 ## Launching
