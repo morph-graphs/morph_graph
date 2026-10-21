@@ -36,6 +36,22 @@ update a bank in `banks.json` that points at that commit.
                                               (records the commit it used)
 ```
 
+## How a launch gets the questions
+
+1. **The config names a bank:** `"questions": {"bank": "v2-150155-82"}`.
+2. **`epic_eval/banks.json` turns the name into a commit and files:** epic-morph commit
+   `c905841…`, files `outputs/v2/*/questions_eval/*_questions.json`, and the expected
+   count (82), which is checked before anything is submitted.
+3. **The launcher reads that commit from a copy of epic-morph on the cluster:**
+   - your own epic-morph clone, if `EPIC_MORPH_DIR` is set to it (any branch can be
+     checked out; it only has to contain the commit, so `git fetch` it if needed); or
+   - otherwise the shared copy in the runs folder,
+     `.../morph_graphs/epic_eval_runs/_mirrors/epic-morph.git`, which is updated from GitHub.
+
+   It never reads the files you have open in epic-morph, only that exact commit.
+4. **It copies the questions into the run folder** (`<run>/questions_repo/`). The jobs read
+   them from there, and that copy stays as the run's record of what it was asked.
+
 ## Adding a new set of questions (e.g. V3)
 
 1. **Finish the questions in epic-morph** and make sure each video has its scored file at
