@@ -63,7 +63,7 @@ A config is one JSON file. Its sections:
 |---|---|---|
 | `run` | `tag` (names the run folder), `runs_root` | tag only via the folder name |
 | `code` | `repo_url` to mirror the eval code from; omit it to snapshot the local checkout (see README_local_models.md) | commit: yes |
-| `questions` | epic-morph `repo_url`, pinned `commit`, `glob` | yes |
+| `questions` | `{"bank": "<name>"}` from `banks.json` (or an explicit `repo_url`, pinned `commit`, `glob`) | yes (the resolved commit) |
 | `paths` | `video_dir`, `python` (interpreter for jobs), `ffmpeg_module`, optional `media_root` | yes, except `media_root` |
 | `container` | Apptainer image jobs run in, instead of `paths.python` | yes |
 | `media` | clip encoding: `max_side`, `encode_fps`, `crf`, `audio`, `enabled` (false = text-only) | yes |
@@ -82,6 +82,23 @@ script: `paths.python` if the config has no `container` block (a conda env, a
 venv, or any interpreter path), otherwise `apptainer exec … <sif> python`.
 Whichever it is needs the backend's packages, and ffmpeg on `PATH` for prep
 (`paths.ffmpeg_module` is `module load`ed first when set).
+
+## Question banks
+
+`banks.json` names each benchmark bank: its repo, full commit SHA, glob and question
+count (`v1-449`, `v2-150155-82`). Configs refer to a bank by name; the orchestrator
+resolves it to that exact commit (so a bank name and the equivalent explicit section give
+the same run folder) and stops if the bank's question count is not the one listed.
+Moving a benchmark to a new bank commit is a one-line change in `banks.json` plus a new
+name if the question set changes.
+
+To see exactly what a bank holds (any epic-morph clone or the runs-root mirror works,
+whatever branch it has checked out):
+
+```bash
+python3 -m epic_eval.bank --list
+python3 -m epic_eval.bank v2-150155-82 --repo <epic-morph clone or mirror> [--csv questions.csv]
+```
 
 ## Running
 

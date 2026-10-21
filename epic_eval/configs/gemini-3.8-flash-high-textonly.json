@@ -7,9 +7,7 @@
     "repo_url": "git@github.com:vatsalag99/morph_graph.git"
   },
   "questions": {
-    "repo_url": "git@github.com:vatsalag99/epic-morph.git",
-    "commit": "04fb5d5aee8d5f3872dd44f28da7a0257009f2ee",
-    "glob": "outputs/questions/*_questions.json"
+    "bank": "v1-449"
   },
   "paths": {
     "video_dir": "/fs/cfar-projects/VPR/datasets/HD-EPIC/videos",

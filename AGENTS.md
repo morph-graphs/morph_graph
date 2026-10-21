@@ -87,6 +87,10 @@ on Zaratan. Details: `proj_context/proj_docs/nexus.md`.
 
 ## Running epic_eval
 
+Question banks are named in `epic_eval/banks.json` (`v1-449`, `v2-150155-82`) and configs
+refer to them as `"questions": {"bank": "<name>"}`; inspect one with
+`python3 -m epic_eval.bank <name> --repo <epic-morph clone or mirror> [--csv f]`.
+
 See `epic_eval/README.md` and `README_local_models.md`. The short version for a
 local model on Zaratan, from a clean checkout at the repo root:
 
