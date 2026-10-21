@@ -7,9 +7,9 @@
     "questions": 449
   },
   "v2-150155-82": {
-    "description": "V2 bank: 82 streaming questions on P09-20240622-150155 (benchmark-v2 at 4014a10)",
+    "description": "V2 bank: 82 streaming questions on P09-20240622-150155 (epic-morph main at c905841; same 82 as 4014a10)",
     "repo_url": "git@github.com:vatsalag99/epic-morph.git",
-    "commit": "4014a10d7762dc85cf9666eac92ec0aa0de44daa",
+    "commit": "c905841e9a9605fad53f9a55864fd4424ea2bd0f",
     "glob": "outputs/v2/*/questions_eval/*_questions.json",
     "questions": 82
   }

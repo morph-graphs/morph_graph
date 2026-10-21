@@ -11,7 +11,7 @@ scored, and what to do when new questions arrive (e.g. V3).
 - **Evals live in this repo (`morph_graph/epic_eval`).** They never read your working
   copy of epic-morph. They read epic-morph **as it was at one specific commit**.
 - **`epic_eval/banks.json` says which commit.** Each entry is a named set of questions,
-  a *bank*: "`v2-150155-82` = epic-morph at commit `4014a10…`, these files, 82 questions".
+  a *bank*: "`v2-150155-82` = epic-morph at commit `c905841…`, these files, 82 questions".
 - **Every eval config names a bank** (`"questions": {"bank": "v2-150155-82"}`), and every
   run records exactly which commit it used.
 
