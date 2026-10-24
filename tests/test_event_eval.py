@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import unittest
 from dataclasses import replace
 
@@ -20,6 +21,7 @@ from morph_graph.event_eval.schema import (
     OracleEvent,
     answers_match,
     gemini_response_schema,
+    mcq_letter,
     normalize_answer,
 )
 from morph_graph.event_eval.select_pilot import select_records
@@ -89,6 +91,48 @@ class SchemaTests(unittest.TestCase):
         self.assertEqual(normalize_answer("A, B!"), "a b")
         self.assertTrue(answers_match("Yes.", "yes"))
         self.assertIsNone(answers_match(None, "yes"))
+
+    def test_mcq_answer_check_compares_letters(self) -> None:
+        options = "A. A stone wall B. A trash can C. A concrete bench D. A post"
+        right = replace(
+            _annotation(), options=options, predicted_answer="C. A concrete bench"
+        ).with_answer_check("A concrete bench on the left.", mcq_answer="C")
+        self.assertTrue(right.answer_match)
+        self.assertEqual(right.gt_answer, "A concrete bench on the left.")
+
+        wrong = replace(
+            _annotation(), options=options, predicted_answer="(B) trash can"
+        ).with_answer_check("A concrete bench on the left.", mcq_answer="C")
+        self.assertFalse(wrong.answer_match)
+        self.assertTrue(
+            any("answer_check_failed" in warning for warning in wrong.warnings)
+        )
+
+        # A free-text answer that starts with the article "A" is not option A,
+        # and an answer with no option letter counts as a mismatch.
+        unparsed = replace(
+            _annotation(), options=options, predicted_answer="A concrete bench"
+        ).with_answer_check("A concrete bench on the left.", mcq_answer="C")
+        self.assertFalse(unparsed.answer_match)
+        missing = replace(
+            _annotation(), options=options, predicted_answer=None
+        ).with_answer_check("A concrete bench on the left.", mcq_answer="C")
+        self.assertIsNone(missing.answer_match)
+        self.assertEqual(mcq_letter("D"), "D")
+        self.assertIsNone(mcq_letter("A fenced playground"))
+
+    def test_options_round_trip(self) -> None:
+        annotation = replace(_annotation(), options="A. x B. y")
+        restored = OracleAnnotation.from_dict(json.loads(json.dumps(annotation.to_dict())))
+        self.assertEqual(restored.options, "A. x B. y")
+
+    def test_reads_pilot_answer_field_as_predicted_answer(self) -> None:
+        raw = _annotation().to_dict()
+        raw.pop("predicted_answer")
+        raw["answer"] = "D. A wooden post"
+        self.assertEqual(
+            OracleAnnotation.from_dict(raw).predicted_answer, "D. A wooden post"
+        )
 
     def test_rejects_incorrrect_category_and_missing_role(self) -> None:
         event = _event(categories=("visible_object",), query_roles=())
@@ -176,14 +220,28 @@ class MetricTests(unittest.TestCase):
 class PromptTests(unittest.TestCase):
     def test_prompt_asks_for_event_sufficient_answer(self) -> None:
         prompt = build_prompt("How many beds were visible?", 60.0)
+        self.assertIn("visibility of a random object is not an event", prompt)
         self.assertIn("minimal set of meaningful video events", prompt)
         self.assertIn("predicted_answer", prompt)
         self.assertIn("derivable from the events you listed alone", prompt)
+        self.assertNotIn("Multiple-choice options:", prompt)
+        self.assertNotIn("option letter", prompt)
+
+    def test_prompt_includes_mcq_options(self) -> None:
+        prompt = build_prompt(
+            "What did I see?",
+            60.0,
+            options="A. A tree B. A dog C. A car D. A plane",
+        )
+        self.assertIn("Multiple-choice options:", prompt)
+        self.assertIn("A. A tree B. A dog C. A car D. A plane", prompt)
+        self.assertIn("option letter", prompt)
 
     def test_conditioned_schema_requires_predicted_answer(self) -> None:
         conditioned = gemini_response_schema("query_conditioned")
         self.assertIn("predicted_answer", conditioned["properties"])
         self.assertIn("predicted_answer", conditioned["required"])
+        self.assertNotIn("answer", conditioned["properties"])
         agnostic = gemini_response_schema("query_agnostic")
         self.assertNotIn("predicted_answer", agnostic["properties"])
 

@@ -43,6 +43,17 @@ def answers_match(predicted: str | None, gt: str | None) -> bool | None:
     return pred_norm == gt_norm
 
 
+def mcq_letter(text: str | None) -> str | None:
+    """Option letter of an MCQ answer: "C", "C.", "(C) bench" -> "C".
+
+    A bare word such as "A fenced playground" is not a letter answer.
+    """
+    if not text:
+        return None
+    found = re.match(r"\s*\(?([A-Za-z])(?:[.):]|\s*$)", text)
+    return found.group(1).upper() if found else None
+
+
 def predicted_answer_from_response(
     generated: dict[str, Any], *, annotation_mode: str
 ) -> str | None:
@@ -137,6 +148,7 @@ class OracleAnnotation:
     video_fps: float
     media_resolution: str | None
     generated_at: str
+    options: str | None = None
     warnings: tuple[str, ...] = ()
     raw_response: str | None = field(default=None, repr=False)
     schema_version: str = SCHEMA_VERSION
@@ -148,7 +160,8 @@ class OracleAnnotation:
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "OracleAnnotation":
-        predicted = raw.get("predicted_answer")
+        # Pilot oracles from Aug 2026 stored the model answer as "answer".
+        predicted = raw.get("predicted_answer") or raw.get("answer")
         gt = raw.get("gt_answer")
         match_raw = raw.get("answer_match")
         return cls(
@@ -167,6 +180,7 @@ class OracleAnnotation:
                 else None
             ),
             generated_at=str(raw["generated_at"]),
+            options=str(raw["options"]).strip() if raw.get("options") is not None else None,
             warnings=tuple(str(value) for value in raw.get("warnings", [])),
             raw_response=raw.get("raw_response"),
             schema_version=str(raw.get("schema_version", SCHEMA_VERSION)),
@@ -176,15 +190,30 @@ class OracleAnnotation:
             answer_match=None if match_raw is None else bool(match_raw),
         )
 
-    def with_answer_check(self, gt_answer: str | None) -> "OracleAnnotation":
-        """Attach GT answer and normalized match flag; warn on mismatch."""
+    def with_answer_check(
+        self, gt_answer: str | None, mcq_answer: str | None = None
+    ) -> "OracleAnnotation":
+        """Attach GT answer and match flag; warn on mismatch.
+
+        With MCQ options and a GT letter, compare option letters; otherwise
+        compare normalized free text.
+        """
         gt = None if gt_answer is None else str(gt_answer).strip() or None
-        match = answers_match(self.predicted_answer, gt)
+        gt_letter = mcq_letter(mcq_answer)
+        if self.options and gt_letter:
+            # A prediction that names no option letter counts as wrong.
+            match = (
+                None
+                if self.predicted_answer is None
+                else mcq_letter(self.predicted_answer) == gt_letter
+            )
+        else:
+            match = answers_match(self.predicted_answer, gt)
         warnings = list(self.warnings)
         if self.annotation_mode == "query_conditioned" and match is False:
             note = (
                 "answer_check_failed: predicted_answer does not match gt_answer "
-                "(normalized compare); oracle events may be incomplete or wrong"
+                "(MCQ letter or normalized compare); oracle events may be incomplete or wrong"
             )
             if note not in warnings:
                 warnings.append(note)

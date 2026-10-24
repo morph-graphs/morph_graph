@@ -42,14 +42,26 @@ class GeminiAnnotationError(RuntimeError):
         self.parsed_events = parsed_events
 
 
-def build_prompt(question: str, duration_sec: float) -> str:
+def build_prompt(
+    question: str,
+    duration_sec: float,
+    *,
+    options: str | None = None,
+) -> str:
     """Query-conditioned oracle prompt (upper bound for one question)."""
     categories = ", ".join(sorted(EVENT_CATEGORIES))
     roles = ", ".join(sorted(QUERY_ROLES))
+    options_block = f"\n\nMultiple-choice options:\n{options.strip()}" if options else ""
+    mcq_rule = (
+        "\nThe question has multiple-choice options: answer with the option letter\n"
+        "followed by its text (e.g. \"B. A red umbrella\").\n"
+        if options
+        else ""
+    )
     return f"""You are creating an upper-bound event oracle for video-question evaluation.
 
 Question:
-{question.strip()}
+{question.strip()}{options_block}
 
 Video duration: {duration_sec:.3f} seconds.
 
@@ -84,7 +96,7 @@ roles). Do not rely on video content outside those events. This is a sufficiency
 check on the oracle: if the events are incomplete, the answer will be wrong.
 If you cannot answer from the events alone, still give your best short answer
 and add a warning explaining what is missing.
-
+{mcq_rule}
 Allowed categories: {categories}
 Allowed query roles: {roles}
 
@@ -227,6 +239,7 @@ class GeminiOracleAnnotator:
         max_output_tokens: int = 32768,
         max_retries: int = 5,
         retry_delay_sec: float = 30.0,
+        thinking_level: str | None = None,
     ) -> None:
         if fps <= 0:
             raise ValueError("fps must be positive")
@@ -247,6 +260,7 @@ class GeminiOracleAnnotator:
         self.max_output_tokens = int(max_output_tokens)
         self.max_retries = int(max_retries)
         self.retry_delay_sec = float(retry_delay_sec)
+        self.thinking_level = thinking_level
         self._types = types
         self._errors = errors
         self._client = genai.Client(api_key=api_key)
@@ -271,6 +285,10 @@ class GeminiOracleAnnotator:
             # as additionalProperties into an invalid API payload.
             "response_json_schema": gemini_response_schema(annotation_mode),
         }
+        if self.thinking_level:
+            kwargs["thinking_config"] = self._types.ThinkingConfig(
+                thinking_level=self.thinking_level
+            )
         if cached_content_name:
             kwargs["cached_content"] = cached_content_name
         if self.media_resolution:
@@ -321,6 +339,7 @@ class GeminiOracleAnnotator:
         video_path: str,
         duration: float,
         query: str,
+        options: str | None = None,
         prompt_builder: Any,
         prompt_version: str,
         annotation_mode: str,
@@ -365,6 +384,7 @@ class GeminiOracleAnnotator:
                     video_fps=self.fps,
                     media_resolution=self.media_resolution,
                     generated_at=datetime.now(timezone.utc).isoformat(),
+                    options=options,
                     warnings=tuple(
                         str(value) for value in generated.get("warnings", [])
                     ),
@@ -397,13 +417,14 @@ class GeminiOracleAnnotator:
         sample_id: str,
         video_path: str | Path,
         question: str,
+        options: str | None = None,
         annotation_mode: str = "query_conditioned",
     ) -> OracleAnnotation:
         if annotation_mode == "query_conditioned":
             if not question.strip():
                 raise ValueError("query-conditioned annotation requires a question")
-            prompt_builder = lambda duration: build_prompt(question, duration)
-            prompt_version = PROMPT_VERSION_ORACLE
+            prompt_builder = lambda duration: build_prompt(question, duration, options=options)
+            prompt_version = PROMPT_VERSION_ORACLE + ("_mcq" if options else "")
             query = question
         elif annotation_mode == "query_agnostic":
             prompt_builder = build_agnostic_prompt
@@ -428,6 +449,7 @@ class GeminiOracleAnnotator:
                 video_path=str(path),
                 duration=duration,
                 query=query,
+                options=options,
                 prompt_builder=prompt_builder,
                 prompt_version=prompt_version,
                 annotation_mode=annotation_mode,
@@ -447,7 +469,7 @@ class GeminiOracleAnnotator:
     ) -> list[OracleAnnotation]:
         """
         Process multiple queries for a single video in parallel using Context Caching.
-        `queries` is a list of dicts with 'sample_id' and 'question' keys.
+        `queries` is a list of dicts with 'sample_id', 'question', and optional 'options' keys.
         """
         path = Path(video_path).resolve()
         duration = video_duration_sec(path)
@@ -462,10 +484,11 @@ class GeminiOracleAnnotator:
                     for idx, q_dict in enumerate(queries):
                         q_text = q_dict["question"]
                         sample_id = q_dict["sample_id"]
+                        q_opts = q_dict.get("options")
                         
                         if annotation_mode == "query_conditioned":
-                            prompt_builder = (lambda d, qt=q_text: build_prompt(qt, d))
-                            prompt_version = PROMPT_VERSION_ORACLE
+                            prompt_builder = (lambda d, qt=q_text, opt=q_opts: build_prompt(qt, d, options=opt))
+                            prompt_version = PROMPT_VERSION_ORACLE + ("_mcq" if options else "")
                             query = q_text
                         elif annotation_mode == "query_agnostic":
                             prompt_builder = build_agnostic_prompt
@@ -481,6 +504,7 @@ class GeminiOracleAnnotator:
                             video_path=str(path),
                             duration=duration,
                             query=query,
+                            options=q_opts,
                             prompt_builder=prompt_builder,
                             prompt_version=prompt_version,
                             annotation_mode=annotation_mode,

@@ -1,0 +1,336 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Event annotation viewer</title>
+<style>
+:root {
+  color-scheme: light;
+  --surface: #fcfcfb; --page: #f9f9f7;
+  --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --baseline: #c3c2b7;
+  --ring: rgba(11,11,11,0.10);
+  --s0: #2a78d6; --s1: #eb6834; --s2: #1baf7a; --s3: #eda100;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --surface: #1a1a19; --page: #0d0d0d;
+    --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --baseline: #383835;
+    --ring: rgba(255,255,255,0.10);
+    --s0: #3987e5; --s1: #d95926; --s2: #199e70; --s3: #c98500;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--page); color: var(--ink);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+main { max-width: 1100px; margin: 0 auto; padding: 20px 24px 60px; }
+h1 { font-size: 20px; margin: 8px 0 2px; }
+h2 { font-size: 15px; margin: 24px 0 8px; }
+a { color: inherit; }
+.sub { color: var(--ink-2); margin: 0 0 12px; }
+.card {
+  background: var(--surface); border: 1px solid var(--ring);
+  border-radius: 8px; padding: 16px; margin-top: 16px;
+}
+label { display: block; font-size: 12px; color: var(--ink-2); margin: 10px 0 3px; }
+input[type=text] {
+  width: 100%; padding: 6px 9px; border: 1px solid var(--baseline);
+  border-radius: 6px; background: var(--page); color: var(--ink); font: inherit;
+}
+.src-row { display: flex; gap: 8px; margin-bottom: 6px; }
+.src-row input:first-child { width: 130px; flex: none; }
+button {
+  padding: 6px 14px; border: 1px solid var(--baseline); border-radius: 6px;
+  background: var(--surface); color: var(--ink); font: inherit; cursor: pointer;
+}
+button:hover { background: var(--ring); }
+button.primary { background: var(--s0); border-color: var(--s0); color: #fff; }
+.status { font-size: 12px; margin-top: 8px; }
+.status .ok { color: var(--ink-2); }
+.status .err { color: #d03b3b; }
+video { width: 100%; max-height: 480px; border-radius: 6px; background: #000; display: block; }
+.legend { display: flex; gap: 18px; margin: 12px 0 4px; flex-wrap: wrap; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-2); }
+.swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.tl-axis { position: relative; height: 18px; border-bottom: 1px solid var(--baseline); }
+.tl-tick { position: absolute; top: 0; font-size: 11px; color: var(--muted); transform: translateX(-50%); }
+.track-label { font-size: 12px; color: var(--ink-2); margin: 10px 0 3px; }
+.lanes { position: relative; cursor: crosshair; }
+.seg {
+  position: absolute; height: 20px; border-radius: 4px;
+  cursor: pointer; opacity: 0.85;
+  border: 2px solid var(--surface);
+}
+.seg:hover { opacity: 1; }
+.seg.active { opacity: 1; box-shadow: 0 0 0 2px var(--ink); }
+.playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--ink); opacity: 0.7; pointer-events: none; }
+#detail { min-height: 64px; }
+#detail .meta { color: var(--ink-2); font-size: 12px; margin-bottom: 4px; }
+.tooltip {
+  position: fixed; z-index: 10; max-width: 340px; pointer-events: none;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--ring);
+  border-radius: 6px; padding: 8px 10px; font-size: 12px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.25); display: none;
+}
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; color: var(--muted); font-weight: 500; border-bottom: 1px solid var(--baseline); padding: 4px 8px; }
+td { border-bottom: 1px solid var(--grid); padding: 5px 8px; vertical-align: top; }
+td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+tr.evt { cursor: pointer; }
+tr.evt:hover { background: var(--ring); }
+tr.evt.active td:first-child { box-shadow: inset 3px 0 0 var(--ink); }
+.pill { display: inline-block; font-size: 11px; color: var(--ink-2); border: 1px solid var(--grid); border-radius: 8px; padding: 0 6px; margin: 0 3px 2px 0; }
+</style>
+</head>
+<body>
+<main id="app"></main>
+<div class="tooltip" id="tooltip"></div>
+<script>
+'use strict';
+
+// ---------- state ----------
+const DEFAULT_CONFIG = {
+  videoRoot: '/lustre/fsw/portfolios/nemotron/users/pulkitk/tracking/datasets/egolongqa',
+  sources: [
+    {label: 'GPT-5.6-sol', path: 'jsonls/gpt_agnostic_pilot.jsonl'},
+    {label: 'Gemini-3.5-flash', path: 'jsonls/eccn-gemini-3_5-flash_agnostic_pilot.jsonl'},
+  ],
+};
+let config = loadConfig();
+let loaded = [];   // [{label, path, count, byVideo: {video_id: row}}]
+let loadErrors = [];
+
+function loadConfig() {
+  try {
+    const raw = localStorage.getItem('event_viewer_config');
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+}
+function saveConfig() {
+  localStorage.setItem('event_viewer_config', JSON.stringify(config));
+}
+
+const app = document.getElementById('app');
+const tooltip = document.getElementById('tooltip');
+const esc = s => String(s).replace(/[&<>"']/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = s => { s = Math.max(0, s); const m = Math.floor(s / 60), r = s - m * 60;
+  return m + ':' + (r < 10 ? '0' : '') + r.toFixed(1); };
+
+// ---------- data loading ----------
+async function loadSources() {
+  loaded = []; loadErrors = [];
+  for (const src of config.sources) {
+    if (!src.path.trim()) continue;
+    try {
+      const resp = await fetch('/read?path=' + encodeURIComponent(src.path.trim()));
+      if (!resp.ok) throw new Error((await resp.json()).error || resp.statusText);
+      const text = await resp.text();
+      const byVideo = {};
+      let count = 0;
+      for (const line of text.split('\n')) {
+        if (!line.trim()) continue;
+        const row = JSON.parse(line);
+        byVideo[row.video_id] = row;
+        count += 1;
+      }
+      loaded.push({label: src.label || src.path, path: src.path, count, byVideo});
+    } catch (e) {
+      loadErrors.push({path: src.path, message: e.message});
+    }
+  }
+}
+
+// ---------- views ----------
+function render() {
+  const hash = new URLSearchParams(location.hash.slice(1));
+  const vid = hash.get('v');
+  if (vid && loaded.length) renderVideo(vid);
+  else renderIndex();
+}
+
+function configHTML() {
+  const rows = config.sources.map((s, i) => `
+    <div class="src-row">
+      <input type="text" placeholder="label" value="${esc(s.label)}"
+             onchange="config.sources[${i}].label=this.value">
+      <input type="text" placeholder="path/to/annotations.jsonl (relative to repo root or absolute)"
+             value="${esc(s.path)}" onchange="config.sources[${i}].path=this.value">
+      <button onclick="config.sources.splice(${i},1);saveConfig();rerender()">✕</button>
+    </div>`).join('');
+  const status = loaded.map(l =>
+    `<div class="ok">✓ ${esc(l.label)} — ${l.count} annotations (${esc(l.path)})</div>`).join('') +
+    loadErrors.map(e =>
+    `<div class="err">✗ ${esc(e.path)} — ${esc(e.message)}</div>`).join('');
+  return `<div class="card">
+    <label>Video root — directory that contains the annotations' relative video paths
+      (e.g. <code>egolongqa/val/&lt;id&gt;.mp4</code>)</label>
+    <input type="text" value="${esc(config.videoRoot)}"
+           onchange="config.videoRoot=this.value;saveConfig()">
+    <label>Annotation JSONL files (label + path)</label>
+    ${rows}
+    <div style="margin-top:8px;display:flex;gap:8px">
+      <button onclick="config.sources.push({label:'',path:''});saveConfig();rerender()">+ add file</button>
+      <button class="primary" onclick="reload()">Load</button>
+    </div>
+    <div class="status">${status}</div>
+  </div>`;
+}
+
+function renderIndex() {
+  const videoIds = [...new Set(loaded.flatMap(l => Object.keys(l.byVideo)))].sort();
+  let table = '';
+  if (videoIds.length) {
+    const header = loaded.map(l => `<th>${esc(l.label)}</th>`).join('');
+    const rows = videoIds.map(vid => {
+      const durRow = loaded.find(l => l.byVideo[vid]);
+      const dur = durRow ? durRow.byVideo[vid].video_duration_sec : 0;
+      const counts = loaded.map(l =>
+        `<td class="num">${l.byVideo[vid] ? l.byVideo[vid].events.length : '—'}</td>`).join('');
+      return `<tr class="evt" onclick="location.hash='v=${esc(vid)}'">
+        <td><a href="#v=${esc(vid)}">${esc(vid)}</a></td>
+        <td class="num">${dur.toFixed(0)}s</td>${counts}</tr>`;
+    }).join('');
+    table = `<div class="card"><table>
+      <tr><th>video</th><th>duration</th>${header}</tr>${rows}</table></div>`;
+  }
+  app.innerHTML = `
+    <h1>Event annotation viewer</h1>
+    <p class="sub">Point at annotation JSONLs and a video root, hit Load, then click a video
+    to compare the models' event segmentations.</p>
+    ${configHTML()}
+    ${table}`;
+}
+
+function packLanes(events) {
+  const laneEnds = [], lanes = [];
+  for (const ev of events) {
+    let placed = false;
+    for (let i = 0; i < laneEnds.length; i++) {
+      if (ev.start_sec >= laneEnds[i] - 1e-6) {
+        lanes.push(i); laneEnds[i] = ev.end_sec; placed = true; break;
+      }
+    }
+    if (!placed) { lanes.push(laneEnds.length); laneEnds.push(ev.end_sec); }
+  }
+  return lanes;
+}
+
+function renderVideo(vid) {
+  const models = loaded.filter(l => l.byVideo[vid]);
+  if (!models.length) { location.hash = ''; return; }
+  const first = models[0].byVideo[vid];
+  const duration = first.video_duration_sec;
+  const relPath = first.video_path;
+  const videoURL = '/video?root=' + encodeURIComponent(config.videoRoot) +
+                   '&rel=' + encodeURIComponent(relPath);
+
+  const legend = models.map((l, i) =>
+    `<span><span class="swatch" style="background:var(--s${i})"></span>${esc(l.label)}</span>`).join('');
+
+  const step = duration > 240 ? 60 : 30;
+  let ticks = '';
+  for (let t = 0; t <= duration; t += step) {
+    const pct = t / duration * 100;
+    ticks += `<span class="tl-tick" style="left:${pct.toFixed(2)}%">${Math.floor(t/60)}:${String(t%60).padStart(2,'0')}</span>`;
+  }
+
+  const laneH = 22, laneGap = 2;
+  const tracks = models.map((l, mi) => {
+    const events = l.byVideo[vid].events;
+    const lanes = packLanes(events);
+    const nLanes = Math.max(0, ...lanes) + 1;
+    const segs = events.map((ev, i) => {
+      const left = ev.start_sec / duration * 100;
+      const width = Math.max((ev.end_sec - ev.start_sec) / duration * 100, 0.15);
+      const top = lanes[i] * (laneH + laneGap);
+      return `<div class="seg" data-key="${mi}:${i}" style="background:var(--s${mi});left:${left.toFixed(3)}%;width:${width.toFixed(3)}%;top:${top}px"></div>`;
+    }).join('');
+    return `<div class="track-label">${esc(l.label)} (${events.length} events)</div>
+      <div class="lanes" style="height:${nLanes * (laneH + laneGap)}px">${segs}
+      <div class="playhead" style="left:0%"></div></div>`;
+  }).join('');
+
+  const tables = models.map((l, mi) => {
+    const rows = l.byVideo[vid].events.map((ev, i) => {
+      const cats = (ev.categories || []).map(c => `<span class="pill">${esc(c)}</span>`).join('');
+      return `<tr class="evt" data-key="${mi}:${i}">
+        <td class="num">${ev.start_sec.toFixed(1)}</td>
+        <td class="num">${ev.end_sec.toFixed(1)}</td>
+        <td>${esc(ev.description)} ${cats}</td></tr>`;
+    }).join('');
+    return `<h2>${esc(l.label)} events</h2><table>
+      <tr><th>start</th><th>end</th><th>description</th></tr>${rows}</table>`;
+  }).join('');
+
+  app.innerHTML = `
+    <p class="sub"><a href="#">&larr; all videos</a></p>
+    <h1>${esc(vid)}</h1>
+    <p class="sub">${duration.toFixed(0)}s · ${esc(relPath)}</p>
+    <div class="card">
+      <video id="vid" controls preload="metadata" src="${videoURL}"></video>
+      <div class="legend">${legend}</div>
+      <div class="tl-axis">${ticks}</div>
+      ${tracks}
+    </div>
+    <div class="card" id="detail"><span class="sub">Click a segment (or table row) to see its
+    description and jump the video there. Click empty track space to seek.</span></div>
+    ${tables}`;
+
+  const video = document.getElementById('vid');
+  const detail = document.getElementById('detail');
+  const eventsFor = key => {
+    const [mi, i] = key.split(':').map(Number);
+    return [models[mi], models[mi].byVideo[vid].events[i]];
+  };
+  const activate = (key, seek) => {
+    document.querySelectorAll('.seg.active, tr.evt.active')
+      .forEach(el => el.classList.remove('active'));
+    document.querySelectorAll(`[data-key="${key}"]`)
+      .forEach(el => el.classList.add('active'));
+    const [model, ev] = eventsFor(key);
+    detail.innerHTML = `<div class="meta">${esc(model.label)} · ${fmt(ev.start_sec)} – ${fmt(ev.end_sec)} · ${esc(ev.granularity || '')}</div>
+      <div>${esc(ev.description)}</div>
+      <div style="margin-top:6px">${(ev.categories || []).map(c => `<span class="pill">${esc(c)}</span>`).join('')}</div>`;
+    if (seek) { video.currentTime = ev.start_sec + 0.01; video.play(); }
+  };
+  document.querySelectorAll('.seg, tr.evt').forEach(el => {
+    el.addEventListener('click', () => activate(el.dataset.key, true));
+  });
+  document.querySelectorAll('.seg').forEach(el => {
+    const [, ev] = eventsFor(el.dataset.key);
+    el.addEventListener('mousemove', e => {
+      tooltip.style.display = 'block';
+      tooltip.innerHTML = `<b>${fmt(ev.start_sec)} – ${fmt(ev.end_sec)}</b><br>${esc(ev.description)}`;
+      tooltip.style.left = Math.min(e.clientX + 14, innerWidth - 360) + 'px';
+      tooltip.style.top = (e.clientY + 14) + 'px';
+    });
+    el.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+  });
+  video.addEventListener('timeupdate', () => {
+    const p = video.currentTime / duration * 100;
+    document.querySelectorAll('.playhead').forEach(el => { el.style.left = p + '%'; });
+  });
+  document.querySelectorAll('.lanes').forEach(el => {
+    el.addEventListener('click', e => {
+      if (e.target.classList.contains('seg')) return;
+      const r = el.getBoundingClientRect();
+      video.currentTime = (e.clientX - r.left) / r.width * duration;
+    });
+  });
+}
+
+// ---------- wiring ----------
+async function reload() { saveConfig(); await loadSources(); render(); }
+function rerender() { render(); }
+window.addEventListener('hashchange', render);
+reload();
+</script>
+</body>
+</html>
