@@ -1,0 +1,1021 @@
+<title>Gemini on EPIC-Morph</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+:root {
+  --ground: #f5f7fa;
+  --surface: #ffffff;
+  --ink: #141820;
+  --ink-2: #474f5e;
+  --muted: #737b8a;
+  --rule: #dde2ea;
+  --grid: #e9edf2;
+  --tint: #eef3fb;
+  --video: #2a78d6;
+  --text-only: #eb6834;
+  --flag-bg: #fdf1e3;
+  --flag-ink: #8a4a00;
+  --ok-bg: #e6f4ec;
+  --ok-ink: #1d6b3b;
+  --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --ground: #101318; --surface: #171b21; --ink: #eef1f5; --ink-2: #b9c0cc; --muted: #8b93a1;
+    --rule: #2b313b; --grid: #232830; --tint: #1b2433; --video: #3987e5; --text-only: #d95926;
+    --flag-bg: #3a2a14; --flag-ink: #f3c88f; --ok-bg: #16301f; --ok-ink: #8fd6a8;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ground: #101318; --surface: #171b21; --ink: #eef1f5; --ink-2: #b9c0cc; --muted: #8b93a1;
+  --rule: #2b313b; --grid: #232830; --tint: #1b2433; --video: #3987e5; --text-only: #d95926;
+  --flag-bg: #3a2a14; --flag-ink: #f3c88f; --ok-bg: #16301f; --ok-ink: #8fd6a8;
+}
+* { box-sizing: border-box; }
+body { background: var(--ground); color: var(--ink); font: 15px/1.6 var(--body); }
+.page { max-width: 1040px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 72px; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; letter-spacing: -0.01em; margin: 0; }
+h1 { font-size: clamp(30px, 5vw, 44px); line-height: 1.08; font-weight: 700; }
+h2 { font-size: 24px; line-height: 1.2; font-weight: 600; }
+h3 { font-size: 17px; font-weight: 600; }
+p { margin: 0; max-width: 68ch; }
+.eyebrow { font: 500 12px/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: 17px; color: var(--ink-2); max-width: 64ch; }
+header.top { display: grid; gap: 14px; padding-bottom: 28px; border-bottom: 1px solid var(--rule); }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font: 13px/1.5 var(--mono); color: var(--muted); }
+.meta b { color: var(--ink-2); font-weight: 500; }
+section { display: grid; gap: 16px; padding-block: 36px 8px; }
+section > header { display: grid; gap: 6px; }
+.figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+.fig { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 16px 18px; display: grid; gap: 4px; align-content: start; }
+.fig .num { font: 600 34px/1.05 var(--display); font-variant-numeric: tabular-nums; }
+.fig .num small { font-size: 16px; color: var(--muted); font-weight: 500; }
+.fig .lab { font-size: 13px; color: var(--ink-2); }
+.key { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.key li { display: grid; grid-template-columns: 22px 1fr; gap: 10px; align-items: start; }
+.key li::before { content: ""; width: 10px; height: 10px; margin-top: 7px; border-radius: 3px; background: var(--video); justify-self: center; }
+.key li.warn::before { background: var(--text-only); }
+.panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 18px; display: grid; gap: 12px; }
+.cap { font-size: 13px; color: var(--muted); max-width: 80ch; }
+.muted { color: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.sw { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+.sw.v { background: var(--video); } .sw.t { background: var(--text-only); }
+.sw.ci { width: 18px; height: 2px; border-radius: 1px; background: var(--video); }
+.chart { overflow-x: auto; }
+.chart svg { display: block; width: 100%; min-width: 560px; height: auto; }
+.chart text { fill: var(--ink-2); font: 12px var(--body); }
+.chart .val { font: 500 12px var(--mono); fill: var(--ink); }
+.chart .muted { fill: var(--muted); }
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font: 500 12px var(--mono); letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+td.n, th.n { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+tr.small td { color: var(--muted); }
+code, .mono { font-family: var(--mono); font-size: 0.92em; }
+.pill { display: inline-block; font: 500 11px/1.6 var(--mono); padding: 0 7px; border-radius: 999px; background: var(--flag-bg); color: var(--flag-ink); white-space: nowrap; }
+.pill.ok { background: var(--ok-bg); color: var(--ok-ink); }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.ex { display: grid; gap: 12px; }
+.case { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; display: grid; gap: 6px; }
+.case .q { font-weight: 500; }
+.case .row { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 14px; }
+.case .row span b { font-weight: 600; }
+.case blockquote { margin: 0; padding-left: 12px; border-left: 2px solid var(--rule); color: var(--ink-2); font-style: italic; font-size: 14px; }
+details { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 10px 14px; }
+details summary { cursor: pointer; font-weight: 500; color: var(--ink-2); }
+details[open] summary { margin-bottom: 10px; }
+.note { background: var(--tint); border-radius: 10px; padding: 14px 16px; display: grid; gap: 6px; font-size: 14px; }
+#tip { position: fixed; z-index: 10; pointer-events: none; background: var(--ink); color: var(--ground); font: 12px/1.45 var(--body); padding: 7px 9px; border-radius: 6px; max-width: 260px; box-shadow: 0 4px 14px rgba(0,0,0,.18); }
+.hit { cursor: default; }
+.hit:focus { outline: 2px solid var(--video); outline-offset: 2px; }
+footer { margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--rule); font-size: 13px; color: var(--muted); display: grid; gap: 6px; }
+@media (prefers-reduced-motion: no-preference) { .chart svg { transition: opacity .2s; } }
+</style>
+
+<div class="page">
+<header class="top">
+  <div class="eyebrow">EPIC-Morph · evaluation report · 23 Sep 2026</div>
+  <h1>How well does Gemini 3.8 Flash answer EPIC-Morph?</h1>
+  <p class="lede">Gemini 3.8 Flash on the first version of the EPIC-Morph question bank: 449 multiple-choice questions about 12 egocentric kitchen videos of one participant (HD-EPIC P09). It was run once with the video and once with no video, as a control. This report covers the questions as they stood before this week's fixes (epic-morph <code>04fb5d5</code>).</p>
+  <div class="meta">
+    <span><b>model</b> gemini-3.8-flash · thinking HIGH · media HIGH · 1 fps</span>
+    <span><b>code</b> morph_graph <code>a504811</code></span>
+    <span><b>questions</b> epic-morph <code>04fb5d5</code></span>
+    <span><b>runs</b> 7625435 (video) · 7625437 (text-only)</span>
+  </div>
+</header>
+
+<section>
+  <div class="figures" id="figs"></div>
+  <ul class="key">
+    <li><span><b>With the video, Gemini gets 75% of the non-yes/no questions right; without it, 42%.</b> The video adds about 33 points, and it helps in every one of the 12 videos.</span></li>
+    <li><span><b>Its clear weakness is counting.</b> On "how many X did I use?" it scores 50%, undercounting far more often than overcounting, and it gets worse as the true count grows.</span></li>
+    <li><span><b>Likely weaknesses:</b> tracking what is in a particular container at the moment the question is asked, and how long something has been on the hob. The errors lean the same way every time, but the samples are small.</span></li>
+    <li class="warn"><span><b>Several question types could be answered without the video,</b> because of how their options were written. Event-order questions were 100% correct with no video at all. We have since fixed the options; see <a href="#bank">Problems in the question bank</a>.</span></li>
+  </ul>
+</section>
+
+<section id="setup">
+  <header><div class="eyebrow">Setup</div><h2>What the model saw</h2></header>
+  <div class="two">
+    <div class="panel">
+      <h3>Questions</h3>
+      <p>449 questions of 22 templated types (<code>form</code>), each shown as 4 options. <b>222 are streaming questions:</b> the model sees the video only up to the moment the question is asked (<code>t_ask</code>), cut with ffmpeg and checked so that no frame comes from after <code>t_ask</code>. The other 227 see the whole recording. 129 questions have a yes/no answer.</p>
+    </div>
+    <div class="panel">
+      <h3>Two runs</h3>
+      <p><b>Video:</b> each video and clip is uploaded once, and its tokens are cached for all the questions that share it. The answer comes back as one letter. <b>Text-only control:</b> the same question and options, with no video and no narration, and the prompt says the video is unavailable. It measures how much can be answered from the question and options alone.</p>
+    </div>
+  </div>
+</section>
+
+<section id="headline">
+  <header><div class="eyebrow">Results</div><h2>Accuracy with and without the video</h2>
+  <p>Yes/no questions are reported separately. Their option layout gave the answer away (see <a href="#bank">below</a>), so the headline number is the 320 non-yes/no questions.</p></header>
+  <div class="panel">
+    <div class="legend"><span><i class="sw v"></i>with video</span><span><i class="sw t"></i>text-only (no video)</span><span><i class="sw ci"></i>95% interval, video run</span></div>
+    <div class="chart" id="c-splits"></div>
+    <p class="cap">Intervals are Wilson 95% intervals that treat questions as independent. Questions cluster within 12 videos and 22 types, so the true uncertainty is wider. Chance is 25% (4 options).</p>
+  </div>
+</section>
+
+<section id="forms">
+  <header><div class="eyebrow">By question type</div><h2>Accuracy for each of the 22 question types</h2>
+  <p>Sorted by accuracy with video. Types with fewer than 5 questions are greyed out. Only <code>count</code> has an interval entirely below the overall average. The tags mark types whose options gave the answer away; they are explained in <a href="#bank">Problems in the question bank</a>.</p></header>
+  <div class="panel">
+    <div class="legend"><span><i class="sw v"></i>with video</span><span><i class="sw t"></i>text-only</span><span><i class="sw ci"></i>95% interval</span></div>
+    <div class="chart" id="c-forms"></div>
+  </div>
+  <details><summary>Table view: all 22 question types</summary><div class="table-wrap" id="t-forms"></div></details>
+</section>
+
+<section id="videos">
+  <header><div class="eyebrow">By video</div><h2>The video helps in every recording</h2>
+  <p>Non-yes/no questions per video, longest recording first. Video beats text-only in all 12 videos, by 18 to 59 points (sign test p ≈ 0.0005).</p></header>
+  <div class="panel">
+    <div class="legend"><span><i class="sw t"></i>text-only</span><span><i class="sw v"></i>with video</span></div>
+    <div class="chart" id="c-videos"></div>
+  </div>
+</section>
+
+<section id="predictors">
+  <header><div class="eyebrow">What does not predict difficulty</div><h2>Reasoning hops and video length make little difference</h2>
+  <p>On non-yes/no questions, 3-hop questions are no harder than 1-hop ones, and the longest recordings score best. The bank's own <code>guessable</code> flag is the only field here that separates hard questions from easy ones.</p></header>
+  <div class="table-wrap" id="t-pred"></div>
+</section>
+
+<section id="weak">
+  <header><div class="eyebrow">Failure modes</div><h2>Where Gemini goes wrong</h2></header>
+
+  <div class="two">
+    <div class="panel">
+      <h3>1 · Counting distinct objects: 50%</h3>
+      <div class="chart" id="c-count"></div>
+      <p class="cap">Accuracy by the true count, across all 38 count questions. It undercounts in 15 cases and overcounts in 4. Bowls account for 8 of its 19 misses. These questions also draw the most thinking, about 29k tokens each.</p>
+    </div>
+    <div class="panel">
+      <h3>3 · How long has it been on the hob: 69%</h3>
+      <p>7 of its 8 wrong answers are <b>overestimates</b>, some by 30+ minutes ("about 4 minutes" answered as "about 41 minutes"). It seems to time the vessel from an earlier session on the hob, not the current one.</p>
+      <p class="cap">n = 26, all streaming. The interval (50–83%) overlaps the average, so this is likely rather than established.</p>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>2 · What is in a container at the moment the question is asked: 66–70%</h3>
+    <p>Four question types test this: <code>checklist</code> (67.9%, n=28), <code>streaming_last_added</code> (65.5%, n=29), <code>first_use_after_retrieval</code> (66.7%, n=12) and <code>what_else_in</code> (70.0%, n=10). Their errors lean the same way. <b>All 9 checklist errors include an ingredient that had not been added yet:</b> Gemini seems to fill in the recipe instead of stopping at the question time. On the other types it mixes up similar containers, or answers from what a container is normally used for.</p>
+    <div class="ex" id="cases"></div>
+    <div class="note"><b>Caveat: some of these "errors" may be mistakes in the bank's answers.</b> In the two checklist cases we checked frame by frame, the video supports Gemini. Salt goes into the smaller saucepan at 13:10–13:13 in P09-20240624-160737, and something red is spooned into the white bowl at 02:16–02:19 in P09-20240623-120359, but the bank's answers include neither. The answers come from narrations, which miss small actions like these, so the 26 container-state failures should be checked against the video before this area is scaled up.</div>
+  </div>
+
+  <div class="panel">
+    <h3>Composite (2-hop) questions, by the question they wrap</h3>
+    <div class="table-wrap" id="t-comp"></div>
+    <p class="cap">Describing the object indirectly ("the cup I used for the hibiscus drink") costs nothing on <code>put_away_at_end</code>: 86.7% against 87.7% when asked directly. The other composite groups are too small to judge.</p>
+  </div>
+</section>
+
+<section id="bank">
+  <header><div class="eyebrow">Question bank</div><h2>Problems in the question bank: answerable without the video</h2>
+  <p>The text-only run showed that four question types could be answered from how their options were written. Each problem below is measured with a simple rule that never looks at the video. The fixes are on the epic-morph branch <code>mcq-option-cues</code> (<code>a240b88</code>).</p></header>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Question type</th><th>Problem</th><th class="n">Rule accuracy, no video</th><th class="n">Chance</th><th>Fix</th><th class="n">Text-only after fix</th></tr></thead>
+    <tbody>
+      <tr><td>yes/no types (129)</td><td>The correct option was the only one with its verdict: one "yes" against two "no" (or the reverse), plus "insufficient information".</td><td class="n">100%</td><td class="n">25%</td><td>Options are now just "yes" and "no"</td><td class="n">58% <span class="muted">(chance 50%)</span></td></tr>
+      <tr><td><code>event_order</code> (11)</td><td>"Which did I do first: X, or Y?" offered only one of X and Y; the other three options were unrelated actions.</td><td class="n">100%</td><td class="n">25%</td><td>Options are the two named actions</td><td class="n">27% <span class="muted">(chance 50%)</span></td></tr>
+      <tr><td><code>checklist</code> (28)</td><td>The answer was the option in the middle of the others, the first k items of a list written in cooking order, and the only state consistent with the recipe.</td><td class="n">87–91%</td><td class="n">25%</td><td>List order randomised; the wrong options are the container's other real states</td><td class="n">46% <span class="muted">(chance 25%)</span></td></tr>
+      <tr><td><code>put_away_at_end</code> (95)</td><td>"Left out" is the answer in 72 of 95, and it is then the only "no" option and the shortest.</td><td class="n">72%</td><td class="n">25%</td><td><span class="pill">needs a decision</span></td><td class="n">—</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="cap">Three smaller types also show a milder pattern, not yet addressed: <code>streaming_placement</code> (the most common answer is right 57% of the time, n=14), <code>what_else_in</code> (the longest option is right 62% of the time, n=10) and <code>washed_after_step</code> (50%, n=6). The check that measures all of this is now part of the bank's audit script (<code>question_audit.py --bank</code>, check D12).</p>
+</section>
+
+<section id="caveats">
+  <header><div class="eyebrow">How far to trust these numbers</div><h2>Caveats</h2></header>
+  <ul class="key">
+    <li><span><b>One run, one participant, 12 videos.</b> Nothing measures run-to-run variation, and questions cluster by video and type. The gap between video and text-only holds video by video; the per-type differences mostly do not reach significance.</span></li>
+    <li><span><b>The text-only run is not a pure ablation.</b> Its prompt says the video is unavailable, and it gets no narration either. A control that gives the model the narration instead of the video would separate what it sees from what it reasons.</span></li>
+    <li><span><b>The same model family wrote the wrong options.</b> Gemini 3.8 Flash wrote them from the narrations; that could affect scores in either direction.</span></li>
+    <li><span><b>Some of the bank's answers are probably wrong</b> (see the container caveat above).</span></li>
+    <li><span><b>Independent check.</b> Gemini was asked to challenge these claims. It rated the headline gap "partially supported" and the list of weaknesses "not supported" on significance grounds; counting is the one weakness that clears it.</span></li>
+  </ul>
+</section>
+
+<section id="cost">
+  <header><div class="eyebrow">Cost and time</div><h2>About $59 and 47 minutes for both runs</h2></header>
+  <div class="table-wrap" id="t-cost"></div>
+  <p class="cap">Published paid-tier prices for <code>gemini-3.8-flash</code> until 31 Dec 2026: input $0.75, output including thinking $3.75, cached input $0.075 per million tokens, plus $0.50 per million tokens per hour for cache storage. Prices double from 1 Jan 2027. The heaviest single answer used 62,915 of the 65,536-token output cap on thinking, so no answer was cut off.</p>
+</section>
+
+<section id="next">
+  <header><div class="eyebrow">Next</div><h2>Next steps</h2></header>
+  <ul class="key">
+    <li><span><b>Merge the bank fixes</b> (<code>mcq-option-cues</code>) and re-run Gemini on the 168 changed questions (about $10–15).</span></li>
+    <li><span><b>Decide on <code>put_away_at_end</code>:</b> generate more "put away" questions, cap "left out" at half the type, or report it against its majority baseline.</span></li>
+    <li><span><b>Also ask checklist questions before the first addition and after the last,</b> so that "none" and "all" can be correct answers.</span></li>
+    <li><span><b>Scale the dataset toward the weak areas:</b> counting with 3 or more of the same object; container state where the recipe order misleads; duration questions with several on/off sessions. First check the container-state answers against the video.</span></li>
+    <li><span><b>Other models:</b> a Qwen backend is under way on the same pipeline, with one backend file per model.</span></li>
+  </ul>
+</section>
+
+<footer>
+  <div>Numbers come from the answer files of runs 7625435 and 7625437, with no manual entry. Pipeline: <code>morph_graph/epic_eval</code>; question fixes: <code>epic-morph/design/07_option_cues.md</code>.</div>
+</footer>
+</div>
+<div id="tip" hidden></div>
+
+<script>
+const DATA = {
+ "splits": [
+  {
+   "name": "All questions",
+   "n": 449,
+   "acc": 77.1,
+   "text": 46.8,
+   "lo": 73.0,
+   "hi": 80.7,
+   "majority": 43.4
+  },
+  {
+   "name": "Non-yes/no (headline)",
+   "n": 320,
+   "acc": 75.0,
+   "text": 41.6,
+   "lo": 70.0,
+   "hi": 79.4,
+   "majority": 38.7
+  },
+  {
+   "name": "Non-yes/no, streaming",
+   "n": 128,
+   "acc": 73.4,
+   "text": 43.8,
+   "lo": 65.2,
+   "hi": 80.3,
+   "majority": 20.3
+  },
+  {
+   "name": "Non-yes/no, full video",
+   "n": 192,
+   "acc": 76.0,
+   "text": 40.1,
+   "lo": 69.5,
+   "hi": 81.5,
+   "majority": 51.0
+  },
+  {
+   "name": "Yes/no",
+   "n": 129,
+   "acc": 82.2,
+   "text": 59.7,
+   "lo": 74.7,
+   "hi": 87.8,
+   "majority": 55.1
+  }
+ ],
+ "forms": [
+  {
+   "form": "count",
+   "n": 38,
+   "acc": 50.0,
+   "text": 31.6,
+   "lo": 34.8,
+   "hi": 65.2,
+   "majority": 44.7,
+   "streaming": "none",
+   "yesno": false,
+   "think": 28967
+  },
+  {
+   "form": "next_weighed",
+   "n": 2,
+   "acc": 50.0,
+   "text": 0.0,
+   "lo": 9.5,
+   "hi": 90.5,
+   "majority": 50.0,
+   "streaming": "none",
+   "yesno": false,
+   "think": 2498
+  },
+  {
+   "form": "streaming_last_added",
+   "n": 29,
+   "acc": 65.5,
+   "text": 24.1,
+   "lo": 47.3,
+   "hi": 80.1,
+   "majority": 10.3,
+   "streaming": "all",
+   "yesno": false,
+   "think": 6596
+  },
+  {
+   "form": "first_use_after_retrieval",
+   "n": 12,
+   "acc": 66.7,
+   "text": 25.0,
+   "lo": 39.1,
+   "hi": 86.2,
+   "majority": 16.7,
+   "streaming": "none",
+   "yesno": false,
+   "think": 5216
+  },
+  {
+   "form": "washed_after_step",
+   "n": 6,
+   "acc": 66.7,
+   "text": 50.0,
+   "lo": 30.0,
+   "hi": 90.3,
+   "majority": 33.3,
+   "streaming": "none",
+   "yesno": false,
+   "think": 31791
+  },
+  {
+   "form": "checklist",
+   "n": 28,
+   "acc": 67.9,
+   "text": 57.1,
+   "lo": 49.3,
+   "hi": 82.1,
+   "majority": 7.1,
+   "streaming": "all",
+   "yesno": false,
+   "think": 4914
+  },
+  {
+   "form": "hob_duration",
+   "n": 26,
+   "acc": 69.2,
+   "text": 26.9,
+   "lo": 50.0,
+   "hi": 83.5,
+   "majority": 26.9,
+   "streaming": "all",
+   "yesno": false,
+   "think": 8915
+  },
+  {
+   "form": "what_else_in",
+   "n": 10,
+   "acc": 70.0,
+   "text": 20.0,
+   "lo": 39.7,
+   "hi": 89.2,
+   "majority": 10.0,
+   "streaming": "none",
+   "yesno": false,
+   "think": 12639
+  },
+  {
+   "form": "concurrent_activity",
+   "n": 4,
+   "acc": 75.0,
+   "text": 25.0,
+   "lo": 30.1,
+   "hi": 95.4,
+   "majority": 25.0,
+   "streaming": "none",
+   "yesno": false,
+   "think": 1773
+  },
+  {
+   "form": "composite",
+   "n": 43,
+   "acc": 76.7,
+   "text": 58.1,
+   "lo": 62.3,
+   "hi": 86.8,
+   "majority": 58.1,
+   "streaming": "7/43",
+   "yesno": false,
+   "think": 9274
+  },
+  {
+   "form": "streaming_placement",
+   "n": 14,
+   "acc": 78.6,
+   "text": 35.7,
+   "lo": 52.4,
+   "hi": 92.4,
+   "majority": 50.0,
+   "streaming": "all",
+   "yesno": false,
+   "think": 7209
+  },
+  {
+   "form": "activity_order",
+   "n": 25,
+   "acc": 80.0,
+   "text": 64.0,
+   "lo": 60.9,
+   "hi": 91.1,
+   "majority": 52.0,
+   "streaming": "none",
+   "yesno": true,
+   "think": 3160
+  },
+  {
+   "form": "activity_duration",
+   "n": 10,
+   "acc": 80.0,
+   "text": 60.0,
+   "lo": 49.0,
+   "hi": 94.3,
+   "majority": 70.0,
+   "streaming": "none",
+   "yesno": true,
+   "think": 6269
+  },
+  {
+   "form": "ingredient_flow_after",
+   "n": 5,
+   "acc": 80.0,
+   "text": 60.0,
+   "lo": 37.6,
+   "hi": 96.4,
+   "majority": 20.0,
+   "streaming": "none",
+   "yesno": false,
+   "think": 17746
+  },
+  {
+   "form": "have_i_added",
+   "n": 84,
+   "acc": 82.1,
+   "text": 60.7,
+   "lo": 72.6,
+   "hi": 88.9,
+   "majority": 53.6,
+   "streaming": "all",
+   "yesno": true,
+   "think": 4057
+  },
+  {
+   "form": "put_away_at_end",
+   "n": 65,
+   "acc": 87.7,
+   "text": 35.4,
+   "lo": 77.5,
+   "hi": 93.6,
+   "majority": 72.3,
+   "streaming": "none",
+   "yesno": false,
+   "think": 6486
+  },
+  {
+   "form": "washed_before",
+   "n": 10,
+   "acc": 90.0,
+   "text": 40.0,
+   "lo": 59.6,
+   "hi": 98.2,
+   "majority": 60.0,
+   "streaming": "all",
+   "yesno": true,
+   "think": 2424
+  },
+  {
+   "form": "streaming_flow",
+   "n": 13,
+   "acc": 92.3,
+   "text": 46.2,
+   "lo": 66.7,
+   "hi": 98.6,
+   "majority": 15.4,
+   "streaming": "all",
+   "yesno": false,
+   "think": 14826
+  },
+  {
+   "form": "same_unit",
+   "n": 11,
+   "acc": 100.0,
+   "text": 63.6,
+   "lo": 74.1,
+   "hi": 100.0,
+   "majority": 27.3,
+   "streaming": "none",
+   "yesno": false,
+   "think": 2897
+  },
+  {
+   "form": "event_order",
+   "n": 11,
+   "acc": 100.0,
+   "text": 100.0,
+   "lo": 74.1,
+   "hi": 100.0,
+   "majority": 9.1,
+   "streaming": "all",
+   "yesno": false,
+   "think": 5702
+  },
+  {
+   "form": "made_item_count",
+   "n": 2,
+   "acc": 100.0,
+   "text": 100.0,
+   "lo": 34.2,
+   "hi": 100.0,
+   "majority": 50.0,
+   "streaming": "none",
+   "yesno": false,
+   "think": 5878
+  },
+  {
+   "form": "contents_when_stored",
+   "n": 1,
+   "acc": 100.0,
+   "text": 0.0,
+   "lo": 20.7,
+   "hi": 100.0,
+   "majority": 100.0,
+   "streaming": "none",
+   "yesno": false,
+   "think": 20194
+  }
+ ],
+ "videos": [
+  {
+   "name": "P09-20240623-120359",
+   "minutes": 60.7,
+   "n": 62,
+   "acc": 80.6,
+   "text": 38.7,
+   "lo": 69.1,
+   "hi": 88.6,
+   "majority": 38.5
+  },
+  {
+   "name": "P09-20240621-093545",
+   "minutes": 49.3,
+   "n": 42,
+   "acc": 61.9,
+   "text": 33.3,
+   "lo": 46.8,
+   "hi": 75.0,
+   "majority": 34.6
+  },
+  {
+   "name": "P09-20240622-150155",
+   "minutes": 41.6,
+   "n": 55,
+   "acc": 72.7,
+   "text": 43.6,
+   "lo": 59.8,
+   "hi": 82.7,
+   "majority": 30.6
+  },
+  {
+   "name": "P09-20240624-160737",
+   "minutes": 35.9,
+   "n": 43,
+   "acc": 74.4,
+   "text": 44.2,
+   "lo": 59.8,
+   "hi": 85.1,
+   "majority": 35.9
+  },
+  {
+   "name": "P09-20240624-165332",
+   "minutes": 23.7,
+   "n": 24,
+   "acc": 87.5,
+   "text": 58.3,
+   "lo": 69.0,
+   "hi": 95.7,
+   "majority": 42.0
+  },
+  {
+   "name": "P09-20240622-154652",
+   "minutes": 17.8,
+   "n": 19,
+   "acc": 78.9,
+   "text": 47.4,
+   "lo": 56.7,
+   "hi": 91.5,
+   "majority": 53.1
+  },
+  {
+   "name": "P09-20240622-162302",
+   "minutes": 17.6,
+   "n": 31,
+   "acc": 71.0,
+   "text": 41.9,
+   "lo": 53.4,
+   "hi": 83.9,
+   "majority": 35.8
+  },
+  {
+   "name": "P09-20240621-153208",
+   "minutes": 17.0,
+   "n": 22,
+   "acc": 72.7,
+   "text": 13.6,
+   "lo": 51.8,
+   "hi": 86.8,
+   "majority": 42.8
+  },
+  {
+   "name": "P09-20240622-194642",
+   "minutes": 6.3,
+   "n": 11,
+   "acc": 90.9,
+   "text": 72.7,
+   "lo": 62.3,
+   "hi": 98.4,
+   "majority": 50.8
+  },
+  {
+   "name": "P09-20240623-153748",
+   "minutes": 5.0,
+   "n": 4,
+   "acc": 75.0,
+   "text": 50.0,
+   "lo": 30.1,
+   "hi": 95.4,
+   "majority": 65.4
+  },
+  {
+   "name": "P09-20240623-153253",
+   "minutes": 4.2,
+   "n": 5,
+   "acc": 60.0,
+   "text": 40.0,
+   "lo": 23.1,
+   "hi": 88.2,
+   "majority": 61.3
+  },
+  {
+   "name": "P09-20240623-154547",
+   "minutes": 0.6,
+   "n": 2,
+   "acc": 100.0,
+   "text": 50.0,
+   "lo": 34.2,
+   "hi": 100.0,
+   "majority": 65.2
+  }
+ ],
+ "count_by_truth": [
+  {
+   "truth": 2,
+   "correct": 11,
+   "n": 17
+  },
+  {
+   "truth": 3,
+   "correct": 5,
+   "n": 10
+  },
+  {
+   "truth": 4,
+   "correct": 2,
+   "n": 5
+  },
+  {
+   "truth": 5,
+   "correct": 1,
+   "n": 6
+  }
+ ],
+ "count_error": {
+  "-2": 3,
+  "-1": 12,
+  "0": 19,
+  "1": 4
+ },
+ "hops": [
+  {
+   "name": "1 hop",
+   "n": 164,
+   "acc": 73.8,
+   "text": 32.3,
+   "lo": 66.6,
+   "hi": 79.9,
+   "majority": 49.3
+  },
+  {
+   "name": "2 hops",
+   "n": 142,
+   "acc": 76.1,
+   "text": 50.0,
+   "lo": 68.4,
+   "hi": 82.3,
+   "majority": 29.2
+  },
+  {
+   "name": "3 hops",
+   "n": 14,
+   "acc": 78.6,
+   "text": 64.3,
+   "lo": 52.4,
+   "hi": 92.4,
+   "majority": 11.5
+  }
+ ],
+ "length": [
+  {
+   "name": "under 10 min",
+   "n": 34,
+   "acc": 76.5,
+   "text": 47.1,
+   "lo": 60.0,
+   "hi": 87.6,
+   "majority": 45.6
+  },
+  {
+   "name": "10\u201320 min",
+   "n": 90,
+   "acc": 73.3,
+   "text": 33.3,
+   "lo": 63.4,
+   "hi": 81.4,
+   "majority": 37.1
+  },
+  {
+   "name": "20\u201340 min",
+   "n": 85,
+   "acc": 70.6,
+   "text": 50.6,
+   "lo": 60.2,
+   "hi": 79.2,
+   "majority": 34.0
+  },
+  {
+   "name": "40+ min",
+   "n": 111,
+   "acc": 79.3,
+   "text": 39.6,
+   "lo": 70.8,
+   "hi": 85.8,
+   "majority": 41.6
+  }
+ ],
+ "guessable": [
+  {
+   "name": "guessable = False",
+   "n": 198,
+   "acc": 70.2,
+   "text": 40.4,
+   "lo": 63.5,
+   "hi": 76.1,
+   "majority": 22.7
+  },
+  {
+   "name": "guessable = True",
+   "n": 122,
+   "acc": 82.8,
+   "text": 43.4,
+   "lo": 75.1,
+   "hi": 88.5,
+   "majority": 64.7
+  }
+ ],
+ "composite": [
+  {
+   "name": "put_away_at_end",
+   "n": 30,
+   "acc": 86.7,
+   "text": 60.0,
+   "lo": 70.3,
+   "hi": 94.7,
+   "majority": 58.1
+  },
+  {
+   "name": "streaming_placement",
+   "n": 7,
+   "acc": 57.1,
+   "text": 57.1,
+   "lo": 25.0,
+   "hi": 84.2,
+   "majority": 58.1
+  },
+  {
+   "name": "washed_after_step",
+   "n": 5,
+   "acc": 60.0,
+   "text": 60.0,
+   "lo": 23.1,
+   "hi": 88.2,
+   "majority": 58.1
+  },
+  {
+   "name": "contents_when_stored",
+   "n": 1,
+   "acc": 0.0,
+   "text": 0.0,
+   "lo": 0.0,
+   "hi": 79.3,
+   "majority": 58.1
+  }
+ ],
+ "put_away": {
+  "n": 95,
+  "left_out": 72
+ },
+ "meta": {
+  "n": 449,
+  "videos": 12,
+  "streaming": 222,
+  "binary": 129,
+  "video_hours": 4.7,
+  "think_M": 3.89,
+  "prompt_M": 202.0,
+  "cached_M": 198.7,
+  "max_think": 62915,
+  "lat_median": 63.47
+ }
+};
+const CASES = [
+  {form: "checklist", q: "Of the chicken, water, salt and oil: which have I already put in the red saucepan? (asked at 14:19)", truth: "chicken, water, salt", pred: "chicken, water, salt, oil", why: "“I can definitively say I put chicken, water, salt, and oil in the red saucepan at some point.”", note: "It answers for the whole video, not the moment the question is asked."},
+  {form: "streaming_last_added", q: "What was the last thing I added to the small white bowl?", truth: "sliced courgette", pred: "coconut milk", why: "“this does not appear to be the same small white bowl as the bowl used for … coconut milk”, and then it picks coconut milk anyway.", note: "It mixes up two similar containers."},
+  {form: "streaming_last_added", q: "What was the last thing I added to the patterned green bowl?", truth: "egg", pred: "potato chicken ball", why: "“the final addition is the potato chicken ball … considering the structure of the coating process”", note: "It answers from the recipe step, not from what went into the bowl."},
+  {form: "first_use_after_retrieval", q: "After I took the beaker out of the left cupboard above the stove, what did I first put in it?", truth: "water", pred: "hibiscus drink", why: "“In the context of cooking and transfer, the first thing ‘put in it’ has to be the hibiscus drink.”", note: "It answers from what the beaker is for, not from what it saw."}
+];
+const BANKFLAG = {event_order: "answer named in question", checklist: "middle option", put_away_at_end: "76% “left out”", have_i_added: "lone verdict", activity_order: "lone verdict", activity_duration: "lone verdict", washed_before: "lone verdict", composite: "via put_away"};
+
+const tip = document.getElementById("tip");
+function showTip(e, html) {
+  tip.innerHTML = html; tip.hidden = false;
+  const r = tip.getBoundingClientRect();
+  let x = (e.clientX ?? 0) + 14, y = (e.clientY ?? 0) + 14;
+  if (x + r.width > innerWidth - 8) x = (e.clientX ?? 0) - r.width - 14;
+  if (y + r.height > innerHeight - 8) y = (e.clientY ?? 0) - r.height - 14;
+  tip.style.left = x + "px"; tip.style.top = y + "px";
+}
+function hideTip() { tip.hidden = true; }
+function bindTips(root) {
+  root.querySelectorAll("[data-tip]").forEach(el => {
+    el.addEventListener("mousemove", e => showTip(e, el.dataset.tip));
+    el.addEventListener("mouseleave", hideTip);
+    el.addEventListener("focus", () => { const b = el.getBoundingClientRect(); showTip({clientX: b.right, clientY: b.top}, el.dataset.tip); });
+    el.addEventListener("blur", hideTip);
+  });
+}
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+const pct = v => v == null ? "–" : (Math.round(v * 10) / 10).toFixed(1) + "%";
+
+/* horizontal rows on a 0–100 axis: dot (text-only) + dot with CI whisker (video) */
+function dotRows(el, rows, opts) {
+  const W = 900, L = opts.left, R = 64, rowH = opts.rowH || 30, top = 26, H = top + rows.length * rowH + 14;
+  const x = v => L + (W - L - R) * v / 100;
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(opts.label)}">`;
+  for (const t of [0, 25, 50, 75, 100]) {
+    s += `<line x1="${x(t)}" x2="${x(t)}" y1="${top - 8}" y2="${H - 10}" stroke="var(--grid)" stroke-width="1"/>`;
+    s += `<text x="${x(t)}" y="${top - 12}" text-anchor="middle" class="muted">${t}%</text>`;
+  }
+  s += `<text x="${x(25) + 4}" y="${H - 14}" class="muted" font-size="11">chance</text>`;
+  rows.forEach((r, i) => {
+    const y = top + i * rowH + rowH / 2, small = r.n < 5;
+    s += `<text x="${L - 12}" y="${y + 4}" text-anchor="end" ${small ? 'class="muted"' : ""}>${esc(r.label)}</text>`;
+    if (r.flag) s += `<text x="${L - 12}" y="${y + 16}" text-anchor="end" font-size="10.5" fill="var(--flag-ink)">${esc(r.flag)}</text>`;
+    if (r.lo != null) s += `<line x1="${x(r.lo)}" x2="${x(r.hi)}" y1="${y}" y2="${y}" stroke="var(--video)" stroke-width="2" stroke-linecap="round" opacity="${small ? .45 : .9}"/>`;
+    const tipTxt = `<b>${esc(r.name)}</b><br>n = ${r.n}<br>with video ${pct(r.acc)}${r.lo != null ? ` (95% CI ${r.lo}–${r.hi})` : ""}<br>text-only ${pct(r.text)}${r.extra ? "<br>" + r.extra : ""}`;
+    s += `<g class="hit" tabindex="0" data-tip="${esc(tipTxt)}"><rect x="${L - 4}" y="${y - rowH / 2}" width="${W - L - R + 8}" height="${rowH}" fill="transparent"/>`;
+    s += `<circle cx="${x(r.text)}" cy="${y}" r="5" fill="var(--text-only)" stroke="var(--surface)" stroke-width="2" opacity="${small ? .5 : 1}"/>`;
+    s += `<circle cx="${x(r.acc)}" cy="${y}" r="6" fill="var(--video)" stroke="var(--surface)" stroke-width="2" opacity="${small ? .5 : 1}"/></g>`;
+    s += `<text x="${W - R + 10}" y="${y + 4}" class="val">${pct(r.acc)}</text>`;
+  });
+  s += `</svg>`;
+  el.innerHTML = s; bindTips(el);
+}
+
+/* headline splits: paired bars */
+(function splits() {
+  const el = document.getElementById("c-splits"), rows = DATA.splits;
+  const W = 900, L = 200, R = 70, band = 52, top = 24, H = top + rows.length * band + 18;
+  const x = v => L + (W - L - R) * v / 100;
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Accuracy with and without video by split">`;
+  for (const t of [0, 25, 50, 75, 100]) {
+    s += `<line x1="${x(t)}" x2="${x(t)}" y1="${top - 6}" y2="${H - 12}" stroke="var(--grid)" stroke-width="1"/>`;
+    s += `<text x="${x(t)}" y="${top - 10}" text-anchor="middle" class="muted">${t}%</text>`;
+  }
+  rows.forEach((r, i) => {
+    const y0 = top + i * band + 8, bh = 14;
+    const bar = (v, yy, col) => `<path d="M${x(0)},${yy} H${x(v) - 4} a4,4 0 0 1 4,4 V${yy + bh - 4} a4,4 0 0 1 -4,4 H${x(0)} Z" fill="${col}"/>`;
+    s += `<text x="${L - 12}" y="${y0 + 18}" text-anchor="end" ${i === 1 ? 'font-weight="600" fill="var(--ink)"' : ""}>${esc(r.name)}</text>`;
+    s += `<text x="${L - 12}" y="${y0 + 32}" text-anchor="end" class="muted" font-size="11">n = ${r.n}</text>`;
+    const t = `<b>${esc(r.name)}</b><br>n = ${r.n}<br>with video ${pct(r.acc)} (95% CI ${r.lo}–${r.hi})<br>text-only ${pct(r.text)}<br>bank majority baseline ${pct(r.majority)}`;
+    s += `<g class="hit" tabindex="0" data-tip="${esc(t)}"><rect x="${L}" y="${y0 - 3}" width="${W - L - R}" height="${2 * bh + 8}" fill="transparent"/>`;
+    s += bar(r.acc, y0, "var(--video)") + bar(r.text, y0 + bh + 2, "var(--text-only)");
+    s += `<line x1="${x(r.lo)}" x2="${x(r.hi)}" y1="${y0 + bh / 2}" y2="${y0 + bh / 2}" stroke="var(--ink)" stroke-width="1.5" opacity=".55"/></g>`;
+    s += `<text x="${x(r.acc) + 8}" y="${y0 + 11}" class="val">${pct(r.acc)}</text>`;
+    s += `<text x="${x(r.text) + 8}" y="${y0 + bh + 13}" class="val" fill="var(--ink-2)">${pct(r.text)}</text>`;
+  });
+  s += `<line x1="${x(25)}" x2="${x(25)}" y1="${top - 6}" y2="${H - 12}" stroke="var(--muted)" stroke-width="1" opacity=".7"/>`;
+  s += `<text x="${x(25) + 4}" y="${H - 4}" class="muted" font-size="11">chance</text></svg>`;
+  el.innerHTML = s; bindTips(el);
+})();
+
+/* per form */
+(function forms() {
+  const rows = [...DATA.forms].sort((a, b) => a.acc - b.acc || b.n - a.n).map(r => ({
+    ...r, name: r.form, label: `${r.form}  (${r.n})`, flag: BANKFLAG[r.form],
+    extra: `${r.yesno ? "yes/no · " : ""}streaming: ${r.streaming} · mean thinking ${(r.think / 1000).toFixed(1)}k tokens`
+  }));
+  dotRows(document.getElementById("c-forms"), rows, {left: 250, rowH: 30, label: "Accuracy per question type"});
+  let t = `<table><thead><tr><th>Question type</th><th class="n">n</th><th class="n">With video</th><th class="n">95% CI</th><th class="n">Text-only</th><th class="n">Gain</th><th>Streaming</th><th class="n">Thinking / q</th></tr></thead><tbody>`;
+  for (const r of rows) t += `<tr class="${r.n < 5 ? "small" : ""}"><td><code>${esc(r.form)}</code>${r.yesno ? ' <span class="pill ok">yes/no</span>' : ""}${r.flag ? ` <span class="pill">${esc(r.flag)}</span>` : ""}</td><td class="n">${r.n}</td><td class="n">${pct(r.acc)}</td><td class="n">${r.lo}–${r.hi}</td><td class="n">${pct(r.text)}</td><td class="n">${(r.acc - r.text >= 0 ? "+" : "") + (r.acc - r.text).toFixed(1)}</td><td>${r.streaming}</td><td class="n">${(r.think / 1000).toFixed(1)}k</td></tr>`;
+  document.getElementById("t-forms").innerHTML = t + "</tbody></table>";
+})();
+
+/* per video: dumbbells */
+(function videos() {
+  const rows = DATA.videos.map(r => ({...r, name: r.name, label: `${r.name.replace("P09-", "")} · ${r.minutes} min`, extra: `${r.minutes} min recording · non-yes/no questions`}));
+  const el = document.getElementById("c-videos");
+  dotRows(el, rows, {left: 210, rowH: 28, label: "Accuracy per video"});
+  /* connect text-only to video with a thin line, drawn under the dots */
+  const svg = el.querySelector("svg"), W = 900, L = 210, R = 64, top = 26, rowH = 28, x = v => L + (W - L - R) * v / 100;
+  rows.forEach((r, i) => {
+    const y = top + i * rowH + rowH / 2, ln = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    ln.setAttribute("x1", x(r.text)); ln.setAttribute("x2", x(r.acc)); ln.setAttribute("y1", y); ln.setAttribute("y2", y);
+    ln.setAttribute("stroke", "var(--rule)"); ln.setAttribute("stroke-width", "3"); ln.setAttribute("stroke-linecap", "round");
+    svg.insertBefore(ln, svg.querySelector("g.hit"));
+  });
+  svg.querySelectorAll('line[stroke="var(--video)"]').forEach(l => l.remove()); /* per-video CIs clutter the dumbbell */
+})();
+
+/* count by true count */
+(function count() {
+  const rows = DATA.count_by_truth, el = document.getElementById("c-count");
+  const W = 420, H = 220, L = 40, B = 180, T = 22, bw = 24, x = i => L + 30 + i * ((W - L - 40) / rows.length), y = v => B - (B - T) * v / 100;
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Count accuracy by true count">`;
+  for (const t of [0, 50, 100]) s += `<line x1="${L}" x2="${W - 10}" y1="${y(t)}" y2="${y(t)}" stroke="var(--grid)"/><text x="${L - 6}" y="${y(t) + 4}" text-anchor="end" class="muted">${t}%</text>`;
+  rows.forEach((r, i) => {
+    const v = 100 * r.correct / r.n, cx = x(i) + 20, yt = y(v);
+    s += `<g class="hit" tabindex="0" data-tip="${esc(`<b>true count ${r.truth}</b><br>${r.correct} of ${r.n} correct (${pct(v)})`)}"><rect x="${cx - 26}" y="${T}" width="52" height="${B - T}" fill="transparent"/>`;
+    s += `<path d="M${cx - bw / 2},${B} V${yt + 4} a4,4 0 0 1 4,-4 H${cx + bw / 2 - 4} a4,4 0 0 1 4,4 V${B} Z" fill="var(--video)"/></g>`;
+    s += `<text x="${cx}" y="${yt - 6}" text-anchor="middle" class="val">${Math.round(v)}%</text>`;
+    s += `<text x="${cx}" y="${B + 16}" text-anchor="middle">${r.truth}</text><text x="${cx}" y="${B + 30}" text-anchor="middle" class="muted" font-size="11">n=${r.n}</text>`;
+  });
+  s += `<text x="${W / 2 + 10}" y="${H - 2}" text-anchor="middle" class="muted" font-size="11">true number of objects</text></svg>`;
+  el.innerHTML = s; el.querySelector("svg").style.minWidth = "300px"; bindTips(el);
+})();
+
+/* tables */
+(function tables() {
+  const row = (r, lab) => `<tr><td>${esc(lab ?? r.name)}</td><td class="n">${r.n}</td><td class="n">${pct(r.acc)}</td><td class="n">${r.lo}–${r.hi}</td><td class="n">${pct(r.text)}</td></tr>`;
+  const head = `<table><thead><tr><th>Group (non-yes/no)</th><th class="n">n</th><th class="n">With video</th><th class="n">95% CI</th><th class="n">Text-only</th></tr></thead><tbody>`;
+  document.getElementById("t-pred").innerHTML = head
+    + DATA.hops.map(r => row(r, "Reasoning hops: " + r.name)).join("")
+    + DATA.length.map(r => row(r, "Video watched: " + r.name)).join("")
+    + DATA.guessable.map(r => row(r, "Bank flag " + r.name)).join("") + "</tbody></table>";
+  document.getElementById("t-comp").innerHTML = `<table><thead><tr><th>Wrapped question type</th><th class="n">n</th><th class="n">With video</th><th class="n">95% CI</th><th class="n">Text-only</th></tr></thead><tbody>`
+    + DATA.composite.map(r => row(r)).join("") + "</tbody></table>";
+  const m = DATA.meta;
+  document.getElementById("t-cost").innerHTML = `<table><thead><tr><th>Run</th><th class="n">Questions</th><th class="n">Prompt tokens</th><th class="n">Of which cached</th><th class="n">Thinking tokens</th><th class="n">Cost</th><th class="n">Wall time</th></tr></thead><tbody>
+    <tr><td>With video (HIGH media resolution)</td><td class="n">449/449</td><td class="n">${m.prompt_M}M</td><td class="n">${m.cached_M}M</td><td class="n">${m.think_M}M</td><td class="n">≈ $52</td><td class="n" rowspan="2">47 min</td></tr>
+    <tr><td>Text-only control</td><td class="n">449/449</td><td class="n">0.1M</td><td class="n">–</td><td class="n">1.76M</td><td class="n">≈ $7</td></tr></tbody></table>`;
+})();
+
+/* headline figures */
+(function figs() {
+  const nb = DATA.splits[1], all = DATA.splits[0];
+  const f = [
+    [pct(nb.acc), "Non-yes/no accuracy with the video (320 questions)"],
+    [pct(nb.text), "The same questions with no video (text-only control)"],
+    ["+" + (nb.acc - nb.text).toFixed(1) + "<small> pts</small>", "Gain from the video; higher in all 12 recordings"],
+    [pct(all.acc), `All ${DATA.meta.n} questions, including yes/no (text-only ${pct(all.text)})`]
+  ];
+  document.getElementById("figs").innerHTML = f.map(([n, l]) => `<div class="fig"><div class="num">${n}</div><div class="lab">${l}</div></div>`).join("");
+})();
+
+/* failure cases */
+document.getElementById("cases").innerHTML = CASES.map(c => `<div class="case"><div><code>${esc(c.form)}</code></div><div class="q">${esc(c.q)}</div>
+  <div class="row"><span><b>Correct:</b> ${esc(c.truth)}</span><span><b>Gemini:</b> ${esc(c.pred)}</span></div>
+  <blockquote>${esc(c.why)}</blockquote><div class="cap">${esc(c.note)}</div></div>`).join("");
+</script>
