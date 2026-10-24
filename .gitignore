@@ -229,3 +229,6 @@ model_zoo
 
 # Apptainer images
 *.sif
+
+# EgoLongQA split question files (regenerate with scripts/split_compound_questions.py)
+wearable_ai_2026_egolongqa_val_split*.jsonl
