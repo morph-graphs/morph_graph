@@ -56,6 +56,7 @@
 
   const el = {
     oracleDir: document.getElementById("oracle-dir"),
+    oracleDirSelect: document.getElementById("oracle-dir-select"),
     agnosticDir: document.getElementById("agnostic-dir"),
     tsmDir: document.getElementById("tsm-dir"),
     eventGraphDir: document.getElementById("event-graph-dir"),
@@ -176,11 +177,46 @@
       questions_jsonl: el.questionsJsonl.value.trim(),
       verification_dir: el.verificationDir.value.trim(),
     };
+    syncDirectorySelects();
+  }
+
+  function syncDirectorySelect(select, input) {
+    const current = input.value.trim();
+    const match = [...select.options].find(
+      (option) =>
+        option.value &&
+        (current === option.value || current.endsWith(`/${option.value}`)),
+    );
+    select.value = match ? match.value : "";
+  }
+
+  function syncDirectorySelects() {
+    syncDirectorySelect(el.oracleDirSelect, el.oracleDir);
+    syncDirectorySelect(el.agnosticDirSelect, el.agnosticDir);
+  }
+
+  function writeDirectoryOptions(options) {
+    const populate = (target, paths) => {
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = "Choose a discovered directory…";
+      const entries = (paths || []).map((path) => {
+        const option = document.createElement("option");
+        option.value = path;
+        option.textContent = path;
+        return option;
+      });
+      target.replaceChildren(placeholder, ...entries);
+    };
+    populate(el.oracleDirSelect, options.oracle_dirs);
+    populate(el.agnosticDirSelect, options.agnostic_dirs);
+    syncDirectorySelects();
   }
 
   async function loadDefaults() {
     const data = await fetchJSON("/api/defaults");
     writePathInputs(data.paths);
+    writeDirectoryOptions(data.directory_options || {});
     return data;
   }
 
@@ -1178,6 +1214,14 @@
 
   el.loadBtn.addEventListener("click", () => {
     loadSamples().catch((err) => setStatus(String(err.message || err), true));
+  });
+  [
+    [el.oracleDirSelect, el.oracleDir],
+    [el.agnosticDirSelect, el.agnosticDir],
+  ].forEach(([select, input]) => {
+    select.addEventListener("change", () => {
+      if (select.value) input.value = select.value;
+    });
   });
   el.resetBtn.addEventListener("click", () => {
     loadDefaults()

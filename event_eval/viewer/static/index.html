@@ -17,21 +17,29 @@
         <h2>Data paths</h2>
         <div class="field">
           <label for="oracle-dir">Oracle directory (query-conditioned)</label>
-          <textarea
+          <select id="oracle-dir-select" class="directory-select">
+            <option value="">Choose a discovered directory…</option>
+          </select>
+          <input
+            type="text"
             id="oracle-dir"
             class="path-input"
-            rows="3"
+            autocomplete="off"
             spellcheck="false"
-          ></textarea>
+          />
         </div>
         <div class="field">
           <label for="agnostic-dir">Agnostic directory (Gemini, *_latest)</label>
-          <textarea
+          <select id="agnostic-dir-select" class="directory-select">
+            <option value="">Choose a discovered directory…</option>
+          </select>
+          <input
+            type="text"
             id="agnostic-dir"
             class="path-input"
-            rows="3"
+            autocomplete="off"
             spellcheck="false"
-          ></textarea>
+          />
         </div>
         <div class="field">
           <label for="tsm-dir">TSM directory</label>

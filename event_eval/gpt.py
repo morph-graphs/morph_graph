@@ -147,13 +147,14 @@ class GPTOracleAnnotator:
         sample_id: str,
         video_path: str | Path,
         question: str,
+        options: str | None = None,
         annotation_mode: str = "query_conditioned",
     ) -> OracleAnnotation:
         if annotation_mode == "query_conditioned":
             if not question.strip():
                 raise ValueError("query-conditioned annotation requires a question")
-            prompt_builder = lambda duration: build_prompt(question, duration)
-            prompt_version = PROMPT_VERSION_ORACLE
+            prompt_builder = lambda duration: build_prompt(question, duration, options=options)
+            prompt_version = PROMPT_VERSION_ORACLE + ("_mcq" if options else "")
             query = question
         elif annotation_mode == "query_agnostic":
             prompt_builder = build_agnostic_prompt
