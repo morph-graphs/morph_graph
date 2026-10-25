@@ -22,8 +22,22 @@ is run from the repo root as `python -m epic_eval.<module>`.
 
 ## Git
 
-- Work directly on the branch the user names (currently `epic-eval`); don't create
-  side branches or worktrees unless asked.
+Two people (Anubhav, Vatsal) and their agents work here in parallel. The rules
+that keep branches from drifting:
+
+- Work on `<person>/<topic>` branches (`anubhav/...`, `vatsal/...`), on the branch
+  the user names when there is one. One agent per branch, and one branch per git
+  worktree when several agents run at once.
+- **Never commit or push to `main`.** The pre-push hook refuses it, and force
+  pushes too; enable it once per clone: `git config core.hooksPath .githooks`.
+- **Stay close to main:** at the start of each working day,
+  `git fetch origin && git merge origin/main`. Merge, do not rebase, a branch that
+  is already pushed. **Never force-push**, `--force-with-lease` included.
+- Anubhav squash-merges every PR in a daily batch prepared at 4 am. Open the PR
+  with the template filled in, including evidence from one real sample.
+- Before editing a file the other person is also changing (see open PRs and
+  `scripts/sync_report.sh`), say so in your daily log first. Logs go in
+  `notes/daily/YYYY-MM-DD_<person>.md`; read the other person's latest one first.
 - Commit when asked, only the files that belong to the change; leave the user's
   other uncommitted work alone and say what's left.
 - **Pushing happens from a login node.** Agent sessions usually run on a compute
@@ -31,8 +45,8 @@ is run from the repo root as `python -m epic_eval.<module>`.
   locally, then hand the user the exact command:
   `cd /scratch/zt1/project/abhinav2-prj/user/vatsalag/morph_graphs/morph_graph && git push origin <branch>`.
   The user may review first by pulling this checkout onto their own machine.
-- A `git pull` here is a rebase: finish an interrupted one with `git rebase --continue`,
-  not a plain `git commit`.
+- If a clone has `pull.rebase` set, `git pull` rebases. Use
+  `git fetch origin && git merge origin/main` on a pushed branch instead.
 
 ## Coding practices
 
