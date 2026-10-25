@@ -39,7 +39,7 @@ jobs:
       - name: Install test dependencies (CPU)
         run: |
           pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
-          pip install transformers==5.8.0 numpy networkx openai tiktoken nano-vectordb
+          pip install transformers==5.8.0 numpy networkx openai tiktoken nano-vectordb ezcolorlog
       # Only suites that need no data, GPU or ffmpeg. epic_eval/test_epic_eval.py
       # needs ffmpeg and real media; run it on the cluster.
       - name: Unit tests
