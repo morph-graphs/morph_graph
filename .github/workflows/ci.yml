@@ -1,0 +1,46 @@
+# CPU checks on pull requests only. The org's private repos share 2,000 Actions
+# minutes a month, so: no push or scheduled triggers, a newer push cancels the
+# older run, CPU-only torch, cached pip. GPU work stays on the clusters.
+name: ci
+
+on:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  cpu-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # The repo root is the `morph_graph` package, so check it out under that name
+      # and run from its parent (submodules are not needed).
+      - uses: actions/checkout@v4
+        with:
+          path: morph_graph
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Refuse committed bytecode
+        working-directory: morph_graph
+        run: |
+          if git ls-files | grep -E '(__pycache__/|\.pyc$)'; then
+            echo "Remove the files above: git rm -r --cached <path>"; exit 1
+          fi
+      - name: Compile every Python file
+        run: python -m compileall -q -x '/(QAFD-RAG|embeddings_zoo)/' morph_graph
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ hashFiles('morph_graph/.github/workflows/ci.yml') }}
+      # Versions follow proj_context/setup/pinned.txt where it pins them.
+      - name: Install test dependencies (CPU)
+        run: |
+          pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+          pip install transformers==5.8.0 numpy networkx openai tiktoken nano-vectordb ezcolorlog
+      # Only suites that need no data, GPU or ffmpeg. epic_eval/test_epic_eval.py
+      # needs ffmpeg and real media; run it on the cluster.
+      - name: Unit tests
+        run: python -m unittest morph_graph.tests.test_event_eval morph_graph.tests.test_qafd_retrieval

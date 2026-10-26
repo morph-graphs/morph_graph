@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Refuses pushes to main and force pushes (any non-fast-forward update).
+# Enable once per clone: git config core.hooksPath .githooks
+# Emergency override, Anubhav only: ALLOW_MAIN_PUSH=1 git push ...
+
+zero=0000000000000000000000000000000000000000
+status=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+    if [[ "$remote_ref" == refs/heads/main && "${ALLOW_MAIN_PUSH:-0}" != 1 ]]; then
+        echo "pre-push: refusing to push to main. Open a PR from a <person>/<topic> branch." >&2
+        status=1
+        continue
+    fi
+    # Deleting a branch, or creating a new one, is not a force push.
+    [[ "$local_sha" == "$zero" || "$remote_sha" == "$zero" ]] && continue
+    if ! git cat-file -e "$remote_sha" 2>/dev/null; then
+        echo "pre-push: $remote_ref has commits you don't have locally. Run 'git fetch origin && git merge origin/${remote_ref#refs/heads/}' first." >&2
+        status=1
+    elif ! git merge-base --is-ancestor "$remote_sha" "$local_sha"; then
+        echo "pre-push: refusing a force push to $remote_ref. Merge instead of rebasing a pushed branch." >&2
+        status=1
+    fi
+done
+exit $status
