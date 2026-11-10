@@ -1,31 +1,97 @@
 {
-  "title": "EPIC-Morph V3 Scoreboard",
-  "bank": {"name": "v3-batch10-598", "commit": "0f30904", "n": 598,
-           "about": "598 streaming questions over 10 HD-EPIC videos, each asked at its t_ask with only the video up to then"},
-  "bank_dir": "/fs/cfar-projects/mem_open_vocab/morph_graphs/vatsal/epic_morph/outputs/v3/banks/batch10_agree2",
-  "runs": [
-    {"id": "gem38flash", "label": "Gemini 3.8 Flash", "owner": "Anubhav", "group": "Plain model", "kind": "epic_eval",
-     "run_dir": "/fs/cfar-projects/mem_open_vocab/morph_graphs/epic_eval_runs_v3/27c6fddf_gemini38flash-high-v3-batch10_cfgb399d802",
-     "note": "thinking HIGH, 1 fps, media resolution HIGH"},
-    {"id": "gem31lite", "label": "Gemini 3.1 Flash Lite", "owner": "Vatsal", "group": "Plain model", "kind": "epic_eval",
-     "run_dir": "/fs/cfar-projects/mem_open_vocab/morph_graphs/vatsal/epic_eval_runs_v3/27c6fddf_gemini31flashlite-high-v3-batch10_cfg6c81c204",
-     "note": "thinking HIGH, 1 fps, media resolution HIGH"},
-    {"id": "q38_27b", "label": "Qwen3.8-27B", "owner": "Vatsal", "group": "Plain model", "kind": "planned",
-     "note": "thinking, 1 fps, up to 768 frames; env being rebuilt after the smoke test crashed"},
-    {"id": "q3vl_8b", "label": "Qwen3-VL-8B", "owner": "Vatsal", "group": "Plain model", "kind": "epic_eval",
-     "run_dir": "/fs/cfar-projects/mem_open_vocab/morph_graphs/vatsal/epic_eval_runs_v3/27c6fddf_qwen3vl-8b-instruct-v3-batch10-fps1-f768_cfg6d508f62",
-     "note": "instruct, 1 fps, up to 768 frames"},
-    {"id": "merit_m8", "label": "MERIT · Qwen3-VL-8B", "owner": "Anubhav", "group": "Memory method", "kind": "slices",
-     "root": "/fs/cfar-projects/mem_open_vocab/morph_graphs/anubhav/baselines/MERIT/output/v3", "arm": "m8",
-     "note": "8B captions and answers"},
-    {"id": "merit_m27", "label": "MERIT · Qwen3.8-27B", "owner": "Anubhav", "group": "Memory method", "kind": "slices",
-     "root": "/fs/cfar-projects/mem_open_vocab/morph_graphs/anubhav/baselines/MERIT/output/v3", "arm": "m27",
-     "note": "27B captions and answers"},
-    {"id": "magic_m8", "label": "MAGIC-Video · Qwen3-VL-8B", "owner": "Vatsal", "group": "Memory method", "kind": "slices",
-     "root": "/fs/cfar-projects/mem_open_vocab/morph_graphs/baselines/MAGIC-video/output/v3", "arm": "magic_m8",
-     "note": "on MERIT's 8B captions; so far only the 8-question smoke slice"},
-    {"id": "wmm_w8", "label": "WorldMM · Qwen3-VL-8B", "owner": "Vatsal", "group": "Memory method", "kind": "slices",
-     "root": "/fs/cfar-projects/mem_open_vocab/morph_graphs/baselines/WorldMM/output/v3", "arm": "w8",
-     "note": "own 10 s captions; so far only the 10-question smoke slice"}
-  ]
+ "title": "EPIC-Morph V3 Scoreboard",
+ "bank": {
+  "name": "v3-batch10-598",
+  "commit": "0f30904",
+  "n": 598,
+  "about": "598 streaming questions over 10 HD-EPIC videos, each asked at its t_ask with only the video up to then"
+ },
+ "bank_dir": "/fs/cfar-projects/mem_open_vocab/morph_graphs/vatsal/epic_morph/outputs/v3/banks/batch10_agree2",
+ "runs": [
+  {
+   "id": "gem38flash",
+   "label": "Gemini 3.8 Flash",
+   "owner": "Anubhav",
+   "group": "Plain model",
+   "kind": "epic_eval",
+   "run_dir": "/fs/cfar-projects/mem_open_vocab/morph_graphs/epic_eval_runs_v3/27c6fddf_gemini38flash-high-v3-batch10_cfgb399d802",
+   "note": "thinking HIGH, 1 fps, media resolution HIGH"
+  },
+  {
+   "id": "gem31lite",
+   "label": "Gemini 3.1 Flash Lite",
+   "owner": "Vatsal",
+   "group": "Plain model",
+   "kind": "epic_eval",
+   "run_dir": "/fs/cfar-projects/mem_open_vocab/morph_graphs/vatsal/epic_eval_runs_v3/27c6fddf_gemini31flashlite-high-v3-batch10_cfg6c81c204",
+   "note": "thinking HIGH, 1 fps, media resolution HIGH"
+  },
+  {
+   "id": "q38_27b",
+   "label": "Qwen3.8-27B",
+   "owner": "Vatsal",
+   "group": "Plain model",
+   "kind": "planned",
+   "note": "thinking, 1 fps, up to 768 frames; env being rebuilt after the smoke test crashed"
+  },
+  {
+   "id": "q3vl_8b",
+   "label": "Qwen3-VL-8B",
+   "owner": "Vatsal",
+   "group": "Plain model",
+   "kind": "epic_eval",
+   "run_dir": "/fs/cfar-projects/mem_open_vocab/morph_graphs/vatsal/epic_eval_runs_v3/27c6fddf_qwen3vl-8b-instruct-v3-batch10-fps1-f768_cfg6d508f62",
+   "note": "instruct, 1 fps, up to 768 frames"
+  },
+  {
+   "id": "merit_m8",
+   "label": "MERIT · Qwen3-VL-8B",
+   "owner": "Anubhav",
+   "group": "Memory method",
+   "kind": "slices",
+   "root": "/fs/cfar-projects/mem_open_vocab/morph_graphs/anubhav/baselines/MERIT/output/v3",
+   "arm": "m8",
+   "note": "8B captions and answers"
+  },
+  {
+   "id": "merit_m27",
+   "label": "MERIT · Qwen3.8-27B",
+   "owner": "Anubhav",
+   "group": "Memory method",
+   "kind": "slices",
+   "root": "/fs/cfar-projects/mem_open_vocab/morph_graphs/anubhav/baselines/MERIT/output/v3",
+   "arm": "m27",
+   "note": "27B captions and answers"
+  },
+  {
+   "id": "magic_m8",
+   "label": "MAGIC-Video · Qwen3-VL-8B",
+   "owner": "Vatsal",
+   "group": "Memory method",
+   "kind": "slices",
+   "root": "/fs/cfar-projects/mem_open_vocab/morph_graphs/baselines/MAGIC-video/output/v3",
+   "arm": "magic_m8",
+   "note": "on MERIT's Qwen3-VL-8B 30 s captions; local Qwen3-VL-8B for every LLM role (controlled vs MERIT, not the published setup)"
+  },
+  {
+   "id": "magic_mo",
+   "label": "MAGIC-Video · published (gpt-oss-120b + Qwen3.5-Flash)",
+   "owner": "Vatsal",
+   "group": "Memory method",
+   "kind": "slices",
+   "root": "/fs/cfar-projects/mem_open_vocab/morph_graphs/baselines/MAGIC-video/output/v3",
+   "arm": "magic_mo",
+   "note": "as published, all via OpenRouter: gpt-oss-120b offline preprocessing + retriever, Qwen3.5-Flash responder; own 30 s captions (Whisper large-v3-turbo + Qwen3.5-Flash VLM, merged by gpt-oss-120b). Config: output/v3/nexus/magic_mo/run_config.json"
+  },
+  {
+   "id": "wmm_w8",
+   "label": "WorldMM · Qwen3-VL-8B",
+   "owner": "Vatsal",
+   "group": "Memory method",
+   "kind": "slices",
+   "root": "/fs/cfar-projects/mem_open_vocab/morph_graphs/baselines/WorldMM/output/v3",
+   "arm": "w8",
+   "note": "own 10 s captions; so far only the 10-question smoke slice"
+  }
+ ]
 }
