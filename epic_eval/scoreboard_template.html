@@ -1,0 +1,248 @@
+<title>EPIC-Morph V3 Scoreboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600&display=swap">
+<style>
+:root {
+  --ground: #f3f5f2; --surface: #ffffff; --sunk: #e9ede9; --ink: #1b2420; --muted: #5d6a64; --rule: #d6ddd8;
+  --accent: #0e6b5a; --anubhav: #95580f; --vatsal: #3a4b9a;
+  --good: #2b7a4f; --bad: #b4432e; --none: #c4cbc6; --chance: #8a6d1f;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --cond: "IBM Plex Sans Condensed", "IBM Plex Sans", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --ground: #111614; --surface: #19201d; --sunk: #141a18; --ink: #e4ebe7; --muted: #98a59f; --rule: #2b3531;
+    --accent: #52b89f; --anubhav: #e0a45c; --vatsal: #95a3ea;
+    --good: #5bc48a; --bad: #e27560; --none: #3a4440; --chance: #d6b45a;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ground: #111614; --surface: #19201d; --sunk: #141a18; --ink: #e4ebe7; --muted: #98a59f; --rule: #2b3531;
+  --accent: #52b89f; --anubhav: #e0a45c; --vatsal: #95a3ea;
+  --good: #5bc48a; --bad: #e27560; --none: #3a4440; --chance: #d6b45a;
+}
+* { box-sizing: border-box; }
+body { background: var(--ground); color: var(--ink); font: 14px/1.5 var(--sans); padding-inline: 16px; padding-block: 24px 48px; }
+.wrap { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 32px; }
+h1 { font: 600 28px/1.15 var(--cond); letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+h2 { font: 600 18px/1.2 var(--cond); margin: 0; }
+.meta { color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 8px; }
+.meta b { color: var(--ink); font-weight: 500; }
+.mono, td.num, .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+section { display: flex; flex-direction: column; gap: 12px; }
+.head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
+.hint { color: var(--muted); font-size: 13px; max-width: 70ch; }
+.scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; }
+table { border-collapse: collapse; width: 100%; }
+th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--rule); vertical-align: middle; }
+th { font: 500 11px/1.3 var(--sans); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); white-space: nowrap; background: var(--surface); }
+tbody tr:last-child td { border-bottom: 0; }
+.chip { display: inline-block; font-size: 11px; font-weight: 500; letter-spacing: 0.03em; padding: 1px 7px; border-radius: 99px; border: 1px solid currentColor; white-space: nowrap; }
+.own-Anubhav { color: var(--anubhav); } .own-Vatsal { color: var(--vatsal); }
+.label { font-weight: 500; }
+.note { color: var(--muted); font-size: 12px; }
+.bar { position: relative; height: 8px; background: var(--sunk); border-radius: 4px; min-width: 120px; }
+.bar > i { position: absolute; inset: 0 auto 0 0; background: var(--accent); border-radius: 4px; }
+.acc { position: relative; height: 18px; min-width: 160px; }
+.acc .track { position: absolute; left: 0; right: 0; top: 8px; height: 2px; background: var(--rule); }
+.acc .ci { position: absolute; top: 5px; height: 8px; background: color-mix(in oklab, var(--accent) 28%, transparent); border-radius: 2px; }
+.acc .pt { position: absolute; top: 3px; width: 3px; height: 12px; margin-left: -1px; background: var(--accent); border-radius: 1px; }
+.acc .chance { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px dashed var(--chance); }
+.big { font: 500 16px var(--mono); }
+.dim { color: var(--muted); }
+.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; background: var(--surface); }
+.seg button { font: 500 13px var(--sans); color: var(--muted); background: none; border: 0; padding: 6px 12px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--rule); }
+.seg button[aria-pressed="true"] { color: var(--surface); background: var(--accent); }
+button:focus-visible, select:focus-visible, input:focus-visible, tr[tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+td.heat { text-align: center; font-family: var(--mono); font-size: 13px; min-width: 76px; }
+td.heat small { display: block; font-size: 10px; color: var(--muted); }
+.heat-hd { writing-mode: horizontal-tb; text-align: center; white-space: normal; min-width: 76px; max-width: 110px; text-transform: none; letter-spacing: 0; font-size: 12px; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+select, input[type="search"] { font: 13px var(--sans); color: var(--ink); background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 6px 8px; max-width: 100%; }
+input[type="search"] { width: 220px; }
+.count { color: var(--muted); font-size: 13px; }
+.qtab td { font-size: 13px; }
+.qtab tr.q { cursor: pointer; }
+.qtab tr.q:hover td { background: var(--sunk); }
+.qtext { min-width: 260px; max-width: 52ch; }
+.mk { text-align: center; font: 500 13px var(--mono); width: 44px; }
+.mk.y { color: var(--good); } .mk.n { color: var(--bad); } .mk.x { color: var(--none); }
+tr.detail td { background: var(--sunk); }
+.opts { display: grid; gap: 4px; margin: 4px 0; padding: 0; list-style: none; }
+.opts li { display: flex; gap: 8px; align-items: baseline; }
+.opts .l { font-family: var(--mono); color: var(--muted); width: 1.2em; flex: none; }
+.opts li.gt { color: var(--good); font-weight: 500; }
+.picks { color: var(--muted); font-size: 12px; display: flex; flex-wrap: wrap; gap: 2px 14px; }
+.more { font: 500 13px var(--sans); color: var(--accent); background: none; border: 1px solid var(--rule); border-radius: 6px; padding: 6px 12px; cursor: pointer; align-self: flex-start; }
+.empty { color: var(--muted); padding: 16px; }
+@media (max-width: 640px) { h1 { font-size: 23px; } input[type="search"] { width: 100%; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1 id="title">EPIC-Morph V3 Scoreboard</h1>
+    <div class="meta" id="meta"></div>
+  </header>
+
+  <section>
+    <div class="head"><h2>Leaderboard</h2>
+      <span class="hint">Accuracy is over the questions a run has answered so far, with a 95% Wilson interval; the dashed line is chance for these 4-option questions. Coverage shows how far along each run is.</span></div>
+    <div class="scroll"><table id="lb"></table></div>
+  </section>
+
+  <section>
+    <div class="head"><h2>Breakdown</h2>
+      <div class="seg" role="group" aria-label="Break down by">
+        <button id="by-form" data-by="form" aria-pressed="true">Question type</button>
+        <button id="by-video" data-by="video" aria-pressed="false">Video</button>
+        <button id="by-hops" data-by="hops" aria-pressed="false">Hops</button>
+      </div></div>
+    <div class="scroll"><table id="heat"></table></div>
+  </section>
+
+  <section>
+    <div class="head"><h2>Questions</h2><span class="count" id="count"></span></div>
+    <div class="filters">
+      <select id="f-video" aria-label="Video"></select>
+      <select id="f-form" aria-label="Question type"></select>
+      <select id="f-show" aria-label="Show">
+        <option value="all">All questions</option>
+        <option value="disagree">Runs disagree</option>
+        <option value="allwrong">Every run wrong</option>
+        <option value="allright">Every run right</option>
+      </select>
+      <input id="f-q" type="search" placeholder="Search question text" aria-label="Search question text">
+    </div>
+    <div class="scroll"><table class="qtab" id="qs"></table></div>
+    <button class="more" id="more" hidden>Show more</button>
+  </section>
+</div>
+
+<script>
+const D = /*__DATA__*/null;
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const pct = (x) => (x == null ? "—" : (100 * x).toFixed(1));
+const Q = D.questions, R = D.runs, RES = D.results;
+const L = "ABCDEFGH";
+const chance = Q.reduce((s, q) => s + 1 / q.opts.length, 0) / Q.length;
+const mmss = (t) => `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2, "0")}`;
+const short = (v) => v.replace(/-(\d{8})-(\d{6})$/, " ·$2");
+
+$("#meta").innerHTML = [
+  `<span>Bank <b class="mono">${esc(D.bank.name)}</b> @ <span class="mono">${esc(D.bank.commit)}</span></span>`,
+  `<span>${esc(D.bank.about)}</span>`,
+  `<span>Rebuilt <b>${esc(D.generated)}</b></span>`,
+].join("");
+
+// Leaderboard: answered runs by accuracy, then runs with nothing yet.
+const ranked = [...R].sort((a, b) => {
+  const aa = a.total.ans ? a.total.ok / a.total.ans : -1, bb = b.total.ans ? b.total.ok / b.total.ans : -1;
+  return bb - aa;
+});
+function accCell(t) {
+  if (!t.ans) return `<span class="dim">no answers yet</span>`;
+  const p = t.ok / t.ans, [lo, hi] = t.ci;
+  return `<div style="display:flex;align-items:center;gap:12px"><span class="big">${pct(p)}%</span>
+    <div class="acc" aria-hidden="true"><div class="track"></div>
+      <div class="chance" style="left:${100 * chance}%"></div>
+      <div class="ci" style="left:${100 * lo}%;width:${100 * (hi - lo)}%"></div>
+      <div class="pt" style="left:${100 * p}%"></div></div></div>
+    <div class="note mono">${pct(lo)}–${pct(hi)} · ${t.ok}/${t.ans}</div>`;
+}
+$("#lb").innerHTML = `<thead><tr><th>Run</th><th>Owner</th><th>Type</th><th>Coverage</th><th>Accuracy</th><th>Last answer</th></tr></thead><tbody>` +
+  ranked.map((r) => `<tr>
+    <td><div class="label">${esc(r.label)}</div>${r.note ? `<div class="note">${esc(r.note)}</div>` : ""}</td>
+    <td><span class="chip own-${esc(r.owner)}">${esc(r.owner)}</span></td>
+    <td class="dim">${esc(r.group)}</td>
+    <td><div class="bar" title="${r.total.ans} of ${r.total.n}"><i style="width:${(100 * r.total.ans) / r.total.n}%"></i></div>
+        <div class="note mono">${r.total.ans}/${r.total.n}</div></td>
+    <td>${r.kind === "planned" ? `<span class="dim">not started</span>` : accCell(r.total)}</td>
+    <td class="note mono">${r.updated ? esc(r.updated) : "—"}</td></tr>`).join("") + `</tbody>`;
+
+// Breakdown heatmap.
+const live = R.filter((r) => r.total.ans > 0);
+function heatColor(p) {
+  const g = Math.round(100 * Math.max(0, Math.min(1, (p - chance) / (1 - chance))));
+  return `color-mix(in oklab, color-mix(in oklab, var(--good) ${g}%, var(--bad)) 34%, var(--surface))`;
+}
+function drawHeat(by) {
+  document.querySelectorAll(".seg button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.by === by)));
+  if (!live.length) { $("#heat").innerHTML = `<tbody><tr><td class="empty">No run has answers yet.</td></tr></tbody>`; return; }
+  const keys = Object.keys(live[0].groups[by]);
+  const name = (k) => (by === "video" ? short(k) : by === "hops" ? `${k} hop${k === "1" ? "" : "s"}` : k.replace(/_/g, " "));
+  $("#heat").innerHTML = `<thead><tr><th>${by === "form" ? "Question type" : by === "video" ? "Video" : "Hops"}</th><th class="num">n</th>` +
+    live.map((r) => `<th class="heat-hd">${esc(r.label)}</th>`).join("") + `</tr></thead><tbody>` +
+    keys.map((k) => `<tr><td>${esc(name(k))}</td><td class="num dim">${live[0].groups[by][k].n}</td>` +
+      live.map((r) => {
+        const c = r.groups[by][k];
+        if (!c || !c.ans) return `<td class="heat dim">—</td>`;
+        const p = c.ok / c.ans;
+        return `<td class="heat" style="background:${heatColor(p)}">${pct(p)}<small>${c.ok}/${c.ans}</small></td>`;
+      }).join("") + `</tr>`).join("") + `</tbody>`;
+}
+document.querySelectorAll(".seg button").forEach((b) => b.addEventListener("click", () => drawHeat(b.dataset.by)));
+drawHeat("form");
+
+// Questions.
+const videos = [...new Set(Q.map((q) => q.video))], forms = [...new Set(Q.map((q) => q.form))].sort();
+$("#f-video").innerHTML = `<option value="">All videos</option>` + videos.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join("");
+$("#f-form").innerHTML = `<option value="">All question types</option>` + forms.map((f) => `<option value="${esc(f)}">${esc(f.replace(/_/g, " "))}</option>`).join("");
+let limit = 100, open = new Set();
+function marks(i) { return live.map((r) => RES[r.id][i]); }
+function rows() {
+  const v = $("#f-video").value, f = $("#f-form").value, show = $("#f-show").value, s = $("#f-q").value.trim().toLowerCase();
+  return Q.map((q, i) => i).filter((i) => {
+    const q = Q[i];
+    if (v && q.video !== v) return false;
+    if (f && q.form !== f) return false;
+    if (s && !q.q.toLowerCase().includes(s)) return false;
+    if (show !== "all") {
+      const m = marks(i).filter(Boolean);
+      if (!m.length) return false;
+      const k = m.filter((x) => x[0]).length;
+      if (show === "disagree" && (k === 0 || k === m.length)) return false;
+      if (show === "allwrong" && k !== 0) return false;
+      if (show === "allright" && k !== m.length) return false;
+    }
+    return true;
+  });
+}
+function drawQs() {
+  const ix = rows();
+  $("#count").textContent = `${ix.length} of ${Q.length} questions`;
+  const head = `<thead><tr><th>Video</th><th>Asked at</th><th>Type</th><th>Question</th>` +
+    live.map((r) => `<th class="mk" title="${esc(r.label)}">${esc(r.label.split(" ")[0].slice(0, 6))}</th>`).join("") + `</tr></thead>`;
+  const body = ix.slice(0, limit).map((i) => {
+    const q = Q[i];
+    const cells = marks(i).map((m) => (m ? `<td class="mk ${m[0] ? "y" : "n"}">${m[0] ? "✓" : "✗"}</td>` : `<td class="mk x">·</td>`)).join("");
+    let html = `<tr class="q" tabindex="0" data-i="${i}" aria-expanded="${open.has(i)}"><td class="mono dim">${esc(short(q.video))} #${q.pos}</td>
+      <td class="mono dim">${mmss(q.t)}</td><td class="dim">${esc(q.form.replace(/_/g, " "))}</td><td class="qtext">${esc(q.q)}</td>${cells}</tr>`;
+    if (open.has(i)) {
+      const picks = live.map((r) => {
+        const m = RES[r.id][i];
+        const what = !m ? "no answer" : m[1] == null ? (m[0] ? "right" : "wrong") : `${L[m[1]]}${m[0] ? " ✓" : ""}`;
+        return `<span>${esc(r.label)}: <b>${esc(what)}</b></span>`;
+      }).join("");
+      html += `<tr class="detail"><td colspan="${4 + live.length}"><ul class="opts">` +
+        q.opts.map((o, k) => `<li class="${k === q.gt ? "gt" : ""}"><span class="l">${L[k]}</span><span>${esc(o)}</span></li>`).join("") +
+        `</ul><div class="picks">${picks}</div></td></tr>`;
+    }
+    return html;
+  }).join("");
+  $("#qs").innerHTML = head + `<tbody>${body || `<tr><td class="empty" colspan="${4 + live.length}">No questions match these filters.</td></tr>`}</tbody>`;
+  $("#more").hidden = ix.length <= limit;
+}
+function toggle(tr) { const i = +tr.dataset.i; open.has(i) ? open.delete(i) : open.add(i); drawQs(); }
+$("#qs").addEventListener("click", (e) => { const tr = e.target.closest("tr.q"); if (tr) toggle(tr); });
+$("#qs").addEventListener("keydown", (e) => { const tr = e.target.closest("tr.q"); if (tr && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); toggle(tr); } });
+["#f-video", "#f-form", "#f-show"].forEach((s) => $(s).addEventListener("change", () => { limit = 100; drawQs(); }));
+$("#f-q").addEventListener("input", () => { limit = 100; drawQs(); });
+$("#more").addEventListener("click", () => { limit += 200; drawQs(); });
+drawQs();
+</script>
