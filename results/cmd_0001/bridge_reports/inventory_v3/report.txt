@@ -1,0 +1,73 @@
+host=login-1.zaratan.umd.edu Tue Nov 10 20:37:17 UTC 2026
+== 1. worktree at origin/vatsal/v3-evals
+fetched
+4b14137 notes: EPIC-Morph V3 eval state at handoff to a dedicated eval session
+afd23cf epic_eval: Zaratan config for Qwen3.8-27B thinking on v3-batch10 (v2 Zaratan config, v3 bank)
+ee2619b epic_eval: Qwen3.8-27B v3 config uses qwen38_vl_cu126 (Zaratan container's pinned stack)
+protocol commit 27c6fdd: present
+-rw-r--r--. 1 vatsalag zt-abhinav2-prj 1796 Nov 10 15:37 /scratch/zt1/project/abhinav2-prj/user/vatsalag/morph_graphs/morph_graph_v3evals/epic_eval/configs/qwen3.8-27b-thinking-v3-batch10-zaratan.json
+== 2. epic-morph mirror
+fetched
+bank commit 0f30904: present
+== 3. model, container, videos
+chat_template.jinja
+config.json
+crc32.txt
+18
+-rwxr-xr-x. 1 vatsalag zt-abhinav2-prj 7849824256 Sep 24 18:17 /scratch/zt1/project/abhinav2-prj/user/vatsalag/morph_graphs/morph_graph/morph_graphs.sif
+P01-20240203-123350 /scratch/zt1/project/abhinav2-prj/user/vatsalag/datasets/HD-EPIC/videos/P01/P01-20240203-123350.mp4
+P01-20240204-142301 /scratch/zt1/project/abhinav2-prj/user/vatsalag/datasets/HD-EPIC/videos/P01/P01-20240204-142301.mp4
+P02-20240211-175138 /scratch/zt1/project/abhinav2-prj/user/vatsalag/datasets/HD-EPIC/videos/P02/P02-20240211-175138.mp4
+P03-20240217-131219 /scratch/zt1/project/abhinav2-prj/user/vatsalag/datasets/HD-EPIC/videos/P03/P03-20240217-131219.mp4
+P05-20240425-201444 /scratch/zt1/project/abhinav2-prj/user/vatsalag/datasets/HD-EPIC/videos/P05/P05-20240425-201444.mp4
+P06-20240510-090328 /scratch/zt1/project/abhinav2-prj/user/vatsalag/datasets/HD-EPIC/videos/P06/P06-20240510-090328.mp4
+P07-20240531-201703 /scratch/zt1/project/abhinav2-prj/user/vatsalag/datasets/HD-EPIC/videos/P07/P07-20240531-201703.mp4
+P08-20240617-130401 /scratch/zt1/project/abhinav2-prj/user/vatsalag/datasets/HD-EPIC/videos/P08/P08-20240617-130401.mp4
+P08-20240617-184909 /scratch/zt1/project/abhinav2-prj/user/vatsalag/datasets/HD-EPIC/videos/P08/P08-20240617-184909.mp4
+P09-20240624-160737 /scratch/zt1/project/abhinav2-prj/user/vatsalag/datasets/HD-EPIC/videos/P09/P09-20240624-160737.mp4
+== 4. orchestrator dry run
+Loading python/3.10.10/gcc/11.3.0/nocuda/linux-rhel8-zen2
+  Loading requirement: gcc/11.3.0
+
+=== eval: 78 task(s) (gpu, gpu:a100:2, 8 cpu, 64G, 8:00:00) | /scratch/zt1/project/abhinav2-prj/user/vatsalag/morph_graphs/epic_eval_runs/dryrun_qwen38_27b_v3/slurm/eval_20261110-153808.slurm
+#!/bin/bash
+
+set -eo pipefail
+echo "host=$(hostname) job=${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID} restarts=${SLURM_RESTART_COUNT:-0}"
+source /etc/profile.d/modules.sh
+export PYTHONUNBUFFERED=1
+
+RUN=/scratch/zt1/project/abhinav2-prj/user/vatsalag/morph_graphs/epic_eval_runs/dryrun_qwen38_27b_v3
+command -v apptainer >/dev/null || module load apptainer
+SIF=/scratch/zt1/project/abhinav2-prj/user/vatsalag/morph_graphs/morph_graph/morph_graphs.sif
+py() { apptainer exec --nv --cleanenv --bind /scratch --env PYTHONPATH=/scratch/zt1/project/abhinav2-prj/user/vatsalag/pyextra_morph_graphs "$SIF" python "$@"; }
+cd "$RUN/code_repo"
+
+case "$SLURM_ARRAY_TASK_ID" in
+  *) echo "no task $SLURM_ARRAY_TASK_ID" >&2; exit 2 ;;
+esac
+
+
+=== score: 1 task(s) (standard, no gpu, 1 cpu, 4G, 0:30:00) | /scratch/zt1/project/abhinav2-prj/user/vatsalag/morph_graphs/epic_eval_runs/dryrun_qwen38_27b_v3/slurm/score_20261110-153808.slurm
+#!/bin/bash
+
+set -eo pipefail
+echo "host=$(hostname) job=${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID} restarts=${SLURM_RESTART_COUNT:-0}"
+source /etc/profile.d/modules.sh
+export PYTHONUNBUFFERED=1
+
+RUN=/scratch/zt1/project/abhinav2-prj/user/vatsalag/morph_graphs/epic_eval_runs/dryrun_qwen38_27b_v3
+command -v apptainer >/dev/null || module load apptainer
+SIF=/scratch/zt1/project/abhinav2-prj/user/vatsalag/morph_graphs/morph_graph/morph_graphs.sif
+py() { apptainer exec --nv --cleanenv --bind /scratch --env PYTHONPATH=/scratch/zt1/project/abhinav2-prj/user/vatsalag/pyextra_morph_graphs "$SIF" python "$@"; }
+cd "$RUN/code_repo"
+
+case "$SLURM_ARRAY_TASK_ID" in
+  *) echo "no task $SLURM_ARRAY_TASK_ID" >&2; exit 2 ;;
+esac
+
+
+[DRYRUN] nothing submitted. run dir: /scratch/zt1/project/abhinav2-prj/user/vatsalag/morph_graphs/epic_eval_runs/dryrun_qwen38_27b_v3
+== 5. queue
+       JOBID                           NAME    STATE       TIME NODELIST(REASON)
+    23770390                            zsh  RUNNING 6-04:33:12 compute-a5-9

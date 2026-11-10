@@ -1,0 +1,10 @@
+claimed=2026-11-10T20:35:07Z
+host=compute-a5-9.zaratan.umd.edu
+executor=user on a login node (header says LOGIN node; runner has no route there)
+started=2026-11-10T20:37:17Z (login-1.zaratan.umd.edu, run by the user; runner cannot reach login nodes)
+finished=2026-11-10T20:39:36Z
+exit=0
+jobs=none (dry run; nothing submitted)
+spend=0 SU
+results=1 file (bridge_reports/inventory_v3/report.txt, 4.4 KB)
+summary=worktree morph_graph_v3evals at 4b14137 (27c6fdd present); epic-morph mirror now has 0f30904; Qwen3.8-27B 18 shards, sif 7.8 GB, all 10 batch10 videos present; dry run of qwen3.8-27b-thinking-v3-batch10-zaratan @27c6fdd fps1/f768 = 78 eval tasks x gpu:a100:2 x 8h cap (+1 score task) -> worst case ~60 kSU; cmsc has 4.91 kSU unused (see runner/RUNNER_NOTES.md)
