@@ -217,7 +217,7 @@ def submit(cfg: dict, step: str, script: Path, n_tasks: int, note: str, dryrun: 
     if NEXRUN.exists():
         cmd = [str(NEXRUN), "launch", "--tag", f"{cfg['run']['tag']}-{step}", "--out", str(run_dir),
                "--note", note, "--", "sbatch", str(script)]
-        pattern = r"submitted (\d+)"
+        pattern = r"[Ss]ubmitted (?:batch job )?(\d+)"
     else:
         cmd, pattern = ["sbatch", "--parsable", str(script)], r"^(\d+)"
     out = subprocess.run(cmd, capture_output=True, text=True)
