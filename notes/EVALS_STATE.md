@@ -17,7 +17,7 @@ The user said: run the three plain baselines first, then the memory methods.
 | **Gemini 3.1 Flash Lite** | Vatsal | **done**, 364/598 = 60.9% (scores.txt) | run dir `vatsal/epic_eval_runs_v3/27c6fddf_gemini31flashlite-high-v3-batch10_cfg6c81c204` |
 | **Qwen3-VL-8B plain** | Vatsal | **full run launched** 15:51: eval 8345340 (78 tasks, 1× A6000, vulcan-scavenger), score 8345341; waiting for GPUs | run dir `vatsal/epic_eval_runs_v3/27c6fddf_qwen3vl-8b-instruct-v3-batch10-fps1-f768_cfg6d508f62` |
 | **Qwen3.8-27B plain (Nexus)** | Vatsal | smoke #3 queued: eval 8343807 (2× A6000 scavenger), score 8343808 | run dir `vatsal/epic_eval_runs_v3/smoke_qwen38_27b_v3`. Smokes #1–2 failed (env, see §3). |
-| **Qwen3.8-27B plain (Zaratan)** | Vatsal | runner up (heartbeat 21:21Z); cmd_0001 inventory + dry run exit 0 (all paths present, 78 tasks on 2× A100). Next: queue `nexus/drafts/smoke_q27b_v3.sh` (~100 SU) on user OK | Zaratan config `epic_eval/configs/qwen3.8-27b-thinking-v3-batch10-zaratan.json` |
+| **Qwen3.8-27B plain (Zaratan)** | Vatsal | runner up; cmd_0001 inventory OK; **cmd_0002 queued** 16:40 (2-question 27B smoke, ~100 SU, user OK). Full run worst case ~60 kSU (78 × 2× A100 × 8 h cap): AAC only | Zaratan config `epic_eval/configs/qwen3.8-27b-thinking-v3-batch10-zaratan.json` (account aac) |
 | MAGIC-Video · 8B | Vatsal | **full run** (approved), nexrun tag `magic-m8-v3`: 51/598 answered, 23 correct at 16:27; 2 running, 21 copies pending | `/fs/cfar-projects/mem_open_vocab/morph_graphs/baselines/MAGIC-video`, outputs `output/v3/nexus/magic_m8/` |
 | WorldMM · 8B (w8, all Qwen) | Vatsal | smoke 4/10; superseded by wg8 (user wants WorldMM's original GPT pipeline) | `/fs/cfar-projects/mem_open_vocab/morph_graphs/baselines/WorldMM` |
 | **WorldMM · wg8** | Vatsal | smoke: captions + episodic + semantic + visual built (~$2.50 OpenRouter); build 8345070 OOMed in step 5 on a 16 GB A4000 (VLM2Vec still resident) -> fixed (ea2fffe), rerun build 8345820 (cml-medium 2× A4000), qa 8345821 (tron medium A6000, afterok). Full run after cost report + go-ahead | worktree `baselines/WorldMM/.claude/worktrees/wg8` (branch `vatsal/wg8-gpt-memory`, local), usage logs `output/v3/usage/` |
@@ -69,7 +69,7 @@ Rerunning the same command resumes. The orchestrator submits through `~/.claude/
   `runner/bridge_sync.sh --loop 120` in tmux on a login node, follow PROTOCOL.md / RULES.md, run cmd_0001).
 - Status: `vatsal/zaratan_bridge/nexus/check_bridge.sh`; results: `nexus/pull_results.sh` (lands in
   `vatsal/epic_eval_runs_v3/_zaratan/<run>`; add that run dir to the scoreboard registry).
-- Rules: never cancel a pending Zaratan job (queue age); cmsc account only; `--qos=normal` for GPU.
+- Rules: never cancel a pending Zaratan job (queue age); account **`abhinav2-prj-aac`** from 2026-11-10 (user: CMSC credits cut, 4.9 kSU left; the 27B config now says aac); `--qos=normal` for GPU.
 
 ## 5. Scoreboard
 

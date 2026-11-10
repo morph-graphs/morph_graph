@@ -45,7 +45,7 @@
   },
   "slurm": {
     "prep": {
-      "account": "abhinav2-prj-cmsc",
+      "account": "abhinav2-prj-aac",
       "partition": "standard",
       "qos": "normal",
       "cpus": 16,
@@ -53,7 +53,7 @@
       "time": "3:00:00"
     },
     "eval": {
-      "account": "abhinav2-prj-cmsc",
+      "account": "abhinav2-prj-aac",
       "partition": "gpu",
       "qos": "normal",
       "gres": "gpu:a100:2",
@@ -63,7 +63,7 @@
       "questions_per_task": 8
     },
     "score": {
-      "account": "abhinav2-prj-cmsc",
+      "account": "abhinav2-prj-aac",
       "partition": "standard",
       "qos": "normal",
       "cpus": 1,
