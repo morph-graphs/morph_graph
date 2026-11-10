@@ -1,0 +1,4 @@
+claimed=2026-11-10T21:39:01Z
+host=compute-a5-9.zaratan.umd.edu
+executor=runner (compute node; no login-node step needed)
+account_policy=jobs moved to abhinav2-prj-aac after submission (RULES.md rule 4)
