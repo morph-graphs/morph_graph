@@ -54,6 +54,9 @@ Started 2026-11-10T20:35:06Z. `S=/scratch/zt1/project/abhinav2-prj/user/vatsalag
 
 - Slurm 25.11.8. Associations: `abhinav2-prj-cmsc` and `abhinav2-prj-aac`, QoS `normal,scavenger`,
   default `normal`.
+- **Account policy changed 2026-11-10: use `abhinav2-prj-aac`** (user's explicit instruction;
+  RULES.md rule 4). The cmsc cap went 300 -> 100 kSU on 2026-11-09 10:38 ET
+  (`sacctmgr show transactions`); the usage counter resets quarterly (last ~2026-10-01).
 - **Budget: cmsc is almost exhausted.** `sbalance`: limit 100.00 kSU (GrpTRESMins
   billing=6,000,000; the docs' 300 kSU is out of date), used 95.09 kSU, **4.91 kSU unused**.
   aac: 548.82 kSU limit, 542.89 kSU unused (off limits without explicit permission).

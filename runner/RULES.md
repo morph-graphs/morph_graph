@@ -16,8 +16,14 @@ priority, a big setback. Therefore:
 
 **Account and QoS.**
 
-4. Account `abhinav2-prj-cmsc` always. `abhinav2-prj-aac` never, unless a command says so
-   with the user's explicit permission.
+4. **Account `abhinav2-prj-aac` from 2026-11-10 on** (user, in the runner session, 2026-11-10
+   ~21:20 UTC: "from now on run on AAC, they've reduced CMSC credits due to overuse"). The
+   cmsc cap was cut from 300 to 100 kSU on 2026-11-09 with ~95 kSU already used this quarter
+   (`runner/RUNNER_NOTES.md`). Until configs say `abhinav2-prj-aac`, the runner moves every job a
+   command submits on cmsc to aac in place right after submission
+   (`scontrol update JobId=<id> Account=abhinav2-prj-aac`, no cancel, queue age kept) and records
+   it in the `.meta`. Nexus authors: set `slurm.*.account` to `abhinav2-prj-aac` in the Zaratan
+   configs; `slurm` is not in the run hash, so run folders do not change.
 5. GPU jobs use `--qos=normal`; `scavenger` is rejected for GPU on Zaratan (CPU only).
 6. The cmsc SU budget is shared and limited: no oversized, duplicate or idle jobs.
    Report SU-relevant facts (GPU type, hours) in each `done/<id>.meta`.
