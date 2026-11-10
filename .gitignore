@@ -1,0 +1,4 @@
+nexus/.pulled
+.sync.lock
+runner/sync.log
+runner/STOP_SYNC
