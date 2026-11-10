@@ -11,7 +11,7 @@
   },
   "paths": {
     "video_dir": "/fs/cfar-projects/VPR/datasets/HD-EPIC/videos",
-    "python": "/fs/cfar-projects/mem_open_vocab/miniconda3/envs/qwen38_vl_cu124/bin/python",
+    "python": "/fs/cfar-projects/mem_open_vocab/miniconda3/envs/qwen38_vl_cu124/bin/python_ffmpeg",
     "ffmpeg_module": "ffmpeg/7.1",
     "media_root": "/fs/cfar-projects/mem_open_vocab/morph_graphs/vatsal/epic_eval_runs_v3/media"
   },
