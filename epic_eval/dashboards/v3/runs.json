@@ -74,6 +74,16 @@
    "note": "on MERIT's Qwen3-VL-8B 30 s captions; local Qwen3-VL-8B for every LLM role (controlled vs MERIT, not the published setup)"
   },
   {
+   "id": "magic_m27",
+   "label": "MAGIC-Video · Qwen3.8-27B",
+   "owner": "Vatsal",
+   "group": "Memory method",
+   "kind": "slices",
+   "root": "/fs/cfar-projects/mem_open_vocab/morph_graphs/baselines/MAGIC-video/output/v3",
+   "arm": "magic_m27",
+   "note": "on MERIT's Qwen3.8-27B 30 s captions; local Qwen3.8-27B (non-thinking, sdpa) for every LLM role (controlled vs MERIT m27)"
+  },
+  {
    "id": "magic_mo",
    "label": "MAGIC-Video · published (gpt-oss-120b + Qwen3.5-Flash)",
    "owner": "Vatsal",
