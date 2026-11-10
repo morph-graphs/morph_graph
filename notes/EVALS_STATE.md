@@ -1,4 +1,4 @@
-# EPIC-Morph V3 evals: state (updated 2026-11-10 16:30 ET by the eval session)
+# EPIC-Morph V3 evals: state (updated 2026-11-10 17:30 ET by the eval session)
 
 Handed over from the question-generation session. Read this first; it is the single source of truth
 for what is running and what is waiting. Update it as things change.
@@ -17,10 +17,10 @@ The user said: run the three plain baselines first, then the memory methods.
 | **Gemini 3.1 Flash Lite** | Vatsal | **done**, 364/598 = 60.9% (scores.txt) | run dir `vatsal/epic_eval_runs_v3/27c6fddf_gemini31flashlite-high-v3-batch10_cfg6c81c204` |
 | **Qwen3-VL-8B plain** | Vatsal | **full run launched** 15:51: eval 8345340 (78 tasks, 1× A6000, vulcan-scavenger), score 8345341; waiting for GPUs | run dir `vatsal/epic_eval_runs_v3/27c6fddf_qwen3vl-8b-instruct-v3-batch10-fps1-f768_cfg6d508f62` |
 | **Qwen3.8-27B plain (Nexus)** | Vatsal | smoke #3 queued: eval 8343807 (2× A6000 scavenger), score 8343808 | run dir `vatsal/epic_eval_runs_v3/smoke_qwen38_27b_v3`. Smokes #1–2 failed (env, see §3). |
-| **Qwen3.8-27B plain (Zaratan)** | Vatsal | runner up; cmd_0001 inventory OK; **cmd_0002 queued** 16:40 (2-question 27B smoke, ~100 SU, user OK). Full run worst case ~60 kSU (78 × 2× A100 × 8 h cap): AAC only | Zaratan config `epic_eval/configs/qwen3.8-27b-thinking-v3-batch10-zaratan.json` (account aac) |
-| MAGIC-Video · 8B | Vatsal | **full run** (approved), nexrun tag `magic-m8-v3`: 51/598 answered, 23 correct at 16:27; 2 running, 21 copies pending | `/fs/cfar-projects/mem_open_vocab/morph_graphs/baselines/MAGIC-video`, outputs `output/v3/nexus/magic_m8/` |
+| **Qwen3.8-27B plain (Zaratan)** | Vatsal | cmd_0002 (2-q smoke) claimed 21:39Z; prep 24001392 -> eval 24001393 (2× A100) -> score 24001394, all moved to aac. Full run worst case ~60 kSU, AAC only | Zaratan config `epic_eval/configs/qwen3.8-27b-thinking-v3-batch10-zaratan.json` (account aac) |
+| MAGIC-Video · 8B | Vatsal | **full run** (approved), nexrun tag `magic-m8-v3`: 1/10 videos done (51 q, 23 correct), 7 running, 4 copies pending (17:27). Open question to user: keep MERIT-caption arm only, or add MAGIC's original OpenRouter pipeline (gpt-oss-120b + qwen3.5-flash) as a second arm | `/fs/cfar-projects/mem_open_vocab/morph_graphs/baselines/MAGIC-video`, outputs `output/v3/nexus/magic_m8/` |
 | WorldMM · 8B (w8, all Qwen) | Vatsal | smoke 4/10; superseded by wg8 (user wants WorldMM's original GPT pipeline) | `/fs/cfar-projects/mem_open_vocab/morph_graphs/baselines/WorldMM` |
-| **WorldMM · wg8** | Vatsal | smoke: captions + episodic + semantic + visual built (~$2.50 OpenRouter); build 8345070 OOMed in step 5 on a 16 GB A4000 (VLM2Vec still resident) -> fixed (ea2fffe), rerun build 8345820 (cml-medium 2× A4000), qa 8345821 (tron medium A6000, afterok). Full run after cost report + go-ahead | worktree `baselines/WorldMM/.claude/worktrees/wg8` (branch `vatsal/wg8-gpt-memory`, local), usage logs `output/v3/usage/` |
+| **WorldMM · wg8** | Vatsal | smoke build **done** (rerun 8345820 after OOM fix ea2fffe): $4.50 OpenRouter for the 31-min video (GPT-5 captions $1.84, gpt-5-mini memory $2.67) -> ~$50 for all 10. QA q15-24 8345821 pending on tron medium, est. start 2026-11-11 10:40. Full run after smoke accuracy + go-ahead | worktree `baselines/WorldMM/.claude/worktrees/wg8` (branch `vatsal/wg8-gpt-memory`, local), usage logs `output/v3/usage/` |
 
 Launch commands (from this worktree, with the env python that has google-genai, e.g.
 `/fs/cfar-projects/mem_open_vocab/miniconda3/envs/morph_graphs_qwen3_cu126/bin/python`; plain `python3` lacks it
