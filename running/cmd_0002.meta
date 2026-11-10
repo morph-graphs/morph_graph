@@ -2,3 +2,7 @@ claimed=2026-11-10T21:39:01Z
 host=compute-a5-9.zaratan.umd.edu
 executor=runner (compute node; no login-node step needed)
 account_policy=jobs moved to abhinav2-prj-aac after submission (RULES.md rule 4)
+started=2026-11-10T21:43:05Z
+submitted=prep 24001392 (standard, 16 cpu, 3h) -> eval 24001393 (gpu-a100, gpu:a100:2, 8h cap, 1 task, 2 questions) -> score 24001394 (standard)
+account=all three moved cmsc->aac in place with scontrol update at submission (21:43Z); dependencies intact
+run_dir=/scratch/zt1/project/abhinav2-prj/user/vatsalag/morph_graphs/epic_eval_runs/smoke_qwen38_27b_v3
