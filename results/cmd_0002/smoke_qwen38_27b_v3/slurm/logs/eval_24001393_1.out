@@ -1,0 +1,13 @@
+host=gpu-a6-6.zaratan.umd.edu job=24001393_1 restarts=0
+P06-20240510-090328.20261110-164218-000: 2 questions, 0 done, 0 truncated (not retried), 2 to run
+  loaded /home/vatsalag/scratch/model_hub/Qwen3.8-27B in 202s (attn=flash_attention_2)
+  concurrency: 2 contexts, 1 requests in flight
+  [t_ask=180.0s] 1 questions, input=upto_00180.000s.mp4
+  [t_ask=232.2s] 1 questions, input=upto_00232.200s.mp4
+    upto_00180.000s.mp4: fps=1.0 -> 180 frames, 11870 prompt tokens up to the end of the video
+    [t_ask=180.0s] context ready in 6s (cache=no, cache_tokens=None)
+    upto_00232.200s.mp4: fps=1.0 -> 232 frames, 12840 prompt tokens up to the end of the video
+    [t_ask=232.2s] context ready in 6s (cache=no, cache_tokens=None)
+    [t_ask=180.0s] P06-20240510-090328__8bf64dcf88 pred=C gt=C finish=STOP 227.21s tok=15561
+    [t_ask=232.2s] P06-20240510-090328__d5ea8932ac pred=C gt=B finish=STOP 65.14s tok=13984
+done: 2 answered, 0 failed

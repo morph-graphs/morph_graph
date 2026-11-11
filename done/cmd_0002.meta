@@ -7,3 +7,9 @@ submitted=prep 24001392 (standard, 16 cpu, 3h) -> eval 24001393 (gpu-a100, gpu:a
 account=all three moved cmsc->aac in place with scontrol update at submission (21:43Z); dependencies intact
 run_dir=/scratch/zt1/project/abhinav2-prj/user/vatsalag/morph_graphs/epic_eval_runs/smoke_qwen38_27b_v3
 retarget=2026-11-11T03:01:17Z user (Zaratan session) asked for H100: eval 24001393 moved in place gpu-a100/gpu:a100:2 -> gpu-h100/gpu:h100:1 (scontrol update, no cancel; 144 SU/h vs 96); score dependency intact
+finished=2026-11-11T16:16:47Z
+exit=0
+jobs=prep 24001392_1 COMPLETED 22m28s (compute-b7-2); eval 24001393_1 COMPLETED 9m01s on gpu-a6-6 (1x H100, retargeted from 2xA100 on 2026-11-11); score 24001394_1 COMPLETED
+answers=2/2 (1 correct, 1 wrong; 0 errors, 0 truncated); acc|ans 50%; latencies 227 s and 65 s; thinking 3457 and 1033 tokens; 180 and 232 frames at 1 fps / 768 cap
+spend=~28 SU on aac (eval 9 min x 144 SU/h = ~22; prep 22 min x 16 billing = ~6)
+results=5 files (answers, scores.txt, launches.jsonl, eval .out/.err); no errors/*.jsonl written; nothing >10 MB

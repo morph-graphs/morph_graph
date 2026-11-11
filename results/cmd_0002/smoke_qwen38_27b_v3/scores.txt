@@ -1,0 +1,49 @@
+model=Qwen3.8-27B video_input=True code=27c6fddfa7 questions=0f30904df2
+
+SPLITS
+                                      n  ans   acc% acc|ans chance major.
+all                                 598    2    0.2    50.0   26.4      -
+streaming                           598    2    0.2    50.0   26.4      -
+full_video                            0    0      -       -      -      -
+non_binary                          596    2    0.2    50.0   26.3      -
+binary_yes_no                         2    0    0.0       -   50.0      -
+non_binary/streaming                596    2    0.2    50.0   26.3      -
+non_binary/full_video                 0    0      -       -      -      -
+
+BY FORM
+                                      n  ans   acc% acc|ans chance major.
+checklist                             6    0    0.0       -   25.0      -
+composite                            54    0    0.0       -   25.0      -
+contents_now                         29    1    0.0     0.0   25.0      -
+count                                 5    0    0.0       -   25.0      -
+event_order                          31    0    0.0       -   50.0      -
+first_after_retrieval                13    0    0.0       -   25.0      -
+how_transformed                       3    0    0.0       -   25.0      -
+ingredient_path                      11    0    0.0       -   25.0      -
+last_added                           21    0    0.0       -   25.0      -
+other                               132    1    0.8   100.0   25.2      -
+put_away_at_end                      79    0    0.0       -   25.0      -
+same_storage                         63    0    0.0       -   25.0      -
+state_at_cross_event                 52    0    0.0       -   25.0      -
+washed_before_use                     5    0    0.0       -   35.0      -
+where_last_placed                    94    0    0.0       -   25.0      -
+
+BY VIDEO
+                                      n  ans   acc% acc|ans chance major.
+P01-20240203-123350                  51    0    0.0       -   27.5      -
+P01-20240204-142301                  39    0    0.0       -   25.6      -
+P02-20240211-175138                  71    0    0.0       -   26.4      -
+P03-20240217-131219                  80    0    0.0       -   26.2      -
+P05-20240425-201444                  59    0    0.0       -   26.3      -
+P06-20240510-090328                  35    2    2.9    50.0   26.4      -
+P07-20240531-201703                  64    0    0.0       -   25.8      -
+P08-20240617-130401                  72    0    0.0       -   26.7      -
+P08-20240617-184909                  70    0    0.0       -   27.1      -
+P09-20240624-160737                  57    0    0.0       -   25.9      -
+
+BY OPTIONS MODEL
+                                      n  ans   acc% acc|ans chance major.
+None                                598    2    0.2    50.0   26.4      -
+
+missing: 596 (of which truncated at the output cap: 0)  stray answers: 0  cache_used_frac:   0.0
+usage: {'prompt_token_count': 24854, 'cached_content_token_count': 0, 'candidates_token_count': 199, 'thoughts_token_count': 4490, 'total_token_count': 29545}
