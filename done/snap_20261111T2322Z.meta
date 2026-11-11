@@ -1,0 +1,6 @@
+snapshot=20261111T2322Z
+kind=progress snapshot of cmd_0003 run (user: every 30 min)
+answers=244
+errors=3
+tasks=2 running, 29 completed, 14 held
+files=4 changed answer/error files since previous snapshot, plus status.txt and launches.jsonl
