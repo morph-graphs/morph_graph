@@ -1,0 +1,9 @@
+claimed=2026-11-11T12:32:01Z
+host=compute-a5-9.zaratan.umd.edu
+executor=runner (compute node)
+finished=2026-11-11T12:32:50Z
+exit=0
+split_verified=78 tasks; tasks 1/11/40/78 match Nexus (video + first qid)
+held=24004150_[1-10] (gpu-h100) and 24004150_[40-78] (gpu-a100), JobHeldUser, in place; 29 tasks 11-39 remain PENDING Priority on gpu-h100 (gpu:h100:1); smoke 24001393 untouched
+spend=0 SU; remaining worst case for cmd_0003 run = 29 x 8h x 144 = ~33 kSU
+results=2 files (split.txt, eval_state.txt)
