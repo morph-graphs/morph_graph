@@ -2,3 +2,5 @@ nexus/.pulled
 .sync.lock
 runner/sync.log
 runner/STOP_SYNC
+runner/snapshot.log
+runner/STOP_SNAPSHOTS
