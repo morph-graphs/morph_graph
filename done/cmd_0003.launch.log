@@ -1,0 +1,15 @@
+Loading python/3.10.10/gcc/11.3.0/nocuda/linux-rhel8-zen2
+  Loading requirement: gcc/11.3.0
+run dir: /scratch/zt1/project/abhinav2-prj/user/vatsalag/morph_graphs/epic_eval_runs/27c6fddf_qwen38-27b-thinking-v3-batch10-fps1-f768_cfg8b2c1f83
+  code_repo @ 27c6fddfa7
+  questions_repo @ 0f30904df2
+questions: 598 (598 streaming) over 10 videos @ epic-morph 0f30904df2
+
+prep: 9/10 videos need media -> /scratch/zt1/project/abhinav2-prj/user/vatsalag/morph_graphs/epic_eval_runs/media/13f0bc0e
+prep: 9 task(s) -> job 24004149 (standard, no gpu, 16 cpu, 32G, 3:00:00)
+
+eval: 598 unanswered questions in 78 tasks of <= 8 over 10/10 videos
+eval: 78 task(s) -> job 24004150 (gpu, gpu:a100:2, 8 cpu, 64G, 8:00:00)
+score: 1 task(s) -> job 24004151 (standard, no gpu, 1 cpu, 4G, 0:30:00)
+
+run dir: /scratch/zt1/project/abhinav2-prj/user/vatsalag/morph_graphs/epic_eval_runs/27c6fddf_qwen38-27b-thinking-v3-batch10-fps1-f768_cfg8b2c1f83

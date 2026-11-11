@@ -1,0 +1,14 @@
+claimed=2026-11-11T01:23:16Z
+host=compute-a5-9.zaratan.umd.edu
+executor=runner (compute node)
+account_policy=jobs moved to abhinav2-prj-aac after submission (RULES.md rule 4; command header agrees)
+started=2026-11-10T20:28:15 (local time, ET)
+finished=2026-11-11T01:29:27Z
+exit=0
+run_dir=/scratch/zt1/project/abhinav2-prj/user/vatsalag/morph_graphs/epic_eval_runs/27c6fddf_qwen38-27b-thinking-v3-batch10-fps1-f768_cfg8b2c1f83
+submitted=prep 24004149 (9 tasks, standard, 16 cpu, 3h) -> eval 24004150 (78 tasks, gpu-a100, gpu:a100:2, 8h cap, unthrottled; per-user cap 38 A100s = 19 tasks at once) -> score 24004151 (standard)
+account=all three moved cmsc->aac in place with scontrol update at submission; dependencies intact
+job_states_at_finish=24004149 PENDING, 24004150 PENDING (afterany prep), 24004151 PENDING (afterany eval)
+spend_so_far=0 SU; worst case 78 x 8h x 96 SU/h = ~60 kSU on aac (542.9 kSU unused at submission)
+wait=none: results published now are launches.jsonl only; answers/errors/scores follow in a later command
+results=1 file
