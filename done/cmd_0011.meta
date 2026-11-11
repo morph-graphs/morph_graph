@@ -1,0 +1,10 @@
+claimed=2026-11-11T20:07:09Z
+host=compute-a8-1.zaratan.umd.edu
+executor=runner (compute node)
+answers=req_20261111T2001Z
+finished=2026-11-11T20:07:12Z
+exit=0
+released=24004150_[44-78] (35 tasks) on gpu-h100/gpu:h100:1 (moved there earlier today); still held: 1-10 and 40-43 (14 tasks)
+state=7 running, 35 pending (eligible), 14 held
+spend=0 SU for this command; released tasks ~35 x ~0.5 h x 144 = ~2.5-3 kSU on aac
+results=2 files
