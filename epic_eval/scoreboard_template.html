@@ -44,6 +44,11 @@ tbody tr:last-child td { border-bottom: 0; }
 .own-Anubhav { color: var(--anubhav); } .own-Vatsal { color: var(--vatsal); }
 .label { font-weight: 500; }
 .note { color: var(--muted); font-size: 12px; }
+details.prep { margin-top: 6px; font-size: 12px; }
+details.prep summary { cursor: pointer; color: var(--accent); font-weight: 500; width: fit-content; }
+details.prep dl { display: grid; grid-template-columns: max-content 1fr; gap: 3px 10px; margin: 6px 0 2px; max-width: 72ch; }
+details.prep dt { color: var(--muted); }
+details.prep dd { margin: 0; color: var(--ink); }
 .bar { position: relative; height: 8px; background: var(--sunk); border-radius: 4px; min-width: 120px; }
 .bar > i { position: absolute; inset: 0 auto 0 0; background: var(--accent); border-radius: 4px; }
 .acc { position: relative; height: 18px; min-width: 160px; }
@@ -163,13 +168,19 @@ function accCell(t) {
       <div class="pt" style="left:${100 * p}%"></div></div></div>
     <div class="note mono">${pct(lo)}–${pct(hi)} · ${t.ok}/${t.ans}</div>`;
 }
+// Video preprocessing settings per run (registry "prep"), collapsed under the run name.
+function prepBlock(p) {
+  if (!p) return "";
+  return `<details class="prep"><summary>Video preprocessing</summary><dl>` +
+    Object.entries(p).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("") + `</dl></details>`;
+}
 function drawLb(order) {
   document.querySelectorAll("#lb-seg button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.order === order)));
   try { localStorage.setItem("lb-order", order); } catch (e) {}
   const ranked = [...R].sort(ORDERS[order]);
   $("#lb").innerHTML = `<thead><tr><th>Run</th><th>Owner</th><th>Type</th><th>Coverage</th><th>Accuracy</th><th>Last answer</th></tr></thead><tbody>` +
   ranked.map((r) => `<tr>
-    <td><div class="label">${esc(r.label)}</div>${r.note ? `<div class="note">${esc(r.note)}</div>` : ""}</td>
+    <td><div class="label">${esc(r.label)}</div>${r.note ? `<div class="note">${esc(r.note)}</div>` : ""}${prepBlock(r.prep)}</td>
     <td><span class="chip own-${esc(r.owner)}">${esc(r.owner)}</span></td>
     <td class="dim">${esc(r.group)}</td>
     <td><div class="bar" title="${r.total.ans} of ${r.total.n}"><i style="width:${(100 * r.total.ans) / r.total.n}%"></i></div>

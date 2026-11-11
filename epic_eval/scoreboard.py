@@ -140,7 +140,7 @@ def main():
         elif r["kind"] == "slices":
             res, mtime = from_slices(r["root"], r["arm"], qs)
         total, groups = summarize(res, qs)
-        runs.append({k: r.get(k) for k in ("id", "label", "owner", "group", "kind", "note")}
+        runs.append({k: r.get(k) for k in ("id", "label", "owner", "group", "kind", "note", "prep")}
                     | {"total": total, "groups": groups,
                        "updated": time.strftime("%Y-%m-%d %H:%M", time.localtime(mtime)) if mtime else None})
         results[r["id"]] = {str(i): [int(ok), pick] for i, (ok, pick) in res.items()}

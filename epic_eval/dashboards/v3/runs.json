@@ -15,7 +15,12 @@
    "group": "Plain model",
    "kind": "epic_eval",
    "run_dir": "/fs/cfar-projects/mem_open_vocab/morph_graphs/epic_eval_runs_v3/27c6fddf_gemini38flash-high-v3-batch10_cfgb399d802",
-   "note": "thinking HIGH, 1 fps, media resolution HIGH"
+   "note": "thinking HIGH, 1 fps, media resolution HIGH",
+   "prep": {
+    "Input clips": "HD-EPIC 1408×1408 → re-encoded clips max side 1024, 2 fps, CRF 26, no audio (media c189f41a), cut at each question's t_ask",
+    "Sampling": "1 fps (Gemini API)",
+    "Resolution": "media_resolution MEDIA_RESOLUTION_HIGH (Gemini decides tokens per frame)"
+   }
   },
   {
    "id": "gem31lite",
@@ -24,7 +29,12 @@
    "group": "Plain model",
    "kind": "epic_eval",
    "run_dir": "/fs/cfar-projects/mem_open_vocab/morph_graphs/vatsal/epic_eval_runs_v3/27c6fddf_gemini31flashlite-high-v3-batch10_cfg6c81c204",
-   "note": "thinking HIGH, 1 fps, media resolution HIGH"
+   "note": "thinking HIGH, 1 fps, media resolution HIGH",
+   "prep": {
+    "Input clips": "HD-EPIC 1408×1408 → re-encoded clips max side 1024, 2 fps, CRF 26, no audio (media c189f41a), cut at each question's t_ask",
+    "Sampling": "1 fps (Gemini API)",
+    "Resolution": "media_resolution MEDIA_RESOLUTION_HIGH (Gemini decides tokens per frame)"
+   }
   },
   {
    "id": "q38_27b",
@@ -36,7 +46,14 @@
    "run_dir": "/fs/cfar-projects/mem_open_vocab/morph_graphs/vatsal/epic_eval_runs_v3/27c6fddf_qwen38-27b-thinking-v3-batch10-fps1-f768_cfg8811a86e",
    "run_dirs": [
     "/fs/cfar-projects/mem_open_vocab/morph_graphs/vatsal/epic_eval_runs_v3/_zaratan/27c6fddf_qwen38-27b-thinking-v3-batch10-fps1-f768_cfg8b2c1f83"
-   ]
+   ],
+   "prep": {
+    "Input clips": "HD-EPIC 1408×1408 → re-encoded clips max side 1024, 2 fps, CRF 26, no audio (media c189f41a), cut at each question's t_ask",
+    "Sampling": "1 fps, max_frames 768",
+    "Pixel budget": "processor default (video_preprocessor_config.json, not overridden): size.longest_edge 25,165,824 px for the whole clip, size.shortest_edge 4,096 px per frame",
+    "Patching": "patch 16 px, merge 2×2, temporal patch 2 frames",
+    "Effective frame size": "~160×160 px at 768 frames (measured grid [384,10,10]); larger for shorter clips (~224–240 px at ~436 frames)"
+   }
   },
   {
    "id": "q3vl_8b",
@@ -45,7 +62,14 @@
    "group": "Plain model",
    "kind": "epic_eval",
    "run_dir": "/fs/cfar-projects/mem_open_vocab/morph_graphs/vatsal/epic_eval_runs_v3/27c6fddf_qwen3vl-8b-instruct-v3-batch10-fps1-f768_cfg6d508f62",
-   "note": "instruct, 1 fps, up to 768 frames"
+   "note": "instruct, 1 fps, up to 768 frames",
+   "prep": {
+    "Input clips": "HD-EPIC 1408×1408 → re-encoded clips max side 1024, 2 fps, CRF 26, no audio (media c189f41a), cut at each question's t_ask",
+    "Sampling": "1 fps, max_frames 768",
+    "Pixel budget": "processor default (video_preprocessor_config.json, not overridden): size.longest_edge 25,165,824 px for the whole clip, size.shortest_edge 4,096 px per frame",
+    "Patching": "patch 16 px, merge 2×2, temporal patch 2 frames",
+    "Effective frame size": "~160×160 px at 768 frames (measured grid [384,10,10]); larger for shorter clips (~224–240 px at ~436 frames)"
+   }
   },
   {
    "id": "merit_m8",
@@ -55,7 +79,11 @@
    "kind": "slices",
    "root": "/fs/cfar-projects/mem_open_vocab/morph_graphs/anubhav/baselines/MERIT/output/v3",
    "arm": "m8",
-   "note": "8B captions and answers · embedder: Qwen3-Embedding-4B (text only, the 4 keys per 30 s clip, MaxSim retrieval); no visual embedder"
+   "note": "8B captions and answers · embedder: Qwen3-Embedding-4B (text only, the 4 keys per 30 s clip, MaxSim retrieval); no visual embedder",
+   "prep": {
+    "Captions": "30 s clips, 1 fps frames at 448 px (prepare_epic.py --frame_size 448), captioned by the arm's backbone",
+    "Retrieval": "text only (4 keys per clip, Qwen3-Embedding-4B)"
+   }
   },
   {
    "id": "merit_m27",
@@ -65,7 +93,11 @@
    "kind": "slices",
    "root": "/fs/cfar-projects/mem_open_vocab/morph_graphs/anubhav/baselines/MERIT/output/v3",
    "arm": "m27",
-   "note": "27B captions and answers · embedder: Qwen3-Embedding-4B (text only, the 4 keys per 30 s clip, MaxSim retrieval); no visual embedder"
+   "note": "27B captions and answers · embedder: Qwen3-Embedding-4B (text only, the 4 keys per 30 s clip, MaxSim retrieval); no visual embedder",
+   "prep": {
+    "Captions": "30 s clips, 1 fps frames at 448 px (prepare_epic.py --frame_size 448), captioned by the arm's backbone",
+    "Retrieval": "text only (4 keys per clip, Qwen3-Embedding-4B)"
+   }
   },
   {
    "id": "magic_m8",
@@ -75,7 +107,12 @@
    "kind": "slices",
    "root": "/fs/cfar-projects/mem_open_vocab/morph_graphs/baselines/MAGIC-video/output/v3",
    "arm": "magic_m8",
-   "note": "on MERIT's Qwen3-VL-8B 30 s captions; local Qwen3-VL-8B for every LLM role (controlled vs MERIT, not the published setup) · embedders (local, separate from the LLM): Qwen3-Embedding-4B (text) + VLM2Vec-V2.0 on Qwen2-VL-2B (visual clips)"
+   "note": "on MERIT's Qwen3-VL-8B 30 s captions; local Qwen3-VL-8B for every LLM role (controlled vs MERIT, not the published setup) · embedders (local, separate from the LLM): Qwen3-Embedding-4B (text) + VLM2Vec-V2.0 on Qwen2-VL-2B (visual clips)",
+   "prep": {
+    "Captions": "MERIT's (30 s clips, 1 fps frames at 448 px (prepare_epic.py --frame_size 448), captioned by the arm's backbone)",
+    "Visual memory": "VLM2Vec-V2.0: 16 frames per 30 s clip from MERIT's 448 px clips",
+    "QA frames": "retrieved clips' frames to the backbone at 1 fps, up to 64 frames (WorldMM visual-memory defaults)"
+   }
   },
   {
    "id": "magic_m27",
@@ -85,7 +122,12 @@
    "kind": "slices",
    "root": "/fs/cfar-projects/mem_open_vocab/morph_graphs/baselines/MAGIC-video/output/v3",
    "arm": "magic_m27",
-   "note": "on MERIT's Qwen3.8-27B 30 s captions; local Qwen3.8-27B (non-thinking, FA2, transformers 5.8) for every LLM role (controlled vs MERIT m27) · embedders (local, separate from the LLM): Qwen3-Embedding-4B (text) + VLM2Vec-V2.0 on Qwen2-VL-2B (visual clips)"
+   "note": "on MERIT's Qwen3.8-27B 30 s captions; local Qwen3.8-27B (non-thinking, FA2, transformers 5.8) for every LLM role (controlled vs MERIT m27) · embedders (local, separate from the LLM): Qwen3-Embedding-4B (text) + VLM2Vec-V2.0 on Qwen2-VL-2B (visual clips)",
+   "prep": {
+    "Captions": "MERIT's (30 s clips, 1 fps frames at 448 px (prepare_epic.py --frame_size 448), captioned by the arm's backbone)",
+    "Visual memory": "VLM2Vec-V2.0: 16 frames per 30 s clip from MERIT's 448 px clips",
+    "QA frames": "retrieved clips' frames to the backbone at 1 fps, up to 64 frames (WorldMM visual-memory defaults)"
+   }
   },
   {
    "id": "magic_mo",
@@ -95,7 +137,12 @@
    "kind": "slices",
    "root": "/fs/cfar-projects/mem_open_vocab/morph_graphs/baselines/MAGIC-video/output/v3",
    "arm": "magic_mo",
-   "note": "as published, all via OpenRouter: gpt-oss-120b offline preprocessing + retriever, Qwen3.5-Flash responder; own 30 s captions (Whisper large-v3-turbo + Qwen3.5-Flash VLM, merged by gpt-oss-120b). Config: output/v3/nexus/magic_mo/run_config.json · embedders (local, separate from the LLM): Qwen3-Embedding-4B (text) + VLM2Vec-V2.0 on Qwen2-VL-2B (visual clips)"
+   "note": "as published, all via OpenRouter: gpt-oss-120b offline preprocessing + retriever, Qwen3.5-Flash responder; own 30 s captions (Whisper large-v3-turbo + Qwen3.5-Flash VLM, merged by gpt-oss-120b). Config: output/v3/nexus/magic_mo/run_config.json · embedders (local, separate from the LLM): Qwen3-Embedding-4B (text) + VLM2Vec-V2.0 on Qwen2-VL-2B (visual clips)",
+   "prep": {
+    "Captions": "MAGIC merge chain: each 30 s clip re-encoded at 360p (CRF 32) and sent as video_url to Qwen3.5-Flash (provider-side sampling); Whisper large-v3-turbo on the audio",
+    "Visual memory": "VLM2Vec-V2.0: 16 frames per 30 s clip from MERIT's 448 px clips",
+    "QA frames": "retrieved clips' frames to the backbone at 1 fps, up to 64 frames (WorldMM visual-memory defaults)"
+   }
   },
   {
    "id": "wmm_published",
@@ -105,7 +152,13 @@
    "kind": "slices",
    "root": "/fs/cfar-projects/mem_open_vocab/morph_graphs/baselines/WorldMM/output/v3",
    "arm": "published",
-   "note": "WorldMM's original split, GPT via OpenRouter: GPT-5 10 s captions, gpt-5-mini memory construction; Qwen3-VL-8B (local) retrieval + answers, as WorldMM's qwen3vl-8b setting · embedders (local, separate from the LLM): Qwen3-Embedding-4B (text) + VLM2Vec-V2.0 on Qwen2-VL-2B (visual clips)"
+   "note": "WorldMM's original split, GPT via OpenRouter: GPT-5 10 s captions, gpt-5-mini memory construction; Qwen3-VL-8B (local) retrieval + answers, as WorldMM's qwen3vl-8b setting · embedders (local, separate from the LLM): Qwen3-Embedding-4B (text) + VLM2Vec-V2.0 on Qwen2-VL-2B (visual clips)",
+   "prep": {
+    "Input video": "512×512 copy of the HD-EPIC video (prepare_epic.py)",
+    "Captions": "10 s segments, 1 fps frames as images to GPT-5; client caps images at 512×512 (OpenAIModel max_size)",
+    "Visual memory": "VLM2Vec-V2.0: 10 frames per 10 s segment",
+    "QA frames": "retrieved frames at 1 fps, up to 64; Qwen3-VL client thumbnails images ≤512×512, video frames ≤256×256"
+   }
   },
   {
    "id": "wmm_w8",
@@ -115,7 +168,13 @@
    "kind": "slices",
    "root": "/fs/cfar-projects/mem_open_vocab/morph_graphs/baselines/WorldMM/output/v3",
    "arm": "w8",
-   "note": "own 10 s captions by local Qwen3-VL-8B, which also builds memory and answers; so far only the 10-question smoke slice · embedders (local, separate from the LLM): Qwen3-Embedding-4B (text) + VLM2Vec-V2.0 on Qwen2-VL-2B (visual clips)"
+   "note": "own 10 s captions by local Qwen3-VL-8B, which also builds memory and answers; so far only the 10-question smoke slice · embedders (local, separate from the LLM): Qwen3-Embedding-4B (text) + VLM2Vec-V2.0 on Qwen2-VL-2B (visual clips)",
+   "prep": {
+    "Input video": "512×512 copy of the HD-EPIC video (prepare_epic.py)",
+    "Captions": "10 s segments, 1 fps frames to Qwen3-VL-8B; client thumbnails images ≤512×512",
+    "Visual memory": "VLM2Vec-V2.0: 10 frames per 10 s segment",
+    "QA frames": "retrieved frames at 1 fps, up to 64; images ≤512×512, video frames ≤256×256"
+   }
   }
  ]
 }
