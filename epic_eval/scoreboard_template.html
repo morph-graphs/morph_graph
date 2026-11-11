@@ -91,13 +91,18 @@ tr.detail td { background: var(--sunk); }
 
   <section>
     <div class="head"><h2>Leaderboard</h2>
+      <div class="seg" id="lb-seg" role="group" aria-label="Order runs by">
+        <button data-order="type" aria-pressed="false">Type</button>
+        <button data-order="name" aria-pressed="false">Name</button>
+        <button data-order="acc" aria-pressed="true">Accuracy</button>
+      </div>
       <span class="hint">Accuracy is over the questions a run has answered so far, with a 95% Wilson interval; the dashed line is chance for these 4-option questions. Coverage shows how far along each run is.</span></div>
     <div class="scroll"><table id="lb"></table></div>
   </section>
 
   <section>
     <div class="head"><h2>Breakdown</h2>
-      <div class="seg" role="group" aria-label="Break down by">
+      <div class="seg" id="heat-seg" role="group" aria-label="Break down by">
         <button id="by-form" data-by="form" aria-pressed="true">Question type</button>
         <button id="by-video" data-by="video" aria-pressed="false">Video</button>
         <button id="by-hops" data-by="hops" aria-pressed="false">Hops</button>
@@ -140,11 +145,14 @@ $("#meta").innerHTML = [
   `<span>Rebuilt <b>${esc(D.generated)}</b></span>`,
 ].join("");
 
-// Leaderboard: answered runs by accuracy, then runs with nothing yet.
-const ranked = [...R].sort((a, b) => {
-  const aa = a.total.ans ? a.total.ok / a.total.ans : -1, bb = b.total.ans ? b.total.ok / b.total.ans : -1;
-  return bb - aa;
-});
+// Leaderboard order: accuracy (runs with nothing yet last), type (group, then accuracy), or name.
+const acc = (r) => (r.total.ans ? r.total.ok / r.total.ans : -1);
+const groups = [...new Set(R.map((r) => r.group))];   // registry order: plain models first
+const ORDERS = {
+  acc: (a, b) => acc(b) - acc(a),
+  type: (a, b) => groups.indexOf(a.group) - groups.indexOf(b.group) || acc(b) - acc(a),
+  name: (a, b) => a.label.localeCompare(b.label) || acc(b) - acc(a),
+};
 function accCell(t) {
   if (!t.ans) return `<span class="dim">no answers yet</span>`;
   const p = t.ok / t.ans, [lo, hi] = t.ci;
@@ -155,7 +163,11 @@ function accCell(t) {
       <div class="pt" style="left:${100 * p}%"></div></div></div>
     <div class="note mono">${pct(lo)}–${pct(hi)} · ${t.ok}/${t.ans}</div>`;
 }
-$("#lb").innerHTML = `<thead><tr><th>Run</th><th>Owner</th><th>Type</th><th>Coverage</th><th>Accuracy</th><th>Last answer</th></tr></thead><tbody>` +
+function drawLb(order) {
+  document.querySelectorAll("#lb-seg button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.order === order)));
+  try { localStorage.setItem("lb-order", order); } catch (e) {}
+  const ranked = [...R].sort(ORDERS[order]);
+  $("#lb").innerHTML = `<thead><tr><th>Run</th><th>Owner</th><th>Type</th><th>Coverage</th><th>Accuracy</th><th>Last answer</th></tr></thead><tbody>` +
   ranked.map((r) => `<tr>
     <td><div class="label">${esc(r.label)}</div>${r.note ? `<div class="note">${esc(r.note)}</div>` : ""}</td>
     <td><span class="chip own-${esc(r.owner)}">${esc(r.owner)}</span></td>
@@ -164,6 +176,11 @@ $("#lb").innerHTML = `<thead><tr><th>Run</th><th>Owner</th><th>Type</th><th>Cove
         <div class="note mono">${r.total.ans}/${r.total.n}</div></td>
     <td>${r.kind === "planned" ? `<span class="dim">not started</span>` : accCell(r.total)}</td>
     <td class="note mono">${r.updated ? esc(r.updated) : "—"}</td></tr>`).join("") + `</tbody>`;
+}
+document.querySelectorAll("#lb-seg button").forEach((b) => b.addEventListener("click", () => drawLb(b.dataset.order)));
+let lbOrder = "acc";
+try { lbOrder = localStorage.getItem("lb-order") || "acc"; } catch (e) {}
+drawLb(ORDERS[lbOrder] ? lbOrder : "acc");
 
 // Breakdown heatmap.
 const live = R.filter((r) => r.total.ans > 0);
@@ -172,7 +189,7 @@ function heatColor(p) {
   return `color-mix(in oklab, color-mix(in oklab, var(--good) ${g}%, var(--bad)) 34%, var(--surface))`;
 }
 function drawHeat(by) {
-  document.querySelectorAll(".seg button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.by === by)));
+  document.querySelectorAll("#heat-seg button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.by === by)));
   if (!live.length) { $("#heat").innerHTML = `<tbody><tr><td class="empty">No run has answers yet.</td></tr></tbody>`; return; }
   const keys = Object.keys(live[0].groups[by]);
   const name = (k) => (by === "video" ? short(k) : by === "hops" ? `${k} hop${k === "1" ? "" : "s"}` : k.replace(/_/g, " "));
@@ -186,7 +203,7 @@ function drawHeat(by) {
         return `<td class="heat" style="background:${heatColor(p)}">${pct(p)}<small>${c.ok}/${c.ans}</small></td>`;
       }).join("") + `</tr>`).join("") + `</tbody>`;
 }
-document.querySelectorAll(".seg button").forEach((b) => b.addEventListener("click", () => drawHeat(b.dataset.by)));
+document.querySelectorAll("#heat-seg button").forEach((b) => b.addEventListener("click", () => drawHeat(b.dataset.by)));
 drawHeat("form");
 
 // Questions.
