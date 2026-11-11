@@ -1,0 +1,9 @@
+claimed=2026-11-11T17:29:54Z
+host=compute-a8-1.zaratan.umd.edu
+executor=runner (compute node)
+finished=2026-11-11T17:29:58Z
+exit=0
+snapshot=answers: 51 rows in 8 files errors:  1 rows ; 4 eval tasks RUNNING; held tasks unchanged (1-10, 40-78)
+note=the 1 error row is a MAX_TOKENS truncation (16384 thinking tokens, no answer), final unless retry_truncated; see also 30-min snapshots results/snap_*
+spend=0 SU for this command
+results=11 files
