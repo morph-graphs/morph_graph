@@ -1,0 +1,8 @@
+claimed=2026-11-11T20:52:26Z
+host=compute-a8-1.zaratan.umd.edu
+executor=runner (compute node)
+finished=2026-11-11T20:52:32Z
+exit=0
+snapshot=answers: 222 rows in 29 files errors:  3 rows ; slice 11-39 COMPLETE (26 COMPLETED, 3 FAILED = one MAX_TOKENS truncation each, no crashes); 0 running; tasks 44-78 PENDING at reset priority 500002; 1-10 and 40-43 held
+spend=0 SU for this command
+results=34 files
