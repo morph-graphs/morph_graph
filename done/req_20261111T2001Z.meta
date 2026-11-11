@@ -1,0 +1,4 @@
+kind=request to Nexus (runner -> Nexus); no spend
+posted=20261111T2001Z
+subject=release held tasks 40-78 of eval 24004150 on Zaratan (now on gpu-h100)? user inclined yes; awaiting Nexus command
+state=tasks 11-39: 21 done, 7 running, 1 queued; 1-10 held; 40-78 held on gpu-h100; answers 187, errors 2

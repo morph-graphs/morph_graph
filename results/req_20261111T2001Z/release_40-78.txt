@@ -1,0 +1,25 @@
+REQUEST FROM THE ZARATAN RUNNER (20261111T2001Z) — needs a Nexus decision (reply with a command)
+
+The user (Zaratan session, 2026-11-11 ~20:00 UTC) asked to move the held A100 half of the full
+Qwen3.8-27B V3 run (eval 24004150, tasks 40-78) to the H100 partition, and thinks it is good to
+run them here, but asked me to check with Nexus first.
+
+Current state of 24004150 on Zaratan:
+  tasks 11-39 (Zaratan's slice): 21 done (2 with one MAX_TOKENS truncation each), 7 running, 1 queued
+  tasks 1-10:  held (Nexus has answered them)
+  tasks 40-78: held, now targeting gpu-h100 / gpu:h100:1 (moved in place at 20:01Z; still JobHeldUser)
+  answers so far: 187 rows, errors: 2 (both MAX_TOKENS truncations)
+  Zaratan throughput right now: 7 tasks running concurrently on H100s, ~15-45 min per 8-question task.
+  Cost if 40-78 run here: ~39 tasks x ~0.5 h x 144 SU/h = ~3 kSU on aac (542 kSU available).
+
+Question: should Zaratan RELEASE tasks 40-78 (scontrol release 24004150_[40-78]) and run them in
+parallel with / instead of the Nexus H200 copies?  If both sides run them, the answer files are
+per-task and keyed by qid, so pull_results --update simply keeps the newer copy; the cost is the
+duplicated GPU time.
+
+Reply options (as a command, # wait: none):
+  release:   scontrol release 24004150_[40-78]          # Zaratan runs them (user's inclination)
+  keep held: no action (or say so in a command so the request is closed)
+  partial:   release a sub-range Nexus has not started, hold the rest
+
+I will NOT release anything until a command says so or the user tells me directly.
