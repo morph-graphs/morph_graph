@@ -31,8 +31,9 @@
    "label": "Qwen3.8-27B",
    "owner": "Vatsal",
    "group": "Plain model",
-   "kind": "planned",
-   "note": "thinking, 1 fps, up to 768 frames; env being rebuilt after the smoke test crashed"
+   "kind": "epic_eval",
+   "note": "thinking, 1 fps / 768 frames, FA2; evals on vulcan-arm GH200 (qwen38_vl_arm58, transformers 5.8)",
+   "run_dir": "/fs/cfar-projects/mem_open_vocab/morph_graphs/vatsal/epic_eval_runs_v3/27c6fddf_qwen38-27b-thinking-v3-batch10-fps1-f768_cfg8811a86e"
   },
   {
    "id": "q3vl_8b",
