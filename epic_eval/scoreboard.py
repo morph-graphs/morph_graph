@@ -5,7 +5,7 @@
 Unlike epic_eval.dashboard (epic_eval runs only, with full replies), this also reads the memory
 baselines, which write MERIT-style slices ({arm}_{video}_q{a}-{b}_final.json, rows with a 1-based
 "ID" into the video's bank file and "evaluate"). A registry entry is one of
-    {"id", "label", "owner", "group", "kind": "epic_eval", "run_dir": ...}
+    {"id", "label", "owner", "group", "kind": "epic_eval", "run_dir": ..., "run_dirs": [...]}   (run_dirs optional: same run split over machines)
     {"id", "label", "owner", "group", "kind": "slices", "root": ..., "arm": ...}
     {"id", "label", "owner", "group", "kind": "planned"}          (listed, no results yet)
 plus an optional "note". Scores come straight from each run's files, so runs in progress
@@ -130,7 +130,13 @@ def main():
     for r in reg["runs"]:
         res, mtime = {}, 0
         if r["kind"] == "epic_eval":
-            res, mtime = from_epic_eval(r["run_dir"], qs)
+            # one run split over machines: run_dir first, then each of run_dirs; the first answer to a question wins
+            res, mtime = {}, 0
+            for d in [r["run_dir"]] + r.get("run_dirs", []):
+                part, m = from_epic_eval(d, qs)
+                for i, v in part.items():
+                    res.setdefault(i, v)
+                mtime = max(mtime, m)
         elif r["kind"] == "slices":
             res, mtime = from_slices(r["root"], r["arm"], qs)
         total, groups = summarize(res, qs)

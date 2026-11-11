@@ -32,8 +32,11 @@
    "owner": "Vatsal",
    "group": "Plain model",
    "kind": "epic_eval",
-   "note": "thinking, 1 fps / 768 frames, FA2; evals on vulcan-arm GH200 (qwen38_vl_arm58, transformers 5.8)",
-   "run_dir": "/fs/cfar-projects/mem_open_vocab/morph_graphs/vatsal/epic_eval_runs_v3/27c6fddf_qwen38-27b-thinking-v3-batch10-fps1-f768_cfg8811a86e"
+   "note": "thinking, 1 fps / 768 frames, FA2, transformers 5.8; one run split over machines (same code 27c6fddf, bank, protocol): tasks 1-10 vulcan-arm GH200, 11-39 Zaratan H100 (container), 40-78 Nexus H200",
+   "run_dir": "/fs/cfar-projects/mem_open_vocab/morph_graphs/vatsal/epic_eval_runs_v3/27c6fddf_qwen38-27b-thinking-v3-batch10-fps1-f768_cfg8811a86e",
+   "run_dirs": [
+    "/fs/cfar-projects/mem_open_vocab/morph_graphs/vatsal/epic_eval_runs_v3/_zaratan/27c6fddf_qwen38-27b-thinking-v3-batch10-fps1-f768_cfg8b2c1f83"
+   ]
   },
   {
    "id": "q3vl_8b",
