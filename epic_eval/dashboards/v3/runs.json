@@ -94,14 +94,24 @@
    "note": "as published, all via OpenRouter: gpt-oss-120b offline preprocessing + retriever, Qwen3.5-Flash responder; own 30 s captions (Whisper large-v3-turbo + Qwen3.5-Flash VLM, merged by gpt-oss-120b). Config: output/v3/nexus/magic_mo/run_config.json"
   },
   {
+   "id": "wmm_published",
+   "label": "WorldMM · published (GPT-5 + gpt-5-mini memory, Qwen3-VL-8B answers)",
+   "owner": "Vatsal",
+   "group": "Memory method",
+   "kind": "slices",
+   "root": "/fs/cfar-projects/mem_open_vocab/morph_graphs/baselines/WorldMM/output/v3",
+   "arm": "published",
+   "note": "WorldMM's original split, GPT via OpenRouter: GPT-5 10 s captions, gpt-5-mini memory construction; Qwen3-VL-8B (local) retrieval + answers, as WorldMM's qwen3vl-8b setting"
+  },
+  {
    "id": "wmm_w8",
-   "label": "WorldMM · Qwen3-VL-8B",
+   "label": "WorldMM · Qwen3-VL-8B (all local)",
    "owner": "Vatsal",
    "group": "Memory method",
    "kind": "slices",
    "root": "/fs/cfar-projects/mem_open_vocab/morph_graphs/baselines/WorldMM/output/v3",
    "arm": "w8",
-   "note": "own 10 s captions; so far only the 10-question smoke slice"
+   "note": "own 10 s captions by local Qwen3-VL-8B, which also builds memory and answers; so far only the 10-question smoke slice"
   }
  ]
 }
