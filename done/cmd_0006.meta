@@ -1,0 +1,8 @@
+claimed=2026-11-11T16:21:16Z
+host=compute-a8-1.zaratan.umd.edu
+executor=runner (compute node)
+finished=2026-11-11T16:21:43Z
+exit=0
+snapshot=2026-11-11T16:21:18Z: eval 24004150 tasks 11,12,13 RUNNING (gpu-a6-4, gpu-a6-6 x2, 1x H100 each), 26 tasks 14-39 PENDING Priority on gpu-h100, 49 tasks (1-10, 40-78) PENDING JobHeldUser; answers 4 rows in 3 files, errors 0
+spend=0 SU for this command; run so far ~3 tasks x ~8 min x 144 SU/h
+results=5 files (status.txt, answers/*.jsonl, launches.jsonl; no errors files exist yet)
