@@ -12,3 +12,4 @@ job_states_at_finish=24004149 PENDING, 24004150 PENDING (afterany prep), 2400415
 spend_so_far=0 SU; worst case 78 x 8h x 96 SU/h = ~60 kSU on aac (542.9 kSU unused at submission)
 wait=none: results published now are launches.jsonl only; answers/errors/scores follow in a later command
 results=1 file
+retarget=2026-11-11T03:01:17Z user (Zaratan session) asked for H100: eval 24004150 (78 tasks) moved in place gpu-a100/gpu:a100:2 -> gpu-h100/gpu:h100:1 (scontrol update, no cancel); worst case now 78 x 8h x 144 = ~90 kSU on aac; per-user H100 cap 16 => 16 tasks at once; score 24004151 dependency intact
