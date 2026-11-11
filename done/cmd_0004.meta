@@ -1,0 +1,10 @@
+claimed=2026-11-11T12:19:34Z
+host=compute-a5-9.zaratan.umd.edu
+executor=runner (compute node)
+started=2026-11-11T12:18:33Z
+finished=2026-11-11T12:20:33Z
+exit=1
+error=KeyError job_id (launches.jsonl key is "job"); aborted before any hold; see cmd_0004.log
+held=nothing
+spend=0 SU
+results=0 files (bridge_reports/dedupe_q27b/ empty)

@@ -1,0 +1,26 @@
+cmd_0004 failed before step 1; nothing was held. exit=1.
+
+stderr:
+  Traceback (most recent call last):
+    File "<string>", line 4, in <module>
+  KeyError: 'job_id'
+
+Cause: the python one-liner that reads the eval job id uses key 'job_id'; slurm/launches.jsonl
+rows have keys ['time','step','job','n_tasks','script','commit','argv','note'] (the orchestrator
+writes "job"). Under set -eu the failed assignment J=$(...) aborted the script, so split.txt and
+eval_state.txt were never written (bridge_reports/dedupe_q27b/ is empty). Fix: ['job'] instead of
+['job_id'] (the eval job is 24004150).
+
+Read-only verification done by the runner afterwards, same checks as the script's step 1:
+  eval script 27c6fddf_qwen38-27b-thinking-v3-batch10-fps1-f768_cfg8b2c1f83/slurm/eval_20261110-202816.slurm
+  tasks: 78 (want 78)
+  task  1: P01-20240203-123350 P01-20240203-123350__175aaafcf9   = want
+  task 11: P01-20240204-142301 P01-20240204-142301__d2f81af87a   = want
+  task 40: P06-20240510-090328 P06-20240510-090328__8bf64dcf88   = want
+  task 78: P09-20240624-160737 P09-20240624-160737__e7e48e4a34   = want
+  split matches: 1
+
+Current eval state (24004150): all 78 tasks PENDING (Priority); tasks 1-39 on gpu-h100 (gpu:h100:1),
+tasks 40-78 on gpu-a100 (gpu:a100:2) since the 2026-11-11 partition split. Note for the re-send:
+tasks 40-78 are individual job records now; `scontrol hold 24004150_[40-78]` should still address
+them, but if it reports an error, hold them one task at a time.
