@@ -52,7 +52,7 @@
    "kind": "slices",
    "root": "/fs/cfar-projects/mem_open_vocab/morph_graphs/anubhav/baselines/MERIT/output/v3",
    "arm": "m8",
-   "note": "8B captions and answers"
+   "note": "8B captions and answers · embedder: Qwen3-Embedding-4B (text only, the 4 keys per 30 s clip, MaxSim retrieval); no visual embedder"
   },
   {
    "id": "merit_m27",
@@ -62,7 +62,7 @@
    "kind": "slices",
    "root": "/fs/cfar-projects/mem_open_vocab/morph_graphs/anubhav/baselines/MERIT/output/v3",
    "arm": "m27",
-   "note": "27B captions and answers"
+   "note": "27B captions and answers · embedder: Qwen3-Embedding-4B (text only, the 4 keys per 30 s clip, MaxSim retrieval); no visual embedder"
   },
   {
    "id": "magic_m8",
@@ -72,7 +72,7 @@
    "kind": "slices",
    "root": "/fs/cfar-projects/mem_open_vocab/morph_graphs/baselines/MAGIC-video/output/v3",
    "arm": "magic_m8",
-   "note": "on MERIT's Qwen3-VL-8B 30 s captions; local Qwen3-VL-8B for every LLM role (controlled vs MERIT, not the published setup)"
+   "note": "on MERIT's Qwen3-VL-8B 30 s captions; local Qwen3-VL-8B for every LLM role (controlled vs MERIT, not the published setup) · embedders (local, separate from the LLM): Qwen3-Embedding-4B (text) + VLM2Vec-V2.0 on Qwen2-VL-2B (visual clips)"
   },
   {
    "id": "magic_m27",
@@ -82,7 +82,7 @@
    "kind": "slices",
    "root": "/fs/cfar-projects/mem_open_vocab/morph_graphs/baselines/MAGIC-video/output/v3",
    "arm": "magic_m27",
-   "note": "on MERIT's Qwen3.8-27B 30 s captions; local Qwen3.8-27B (non-thinking, sdpa) for every LLM role (controlled vs MERIT m27)"
+   "note": "on MERIT's Qwen3.8-27B 30 s captions; local Qwen3.8-27B (non-thinking, FA2, transformers 5.8) for every LLM role (controlled vs MERIT m27) · embedders (local, separate from the LLM): Qwen3-Embedding-4B (text) + VLM2Vec-V2.0 on Qwen2-VL-2B (visual clips)"
   },
   {
    "id": "magic_mo",
@@ -92,7 +92,7 @@
    "kind": "slices",
    "root": "/fs/cfar-projects/mem_open_vocab/morph_graphs/baselines/MAGIC-video/output/v3",
    "arm": "magic_mo",
-   "note": "as published, all via OpenRouter: gpt-oss-120b offline preprocessing + retriever, Qwen3.5-Flash responder; own 30 s captions (Whisper large-v3-turbo + Qwen3.5-Flash VLM, merged by gpt-oss-120b). Config: output/v3/nexus/magic_mo/run_config.json"
+   "note": "as published, all via OpenRouter: gpt-oss-120b offline preprocessing + retriever, Qwen3.5-Flash responder; own 30 s captions (Whisper large-v3-turbo + Qwen3.5-Flash VLM, merged by gpt-oss-120b). Config: output/v3/nexus/magic_mo/run_config.json · embedders (local, separate from the LLM): Qwen3-Embedding-4B (text) + VLM2Vec-V2.0 on Qwen2-VL-2B (visual clips)"
   },
   {
    "id": "wmm_published",
@@ -102,7 +102,7 @@
    "kind": "slices",
    "root": "/fs/cfar-projects/mem_open_vocab/morph_graphs/baselines/WorldMM/output/v3",
    "arm": "published",
-   "note": "WorldMM's original split, GPT via OpenRouter: GPT-5 10 s captions, gpt-5-mini memory construction; Qwen3-VL-8B (local) retrieval + answers, as WorldMM's qwen3vl-8b setting"
+   "note": "WorldMM's original split, GPT via OpenRouter: GPT-5 10 s captions, gpt-5-mini memory construction; Qwen3-VL-8B (local) retrieval + answers, as WorldMM's qwen3vl-8b setting · embedders (local, separate from the LLM): Qwen3-Embedding-4B (text) + VLM2Vec-V2.0 on Qwen2-VL-2B (visual clips)"
   },
   {
    "id": "wmm_w8",
@@ -112,7 +112,7 @@
    "kind": "slices",
    "root": "/fs/cfar-projects/mem_open_vocab/morph_graphs/baselines/WorldMM/output/v3",
    "arm": "w8",
-   "note": "own 10 s captions by local Qwen3-VL-8B, which also builds memory and answers; so far only the 10-question smoke slice"
+   "note": "own 10 s captions by local Qwen3-VL-8B, which also builds memory and answers; so far only the 10-question smoke slice · embedders (local, separate from the LLM): Qwen3-Embedding-4B (text) + VLM2Vec-V2.0 on Qwen2-VL-2B (visual clips)"
   }
  ]
 }
