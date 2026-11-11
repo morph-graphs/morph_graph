@@ -110,7 +110,7 @@
    "note": "on MERIT's Qwen3-VL-8B 30 s captions; local Qwen3-VL-8B for every LLM role (controlled vs MERIT, not the published setup) · embedders (local, separate from the LLM): Qwen3-Embedding-4B (text) + VLM2Vec-V2.0 on Qwen2-VL-2B (visual clips)",
    "prep": {
     "Captions": "MERIT's (30 s clips, 1 fps frames at 448 px (prepare_epic.py --frame_size 448), captioned by the arm's backbone)",
-    "Visual memory": "VLM2Vec-V2.0: 16 frames per 30 s clip from MERIT's 448 px clips",
+    "Visual memory": "VLM2Vec-V2.0: 16 frames per 30 s clip from MERIT's 448 px clips (adapter choice, aligned with the caption clips), resized inside VLM2Vec to ≤360×420 px (151,200 px) per frame; upstream MAGIC instead cuts each 30 s clip from the full-resolution video (CRF 23), then the same VLM2Vec cap applies",
     "QA frames": "retrieved clips' frames to the backbone at 1 fps, up to 64 frames (WorldMM visual-memory defaults)"
    }
   },
@@ -125,7 +125,7 @@
    "note": "on MERIT's Qwen3.8-27B 30 s captions; local Qwen3.8-27B (non-thinking, FA2, transformers 5.8) for every LLM role (controlled vs MERIT m27) · embedders (local, separate from the LLM): Qwen3-Embedding-4B (text) + VLM2Vec-V2.0 on Qwen2-VL-2B (visual clips)",
    "prep": {
     "Captions": "MERIT's (30 s clips, 1 fps frames at 448 px (prepare_epic.py --frame_size 448), captioned by the arm's backbone)",
-    "Visual memory": "VLM2Vec-V2.0: 16 frames per 30 s clip from MERIT's 448 px clips",
+    "Visual memory": "VLM2Vec-V2.0: 16 frames per 30 s clip from MERIT's 448 px clips (adapter choice, aligned with the caption clips), resized inside VLM2Vec to ≤360×420 px (151,200 px) per frame; upstream MAGIC instead cuts each 30 s clip from the full-resolution video (CRF 23), then the same VLM2Vec cap applies",
     "QA frames": "retrieved clips' frames to the backbone at 1 fps, up to 64 frames (WorldMM visual-memory defaults)"
    }
   },
@@ -140,8 +140,9 @@
    "note": "as published, all via OpenRouter: gpt-oss-120b offline preprocessing + retriever, Qwen3.5-Flash responder; own 30 s captions (Whisper large-v3-turbo + Qwen3.5-Flash VLM, merged by gpt-oss-120b). Config: output/v3/nexus/magic_mo/run_config.json · embedders (local, separate from the LLM): Qwen3-Embedding-4B (text) + VLM2Vec-V2.0 on Qwen2-VL-2B (visual clips)",
    "prep": {
     "Captions": "MAGIC merge chain: each 30 s clip re-encoded at 360p (CRF 32) and sent as video_url to Qwen3.5-Flash (provider-side sampling); Whisper large-v3-turbo on the audio",
-    "Visual memory": "VLM2Vec-V2.0: 16 frames per 30 s clip from MERIT's 448 px clips",
-    "QA frames": "retrieved clips' frames to the backbone at 1 fps, up to 64 frames (WorldMM visual-memory defaults)"
+    "Visual memory": "VLM2Vec-V2.0: 16 frames per 30 s clip from MERIT's 448 px clips (adapter choice, aligned with the caption clips), resized inside VLM2Vec to ≤360×420 px (151,200 px) per frame; upstream MAGIC instead cuts each 30 s clip from the full-resolution video (CRF 23), then the same VLM2Vec cap applies",
+    "QA frames": "retrieved clips' frames to the backbone at 1 fps, up to 64 frames (WorldMM visual-memory defaults)",
+    "Deviation": "visual clips are MERIT's 448 px cut, not MAGIC's own full-resolution cut; after VLM2Vec's resize both are ~389 px per frame"
    }
   },
   {
