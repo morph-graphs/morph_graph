@@ -1,0 +1,8 @@
+claimed=2026-11-11T18:30:59Z
+host=compute-a8-1.zaratan.umd.edu
+executor=runner (compute node)
+finished=2026-11-11T18:31:07Z
+exit=0
+snapshot=answers: 90 rows in 13 files errors:  1 rows ; 5 eval tasks RUNNING, 9 COMPLETED, 1 FAILED (task 15: 7/8 answered, 1 MAX_TOKENS truncation; not a crash); held tasks unchanged (1-10, 40-78)
+spend=0 SU for this command
+results=16 files
