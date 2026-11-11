@@ -8,3 +8,4 @@ released=24004150_[44-78] (35 tasks) on gpu-h100/gpu:h100:1 (moved there earlier
 state=7 running, 35 pending (eligible), 14 held
 spend=0 SU for this command; released tasks ~35 x ~0.5 h x 144 = ~2.5-3 kSU on aac
 results=2 files
+note=2026-11-11T20:12:51Z holding reset the age clock: released tasks 44-78 have Priority=500002 (AccrueTime = release time 20:07Z), 65 eligible gpu-h100 tasks ahead of them (median prio ~500620 = ~10 h of age). Expect a wait on the order of the original ~15 h unless backfill takes them; nothing on our side can raise it.

@@ -68,3 +68,9 @@ Started 2026-11-10T20:35:06Z. `S=/scratch/zt1/project/abhinav2-prj/user/vatsalag
 - GPUs free: 0/76 A100, 0/32 H100, 0/28 MIG. Pending per partition: 196 (a100), 104 (h100),
   64 (MIG). Expect long queue waits; queue age is precious (RULES.md).
 - **Progress snapshots (user, 2026-11-11): `runner/snapshot_q27b.sh --loop 1800`** publishes `results/snap_<UTC>/` + `done/snap_<UTC>.meta` every 30 min (status, changed answer/error files, launches.jsonl; scores.txt when done), until scores.txt exists or `runner/STOP_SNAPSHOTS`. Runs in the runner session's background; after a session restart it has to be restarted.
+- **Hold/release resets queue age (learned 2026-11-11).** Priority here = 500000 (QoS normal) + age
+  (10000 pts max over 7 d, ~60/h) + job size; fairshare weight is 0, so account does not matter.
+  `scontrol hold` stops age accrual and `release` restarts it from zero (AccrueTime = release time), so a
+  released task goes to the back of the queue like a fresh submission. Hold only what will not run here.
+  Retargeting partition/gres in place keeps age. Backfill (1 GPU, <= 8 h tasks) is what actually gets
+  our tasks started while ranked mid-queue.
