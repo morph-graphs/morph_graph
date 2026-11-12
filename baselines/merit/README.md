@@ -14,7 +14,7 @@ several rounds. It is the first memory baseline of the EPIC-Morph benchmark pape
 | `epic/caption_clips_qwen.py` | MERIT's memory, step 1: one caption per clip with the arm's model |
 | `epic/blind_qa.py` | MERIT's answer prompt with no context: what the model gets from question and options alone |
 | `epic/collect_answers.py`, `epic/compare_answers.py` | merge a video's answer files and list unanswered IDs; compare two runs |
-| `epic/hf_results.py` | upload a video's results to the Hugging Face dataset, or download them |
+| `../common/hf_results.py` | (shared by all baselines) upload a video's results to the Hugging Face dataset, or download them |
 | `run_merit.sh` | one video, one arm, one stage (prep, build, qa, blind, upload, all) |
 | `env/` | the two environments, pinned: `wheels-*`, `requirements-*`, `install_requirements.sh` (shared by the image and `setup_env.sh`) |
 | `docker/` | the image (`Dockerfile`), `build.sh`, `run.sh` (one job in a container), `image_tag.sh` |
@@ -98,7 +98,7 @@ Rebuild one batch10 video into a scratch folder and compare with our run, fetche
 ```bash
 MERIT_GPU=0 MERIT_OUT=/repo/baselines/merit/work/check \
     bash baselines/merit/docker/run.sh all P07-20240531-201703 m27 batch10_agree2
-python3 baselines/merit/epic/hf_results.py download --arm m27 --video P07-20240531-201703 --dest baselines/merit/work/ref
+python3 baselines/common/hf_results.py download --arm m27 --video P07-20240531-201703 --dest baselines/merit/work/ref
 python3 baselines/merit/epic/compare_answers.py \
     baselines/merit/work/ref/merit/m27/P07-20240531-201703/answers_batch10_agree2.json.gz \
     baselines/merit/work/check/m27/P07-20240531-201703/answers_batch10_agree2.json.gz
