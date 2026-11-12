@@ -6,7 +6,7 @@
 #   EPIC_MORPH_DIR  the epic-morph checkout (required)
 #   MERIT_IMAGE     image (default ghcr.io/morph-graphs/merit:<arm>-<env hash>, from image_tag.sh)
 #   MERIT_HF_CACHE  Hugging Face cache on the host (default ~/.cache/huggingface)
-#   HDEPIC_VIDEOS   videos on the host, if not in $EPIC_MORPH_DIR/data/HD-EPIC/videos; mounted read-only
+#   HDEPIC_VIDEOS   videos on the host (default $EPIC_MORPH_DIR/data/HD-EPIC/videos), mounted read-only at /videos
 #   MERIT_OUT       optional, a path inside the container (e.g. /repo/baselines/merit/work/check)
 set -euo pipefail
 ARM=${3:?usage: run.sh <stage> <video> <arm> [bank]}
@@ -17,11 +17,13 @@ GPU=${MERIT_GPU:?set MERIT_GPU to the GPU index or indices for this job}
 HF=${MERIT_HF_CACHE:-$HOME/.cache/huggingface}
 [ -f "$REPO/baselines/merit/MERIT/eval/evaluate_egolife.py" ] || { echo "run: git submodule update --init baselines/merit/MERIT"; exit 1; }
 mkdir -p "$HF"
-VID=(); [ -n "${HDEPIC_VIDEOS:-}" ] && VID=(-v "$(cd "$HDEPIC_VIDEOS" && pwd):/videos:ro" -e HDEPIC_VIDEOS=/videos)
+# the videos by their real host path: data/HD-EPIC is often a symlink, which would dangle inside the container
+VIDEOS=${HDEPIC_VIDEOS:-$EPIC/data/HD-EPIC/videos}
+[ -d "$VIDEOS" ] || { echo "no videos at $VIDEOS (set HDEPIC_VIDEOS; epic-morph v3/DATA.md)"; exit 1; }
 # the container sees only the chosen GPUs, renumbered from 0
 N=$(echo "$GPU" | tr ',' '\n' | grep -c .); SEEN=$(seq -s, 0 $((N - 1)))
 exec docker run --rm --gpus "\"device=$GPU\"" --shm-size 32g --user "$(id -u):$(id -g)" \
-    -v "$REPO:/repo" -v "$EPIC:/epic-morph" -v "$HF:/hf" ${VID[@]+"${VID[@]}"} -w /repo \
-    -e CUDA_VISIBLE_DEVICES="$SEEN" -e EPIC_MORPH_DIR=/epic-morph -e HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-0}" \
+    -v "$REPO:/repo" -v "$EPIC:/epic-morph" -v "$HF:/hf" -v "$(cd -P "$VIDEOS" && pwd):/videos:ro" -w /repo \
+    -e CUDA_VISIBLE_DEVICES="$SEEN" -e EPIC_MORPH_DIR=/epic-morph -e HDEPIC_VIDEOS=/videos -e HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-0}" \
     ${MERIT_OUT:+-e MERIT_OUT="$MERIT_OUT"} \
     "$IMAGE" bash baselines/merit/run_merit.sh "$@"
