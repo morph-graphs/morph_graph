@@ -1,0 +1,9 @@
+claimed=2026-11-12T06:28:50Z
+host=compute-a8-1.zaratan.umd.edu
+executor=runner (compute node)
+finished=2026-11-12T06:28:52Z
+exit=0
+released=24004150 tasks 65-78 (14 tasks) on gpu-h100/gpu:h100:1; priority reset to ~500002 by the hold/release (see RUNNER_NOTES), so they queue behind aged jobs until backfill takes them
+held=1-10, 40-43 (14 tasks, answered on Nexus)
+spend=0 SU for this command; released tasks ~14 x ~0.5 h x 144 = ~1-1.5 kSU on aac
+results=2 files
