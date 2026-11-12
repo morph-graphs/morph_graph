@@ -73,7 +73,7 @@ def build_tasks(dur):
         for (b, arm), (rate, fam, ev) in BUILD_RATE.items():
             blocked, status = "", "ready"
             if b == "magic":
-                blocked, status = "questions for this video (its narrative chains are built per question time)", "blocked"
+                blocked, status = "MAGIC-Video port smoke test (build split from per-question chains: done on its branch)", "blocked"
             elif b == "worldmm":
                 blocked, status = "WorldMM timing pilot", "blocked"
             elif b == "m3agent":
@@ -140,8 +140,8 @@ def eng_tasks():
           status="in progress", note="Subagent on branch anubhav-port-magic, from Vatsal's port"),
         E(stage="Port M3-Agent (local swaps for Gemini diarization and OpenAI embeddings)", person="Anubhav's agent", level=1,
           status="in progress", note="Subagent on branch anubhav-port-m3agent; two venvs; D7 still open"),
-        E(stage="Port Qwen-MM-Plugins through OpenRouter", person="Anubhav's agent", level=1, status="in progress",
-          note="Subagent on branch anubhav-port-qwenplug; live test needs the key at ~/.config/openrouter/api_key on Nexus"),
+        E(stage="Qwen-MM-Plugins (deferred by Anubhav, 2026-11-12)", person="Anubhav's agent", level=5, status="held",
+          note="Port built and mock-tested on branch anubhav-port-qwenplug (6bad6db); later, likely served locally with Qwen3.8-27B instead of OpenRouter"),
         E(stage="Docker images for every baseline from their env/ files (one workflow)", person="Anubhav's agent", level=2,
           status="blocked", blocked_by="the four ports", note="After the ports land"),
         E(stage="Onboard wriva friends (image, video access, token, worker)", person="Anubhav's agent", level=2,
@@ -233,7 +233,7 @@ def main():
     add("WorldMM 8B · main", "t1", 0, 10, "videos", "unverified", "ask Vatsal")
     add("WorldMM 27B · main", "t1", 0, 10, "videos", "unverified", "ask Vatsal")
     add("M3-Agent · main", "t1", 0, 10, "videos", "blocked", "port needed")
-    add("Qwen-MM-Plugins · main", "t1", 0, 10, "videos", "blocked", "API only: decision")
+    add("Qwen-MM-Plugins · main", "t1", 0, 10, "videos", "held", "deferred by Anubhav")
     add("M2 probes · 8B no context", "t1", 1513, 1513, "probes", "done")
     add("M2 probes · 27B no context", "t1", 1513, 1513, "probes", "done")
     add("M2 probes · MERIT 8B memory only", "t1", 1513, 1513, "probes", "done")
@@ -265,9 +265,9 @@ def main():
         dict(id="D5", question="Which GPUs may run each model size?", owner="Anubhav", status="decided",
              why="Captions differ slightly across GPU models.",
              options="Decided: anywhere the model fits, whichever starts first; every output records its GPU and the paper gets one cross-GPU check per arm."),
-        dict(id="D6", question="Qwen-MM-Plugins through OpenRouter?", owner="Anubhav", status="open",
-             why="We have an OpenRouter key. Its default models (Qwen VL, ASR, omni, embeddings) must all exist there; frames leave our clusters.",
-             options="Check model availability on OpenRouter, then a capped pilot"),
+        dict(id="D6", question="Qwen-MM-Plugins?", owner="Anubhav", status="decided",
+             why="API-only defaults, no paper, ~$150 through OpenRouter; a local Qwen3.8-27B version is possible.",
+             options="Decided 2026-11-12: deferred; revisit later."),
         dict(id="D7", question="M3-Agent: replace its Gemini diarization and OpenAI embeddings with local models?",
              owner="Anubhav", status="open", why="Keeps everything on our GPUs, but it is then not exactly the published method.",
              options="Local swaps, noted in the paper / Use the APIs"),
