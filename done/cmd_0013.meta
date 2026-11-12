@@ -1,0 +1,10 @@
+claimed=2026-11-12T03:40:47Z
+host=compute-a8-1.zaratan.umd.edu
+executor=runner (compute node)
+finished=2026-11-12T03:40:58Z
+exit=0
+held=14 tasks of 65-78 (pending ones); left alone: 0 (running/gone)
+note=a held task stops accruing age and restarts from zero on release (see RUNNER_NOTES); 51-64 stay queued (prio ~500450, ~33 h100 tasks ahead)
+state=28 PENDING JobHeldUser; 12 PENDING Priority; 
+spend=0 SU for this command
+results=2 files
