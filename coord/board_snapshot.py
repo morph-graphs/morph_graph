@@ -37,8 +37,8 @@ POOLS = [
          families="48gb", launcher="Slurm fan-out over scavenger, cml-scavenger, vulcan-scavenger, tron high, vulcan-ampere",
          state="active", capacity=12, note="Main pool for 8B arms. Preemptible tiers; jobs resume."),
     dict(pool="nexus-vatsal", person="Vatsal's agent", hardware="Nexus GPUs on Vatsal's account",
-         families="48gb", launcher="Slurm (his MAGIC-Video and WorldMM ports)", state="active", capacity=6,
-         note="Runs MAGIC-Video and WorldMM until they move into morph_graph."),
+         families="48gb", launcher="Slurm", state="not visible", capacity=0,
+         note="We can't see Vatsal's jobs or agents; this pool joins the board when his side runs a worker."),
     dict(pool="exempt-sailon", person="Anubhav's agent", hardware="vulcan-exempt and sailon queues",
          families="48gb,hopper", launcher="Slurm", state="waiting for access", capacity=0,
          note="Access requested; no jobs until Anubhav confirms."),
@@ -156,11 +156,14 @@ def project(rows, pools):
     left = {p["pool"]: p["capacity"] * 72.0 for p in pools if p["state"] in ("active", "check if idle")}
     fam = {p["pool"]: p["families"].split(",") for p in pools}
     person = {p["pool"]: p["person"] for p in pools}
-    special = {"magic": ("nexus-vatsal", "arm00"), "worldmm": ("nexus-vatsal", "arm00")}   # Vatsal's ports
+    special = {"magic": (), "worldmm": ()}   # wait for their ports; nothing is projected onto Vatsal's pool
     for r in sorted((r for r in rows if r["kind"] == "gpu" and r["status"] == "ready"),
                     key=lambda r: (r["level"], -r["est_gpu_h"])):
         cands = [p for p in left if r["family"] in fam[p] and (r["baseline"] not in special or p in special[r["baseline"]])]
         cands = [p for p in cands if r["baseline"] in special or p != "nexus-vatsal"]
+        if not cands and r["baseline"] in special:
+            r["pool"], r["status"], r["blocked_by"] = "—", "blocked", f"{r['method']} port (in progress)"
+            continue
         if not cands:
             r["pool"], r["status"] = "—", "blocked"
             r["blocked_by"] = f"no free {'Hopper (H100 / GH200)' if r['family'] == 'hopper' else '48 GB'} pool: wriva needs onboarding, Zaratan needs approval, arm00 busy"
@@ -190,6 +193,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--durations", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--running", help="rows of live jobs (pool, job, what, state, since, note), collected from the queues")
     a = ap.parse_args()
     dur = json.JSONDecoder().raw_decode(open(a.durations).read())[0]
     rows = tranche1_tasks(dur) + build_tasks(dur) + eng_tasks()
@@ -261,7 +265,8 @@ def main():
              options="Local swaps, noted in the paper / Use the APIs"),
     ]
     os.makedirs(a.out, exist_ok=True)
-    for name, data in [("tasks", rows), ("pools", POOLS), ("progress", progress), ("decisions", decisions),
+    running = json.load(open(a.running)) if a.running else []
+    for name, data in [("running", running), ("tasks", rows), ("pools", POOLS), ("progress", progress), ("decisions", decisions),
                        ("tranches", tranches)]:
         json.dump(data, open(os.path.join(a.out, f"{name}.json"), "w"), indent=0)
     print({k: len(v) for k, v in [("tasks", rows), ("pools", POOLS), ("progress", progress)]},
