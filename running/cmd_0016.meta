@@ -1,0 +1,4 @@
+claimed=2026-11-12T15:31:44Z
+host=compute-a8-1.zaratan.umd.edu
+executor=runner (compute node)
+approval=explicit user approval quoted in the command header (RULES.md #3); queue-age cost nil (tasks answered on Nexus, never meant to run here)
