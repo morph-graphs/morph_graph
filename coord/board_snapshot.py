@@ -44,10 +44,10 @@ POOLS = [
          note="Access requested; no jobs until Anubhav confirms."),
     dict(pool="wriva", person="Archana and Aaron", hardware="2-4 H100-SXM (cml-wriva, cml-wriva-high), indefinitely",
          families="hopper,48gb", launcher="Slurm on cml-wriva, under their own accounts", state="needs onboarding", capacity=3,
-         note="They are not in the openvocab group, so they can't read our videos yet. Needs their usernames, the public image and their own Hugging Face tokens."),
+         note="UMIACS is adding them to the openvocab project folder; then onboarding (venvs in /fs/cfar-projects/mem_open_vocab/envs, their own Hugging Face tokens)."),
     dict(pool="arm00", person="Anubhav's agent", hardware="1x GH200 96 GB (aarch64), shared",
-         families="hopper", launcher="direct, one job at a time when idle", state="busy", capacity=1,
-         note="Busy at 21:20 UTC 2026-11-12: another user's jobs hold 78 of 98 GB at 100% load. 27B arm environment exists (Vatsal's); x86 Docker images don't run here."),
+         families="hopper", launcher="direct, one job at a time when idle", state="active", capacity=1,
+         note="Free at 23:30 UTC 2026-11-12 (0.3 of 98 GB). Needs an aarch64 venv for MERIT 27B (the existing arm env is conda, which we're replacing). x86 Docker images don't run here."),
     dict(pool="zaratan", person="Anubhav's agent", hardware="H100 / A100",
          families="hopper,48gb", launcher="zr sbatch; uploads from the login node", state="active", capacity=8,
          note="AAC approved by Anubhav 2026-11-12 (CMSC is empty). H100 = 144 SU/h. Videos and models already on scratch; waits for the public image."),
@@ -134,10 +134,16 @@ def eng_tasks():
           level=2, note="Lets Nexus, wriva and Zaratan run the same environment as Max"),
         E(stage="vLLM answering for 27B arms", person="Anubhav's agent", level=2,
           note="Expected 5-10x on 27B answering (not measured); halves the H100 budget"),
-        E(stage="Move MAGIC-Video and WorldMM into morph_graph (run.sh + images)", person="Vatsal's agent", level=2,
-          note="Same entry point and output layout as MERIT"),
-        E(stage="Port M3-Agent (local swaps for Gemini diarization and OpenAI embeddings)", person="unassigned", level=3,
-          note="Only method with open weights for memory and QA; needs audio"),
+        E(stage="Port WorldMM into morph_graph (venvs, run.sh, one-video check)", person="Anubhav's agent", level=1,
+          status="in progress", note="Subagent on branch anubhav-port-worldmm, from Vatsal's port; build needs no questions"),
+        E(stage="Port MAGIC-Video into morph_graph (build split from per-question chains)", person="Anubhav's agent", level=1,
+          status="in progress", note="Subagent on branch anubhav-port-magic, from Vatsal's port"),
+        E(stage="Port M3-Agent (local swaps for Gemini diarization and OpenAI embeddings)", person="Anubhav's agent", level=1,
+          status="in progress", note="Subagent on branch anubhav-port-m3agent; two venvs; D7 still open"),
+        E(stage="Port Qwen-MM-Plugins through OpenRouter", person="Anubhav's agent", level=1, status="in progress",
+          note="Subagent on branch anubhav-port-qwenplug; live test needs the key at ~/.config/openrouter/api_key on Nexus"),
+        E(stage="Docker images for every baseline from their env/ files (one workflow)", person="Anubhav's agent", level=2,
+          status="blocked", blocked_by="the four ports", note="After the ports land"),
         E(stage="Onboard wriva friends (image, video access, token, worker)", person="Anubhav's agent", level=2,
           blocked_by="wriva details (decision)", status="blocked", note="Draft the note; Anubhav approves sending"),
         E(stage="Docker launcher for Max's worker", person="Anubhav's agent", level=3,
@@ -190,7 +196,7 @@ def main():
     wave = os.path.join(HERE, "..", "..", "..", "morph", "pkg", "zaratan", "wave1.txt")
     if os.path.exists(os.path.expanduser("~/Work/morph/pkg/zaratan/wave1.txt")):
         for v in open(os.path.expanduser("~/Work/morph/pkg/zaratan/wave1.txt")).read().split():
-            QUEUED[("merit", "m27", "build", v)] = ("zaratan", "Zaratan wave 1: prep 24047789 (scavenger), build 24047790 (H100, AAC)")
+            QUEUED[("merit", "m27", "build", v)] = ("zaratan", "Zaratan wave 1: prep 24047789 running (standard, QoS normal), build 24047790 waits for prep then an H100 (AAC)")
     mark_queued(rows)
     project(rows, POOLS)
     for i, r in enumerate(rows):
