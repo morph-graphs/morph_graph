@@ -88,7 +88,9 @@ python3 baselines/merit/epic/compare_answers.py \
     $EPIC_MORPH_DIR/outputs/v3/merit/m27/P07-20240531-201703/answers_batch10_agree2.json.gz \
     baselines/merit/work/check/m27/P07-20240531-201703/answers_batch10_agree2.json.gz
 ```
-The committed P07 runs score 24/64 (m8) and 25/64 (m27). Generation is greedy but not bit-identical across
-GPUs and library builds, so expect a few questions to flip; the accuracies should be within a few questions
-of each other and the McNemar p well above 0.05. A large gap means a setup problem (most often the wrong
-transformers version for m27).
+The committed P07 runs score 24/64 (m8) and 25/64 (m27), made on RTX A5000s (m8) and A5000s / a GH200 (m27).
+Decoding is greedy and deterministic on one GPU model, but captions differ across GPU models (measured on
+P07, 2026-11-12: this environment and the original container gave 8/8 identical captions on the same A6000,
+and both only 2/8 identical to the A5000 run), and the answers follow the captions. So on another GPU model
+compare accuracy, not answers: our check on an L40S gave 22/64 vs 24/64 for m8 (41/64 same option, McNemar
+p = 0.80). A large gap means a setup problem (most often the wrong transformers version for m27).
