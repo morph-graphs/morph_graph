@@ -59,7 +59,7 @@ POOLS = [
 
 def task(**k):
     base = dict(kind="gpu", baseline="", arm="", stage="", video="", tranche="", status="ready", pool="",
-                person="", level=3, est_gpu_h=0.0, family="", blocked_by="", evidence="", note="")
+                person="", level=3, est_gpu_h=0.0, video_min=None, family="", blocked_by="", evidence="", note="")
     base.update(k)
     base["method"] = NAMES.get(base["baseline"], base["baseline"])
     return base
@@ -82,12 +82,17 @@ def build_tasks(dur):
                 blocked, status = "", "ready"
             rows.append(task(baseline=b, arm=arm, stage="build", video=v, tranche="all videos", status=status,
                              level=3, est_gpu_h=round(rate * vh, 2), family=fam, blocked_by=blocked, evidence=ev,
-                             note=f"build order #{i + 1}; {vh * 60:.0f} min of video"))
+                             video_min=round(vh * 60, 1), note=f"build order #{i + 1}; {vh * 60:.0f} min of video"))
     return rows
 
 
 def tranche1_tasks(dur):
     rows = []
+    for v in BATCH10:
+        for arm, fam in (("m8", "48gb"), ("m27", "hopper")):
+            rows.append(task(baseline="merit", arm=arm, stage="build", video=v, tranche="all videos", status="done",
+                             level=3, family=fam, evidence="measured", video_min=round(dur.get(v, 0) / 60, 1),
+                             note="memory in the results dataset"))
     for v in BATCH10:
         vm = dur.get(v, 0) / 60
         for arm in ("m8", "m27"):
@@ -104,8 +109,9 @@ def tranche1_tasks(dur):
                              status="unverified", level=1, family="48gb" if arm == "w8" else "hopper", evidence="est",
                              note="Vatsal's port; status not visible from here (ask Vatsal)"))
     rows.append(task(baseline="merit", arm="m27", stage="M2 memory-only", video="P07-20240531-201703", tranche="t1",
-                     status="ready", level=4, family="hopper", est_gpu_h=4.0, evidence="measured",
-                     note="Timing pilot for 27B probes; queued on scavenger tiers since last night"))
+                     status="held", level=4, family="hopper", est_gpu_h=4.0, evidence="measured",
+                     blocked_by="M2 probes are in the research phase (Anubhav, 2026-11-12)",
+                     note="Still pending on Nexus as job 8367939; Anubhav to cancel"))
     for name, b, arm, fam, gh in [("WorldMM 8B local", "worldmm", "w8", "48gb", 8),
                                   ("WorldMM 27B local", "worldmm", "w27", "hopper", 10),
                                   ("M3-Agent", "m3agent", "m3", "48gb", 10)]:
@@ -164,6 +170,16 @@ def project(rows, pools):
             r["pool"] = "—"
 
 
+QUEUED = {}   # video -> (pool, note) for tasks submitted outside the board
+
+
+def mark_queued(rows):
+    for r in rows:
+        q = QUEUED.get((r["baseline"], r["arm"], r["stage"], r["video"]))
+        if q:
+            r["status"], r["pool"], r["person"], r["note"] = "queued", q[0], "Anubhav's agent", q[1] + "; " + r["note"]
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--durations", required=True)
@@ -171,6 +187,11 @@ def main():
     a = ap.parse_args()
     dur = json.JSONDecoder().raw_decode(open(a.durations).read())[0]
     rows = tranche1_tasks(dur) + build_tasks(dur) + eng_tasks()
+    wave = os.path.join(HERE, "..", "..", "..", "morph", "pkg", "zaratan", "wave1.txt")
+    if os.path.exists(os.path.expanduser("~/Work/morph/pkg/zaratan/wave1.txt")):
+        for v in open(os.path.expanduser("~/Work/morph/pkg/zaratan/wave1.txt")).read().split():
+            QUEUED[("merit", "m27", "build", v)] = ("zaratan", "Zaratan wave 1: prep 24047789 (scavenger), build 24047790 (H100, AAC)")
+    mark_queued(rows)
     project(rows, POOLS)
     for i, r in enumerate(rows):
         r["id"] = f"T{i + 1:04d}"
@@ -197,9 +218,9 @@ def main():
     add("M2 probes · MERIT 8B memory only", "t1", 1513, 1513, "probes", "done")
     add("M2 probes · MERIT 8B with frames", "t1", 805, 1513, "probes", "unverified", "6 of 10 videos at 07:45")
     add("M2 probes · MERIT 8B right clip", "t1", 0, 1513, "probes", "unverified", "running since this morning")
-    add("M2 probes · MERIT 27B memory only", "t1", 0, 1513, "probes", "queued", "P07 pilot first")
+    add("M2 probes · MERIT 27B memory only", "t1", 0, 1513, "probes", "held", "probes are in the research phase")
     add("Memories · MERIT 8B", "all videos", 10, 156, "videos", "ready")
-    add("Memories · MERIT 27B", "all videos", 10, 156, "videos", "ready")
+    add("Memories · MERIT 27B", "all videos", 10, 156, "videos", "queued", "17 queued on Zaratan (wave 1)")
     for exp in ("MERIT 8B · main (with frames)", "MERIT 27B · main (with frames)", "MAGIC-Video 8B · main",
                 "M2 probes · MERIT 8B memory only"):
         add(exp, "t2", 0, 129, "videos", "waiting for questions", "Max's Stage A in progress")
