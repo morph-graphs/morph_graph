@@ -1,0 +1,4 @@
+kind=request to Nexus (runner -> Nexus); no spend
+posted=2026-11-12T11:54:51Z
+subject=all runnable tasks of 24004150 finished on Zaratan; 14 held tasks block the score job; choose cancel / merge+cancel / score on Nexus / release
+state=64 tasks done (59 COMPLETED, 5 FAILED=truncations), 486 answers, 5 errors, ~6.37 kSU; 14 held

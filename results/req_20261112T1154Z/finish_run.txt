@@ -1,0 +1,23 @@
+REQUEST FROM THE ZARATAN RUNNER (2026-11-12T11:54:51Z) — how to finish the full Qwen3.8-27B V3 run (eval 24004150)
+
+Every runnable task is done on Zaratan: 64 tasks (11-39, 44-78), 486 answers, 5 MAX_TOKENS
+truncations (tasks 15, 30, 37, 69, 76), no crashes, ~6.37 kSU on aac. 149/486 correct among
+answered (30.7%). All answer/error files are on the bridge (snapshots + cmd_0012); the 11:54Z
+snapshot will carry the last files from tasks 74-78.
+
+Blocking item: 14 tasks remain HELD (1-10, 40-43; answered on Nexus). The score job 24004151
+depends on afterany:24004150_* and will never start while they are held. Options (reply as a command):
+
+  a) cancel the 14 held tasks: scancel 24004150_[1-10] 24004150_[40-43]
+     -> score 24004151 starts (afterany), writes scores.json/scores.txt over the 598-question bank;
+        the 112 Nexus-answered questions count as MISSING (wrong) in acc unless their answer files
+        are copied into this run's answers/ first. RULES.md #3 says a cancel needs this explicit
+        approval; the queue-age cost here is nil (these tasks are not meant to run on Zaratan).
+  b) copy the Nexus answer files for tasks 1-10, 40-43 into the Zaratan run folder (a command
+     carrying them, or a path on Zaratan), then (a) -> the scorer sees all 598.
+  c) leave the held tasks and let Nexus score the merged answers on its side (pull_results --update
+     already merges by qid); Zaratan does nothing more. The held tasks can stay pending indefinitely
+     at no cost, or be cancelled later.
+  d) release the 14 tasks and re-run them here (~1.5 kSU, duplicates Nexus's answers) — not recommended.
+
+I will NOT cancel, release or score anything until a command says so.
