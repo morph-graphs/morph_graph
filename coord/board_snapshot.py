@@ -47,7 +47,7 @@ POOLS = [
          note="UMIACS is adding them to the openvocab project folder; then onboarding (venvs in /fs/cfar-projects/mem_open_vocab/envs, their own Hugging Face tokens)."),
     dict(pool="arm00", person="Anubhav's agent", hardware="1x GH200 96 GB (aarch64), shared",
          families="hopper", launcher="direct, one job at a time when idle", state="active", capacity=1,
-         note="Free at 23:30 UTC 2026-11-12 (0.3 of 98 GB). Needs an aarch64 venv for MERIT 27B (the existing arm env is conda, which we're replacing). x86 Docker images don't run here."),
+         note="Running MERIT 27B builds since 22:49 UTC 2026-11-12 (tmux merit-arm), build order #18 onward; waits whenever another user holds over 20 GB. Uses the batch10 arm environment (no-conda exception for this node, Anubhav)."),
     dict(pool="zaratan", person="Anubhav's agent", hardware="H100 / A100",
          families="hopper,48gb", launcher="zr sbatch; uploads from the login node", state="active", capacity=8,
          note="AAC approved by Anubhav 2026-11-12 (CMSC is empty). H100 = 144 SU/h. Videos and models already on scratch; waits for the public image."),
@@ -197,6 +197,10 @@ def main():
     if os.path.exists(os.path.expanduser("~/Work/morph/pkg/zaratan/wave1.txt")):
         for v in open(os.path.expanduser("~/Work/morph/pkg/zaratan/wave1.txt")).read().split():
             QUEUED[("merit", "m27", "build", v)] = ("zaratan", "Zaratan wave 1: prep 24047789 running (standard, QoS normal), build 24047790 waits for prep then an H100 (AAC)")
+    arm = os.path.expanduser("~/Work/morph/pkg/arm00/arm_list.txt")
+    if os.path.exists(arm):
+        for v in open(arm).read().split():
+            QUEUED[("merit", "m27", "build", v)] = ("arm00", "arm00 loop (tmux merit-arm), one video at a time in build order from #18; Zaratan's next waves take from the end")
     mark_queued(rows)
     project(rows, POOLS)
     for i, r in enumerate(rows):
@@ -226,7 +230,7 @@ def main():
     add("M2 probes · MERIT 8B right clip", "t1", 0, 1513, "probes", "unverified", "running since this morning")
     add("M2 probes · MERIT 27B memory only", "t1", 0, 1513, "probes", "held", "probes are in the research phase")
     add("Memories · MERIT 8B", "all videos", 10, 156, "videos", "ready")
-    add("Memories · MERIT 27B", "all videos", 10, 156, "videos", "queued", "17 queued on Zaratan (wave 1)")
+    add("Memories · MERIT 27B", "all videos", 10, 156, "videos", "queued", "17 queued on Zaratan (wave 1), 129 on arm00 one at a time")
     for exp in ("MERIT 8B · main (with frames)", "MERIT 27B · main (with frames)", "MAGIC-Video 8B · main",
                 "M2 probes · MERIT 8B memory only"):
         add(exp, "t2", 0, 129, "videos", "waiting for questions", "Max's Stage A in progress")
