@@ -7,3 +7,6 @@
 [submodule "baselines/merit/MERIT"]
 	path = baselines/merit/MERIT
 	url = https://github.com/morph-graphs/MERIT.git
+[submodule "baselines/worldmm/WorldMM"]
+	path = baselines/worldmm/WorldMM
+	url = https://github.com/morph-graphs/WorldMM.git

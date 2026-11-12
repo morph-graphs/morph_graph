@@ -1,0 +1,15 @@
+# The m27 backbone server only (baselines/worldmm/epic/llm_server.py serving Qwen3.8-27B): WorldMM itself runs in
+# the client environment. Qwen3.8 needs transformers 5.8 (5.2 loads it but generates garbage, see MERIT's
+# README); the same stack as MERIT's m27 environment. Python 3.11, CUDA 12.4. torch/torchvision/flash-attn come
+# first, from setup_env.sh; causal-conv1d is compiled by install_requirements.sh.
+transformers==5.8.0
+tokenizers==0.22.2
+huggingface-hub==1.32.0
+accelerate==1.15.0
+safetensors==0.8.0
+qwen-vl-utils==0.0.14
+fla-core==0.4.2
+einops==0.8.1
+numpy==2.1.2
+pillow==11.0.0
+av==13.1.0
