@@ -56,7 +56,10 @@ record() {   # one line per finished stage, for the hand-back
 import json, os, platform, subprocess, sys, time
 import torch, transformers
 git = lambda *a, cwd=None: subprocess.run(["git", *a], capture_output=True, text=True, cwd=cwd).stdout.strip()
-commit, merit, bank = git("rev-parse", "HEAD"), git("rev-parse", "HEAD", cwd="baselines/merit/MERIT"), git("rev-parse", "HEAD", cwd=os.environ["EPIC"])
+# docker/run.sh passes the commits read on the host (a worktree's .git points outside the container)
+commit = os.environ.get("MERIT_REPO_COMMIT") or git("rev-parse", "HEAD")
+merit = os.environ.get("MERIT_SUBMODULE_COMMIT") or git("rev-parse", "HEAD", cwd="baselines/merit/MERIT")
+bank = os.environ.get("MERIT_EPIC_COMMIT") or git("rev-parse", "HEAD", cwd=os.environ["EPIC"])
 dirty = bool(git("status", "--porcelain", "baselines/merit"))
 gpus = [torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())]
 print(json.dumps({"stage": sys.argv[1], "seconds": int(float(sys.argv[2])), "commit": commit, "dirty": dirty,

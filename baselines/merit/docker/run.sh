@@ -25,5 +25,7 @@ N=$(echo "$GPU" | tr ',' '\n' | grep -c .); SEEN=$(seq -s, 0 $((N - 1)))
 exec docker run --rm --gpus "\"device=$GPU\"" --shm-size 32g --user "$(id -u):$(id -g)" \
     -v "$REPO:/repo" -v "$EPIC:/epic-morph" -v "$HF:/hf" -v "$(cd -P "$VIDEOS" && pwd):/videos:ro" -w /repo \
     -e CUDA_VISIBLE_DEVICES="$SEEN" -e EPIC_MORPH_DIR=/epic-morph -e HDEPIC_VIDEOS=/videos -e HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-0}" \
+    -e MERIT_REPO_COMMIT="$(git -C "$REPO" rev-parse HEAD)" -e MERIT_EPIC_COMMIT="$(git -C "$EPIC" rev-parse HEAD)" \
+    -e MERIT_SUBMODULE_COMMIT="$(git -C "$REPO/baselines/merit/MERIT" rev-parse HEAD)" \
     ${MERIT_OUT:+-e MERIT_OUT="$MERIT_OUT"} \
     "$IMAGE" bash baselines/merit/run_merit.sh "$@"
