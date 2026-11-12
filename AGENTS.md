@@ -61,6 +61,17 @@ that keep branches from drifting:
 - Publishing costs Actions minutes (2,000 a month, shared): run the workflow by hand on `main` after a merge
   that changes `baselines/merit/env/` or `docker/`; code-only merges keep the same image tag.
 
+## Generated outputs go to the Hugging Face dataset, never into git
+
+- Baseline outputs (memories, captions, answers, run logs) belong in the private dataset
+  [morph-graphs/epic-morph-results](https://huggingface.co/datasets/morph-graphs/epic-morph-results), not in
+  this repo or epic-morph. MERIT: `baselines/merit/run_merit.sh ... upload` (folder `merit/<arm>/<video>/`); a
+  new baseline gets its own top-level folder there and the same kind of upload step.
+- Reuse what is there: a memory depends only on the video and the model, so `build` takes it from the
+  dataset before building, and every bank, probe set and variant (`MERIT_TAG`, `MERIT_NO_FRAMES`) answers from it.
+- Banks are generated in epic-morph (`v3/export_bank.py <name>`), not committed; record the epic-morph commit
+  with any result (run_merit.sh does, in `runs.jsonl`).
+
 ## Coding practices
 
 - Match the surrounding code: comment density, naming, idiom. Small, direct changes.

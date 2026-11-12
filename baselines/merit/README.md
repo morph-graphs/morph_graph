@@ -28,7 +28,9 @@ rounds, 512 image tokens, keys event + object + summary, 448 px.
 
 **Where things live.** The code is this repo (`git clone --recurse-submodules`, or `git submodule update
 --init baselines/merit/MERIT`). The questions are an epic-morph checkout, named by `EPIC_MORPH_DIR` as for
-`epic_eval`: banks from its `outputs/v3/banks/`, videos from its `data/HD-EPIC/videos/` (or `HDEPIC_VIDEOS`).
+`epic_eval`: banks from its `outputs/v3/banks/` (generated there with `v3/export_bank.py <bank>` when missing:
+banks are not committed, and the same commit gives the same bank byte for byte), videos from its
+`data/HD-EPIC/videos/` (or `HDEPIC_VIDEOS`).
 The results are not in git: they are written to `baselines/merit/results/<arm>/<video>/` (ignored) and the
 `upload` stage puts them in the private Hugging Face dataset
 [morph-graphs/epic-morph-results](https://huggingface.co/datasets/morph-graphs/epic-morph-results) at
@@ -65,7 +67,14 @@ stack without a container.
 
 ## Running
 
-`build_order.txt` lists the 146 videos with no committed memory yet: the 17 that already have object stories,
+**Build a memory once, reuse it everywhere.** A memory depends only on the video and the model, so `build`
+first takes it from the dataset when it is there (CPU only, seconds; `MERIT_FETCH=0` to skip that) and every
+bank, probe set and variant answers from it. Variants of the same bank get their own answer files:
+`MERIT_TAG=<name>` writes `answers_<bank>_<name>.json.gz`, and `MERIT_NO_FRAMES=1` (answer from captions only,
+for memory probes) defaults the tag to `noframes`. `upload` adds files to the dataset folder and merges
+`runs.jsonl`; only a rebuilt memory replaces the folder (answers from the old memory are then removed).
+
+`build_order.txt` lists the 146 videos with no memory yet: the 17 that already have object stories,
 then the rest longest first. `build` makes the clips and frames first if needed. `qa` answers every question
 of the bank for the video; a question MERIT fails on (it writes "Error", e.g. after a CUDA out-of-memory) is
 retried by ID, up to three passes. Every stage skips finished work, so rerun the same command after a

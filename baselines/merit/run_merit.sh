@@ -12,7 +12,8 @@
 #          all    prep + build, then qa + blind when a bank is given (no upload)
 #   arm    m8   Qwen3-VL-8B (captions and answers)    one GPU with >= 40 GB (8B + the 4B embedding model)
 #          m27  Qwen3.8-27B (captions and answers)    one 80 GB GPU, or 2x 48 GB, or 4x 24 GB
-#   bank   a folder name under the epic-morph checkout's outputs/v3/banks/, e.g. batch10_agree2
+#   bank   a named bank of the epic-morph checkout, e.g. batch10_agree2 (generated there with
+#          v3/export_bank.py <bank> when missing; byte-identical for anyone at that commit)
 #
 # Environment (see README.md): PY  python of the arm's environment (the Docker image sets it)
 #   EPIC_MORPH_DIR an epic-morph checkout (required): the banks, and by default the videos
@@ -21,7 +22,11 @@
 #   MERIT_OUT      default baselines/merit/results: per <arm>/<video> the memory (captions, keys),
 #                  answers_<bank>.json.gz, blind_<bank>.json and runs.jsonl (not committed; `upload` puts
 #                  them in the dataset morph-graphs/epic-morph-results at merit/<arm>/<video>/)
-# Every step skips finished work, so rerunning the same command resumes.
+#   MERIT_TAG      a variant name for the answers (answers_<bank>_<tag>.json.gz); MERIT_NO_FRAMES=1 (answer from
+#                  captions only, memory probes) defaults it to "noframes", so variants never overwrite each other
+#   MERIT_FETCH    0 to never take the memory from the dataset (build normally reuses it when it is there)
+# Every step skips finished work, so rerunning the same command resumes. The memory is built once per video
+# and arm and shared by every bank, probe set and variant.
 set -euo pipefail
 STAGE=${1:?usage: run_merit.sh <prep|build|qa|blind|upload|all> <video> <m8|m27> [bank]}
 V=${2:?video id}; ARM=${3:?arm m8 or m27}; BANK=${4:-}
@@ -32,6 +37,7 @@ EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && p
 case $ARM in m8) MODEL=qwen3vl-8b ;; m27) MODEL=qwen38-27b ;; *) echo "arm must be m8 or m27"; exit 1 ;; esac
 VIDEOS=${HDEPIC_VIDEOS:-$EPIC/data/HD-EPIC/videos}; WORK=${MERIT_WORK:-$M/work}; OUTROOT=${MERIT_OUT:-$M/results}
 OUT=$OUTROOT/$ARM/$V; PREP=$WORK/prep; CAP=$OUT/${V}_30sec.json
+TAG=${MERIT_TAG:-}; [ "${MERIT_NO_FRAMES:-0}" = 1 ] && [ -z "$TAG" ] && TAG=noframes; SUF=${TAG:+_$TAG}
 mkdir -p "$OUT" "$WORK/logs"
 # eval_egolife.sh calls plain `python`: this environment's first
 export PATH="$(dirname "$PY"):$PATH" PYTHONPATH="$R/src${PYTHONPATH:+:$PYTHONPATH}" PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
@@ -82,6 +88,17 @@ prep() {
 }
 build() {
     log build; local t=$SECONDS
+    # the memory depends only on the video and the model: take it from the dataset when it is there and no
+    # local one is started (a half-built local memory is resumed, never overwritten)
+    if [ ! -s "$CAP" ] && [ ! -s "$OUT/${V}_30sec_4_key.json" ] && [ "${MERIT_FETCH:-1}" != 0 ]; then
+        local rc=0; "$PY" "$M/epic/hf_results.py" fetch-memory --arm "$ARM" --video "$V" --dir "$OUT" || rc=$?
+        case $rc in
+            0) # anything made from an earlier local memory is stale: embeddings, answering runs, answers
+               rm -rf "$WORK/cache/${ARM}_$V" "$WORK/runs/$ARM/$V"; rm -f "$OUT"/answers_*.json.gz ;;
+            3) echo "no memory in the dataset yet: building it here" ;;
+            *) echo "could not reach the dataset; MERIT_FETCH=0 builds the memory here instead"; exit 1 ;;
+        esac
+    fi
     [ -s "$PREP/captions/$V/${V}_30sec_skeleton.json" ] || prep
     "$PY" "$M/epic/caption_clips_qwen.py" --model "$MODEL" --skeleton "$PREP/captions/$V/${V}_30sec_skeleton.json" --output "$CAP"
     # extract_keys resumes only the clips already in its own output: redo it if that output covers fewer
@@ -97,6 +114,13 @@ build() {
 }
 qa_file() {   # this bank's questions for the video, in MERIT's format (asked at t_ask, or at the end)
     local bank=${BANK:?qa and blind need a bank}; QA=$WORK/qa/$bank/EgoLifeQA_$V.json
+    if [ ! -s "$EPIC/outputs/v3/banks/$bank/${V}_questions.json" ]; then   # banks are generated, not committed
+        # one generator at a time: jobs of other videos read this checkout's bank files too
+        mkdir -p "$EPIC/outputs/v3/banks"
+        ( command -v flock >/dev/null && flock 9
+          [ -s "$EPIC/outputs/v3/banks/$bank/${V}_questions.json" ] || (cd "$EPIC" && "$PY" v3/export_bank.py "$bank") >&2
+        ) 9>"$EPIC/outputs/v3/banks/.$bank.lock" || { echo "cannot generate bank $bank in $EPIC"; exit 1; }
+    fi
     [ -s "$EPIC/outputs/v3/banks/$bank/${V}_questions.json" ] || { echo "no $bank questions for $V in $EPIC"; exit 1; }
     [ -s "$PREP/captions/$V/${V}_30sec_skeleton.json" ] || prep
     mkdir -p "$(dirname "$QA")"
@@ -111,7 +135,7 @@ json.dump(convert_questions(bank, v, end_s), open(out, "w"), indent=2)
 EOF
 }
 qa() {
-    log "qa $BANK"; local t=$SECONDS runs=$WORK/runs/$ARM/$V/$BANK sel
+    log "qa $BANK$SUF"; local t=$SECONDS runs=$WORK/runs/$ARM/$V/$BANK$SUF sel
     [ -s "$OUT/${V}_30sec_4_key.json" ] || build
     qa_file; mkdir -p "$runs"
     local n; n=$("$PY" -c "import json,sys; print(len(json.load(open(sys.argv[1]))))" "$QA")
@@ -120,11 +144,11 @@ qa() {
     # yet (MERIT writes "Error" for a failed question). Nothing runs when all are answered.
     for k in 1 2 3; do
         if ls "$runs"/*/*_final.json >/dev/null 2>&1; then
-            missing=$("$PY" "$M/epic/collect_answers.py" --qa_file "$QA" --runs "$runs/*/*_final.json" --out "$OUT/answers_$BANK.json.gz" | tail -1)
+            missing=$("$PY" "$M/epic/collect_answers.py" --qa_file "$QA" --runs "$runs/*/*_final.json" --out "$OUT/answers_$BANK$SUF.json.gz" | tail -1)
             [ -z "$missing" ] && break
-            sel=(--question-ids $missing); name=${ARM}_${V}_${BANK}_fill$(date +%m%d%H%M%S)
+            sel=(--question-ids $missing); name=${ARM}_${V}_${BANK}${SUF}_fill$(date +%m%d%H%M%S)
         else
-            sel=(--start-num 1 --end-num "$n"); name=${ARM}_${V}_${BANK}_full
+            sel=(--start-num 1 --end-num "$n"); name=${ARM}_${V}_${BANK}${SUF}_full
         fi
         bash "$R/script/eval_egolife.sh" --subject "$V" --data-dir "$PREP" --video-root "$WORK/clips_448" \
             --exp-name "$name" --respond-model "$MODEL" --top-k 5 --max-rounds 5 \
@@ -133,9 +157,9 @@ qa() {
             "${sel[@]}" --output-dir "$runs" --log-dir "$WORK/logs" 2>&1 | tee "$WORK/logs/$name.log" \
             || echo "pass $name exited with an error; the next pass resumes or retries"
     done
-    missing=$("$PY" "$M/epic/collect_answers.py" --qa_file "$QA" --runs "$runs/*/*_final.json" --out "$OUT/answers_$BANK.json.gz" | tail -1)
+    missing=$("$PY" "$M/epic/collect_answers.py" --qa_file "$QA" --runs "$runs/*/*_final.json" --out "$OUT/answers_$BANK$SUF.json.gz" | tail -1)
     [ -z "$missing" ] || { echo "still unanswered after 3 passes: $missing (rerun the same command to retry)"; exit 1; }
-    record "qa $BANK" $((SECONDS - t))
+    record "qa $BANK$SUF" $((SECONDS - t))
 }
 blind() {
     log "blind $BANK"; local t=$SECONDS
