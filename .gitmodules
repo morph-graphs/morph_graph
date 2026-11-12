@@ -4,3 +4,6 @@
 [submodule "QAFD-RAG"]
 	path = QAFD-RAG
 	url = https://github.com/Tarzanagh/QAFD-RAG
+[submodule "baselines/merit/MERIT"]
+	path = baselines/merit/MERIT
+	url = https://github.com/morph-graphs/MERIT.git

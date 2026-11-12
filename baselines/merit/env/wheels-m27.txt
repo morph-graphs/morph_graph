@@ -1,0 +1,4 @@
+# Prebuilt CUDA wheels (torch 2.6, CUDA 12, Python 3.11, CXX11 ABI off); building them needs nvcc and takes long.
+https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1+cu12torch2.6cxx11abiFALSE-cp311-cp311-linux_x86_64.whl
+# causal-conv1d is compiled instead (install_requirements.sh): its published torch2.6 wheels fail to import
+# with torch 2.6.0 (undefined symbol c10::detail::torchCheckFail, checked 2026-11-11)

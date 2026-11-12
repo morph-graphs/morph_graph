@@ -232,3 +232,8 @@ model_zoo
 
 # EgoLongQA split question files (regenerate with scripts/split_compound_questions.py)
 wearable_ai_2026_egolongqa_val_split*.jsonl
+
+# MERIT runs: clips, frames, run folders, caches (baselines/merit/run_merit.sh)
+baselines/merit/work/
+# ENV/ above matches env/ on case-insensitive filesystems; the MERIT environment files are code
+!baselines/merit/env/

@@ -1,0 +1,5 @@
+# Their metadata asks for transformers < 5, but Qwen3.8 needs transformers 5.8, and the batch10 27B runs used
+# exactly these versions on top of it (a transformers 5.8 overlay over a container that had them). Installed
+# after requirements-m27.txt with --no-deps, so pip cannot downgrade transformers.
+sentence-transformers==5.1.2
+flash-linear-attention==0.4.2
