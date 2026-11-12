@@ -1,0 +1,27 @@
+# MERIT arm m27 (Qwen3.8-27B for captions and answers). The batch10 runs used the latent_vc container
+# plus a transformers 5.8 overlay; this is that combination: Python 3.11, CUDA 12.4.
+# Qwen3.8 needs transformers 5.8: with 5.2 it loads but generates garbage.
+# torch/torchvision/flash-attn come first, from setup_env.sh.
+transformers==5.8.0
+tokenizers==0.22.2
+huggingface-hub==1.32.0
+accelerate==1.15.0
+safetensors==0.8.0
+regex==2026.11.9
+qwen-vl-utils==0.0.14
+# Qwen3.8's linear-attention layers: fast kernels (otherwise a slow torch fallback); causal-conv1d is in
+# wheels-m27.txt, flash-linear-attention in requirements-m27-nodeps.txt
+fla-core==0.4.2
+einops==0.8.1
+openai==2.8.1
+tenacity==9.1.2
+scikit-learn==1.6.1
+scipy==1.15.3
+decord==0.6.0
+opencv-python==4.11.0.86
+pillow==11.0.0
+numpy==2.1.2
+pydantic==2.14.1
+av==13.1.0
+tqdm
+filelock

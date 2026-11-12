@@ -1,0 +1,21 @@
+# MERIT arm m8 (Qwen3-VL-8B for captions and answers). Exactly the merit.sif container the batch10
+# runs used: Python 3.11, CUDA 12.4. torch/torchvision/flash-attn come first, from setup_env.sh.
+numpy==2.2.6
+transformers==4.57.3
+tokenizers==0.22.1
+safetensors==0.7.0
+huggingface-hub==0.36.0
+accelerate==1.12.0
+sentence-transformers==5.1.2
+qwen-vl-utils==0.0.14
+openai==2.8.1
+tenacity==9.1.2
+filelock==3.20.0
+decord==0.6.0
+opencv-python==4.12.0.88
+pillow==12.0.0
+pydantic==2.12.5
+tqdm==4.67.1
+scikit-learn==1.9.1
+scipy==1.17.1
+einops==0.8.2

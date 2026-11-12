@@ -1,0 +1,153 @@
+#!/usr/bin/env python3
+"""Turn one HD-EPIC video (+ optionally an epic-morph question file) into MERIT's EgoLife layout.
+
+Writes (all skip-existing):
+  <clip_root>/<subject>/DAY1/DAY1_<subject>_<HHMMSS>00.mp4   30 s clips, re-encoded small
+  <frame_root>/<subject>/<clip>/tNNNNN.jpg                    1 fps frames for captioning
+  <data_dir>/captions/<subject>/<subject>_30sec_skeleton.json  clip list without captions
+  <data_dir>/EgoLifeQA/EgoLifeQA_<subject>.json               questions in EgoLifeQA format (with --questions)
+
+The whole video is treated as DAY1 starting at 00:00:00. A streaming question is asked
+at its t_ask; every other question is asked at the end of the video.
+"""
+import argparse
+import glob
+import json
+import math
+import os
+import shutil
+import subprocess
+
+LETTERS = "ABCD"
+
+
+def hhmmss(sec):
+    sec = int(sec)
+    return f"{sec // 3600:02d}{sec % 3600 // 60:02d}{sec % 60:02d}"
+
+
+def duration(path):
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path],
+        check=True, capture_output=True, text=True).stdout
+    return float(out.strip())
+
+
+def make_clips(video, clip_dir, subject, n_clips, clip_sec, size, threads):
+    want = [os.path.join(clip_dir, f"DAY1_{subject}_{hhmmss(i * clip_sec)}00.mp4") for i in range(n_clips)]
+    if all(os.path.exists(p) for p in want):
+        return want
+    tmp = os.path.join(clip_dir, "_seg")
+    shutil.rmtree(tmp, ignore_errors=True)
+    os.makedirs(tmp)
+    subprocess.run(
+        ["ffmpeg", "-loglevel", "error", "-threads", str(threads), "-i", video,
+         "-vf", f"scale={size}:{size}", "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+         "-force_key_frames", f"expr:gte(t,n_forced*{clip_sec})",
+         "-f", "segment", "-segment_time", str(clip_sec), "-reset_timestamps", "1",
+         os.path.join(tmp, "seg_%04d.mp4")], check=True)
+    segs = sorted(glob.glob(os.path.join(tmp, "seg_*.mp4")))
+    assert len(segs) == n_clips, f"expected {n_clips} segments, got {len(segs)}"
+    for s, p in zip(segs, want):
+        os.replace(s, p)
+    os.rmdir(tmp)
+    return want
+
+
+def make_frames(video, frame_root, clip_names, clip_sec, size, threads):
+    if all(len(glob.glob(os.path.join(frame_root, c, "*.jpg"))) > 0 for c in clip_names):
+        return
+    tmp = os.path.join(frame_root, "_all")
+    shutil.rmtree(tmp, ignore_errors=True)
+    os.makedirs(tmp)
+    # fps=1 emits the frame nearest t = 0, 1, 2, ... s, so frame k (0-based) belongs to clip k // clip_sec.
+    subprocess.run(
+        ["ffmpeg", "-loglevel", "error", "-threads", str(threads), "-i", video,
+         "-vf", f"fps=1,scale={size}:{size}", "-q:v", "3", os.path.join(tmp, "%05d.jpg")], check=True)
+    frames = sorted(glob.glob(os.path.join(tmp, "*.jpg")))
+    for k, f in enumerate(frames):
+        c = min(k // clip_sec, len(clip_names) - 1)
+        d = os.path.join(frame_root, clip_names[c])
+        os.makedirs(d, exist_ok=True)
+        os.replace(f, os.path.join(d, f"t{k:05d}.jpg"))  # t = seconds into the video
+    shutil.rmtree(tmp)
+
+
+def convert_questions(qfile, subject, video_end):
+    raw = json.load(open(qfile))
+    rows = []
+    for i, q in enumerate(raw["questions"], 1):
+        mcq = q["gemini_mcq"]
+        opts = [str(o) for o in mcq["options"]]
+        assert 2 <= len(opts) <= 4, (i, opts)
+        t = q["t_ask"] if q.get("streaming") and "t_ask" in q else video_end
+        row = {
+            "ID": str(i),
+            "query_time": {"date": "DAY1", "time": hhmmss(math.ceil(t)) + "00"},
+            "type": q["form"],
+            "question": q["q"],
+            "answer": LETTERS[mcq["answer_index"]],
+            # Kept for the report; MERIT ignores these.
+            "meta": {k: q.get(k) for k in ("form", "hops", "streaming", "guessable", "confidence",
+                                            "majority_baseline", "t_ask", "answer")},
+        }
+        row["meta"]["n_options"] = len(opts)
+        for letter, o in zip(LETTERS, opts):
+            row[f"choice_{letter.lower()}"] = o
+        rows.append(row)
+    return rows
+
+
+def main():
+    p = argparse.ArgumentParser()
+    p.add_argument("--video", required=True)
+    p.add_argument("--questions", default=None, help="epic-morph bank file; without it only clips, frames and the skeleton are made")
+    p.add_argument("--subject", required=True)
+    p.add_argument("--clip_root", required=True, help="becomes MERIT --video-root")
+    p.add_argument("--frame_root", required=True)
+    p.add_argument("--data_dir", required=True)
+    p.add_argument("--clip_sec", type=int, default=30)
+    p.add_argument("--clip_size", type=int, default=704)
+    p.add_argument("--frame_size", type=int, default=448)
+    p.add_argument("--threads", type=int, default=8)
+    args = p.parse_args()
+
+    dur = duration(args.video)
+    n_clips = math.ceil(dur / args.clip_sec)
+    clip_dir = os.path.join(args.clip_root, args.subject, "DAY1")
+    os.makedirs(clip_dir, exist_ok=True)
+    clips = make_clips(args.video, clip_dir, args.subject, n_clips, args.clip_sec, args.clip_size, args.threads)
+    names = [os.path.splitext(os.path.basename(c))[0] for c in clips]
+    frame_root = os.path.join(args.frame_root, args.subject)
+    make_frames(args.video, frame_root, names, args.clip_sec, args.frame_size, args.threads)
+
+    cap_dir = os.path.join(args.data_dir, "captions", args.subject)
+    os.makedirs(cap_dir, exist_ok=True)
+    skeleton = []
+    for i, name in enumerate(names):
+        start, end = i * args.clip_sec, min((i + 1) * args.clip_sec, math.ceil(dur))
+        skeleton.append({
+            "start_time": hhmmss(start) + "00",
+            "end_time": hhmmss(end) + "00",
+            "date": "DAY1",
+            "video_path": f"{args.subject}/DAY1/{name}.mp4",
+            "frame_dir": os.path.join(frame_root, name),
+        })
+    json.dump(skeleton, open(os.path.join(cap_dir, f"{args.subject}_30sec_skeleton.json"), "w"), indent=2)
+
+    rows = []
+    if args.questions:
+        qa_dir = os.path.join(args.data_dir, "EgoLifeQA")
+        os.makedirs(qa_dir, exist_ok=True)
+        rows = convert_questions(args.questions, args.subject, math.ceil(dur))
+        json.dump(rows, open(os.path.join(qa_dir, f"EgoLifeQA_{args.subject}.json"), "w"), indent=2)
+
+    n_frames = [len(glob.glob(os.path.join(s["frame_dir"], "*.jpg"))) for s in skeleton]
+    print(f"video {dur:.1f}s -> {len(clips)} clips, frames per clip min/max {min(n_frames)}/{max(n_frames)}")
+    if rows:
+        print(f"questions: {len(rows)}; streaming {sum(r['meta']['streaming'] for r in rows)}")
+        print("example QA row:", json.dumps(rows[0])[:400])
+
+
+if __name__ == "__main__":
+    main()
