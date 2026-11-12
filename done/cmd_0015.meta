@@ -1,0 +1,9 @@
+claimed=2026-11-12T11:59:36Z
+host=compute-a8-1.zaratan.umd.edu
+executor=runner (compute node)
+answers=req_20261112T1154Z
+finished=2026-11-12T11:59:38Z
+exit=0
+decision=option (c): Nexus scores the merged answers (592/598 answered, 6 truncations); Zaratan cancels/releases/scores nothing; 14 held tasks + score 24004151 stay pending at no cost
+spend=0 SU
+results=2 files
