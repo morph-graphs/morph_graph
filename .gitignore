@@ -237,3 +237,4 @@ wearable_ai_2026_egolongqa_val_split*.jsonl
 baselines/merit/work/
 # ENV/ above matches env/ on case-insensitive filesystems; the MERIT environment files are code
 !baselines/merit/env/
+baselines/merit/results/

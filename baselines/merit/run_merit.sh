@@ -8,27 +8,29 @@
 #          build  MERIT's memory: a caption per clip, then its retrieval keys     GPU
 #          qa     MERIT answers every question of <bank> for this video            GPU (needs build)
 #          blind  the same answer prompt with no context: the no-memory floor      GPU (no build needed)
-#          all    prep + build, then qa + blind when a bank is given
+#          upload this video and arm's results folder to the Hugging Face dataset  (needs a write token)
+#          all    prep + build, then qa + blind when a bank is given (no upload)
 #   arm    m8   Qwen3-VL-8B (captions and answers)    one GPU with >= 40 GB (8B + the 4B embedding model)
 #          m27  Qwen3.8-27B (captions and answers)    one 80 GB GPU, or 2x 48 GB, or 4x 24 GB
 #   bank   a folder name under the epic-morph checkout's outputs/v3/banks/, e.g. batch10_agree2
 #
 # Environment (see README.md): PY  python of the arm's environment (the Docker image sets it)
-#   EPIC_MORPH_DIR an epic-morph checkout (required): banks are read from it, results written into it
+#   EPIC_MORPH_DIR an epic-morph checkout (required): the banks, and by default the videos
 #   HDEPIC_VIDEOS  default $EPIC_MORPH_DIR/data/HD-EPIC/videos (<P>/<video>.mp4)
 #   MERIT_WORK     default baselines/merit/work: clips, frames, run folders, caches (not committed)
-#   MERIT_OUT      default $EPIC_MORPH_DIR/outputs/v3/merit: per <arm>/<video> the memory (captions, keys),
-#                  answers_<bank>.json.gz, blind_<bank>.json and runs.jsonl (committed in epic-morph)
+#   MERIT_OUT      default baselines/merit/results: per <arm>/<video> the memory (captions, keys),
+#                  answers_<bank>.json.gz, blind_<bank>.json and runs.jsonl (not committed; `upload` puts
+#                  them in the dataset morph-graphs/epic-morph-results at merit/<arm>/<video>/)
 # Every step skips finished work, so rerunning the same command resumes.
 set -euo pipefail
-STAGE=${1:?usage: run_merit.sh <prep|build|qa|blind|all> <video> <m8|m27> [bank]}
+STAGE=${1:?usage: run_merit.sh <prep|build|qa|blind|upload|all> <video> <m8|m27> [bank]}
 V=${2:?video id}; ARM=${3:?arm m8 or m27}; BANK=${4:-}
 M=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); REPO=$(cd "$M/../.." && pwd); R=$M/MERIT   # R: the MERIT submodule
 PY=${PY:?set PY to the python of the $ARM environment}
 EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && pwd)
 [ -f "$R/eval/evaluate_egolife.py" ] || { echo "MERIT submodule missing: git submodule update --init baselines/merit/MERIT"; exit 1; }
 case $ARM in m8) MODEL=qwen3vl-8b ;; m27) MODEL=qwen38-27b ;; *) echo "arm must be m8 or m27"; exit 1 ;; esac
-VIDEOS=${HDEPIC_VIDEOS:-$EPIC/data/HD-EPIC/videos}; WORK=${MERIT_WORK:-$M/work}; OUTROOT=${MERIT_OUT:-$EPIC/outputs/v3/merit}
+VIDEOS=${HDEPIC_VIDEOS:-$EPIC/data/HD-EPIC/videos}; WORK=${MERIT_WORK:-$M/work}; OUTROOT=${MERIT_OUT:-$M/results}
 OUT=$OUTROOT/$ARM/$V; PREP=$WORK/prep; CAP=$OUT/${V}_30sec.json
 mkdir -p "$OUT" "$WORK/logs"
 # eval_egolife.sh calls plain `python`: this environment's first
@@ -142,9 +144,14 @@ blind() {
     record "blind $BANK" $((SECONDS - t))
 }
 
+upload() {
+    log upload
+    "$PY" "$M/epic/hf_results.py" upload --arm "$ARM" --video "$V" --dir "$OUT"
+}
+
 case $STAGE in
-    prep) prep ;; build) build ;; qa) qa ;; blind) blind ;;
+    prep) prep ;; build) build ;; qa) qa ;; blind) blind ;; upload) upload ;;
     all) prep; build; [ -z "$BANK" ] || { qa; blind; } ;;
-    *) echo "stage must be prep, build, qa, blind or all"; exit 1 ;;
+    *) echo "stage must be prep, build, qa, blind, upload or all"; exit 1 ;;
 esac
 echo "=== $V $ARM $STAGE done"

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Run run_merit.sh inside the arm's image: the morph_graph checkout is mounted at /repo (the code), the
-# epic-morph checkout at /epic-morph (banks in, results out: outputs/v3/merit/ there).
+# Run run_merit.sh inside the arm's image: the morph_graph checkout is mounted at /repo (the code; results go
+# to baselines/merit/results/ in it, then `upload` puts them in the Hugging Face dataset), the epic-morph
+# checkout at /epic-morph (the banks). The Hugging Face token: HF_TOKEN, or `hf auth login` on the host
+# (the cache, with its token, is mounted).
 #   MERIT_GPU=0 EPIC_MORPH_DIR=<epic-morph checkout> bash baselines/merit/docker/run.sh <stage> <video> <arm> [bank]
 #   MERIT_GPU       GPU index(es) for this job, e.g. 0 or 2,3 (required: one H100 per m27 job)
 #   EPIC_MORPH_DIR  the epic-morph checkout (required)
@@ -25,6 +27,7 @@ N=$(echo "$GPU" | tr ',' '\n' | grep -c .); SEEN=$(seq -s, 0 $((N - 1)))
 exec docker run --rm --gpus "\"device=$GPU\"" --shm-size 32g --user "$(id -u):$(id -g)" \
     -v "$REPO:/repo" -v "$EPIC:/epic-morph" -v "$HF:/hf" -v "$(cd -P "$VIDEOS" && pwd):/videos:ro" -w /repo \
     -e CUDA_VISIBLE_DEVICES="$SEEN" -e EPIC_MORPH_DIR=/epic-morph -e HDEPIC_VIDEOS=/videos -e HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-0}" \
+    ${HF_TOKEN:+-e HF_TOKEN} ${MERIT_HF_REPO:+-e MERIT_HF_REPO} \
     -e MERIT_REPO_COMMIT="$(git -C "$REPO" rev-parse HEAD)" -e MERIT_EPIC_COMMIT="$(git -C "$EPIC" rev-parse HEAD)" \
     -e MERIT_SUBMODULE_COMMIT="$(git -C "$REPO/baselines/merit/MERIT" rev-parse HEAD)" \
     ${MERIT_OUT:+-e MERIT_OUT="$MERIT_OUT"} \
