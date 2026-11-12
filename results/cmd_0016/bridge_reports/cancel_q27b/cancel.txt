@@ -1,0 +1,16 @@
+eval 24004150 score 24004151
+cancelled 24004150_1
+cancelled 24004150_2
+cancelled 24004150_3
+cancelled 24004150_4
+cancelled 24004150_5
+cancelled 24004150_6
+cancelled 24004150_7
+cancelled 24004150_8
+cancelled 24004150_9
+cancelled 24004150_10
+cancelled 24004150_40
+cancelled 24004150_41
+cancelled 24004150_42
+cancelled 24004150_43
+cancelled score 24004151
