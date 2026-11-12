@@ -144,8 +144,9 @@ blind() {
     record "blind $BANK" $((SECONDS - t))
 }
 
-upload() {
+upload() {   # only a finished memory: a half-built folder would overwrite a good one in the dataset
     log upload
+    [ -s "$CAP" ] && [ -s "$OUT/${V}_30sec_4_key.json" ] || { echo "no finished memory in $OUT: run build first"; exit 1; }
     "$PY" "$M/epic/hf_results.py" upload --arm "$ARM" --video "$V" --dir "$OUT"
 }
 
