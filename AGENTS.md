@@ -16,6 +16,7 @@ each package has its own README (`epic_eval/`, `event_eval/`).
 | `event_eval/` | oracle event annotation (Gemini/Claude/GPT/Kimi), TSM comparison, viewer |
 | `epic_eval/` | sandboxed EPIC-Morph MCQ eval on SLURM (Gemini API or local Qwen3.8) |
 | `baselines/merit/` | MERIT memory baseline on EPIC-Morph: run script, Docker images, MERIT fork as a submodule |
+| `baselines/worldmm/` | WorldMM memory baseline on EPIC-Morph: run script, environments, WorldMM fork as a submodule |
 | `proj_context/` | design docs, notes; `setup/` holds the container definition + pinned versions |
 
 The repo root is the package (`morph_graph.*` imports), except `epic_eval`, which

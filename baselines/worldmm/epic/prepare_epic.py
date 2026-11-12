@@ -34,18 +34,21 @@ def duration(path):
 
 
 def convert_questions(qfile, video_end):
-    """Bank questions -> WorldMM rows (the same mapping as MERIT's prepare_epic.convert_questions)."""
+    """Bank questions -> WorldMM rows (MERIT's mapping, but a streaming t_ask is floored, not ceiled)."""
     rows = []
     for i, q in enumerate(json.load(open(qfile))["questions"], 1):
         mcq = q["gemini_mcq"]
         opts = [str(o) for o in mcq["options"]]
         assert 2 <= len(opts) <= 4, (i, opts)
-        t = q["t_ask"] if q.get("streaming") and "t_ask" in q else video_end
+        # a streaming question is asked at t_ask, floored: memory items end on whole seconds and are seen when they
+        # end <= the query time, so ceil would show an item ending up to 1 s after t_ask; else at the video's end
+        streaming = q.get("streaming") and "t_ask" in q
+        t = q["t_ask"] if streaming else video_end
         row = {
             "ID": str(i),
             "key": q.get("key"),
             "video_id": q["video"],
-            "query_time": {"date": "DAY1", "time": hhmmss(math.ceil(t)) + "00"},
+            "query_time": {"date": "DAY1", "time": hhmmss(math.floor(t) if streaming else math.ceil(t)) + "00"},
             "t_ask": t,
             "type": q["form"],
             "question": q["q"],
