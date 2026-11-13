@@ -213,6 +213,8 @@ def main():
         for r in rows:
             if r["stage"] == "build" and (r["baseline"], r["arm"], r["video"]) in built:
                 r["status"], r["note"] = "done", "memory built (not yet uploaded to the results dataset); " + r["note"]
+    n27 = len({v for b, r, v in built if (b, r) == ("merit", "m27")} | set(BATCH10))
+    n8 = len({v for b, r, v in built if (b, r) == ("merit", "m8")} | set(BATCH10))
     project(rows, POOLS)
     for i, r in enumerate(rows):
         r["id"] = f"T{i + 1:04d}"
@@ -240,9 +242,8 @@ def main():
     add("M2 probes · MERIT 8B with frames", "t1", 805, 1513, "probes", "unverified", "6 of 10 videos at 07:45")
     add("M2 probes · MERIT 8B right clip", "t1", 0, 1513, "probes", "unverified", "running since this morning")
     add("M2 probes · MERIT 27B memory only", "t1", 0, 1513, "probes", "held", "probes are in the research phase")
-    add("Memories · MERIT 8B", "all videos", 10, 156, "videos", "ready")
-    n27 = 10 + sum(1 for b in built if b[:2] == ("merit", "m27"))
-    add("Memories · MERIT 27B", "all videos", n27, 156, "videos", "queued", f"{n27 - 10} built since 2026-11-12 (Zaratan wave 1 + arm00); upload pending")
+    add("Memories · MERIT 27B", "all videos", n27, 156, "videos", "running", "arm00 loop + Zaratan wave 1, uploaded to the results dataset")
+    add("Memories · MERIT 8B", "all videos", n8, 156, "videos", "ready", "board tasks for Max and our Nexus workers")
     for exp in ("MERIT 8B · main (with frames)", "MERIT 27B · main (with frames)", "MAGIC-Video 8B · main",
                 "M2 probes · MERIT 8B memory only"):
         add(exp, "t2", 0, 129, "videos", "waiting for questions", "Max's Stage A in progress")

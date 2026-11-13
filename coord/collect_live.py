@@ -112,6 +112,30 @@ def nexus(rows, alerts):
                          note=f"{part}, {el} elapsed" if state == "RUNNING" else f"{part}, {reason}"))
 
 
+def board(rows, built, alerts):
+    """Claims from every pool's worker (the jobs dataset) and every memory in the results dataset."""
+    rc, out = sh(["nx", "cd /fs/cfar-projects/mem_open_vocab/morph_graphs/anubhav/pkg/wt-coord && HF_TOKEN=$(cat ~/.config/hf_write_token) "
+                        "/fs/nexus-scratch/anubhav/merit_envs/m8/bin/python coord/master.py view 2>/dev/null | tail -1"], timeout=180)
+    try:
+        v = json.loads(out.strip().splitlines()[-1])
+    except Exception:
+        alerts.append(dict(pool="board", job="—", what="jobs dataset not readable", state="alert", since=now(),
+                           note="coord/master.py view failed (nx down or token problem)"))
+        return
+    for c in v["claims"]:
+        if c["state"] in ("running", "lease lapsed", "failed") or c["finished"] >= time.strftime("%Y-%m-%d", time.gmtime(time.time() - 86400)):
+            rows.append(dict(pool=c["pool"], job=c["task"], what=f"{c['task']} (board worker on {c['host']})",
+                             state={"lease lapsed": "alert"}.get(c["state"], c["state"]), since=c["started"].replace("T", " ").replace("Z", " UTC"),
+                             note=(f"{c['gpu']}; " + (f"{c['seconds'] // 60} min" if c.get("seconds") else "running")
+                                   + (f"; {c['note'][-120:]}" if c["state"] == "failed" else "")
+                                   + ("; worker stopped renewing its lease: the task is free again" if c["state"] == "lease lapsed" else ""))))
+    for b, arm, v_ in v["built"]:
+        built.add((b, arm, v_))
+    for name, h in v["pools"].items():
+        rows.append(dict(pool=name, job="worker", what=f"board worker on {h.get('host')}", state="active", since=(h.get("updated") or "").replace("T", " ").replace("Z", " UTC"),
+                         note=f"slots {h.get('slots')}, {h.get('running')} running; last heartbeat {h.get('updated')}"))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--durations", required=True)
@@ -121,6 +145,7 @@ def main():
     zaratan(rows, built, alerts)
     arm00(rows, built, alerts)
     nexus(rows, alerts)
+    board(rows, built, alerts)
     rows.append(dict(pool="nexus-vatsal", job="—", what="Vatsal's agents", state="not visible", since="",
                      note="We can't see Vatsal's jobs or agents until his pool runs a board worker"))
     os.makedirs(a.out, exist_ok=True)
