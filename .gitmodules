@@ -16,3 +16,6 @@
 [submodule "baselines/worldmm/WorldMM"]
 	path = baselines/worldmm/WorldMM
 	url = https://github.com/morph-graphs/WorldMM.git
+[submodule "baselines/vgent/Vgent"]
+	path = baselines/vgent/Vgent
+	url = https://github.com/xiaoqian-shen/Vgent

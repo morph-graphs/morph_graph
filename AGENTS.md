@@ -19,6 +19,7 @@ each package has its own README (`epic_eval/`, `event_eval/`).
 | `baselines/magic/` | MAGIC-Video memory baseline on EPIC-Morph: run script, Docker images, MAGIC-video fork as a submodule |
 | `baselines/worldmm/` | WorldMM memory baseline on EPIC-Morph: run script, environments, WorldMM fork as a submodule |
 | `baselines/m3agent/` | M3-Agent memory baseline on EPIC-Morph: run script, Docker image, m3-agent fork as a submodule |
+| `baselines/vgent/` | Vgent graph-RAG baseline on EPIC-Morph, as released (Qwen2.5-VL-7B): run script, environment, upstream Vgent as a submodule |
 | `baselines/api/` | closed-source API models (Gemini, GPT) on EPIC-Morph through `epic_eval`: run script, Docker image, converter to the baselines' result layout |
 | `proj_context/` | design docs, notes; `setup/` holds the container definition + pinned versions |
 
