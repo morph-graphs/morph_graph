@@ -148,3 +148,42 @@ the page; the master reads those overrides.
 3. Move MAGIC-Video and WorldMM (Vatsal's EPIC ports) and M3-Agent into `baselines/` with the same entry
    point and images; Qwen-MM-Plugins as an API arm.
 4. Onboard wriva (Apptainer images, their worker) and Max (docker launcher).
+
+## Answer (qa) tasks, per tranche
+
+Added 2026-11-13 with the tranche-2 bank. `master.py` EXPERIMENTS holds a `qa` line per (baseline, arm, bank)
+next to the builds; a tranche is one more pair of lines. The master lists a qa task for each video that has
+questions in the bank and no `answers_<bank>.json.gz` at `<baseline>/<arm>/<video>/` in the results dataset;
+while the video's build is still on the board the task depends on it (workers take it only once that build is
+done), and it goes to the same pools as the arm's builds. `publish --dry-run` prints the counts and commits
+nothing.
+
+What the master needs: `EPIC_MORPH_DIR` set to its own epic-morph checkout that has the bank; it regenerates
+`outputs/v3/banks/<bank>/` there each cycle. Without it `publish` stops (a tasks.json without the qa tasks
+would drop them from the board), so set it in the cron's script before this reaches main.
+
+What a worker needs for qa, beyond what builds need:
+- `EPIC_MORPH_DIR`: an epic-morph checkout at a commit whose `v3/export_bank.py` BANKS has the bank, with the
+  bank's B2 files (`outputs/v3/b2/<video>/questions_llm/{bank_checked,verify}.jsonl`). For `t2_agree2`: the 20
+  videos of `v3/tranche2.txt`. `run_merit.sh qa` generates `outputs/v3/banks/<bank>/` there on first use and
+  reuses it after, so after moving the checkout to a newer commit delete that folder to regenerate it.
+- The video itself (as for build): qa cuts the clips and frames if this machine has not, and MERIT reads them.
+- The memory comes from the results dataset (qa runs build, which fetches it; CPU only, seconds): a token that
+  can read it, and HF_HUB_OFFLINE unset.
+- No code change on the worker: `worker.py` already runs `run.sh qa <video> <arm> <bank> && run.sh upload ...`.
+
+## Every ready baseline on the board
+
+Added 2026-11-13. `EXPERIMENTS` lists build + qa (`t2_agree2`) for MERIT, MAGIC-Video and WorldMM, both arms each,
+in that order (the order is the priority). Pools per (baseline, arm) are in `master.POOLS`: every m8 needs one GPU
+of 40 GB or more (the Nexus A6000 pools, wriva, max); every m27 needs an 80 GB GPU (wriva, max, zaratan), and only
+MERIT's m27 also goes to arm00 (the images are x86; MERIT alone has a native aarch64 environment there). MAGIC's
+build depends on MERIT's build of the same video and arm while that is listed, since it reuses MERIT's captions.
+A memory counts as built when its folder has `runs.jsonl` and the baseline's last memory file (`MEMORY_DONE`).
+
+A worker takes only the baselines it is started with: `worker.py --baselines merit magic worldmm` (default `merit`).
+Name a baseline only once the machine has its images, or every task of it fails there and is held back after two
+failures. All baselines' `docker/run.sh` read the worker's settings: `MERIT_GPU` and `MERIT_RUNTIME` (from
+worker.py), `MERIT_SIF_DIR` (a folder of `<baseline>_<arm>.sif`), `MERIT_HF_CACHE` (the models) and `MERIT_WORK`
+(the cluster's shared work folder; MAGIC and WorldMM work in its `magic/` and `worldmm/` subfolders). Each
+baseline's own `MAGIC_*` / `WORLDMM_*` variable wins when set.
