@@ -1,0 +1,5 @@
+# run folders (run_egagent.sh) and, until it is a fork submodule, the upstream clone
+work/
+results/
+egagent/
+!env/

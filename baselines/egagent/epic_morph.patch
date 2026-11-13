@@ -1,0 +1,150 @@
+diff --git a/egagent/langgraph_agent.py b/egagent/langgraph_agent.py
+index 2b6eb05..8125ef3 100644
+--- a/egagent/langgraph_agent.py
++++ b/egagent/langgraph_agent.py
+@@ -31,8 +31,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+ from retrieval_model import device, embed_texts_batch
+ from utils import *
+ 
+-dataset = "egolife" # videomme, egolife
+-agent_backbone = 'gemini-2.5-pro' # gpt-4.1 (default), gemini-2.5-pro, gpt-4o, qwen-2.5-vl-7b
++dataset = os.environ.get("EGAGENT_DATASET", "egolife") # videomme, egolife
++agent_backbone = os.environ.get("EGAGENT_BACKBONE", 'gemini-2.5-pro') # gpt-4.1 (default), gemini-2.5-pro, gpt-4o, qwen-2.5-vl-7b
+ 
+ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+ logger = logging.getLogger(__name__)
+diff --git a/egagent/run_egagent_on_videomme.py b/egagent/run_egagent_on_videomme.py
+index 52407b2..325d33e 100644
+--- a/egagent/run_egagent_on_videomme.py
++++ b/egagent/run_egagent_on_videomme.py
+@@ -64,30 +64,8 @@ def prepare_videomme_example(question_data):
+     return selected_video, vqa_question, options, vidstart, vidend, transcripts, query_time, day_search_dict
+     
+ 
+-def videomme_inference():
+-    parser = argparse.ArgumentParser()
+-    parser.add_argument(
+-        "--tscript-search",
+-        default="llm",
+-        choices=["llm", "bm25"],
+-        help="Transcript search backend used inside the agent graph.",
+-    )
+-    parser.add_argument(
+-        "--example-id",
+-        type=str,
+-        default=None,
+-        help="Run a single VideoMME-long question by question_id (e.g. 601-1) and print the agent trace.",
+-    )
+-    parser.add_argument(
+-        "--verbose",
+-        action="store_true",
+-        help="Print state snapshots after each graph node (use with --example-id).",
+-    )
+-    args = parser.parse_args()
+-
+-    if args.verbose:
+-        logging.getLogger().setLevel(logging.DEBUG)
+-
++def build_app(tscript_search="llm"):
++    """The EGAgent workflow graph for one video (moved out of videomme_inference for the EPIC-Morph port)."""
+     workflow = StateGraph(VeryLongVideoQA)
+     
+     # Define the nodes (node names match paper Appendix E where applicable)
+@@ -99,7 +77,7 @@ def videomme_inference():
+     workflow.add_node("analyze_retrieved_frames", analyze_retrieved_frames)
+     workflow.add_node("generate_answer", generate_answer)
+ 
+-    if args.tscript_search == "llm":
++    if tscript_search == "llm":
+         workflow.add_node("search_transcripts", retrieve_transcripts)
+     else:
+         workflow.add_node("search_transcripts", search_and_analyze_transcripts_bm25)
+@@ -131,6 +109,34 @@ def videomme_inference():
+     )
+     workflow.add_edge("generate_answer", END)
+     app = workflow.compile()
++    return app
++
++
++def videomme_inference():
++    parser = argparse.ArgumentParser()
++    parser.add_argument(
++        "--tscript-search",
++        default="llm",
++        choices=["llm", "bm25"],
++        help="Transcript search backend used inside the agent graph.",
++    )
++    parser.add_argument(
++        "--example-id",
++        type=str,
++        default=None,
++        help="Run a single VideoMME-long question by question_id (e.g. 601-1) and print the agent trace.",
++    )
++    parser.add_argument(
++        "--verbose",
++        action="store_true",
++        help="Print state snapshots after each graph node (use with --example-id).",
++    )
++    args = parser.parse_args()
++
++    if args.verbose:
++        logging.getLogger().setLevel(logging.DEBUG)
++
++    app = build_app(args.tscript_search)
+ 
+     df_videomme = json.loads(pd.read_parquet(f"{VIDEO_MME_ROOT}/videomme/test-00000-of-00001.parquet").to_json(orient='records'))
+     df_videomme_long = [e for e in df_videomme if e['duration'] == 'long']
+diff --git a/paths.py b/paths.py
+index 30223c9..d21a6ae 100644
+--- a/paths.py
++++ b/paths.py
+@@ -18,6 +18,7 @@ Update these values to match your local setup.
+ """
+ 
+ # Path helpers
++import os
+ from pathlib import Path
+ 
+ # Project root (this file lives at repo root)
+@@ -25,8 +26,8 @@ EGAGENT_ROOT = Path(__file__).resolve().parent
+ 
+ # Dataset roots
+ EGOLIFE_ROOT = "/home/aniket/EgoLife"  # path to EgoLife dataset root (https://huggingface.co/datasets/lmms-lab/EgoLife)
+-VIDEO_MME_ROOT = "/home/aniket/Video-MME"  # path to VideoMME dataset root (https://huggingface.co/datasets/lmms-lab/Video-MME)
+-MODEL_ROOT = EGAGENT_ROOT  # path containing multimodal embedding model
++VIDEO_MME_ROOT = os.environ.get("EGAGENT_DATA_ROOT", "/home/aniket/Video-MME")  # path to VideoMME dataset root (https://huggingface.co/datasets/lmms-lab/Video-MME)
++MODEL_ROOT = os.environ.get("EGAGENT_MODEL_ROOT", EGAGENT_ROOT)  # path containing multimodal embedding model
+ 
+ # API key file locations
+ GOOGLE_GENAI_KEY_PATH = "google-genai-key.txt"
+@@ -41,6 +42,6 @@ VMME_EMBS_PATH = "path/to/videomme_embeddings" # path to .npy files of embedding
+ 
+ # Outputs and derived data (repo-relative, do not change)
+ RESULTS_ROOT = EGAGENT_ROOT / "egolife_results"
+-DB_ROOT = EGAGENT_ROOT / "dbs"
++DB_ROOT = Path(os.environ.get("EGAGENT_DB_ROOT", EGAGENT_ROOT / "dbs"))
+ ENTITYGRAPH_DB_ROOT = EGAGENT_ROOT / "entitygraph_db"
+ TIMESTAMP_EPISODES_ROOT = EGAGENT_ROOT / "timestamp_episodes"
+\ No newline at end of file
+diff --git a/utils.py b/utils.py
+index be92d88..4da7fee 100644
+--- a/utils.py
++++ b/utils.py
+@@ -180,8 +180,15 @@ def get_file_contents(filename):
+     except FileNotFoundError:
+         raise FileNotFoundError(f"'{filename}' file not found")
+ 
+-GOOGLE_GENAI_API_KEY = get_file_contents(GOOGLE_GENAI_KEY_PATH)
+-OPENAI_API_KEY = get_file_contents(OPENAI_API_KEY_PATH)
++def get_api_key(env_name, filename):
++    """EPIC-Morph port: the key from the environment, else upstream's key file; a provider this arm never
++    calls may have neither (its client is then built with a placeholder and fails if it is ever called)."""
++    if os.environ.get(env_name):
++        return os.environ[env_name]
++    return get_file_contents(filename) if os.path.exists(filename) else "MISSING"
++
++GOOGLE_GENAI_API_KEY = get_api_key("GOOGLE_API_KEY", GOOGLE_GENAI_KEY_PATH)
++OPENAI_API_KEY = get_api_key("OPENAI_API_KEY", OPENAI_API_KEY_PATH)
+ 
+ def get_50_frames_from_video(image_dir:str, n_samples=50) -> Tuple[int, List[str]]:
+     """Get 50 image frames from a video."""
