@@ -98,9 +98,9 @@ def update(out, built_src, view):
     hb = (view or {}).get("pools", {})
     site_of = lambda n: "Nexus" if (n.startswith("nexus") or n in ("wriva", "exempt-sailon")) else \
         {"arm00": "arm00", "zaratan": "Zaratan", "max": "Max"}.get(n, n)
-    who = {"Nexus": "Anubhav's agent (wriva: Archana and Aaron, soon)", "arm00": "Anubhav's agent",
+    who = {"Nexus": "Anubhav's agent; wriva H100s: Archana and Aaron", "arm00": "Anubhav's agent",
            "Zaratan": "Anubhav's agent", "Max": "Max's agent"}
-    hw = {"Nexus": "A6000 / L40S / A5000 queues, wriva H100s (soon)", "arm00": "1x GH200 96 GB",
+    hw = {"Nexus": "vulcan-sailon (48 GPUs), tron, scavenger queues; wriva 4x H100", "arm00": "1x GH200 96 GB",
           "Zaratan": "H100 / A100 (AAC)", "Max": "his cluster (Slurm + Apptainer, to confirm)"}
     people = []
     for site in ("Nexus", "arm00", "Zaratan", "Max"):
