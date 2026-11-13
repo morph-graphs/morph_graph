@@ -34,8 +34,16 @@ def duration(path):
 
 
 def make_clips(video, clip_dir, subject, n_clips, clip_sec, size, threads):
+    """Cut 30 s clips. The container's duration (ffprobe format) can run a few seconds past the last video
+    frame, the audio being longer, so ffmpeg may cut one segment fewer than ceil(duration / clip_sec): the
+    clip list is what ffmpeg cut, recorded in _clips_<subject>.txt so a rerun does not cut again."""
     want = [os.path.join(clip_dir, f"DAY1_{subject}_{hhmmss(i * clip_sec)}00.mp4") for i in range(n_clips)]
-    if all(os.path.exists(p) for p in want):
+    done = os.path.join(clip_dir, f"_clips_{subject}.txt")
+    if os.path.exists(done):
+        have = [os.path.join(clip_dir, l.strip()) for l in open(done) if l.strip()]
+        if have and all(os.path.exists(p) for p in have):
+            return have
+    elif all(os.path.exists(p) for p in want):
         return want
     tmp = os.path.join(clip_dir, "_seg")
     shutil.rmtree(tmp, ignore_errors=True)
@@ -47,10 +55,13 @@ def make_clips(video, clip_dir, subject, n_clips, clip_sec, size, threads):
          "-f", "segment", "-segment_time", str(clip_sec), "-reset_timestamps", "1",
          os.path.join(tmp, "seg_%04d.mp4")], check=True)
     segs = sorted(glob.glob(os.path.join(tmp, "seg_*.mp4")))
-    assert len(segs) == n_clips, f"expected {n_clips} segments, got {len(segs)}"
+    # one fewer is the video ending before the container does (no frames to cut); anything else is an error
+    assert max(1, n_clips - 1) <= len(segs) <= n_clips, f"expected {n_clips} segments, got {len(segs)}"
+    want = want[:len(segs)]
     for s, p in zip(segs, want):
         os.replace(s, p)
     os.rmdir(tmp)
+    open(done, "w").write("".join(os.path.basename(p) + "\n" for p in want))
     return want
 
 
