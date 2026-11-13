@@ -35,7 +35,7 @@ POOLS = {
     "arm00": ("arm00", "Anubhav's agent", "1x GH200 96 GB, tmux loop"),
 }
 SITES = ["Nexus", "wriva", "Max", "Zaratan", "arm00"]
-OURS = {"nexus", "nexus-test", "nexus-slurm"}     # pools whose Slurm jobs our squeue shows
+OURS = {"nexus", "nexus-test", "nexus-slurm", "wriva"}   # pools on Nexus: the collector's squeue shows their jobs
 VID = re.compile(r"P\d\d-\d{8}-\d{6}")
 
 TRANCHES = [

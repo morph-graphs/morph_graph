@@ -106,8 +106,10 @@ def arm00(rows, built, alerts):
 
 
 def nexus(rows, alerts, nxq):
-    """Our Nexus jobs: board tasks' jobs (named board-<task id>) go to nxq for the views; other jobs are rows."""
-    rc, out = sh(["nx", "squeue -u anubhav -h -o '%i|%j|%P|%T|%M|%R' | grep -v keepalive"], timeout=120)
+    """Nexus jobs: every user's board-task jobs (named board-<task id>; wriva's run under Aaron's or Archana's
+    account) go to nxq for the views; our other jobs are rows."""
+    rc, out = sh(["nx", "squeue -h -o '%i|%j|%P|%T|%M|%R|%u' | awk -F'|' '$7 == \"anubhav\" || $2 ~ /^board-/' "
+                        "| grep -v keepalive"], timeout=120)
     if rc not in (0, 1):
         alerts.append(dict(pool="nexus", what="Nexus not readable", state="alert", since=now(),
                            note="nx returned nothing: its login lapsed. Run `! nx login` (Duo); until then Nexus jobs show as claimed"))
@@ -115,11 +117,14 @@ def nexus(rows, alerts, nxq):
     for line in out.splitlines():
         if line.count("|") < 5:
             continue
-        jid, name, part, state, el, reason = line.split("|")[:6]
+        jid, name, part, state, el, reason, user = line.split("|")[:7]
         if name.startswith("board-worker"):
             continue                      # the workers themselves: their heartbeats are on the board
         if name.startswith("board-"):
-            nxq[name] = dict(state=state, partition=part, elapsed=el, where=reason.strip("()") if state != "RUNNING" else reason)
+            nxq[name] = dict(state=state, partition=part, elapsed=el, where=reason.strip("()") if state != "RUNNING" else reason,
+                             user=user)
+            continue
+        if user != "anubhav":
             continue
         rows.append(dict(pool="nexus", kind="other job", what=name, state="running" if state == "RUNNING" else "queued",
                          since="", where=f"{part} on {reason}, {el} elapsed" if state == "RUNNING" else f"{part}, waiting {reason.strip('()')}"))
