@@ -35,7 +35,11 @@ BUILD_ORDER = os.path.join(ROOT, "baselines", "merit", "build_order.txt")
 # (baseline, arm, stage, pools that may run it, bank). 27B needs an 80 GB GPU (H100 / H200 / GH200) or 2x 48 GB;
 # 8B one GPU of 40 GB or more. A qa task answers its bank on the build's GPU family, so it takes the build's pools.
 POOLS = {"m27": ["wriva", "arm00", "zaratan", "max"], "m8": ["max", "nexus", "nexus-slurm", "nexus-test", "wriva"]}
-EXPERIMENTS = [
+# Closed-source API models (baselines/api): no GPU and no memory, one qa task per video and config. They need the
+# provider's key (GEMINI_API_KEY / OPENAI_API_KEY in the worker's environment), which only Max's machine has, so no
+# other pool may take them. Listed first: 30 short tasks that should not wait behind the memory builds.
+API_CONFIGS = ["gemini-3.1-flash-lite-high", "gemini-3.6-flash-high", "gpt-5-f1024"]
+EXPERIMENTS = [("api", c, "qa", ["max"], "batch10_agree2") for c in API_CONFIGS] + [
     ("merit", "m27", "build", POOLS["m27"], None),
     ("merit", "m8", "build", POOLS["m8"], None),
     ("merit", "m27", "qa", POOLS["m27"], "t2_agree2"),   # tranche 2 (epic-morph v3/tranche2.txt)
@@ -122,7 +126,8 @@ def main():
     elif a.action == "publish":
         tasks = desired(have, files)
         if a.first:
-            tasks.sort(key=lambda t: (t["video"] not in a.first, t["priority"]))
+            # the API tasks stay on top (they are few, short and only Max's pool can take them), then the first videos
+            tasks.sort(key=lambda t: (t["baseline"] != "api", t["video"] not in a.first, t["priority"]))
             for i, t in enumerate(tasks):
                 t["priority"] = i
         if a.only_pools is not None:

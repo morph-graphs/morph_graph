@@ -247,3 +247,8 @@ baselines/magic/results/
 baselines/worldmm/work/
 !baselines/worldmm/env/
 baselines/worldmm/results/
+
+# API baselines: epic_eval run folders and encoded clips; results (baselines/api/run_api.sh)
+baselines/api/work/
+!baselines/api/env/
+baselines/api/results/
