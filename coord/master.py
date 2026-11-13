@@ -40,7 +40,7 @@ BUILD_ORDER = os.path.join(ROOT, "baselines", "merit", "build_order.txt")
 # baselines it was started with (worker.py --baselines), so listing a baseline here runs nothing until a pool opts in.
 # our three Nexus workers are named after the queue their tasks go to: tron (QoS high), scavenger, and
 # vulcan-ampere with QoS vulcan-sailon
-M8 = ["max", "nexus-tron", "nexus-sailon", "nexus-scavenger", "wriva"]
+M8 = ["max", "nexus-tron", "nexus-sailon", "nexus-scavenger", "wriva", "zaratan"]   # zaratan: H100 jobs
 POOLS = {("merit", "m27"): ["wriva", "arm00", "zaratan", "max"], ("merit", "m8"): M8,
          ("magic", "m27"): ["wriva", "zaratan", "max"], ("magic", "m8"): M8,
          ("worldmm", "m27"): ["wriva", "zaratan", "max"], ("worldmm", "m8"): M8}
