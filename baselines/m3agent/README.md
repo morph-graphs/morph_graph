@@ -42,7 +42,7 @@ link), and `insightface/` (insightface downloads `buffalo_l` there on first use)
 
 | stage | needs | measured (P05-20240425-201444, 27 min) |
 |---|---|---|
-| build | one GPU with >= 40 GB: the memorization model (~18 GB in bf16) with a 30 s clip of video and audio, the embedding model (8 GB, a helper process), Whisper and ERes2NetV2; faces run on the CPU (8 cores) | see "Checked" below |
+| build | one GPU with >= 40 GB: the memorization model (~18 GB in bf16) with a 30 s clip of video and audio (~10k tokens), the embedding model (8 GB, a helper process), Whisper and ERes2NetV2; faces run on the CPU (8 cores). A 24 GB card runs out of memory in the first clip's prefill even with the embedding model on the CPU (measured on an A5000) | see "Checked" below |
 | qa, blind | the 32.8B control model on vLLM: 2x 48 GB with tensor parallel 2 (upstream's setting), or one 80 GB GPU (`M3AGENT_TP=1`), plus the embedding model on the first GPU | see "Checked" below |
 
 ## Running
@@ -58,8 +58,9 @@ bash baselines/m3agent/run_m3agent.sh upload P05-20240425-201444 m3
 **Build once, answer many times.** `build` needs no questions, so every video's memory can be built before its
 questions exist. It first takes the memory from the dataset when it is there (`M3AGENT_FETCH=0` to skip that), and
 resumes after the last finished clip when interrupted (the graph is saved after every clip). `qa` truncates the
-memory per question at its `t_ask`: a question asked at time t sees clips 0 .. floor(ceil(t)/30) - 1, the clips
-that had ended by then (upstream's `before_clip`, as in M3-Bench's annotations; MERIT's runs use the same rule).
+memory per question at its `t_ask`: a question asked at time t sees clips 0 .. floor(t/30) - 1, the clips
+that had ended by then (upstream's `before_clip`, as in M3-Bench's annotations; MERIT's runs round t up first,
+which can admit a clip up to 1 s early).
 Questions that are not streaming see the whole video. `M3AGENT_TAG=<name>` writes a variant's answers to
 `answers_<bank>_<name>.json.gz`. Every stage skips finished work: rerun the same command after a failure.
 
@@ -106,7 +107,15 @@ Other changes, all in the submodule's one commit:
    near-greedy (temperature 1e-6), so a retry repeats the same output.
 7. Control: every request seeded (sampling stays at upstream's 0.6 / 0.95 / 20), searches run in one process on a
    cached truncated graph instead of a process pool reloading the pickle, max_model_len 16384 and
-   gpu_memory_utilization 0.8 (to leave room for the embedding model), answers resumable.
+   gpu_memory_utilization 0.8 (to leave room for the embedding model), answers resumable. Parsing: the action is
+   read after `</think>` only (upstream also matched inside reasoning cut off at 1024 tokens) and without a
+   greedy match across brackets. No search runs in the round that must answer (upstream ran one whose result
+   nobody read).
+   **Fallback answer round:** the control model often outputs another [Search] in the round that must answer
+   (with no memory, the blind stage, nearly always: 54 of 59 questions on P05). Upstream counts such a question
+   as unanswered (wrong). We give it one more round in which no search is possible and that asks for the
+   option letter; `answered_in_loop` in each row keeps upstream's outcome, and the summary line prints both
+   accuracies (`--no_fallback_answer` in `control.py` restores upstream's protocol).
 8. flash-attn 2.7.4.post1 instead of 2.6.3 (no torch 2.6 build of 2.6.3); Python 3.11 instead of 3.9; the packages
    only used for training (trl, peft) or by the Omni talker are not installed.
 
@@ -114,3 +123,15 @@ Known approximations: a face or voice node keeps embeddings added by later clips
 reinforce the edges of earlier ones; truncation removes later nodes but not these updates. They can change which
 face-voice equivalence wins (and so the character ids), and an edge weakened to zero by a later clip is missing
 from a search restricted to a character; the text memories themselves and their embeddings are never touched.
+
+## Checked (2026-11-12, P05-20240425-201444, bank batch10_agree2: 59 questions, all streaming)
+
+- Both environments build from `env/` (Python 3.11.11, CPU job, 12 and 15 min); `pip check` is clean for `mem` and
+  reports only the expected transformers pin for `ctl`.
+- `prep`: the 27 min video (1408 px, AAC stereo) gives 55 clips of exactly 30.0 s (video and audio), the last
+  one 9.8 s; questions map to before_clip 8..53.
+- `blind` on 4x RTX A5000 (`M3AGENT_TP=4`, vLLM loads the 66 GB checkpoint in ~4 min, then ~2 min of
+  compilation): 12/59 right (20.3%; chance 25.4% over the options), only 4 answered within the round, 55 through
+  the fallback round. MERIT on the same questions: 8B 21/59, 27B 30/59.
+- `build`: not finished yet at the time of writing. A 24 GB card runs out of memory in the first clip (above).
+

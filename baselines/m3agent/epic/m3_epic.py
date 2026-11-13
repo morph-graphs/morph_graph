@@ -5,8 +5,8 @@
             so the cut is exact; long side scaled to --size), and <clip_dir>/clips.json
   questions bank file -> M3-Agent's control input ({video: {mem_path, qa_list}}), one row per question with
             its options and before_clip: the last clip that ended by t_ask (a question asked at t sees clips
-            0 .. floor(ceil(t) / 30) - 1, as upstream's M3-Bench annotations and our MERIT runs); a question
-            that is not streaming is asked at the end of the video
+            0 .. floor(t / 30) - 1, as upstream's M3-Bench annotations); a question that is not streaming sees
+            the whole video
   collect   control output (jsonl) -> answers file, one row per bank question keyed by its `key`, with the
             chosen option, correctness and the clips each search returned (with times, for evidence scoring);
             prints a summary line, then the keys still unanswered (empty line when none)
@@ -62,24 +62,25 @@ def clips(a):
     print(f"video {dur:.1f} s ({vs.codec_context.width}x{vs.codec_context.height}, audio) -> {len(rows)} clips in {a.clip_dir}")
 
 
-def before_clip(q, video_end):
-    t = q["t_ask"] if q.get("streaming") and "t_ask" in q else video_end
-    return math.ceil(t) // CLIP_SEC - 1
+def before_clip(q):
+    """The last clip that had ended by t_ask (clip k ends at 30k + 30); None for a question about the whole video."""
+    if not (q.get("streaming") and "t_ask" in q):
+        return None
+    return math.floor(q["t_ask"]) // CLIP_SEC - 1
 
 
 def questions(a):
     bank = json.load(open(a.bank))
-    end = json.load(open(a.clips))["duration"]
     qa_list = []
     for i, q in enumerate(bank["questions"], 1):
         mcq = q["gemini_mcq"]
         qa_list.append({"question_id": q["key"], "ID": str(i), "key": q["key"], "question": q["q"],
                         "options": [str(o) for o in mcq["options"]], "answer": LETTERS[mcq["answer_index"]],
-                        "before_clip": before_clip(q, end), "t_ask": q.get("t_ask") if q.get("streaming") else None,
+                        "before_clip": before_clip(q), "t_ask": q.get("t_ask") if q.get("streaming") else None,
                         "meta": {k: q.get(k) for k in ("form", "hops", "streaming", "guessable", "answer")}})
     assert len({r["key"] for r in qa_list}) == len(qa_list), "question keys must be unique within a video"
     json.dump({a.video_id: {"mem_path": a.mem_path, "qa_list": qa_list}}, open(a.out, "w"), indent=1)
-    print(f"{len(qa_list)} questions -> {a.out}; before_clip {min(r['before_clip'] for r in qa_list)}..{max(r['before_clip'] for r in qa_list)}")
+    print(f"{len(qa_list)} questions -> {a.out}; before_clip {sorted(set(r['before_clip'] for r in qa_list), key=lambda b: -1 if b is None else b)}")
 
 
 def collect(a):
