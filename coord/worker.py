@@ -164,6 +164,8 @@ def main():
                 continue
             if os.path.exists(ex):
                 code = int(open(ex).read().strip() or 1)
+                if code == 0 and a.outbox and not os.path.exists(os.path.join(REPO_ROOT, "outbox", tid, ".upload.json")):
+                    code = 2   # nothing for the relay: the run.sh did not pass MERIT_OUTBOX on (or uploaded itself)
                 c.update(status=("relay" if a.outbox else "done") if code == 0 else "failed", exit=code, finished=jobs.iso(),
                          seconds=int(t - c.get("started_t", t)))
                 if code:   # the job's log, or (slurm, job never started) sbatch's own error

@@ -52,7 +52,8 @@ def taken(pools, t=None):
     for name, p in pools.items():
         for tid, c in p.get("claims", {}).items():
             if c["status"] in ("done", "relay") or (c["status"] == "running" and c.get("lease_until", 0) > t):
-                if out.get(tid, (None, {}))[1].get("status") != "done":   # a done claim wins over a running one
+                rank = {"done": 2, "relay": 1}   # a done claim wins over a relay one, both over a running one
+                if rank.get(c["status"], 0) >= rank.get(out.get(tid, (None, {}))[1].get("status"), 0):
                     out[tid] = (name, c)
     return out
 
