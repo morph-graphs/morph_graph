@@ -22,6 +22,7 @@ with one local model for every role (captions, memory construction, retrieval, a
 | `../common/hf_results.py` | (shared by all baselines) upload a video's results to the Hugging Face dataset, or download them |
 | `run_worldmm.sh` | one video, one arm, one stage (prep, build, qa, blind, upload, all) |
 | `env/` | the two environments, pinned: `wheels-*`, `requirements-*`, `install_requirements.sh`, `setup_env.sh` |
+| `docker/` | one image per arm with those environments (`Dockerfile`, `image_tag.sh`, `build.sh`), and `run.sh` to run `run_worldmm.sh` in it with Docker or Apptainer |
 
 Our patches (in the submodule's `epic-morph` branch):
 - **Backbone server.** With `WORLDMM_SERVER` set, `Qwen3VLModel` loads no model and sends each call (after its
@@ -94,6 +95,20 @@ ffmpeg must be on `PATH` for `prep`. Each GPU stage starts the backbone server o
 `answers_<bank>_<name>.json.gz`) answers from it. Every stage skips finished work, so rerun the same command
 after a failure; a question that fails is retried by the next pass (three per run). The 512 px videos, build
 intermediates, per-question rows and HippoRAG caches stay in `baselines/worldmm/work/` (`WORLDMM_WORK`).
+
+## Docker (off our clusters)
+
+One image per arm, built from the repo root with the same `env/` install as the virtualenvs: `m8` has the client
+environment in the image's Python; `m27` adds the server27 environment as a virtualenv at `/opt/server` (the
+image sets `PY` and `SERVER_PY`). The code is not in the image: the checkout is mounted at `/repo`.
+
+```bash
+bash baselines/worldmm/docker/build.sh m8          # = docker build -f baselines/worldmm/docker/Dockerfile --build-arg ARM=m8 .
+WORLDMM_GPU=0 EPIC_MORPH_DIR=<epic-morph checkout> bash baselines/worldmm/docker/run.sh all P05-20240425-201444 m8 batch10_agree2
+WORLDMM_RUNTIME=apptainer WORLDMM_IMAGE=worldmm_m27.sif EPIC_MORPH_DIR=... bash baselines/worldmm/docker/run.sh all <video> m27 batch10_agree2
+```
+Tags are `ghcr.io/morph-graphs/worldmm:<arm>-<hash of the environment files>` (`docker/image_tag.sh`), so a
+code-only commit needs no new image.
 
 ## What comes back (in the Hugging Face dataset)
 
