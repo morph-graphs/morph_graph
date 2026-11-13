@@ -4,9 +4,12 @@
 # checkout at /epic-morph (the banks). The Hugging Face token: HF_TOKEN, or `hf auth login` on the host
 # (the cache, with its token, is mounted).
 #   MERIT_GPU=0 EPIC_MORPH_DIR=<epic-morph checkout> bash baselines/merit/docker/run.sh <stage> <video> <arm> [bank]
-#   MERIT_GPU       GPU index(es) for this job, e.g. 0 or 2,3 (required: one H100 per m27 job)
+#   MERIT_RUNTIME   docker (default) or apptainer (clusters without Docker: the same image, run with
+#                   `apptainer exec`; GPUs are the ones the scheduler gave the job, so MERIT_GPU is not needed)
+#   MERIT_GPU       docker: GPU index(es) for this job, e.g. 0 or 2,3 (required: one H100 per m27 job)
 #   EPIC_MORPH_DIR  the epic-morph checkout (required)
-#   MERIT_IMAGE     image (default ghcr.io/morph-graphs/merit:<arm>-<env hash>, from image_tag.sh)
+#   MERIT_IMAGE     image (default ghcr.io/morph-graphs/merit:<arm>-<env hash>, from image_tag.sh); for
+#                   apptainer, a .sif built once with `apptainer pull merit_<arm>.sif docker://<that image>`
 #   MERIT_HF_CACHE  Hugging Face cache on the host (default ~/.cache/huggingface)
 #   HDEPIC_VIDEOS   videos on the host (default $EPIC_MORPH_DIR/data/HD-EPIC/videos), mounted read-only at /videos
 #   MERIT_OUT       optional, a path inside the container (e.g. /repo/baselines/merit/work/check)
@@ -15,13 +18,27 @@ ARM=${3:?usage: run.sh <stage> <video> <arm> [bank]}
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && pwd)
 IMAGE=${MERIT_IMAGE:-ghcr.io/morph-graphs/merit:$(bash "$REPO/baselines/merit/docker/image_tag.sh" "$ARM")}
-GPU=${MERIT_GPU:?set MERIT_GPU to the GPU index or indices for this job}
+RUNTIME=${MERIT_RUNTIME:-docker}
 HF=${MERIT_HF_CACHE:-$HOME/.cache/huggingface}
 [ -f "$REPO/baselines/merit/MERIT/eval/evaluate_egolife.py" ] || { echo "run: git submodule update --init baselines/merit/MERIT"; exit 1; }
 mkdir -p "$HF"
 # the videos by their real host path: data/HD-EPIC is often a symlink, which would dangle inside the container
 VIDEOS=${HDEPIC_VIDEOS:-$EPIC/data/HD-EPIC/videos}
 [ -d "$VIDEOS" ] || { echo "no videos at $VIDEOS (set HDEPIC_VIDEOS; epic-morph v3/DATA.md)"; exit 1; }
+COMMITS=(MERIT_REPO_COMMIT="$(git -C "$REPO" rev-parse HEAD)" MERIT_EPIC_COMMIT="$(git -C "$EPIC" rev-parse HEAD)"
+         MERIT_SUBMODULE_COMMIT="$(git -C "$REPO/baselines/merit/MERIT" rev-parse HEAD)")
+if [ "$RUNTIME" = apptainer ]; then
+    case $IMAGE in *.sif) ;; *) IMAGE=docker://$IMAGE ;; esac
+    ENVS=EPIC_MORPH_DIR=/epic-morph,HDEPIC_VIDEOS=/videos,HF_HOME=/hf,HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-0},$(IFS=,; echo "${COMMITS[*]}")
+    for v in HF_TOKEN MERIT_HF_REPO MERIT_TAG MERIT_NO_FRAMES MERIT_FETCH MERIT_OUT CUDA_VISIBLE_DEVICES; do
+        [ -n "${!v:-}" ] && ENVS="$ENVS,$v=${!v}"
+    done
+    exec apptainer exec --nv --cleanenv --env "$ENVS" --pwd /repo \
+        --bind "$REPO:/repo,$EPIC:/epic-morph,$HF:/hf,$(cd -P "$VIDEOS" && pwd):/videos:ro" \
+        "$IMAGE" bash baselines/merit/run_merit.sh "$@"
+fi
+[ "$RUNTIME" = docker ] || { echo "MERIT_RUNTIME must be docker or apptainer"; exit 1; }
+GPU=${MERIT_GPU:?set MERIT_GPU to the GPU index or indices for this job}
 # the container sees only the chosen GPUs, renumbered from 0
 N=$(echo "$GPU" | tr ',' '\n' | grep -c .); SEEN=$(seq -s, 0 $((N - 1)))
 exec docker run --rm --gpus "\"device=$GPU\"" --shm-size 32g --user "$(id -u):$(id -g)" \
@@ -29,7 +46,6 @@ exec docker run --rm --gpus "\"device=$GPU\"" --shm-size 32g --user "$(id -u):$(
     -e CUDA_VISIBLE_DEVICES="$SEEN" -e EPIC_MORPH_DIR=/epic-morph -e HDEPIC_VIDEOS=/videos -e HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-0}" \
     ${HF_TOKEN:+-e HF_TOKEN} ${MERIT_HF_REPO:+-e MERIT_HF_REPO} \
     ${MERIT_TAG:+-e MERIT_TAG} ${MERIT_NO_FRAMES:+-e MERIT_NO_FRAMES} ${MERIT_FETCH:+-e MERIT_FETCH} \
-    -e MERIT_REPO_COMMIT="$(git -C "$REPO" rev-parse HEAD)" -e MERIT_EPIC_COMMIT="$(git -C "$EPIC" rev-parse HEAD)" \
-    -e MERIT_SUBMODULE_COMMIT="$(git -C "$REPO/baselines/merit/MERIT" rev-parse HEAD)" \
+    -e "${COMMITS[0]}" -e "${COMMITS[1]}" -e "${COMMITS[2]}" \
     ${MERIT_OUT:+-e MERIT_OUT="$MERIT_OUT"} \
     "$IMAGE" bash baselines/merit/run_merit.sh "$@"

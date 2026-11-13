@@ -4,8 +4,14 @@
 Run it from a morph_graph checkout of main, on the machine that has the GPUs, with a Hugging Face token that
 can write morph-graphs/epic-morph-jobs and morph-graphs/epic-morph-results (HF_TOKEN or `hf auth login`):
 
-    python coord/worker.py --pool max --launcher docker --slots 0 1 2 3          # Max: one task per GPU
+    python coord/worker.py --pool max --launcher docker --slots 0 1 2 3          # a GPU box: one task per GPU
     python coord/worker.py --pool nexus-test --launcher local --slots 0 --max-tasks 1
+    python coord/worker.py --pool max --launcher slurm --runtime apptainer --slots 1 2 3 4 \
+        --sbatch "--partition=gpu --gres=gpu:1 -c 8 --mem=64G --time=8:00:00"        # a cluster: up to 4 jobs at once
+
+With --launcher slurm the worker runs where `sbatch` works (a login node) and each task becomes one
+`sbatch --wait` job that runs the baseline's container on a GPU node (the scheduler picks the GPU); slots are
+just how many jobs may be queued or running at once.
 
 Each cycle (every --every seconds): read the board, mark finished tasks done/failed with their runtime and
 GPU, renew the leases of running ones, claim the highest-priority free tasks for free slots (one commit to
@@ -16,6 +22,7 @@ tasks keep going, and a restarted worker picks them up again from its state fold
 import argparse
 import json
 import re
+import shlex
 import os
 import socket
 import subprocess
@@ -36,14 +43,20 @@ def valid(task):
     return all(VALID[k].match(str(task.get(k) or "")) for k in VALID)
 
 
-def command(task, gpus, launcher):
+def command(task, gpus, a, log):
     """The shell command that runs one task: the stage, then the upload of its results folder."""
     b, stage, v, arm, bank = task["baseline"], task["stage"], task["video"], task["arm"], task.get("bank") or ""
-    if launcher == "docker":
+    if a.launcher == "docker":
         run = f"MERIT_GPU={gpus} bash baselines/{b}/docker/run.sh"
+    elif a.launcher == "slurm":
+        run = f"MERIT_RUNTIME={a.runtime} bash baselines/{b}/docker/run.sh"
     else:
         run = f"CUDA_VISIBLE_DEVICES={gpus} bash baselines/{b}/run_{b}.sh"
-    return f"{run} {stage} {v} {arm} {bank} && {run} upload {v} {arm}"
+    inner = f"{run} {stage} {v} {arm} {bank} && {run} upload {v} {arm}"
+    if a.launcher == "slurm":   # one job per task; --wait returns the job's exit code when it ends
+        return (f"sbatch --wait --parsable --job-name=board-{task['id'][:60]} --output={log} {a.sbatch} "
+                f"--wrap {shlex.quote(f'cd {REPO_ROOT} && nvidia-smi -L; {inner}')}")
+    return inner
 
 
 def alive(pidfile):
@@ -68,7 +81,9 @@ def gpu_name(gpus):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--pool", required=True, help="this pool's name on the board (e.g. max, nexus, arm00)")
-    ap.add_argument("--launcher", choices=["docker", "local"], required=True)
+    ap.add_argument("--launcher", choices=["docker", "local", "slurm"], required=True)
+    ap.add_argument("--runtime", choices=["apptainer", "docker"], default="apptainer", help="slurm: how the job runs the image")
+    ap.add_argument("--sbatch", default="", help="slurm: resources and queue for each task's job, e.g. '--partition=gpu --gres=gpu:1 -c 8 --mem=64G --time=8:00:00'")
     ap.add_argument("--slots", nargs="+", required=True, help="GPU ids per task slot: '0 1' = two one-GPU slots, '0,1' = one two-GPU slot")
     ap.add_argument("--every", type=int, default=300, help="seconds between cycles")
     ap.add_argument("--max-tasks", type=int, default=0, help="stop claiming after this many (0 = no limit)")
@@ -124,7 +139,8 @@ def main():
             if any(d not in done for d in task.get("deps", [])):
                 continue
             slot = free.pop(0)
-            claims[tid] = dict(status="running", host=host, slot=slot, gpu=gpu_name(slot), claimed=jobs.iso(),
+            claims[tid] = dict(status="running", host=host, slot=slot,
+                               gpu="(scheduler)" if a.launcher == "slurm" else gpu_name(slot), claimed=jobs.iso(),
                                started=jobs.iso(), started_t=t, lease_until=t + jobs.LEASE_S)
             start.append((task, slot))
         mine.update(pool=a.pool, host=host, slots=a.slots, launcher=a.launcher, updated=jobs.iso(),
@@ -138,7 +154,9 @@ def main():
             for f in (ex, ex + ".tmp"):   # an exit code from an earlier run of this task must not end this one
                 if os.path.exists(f):
                     os.remove(f)
-            cmd = f"cd {REPO_ROOT} && ( {command(task, slot, a.launcher)} ) > {log} 2>&1; echo $? > {ex}.tmp && mv {ex}.tmp {ex}"
+            run = command(task, slot, a, log)
+            out = log + ".submit" if a.launcher == "slurm" else log   # slurm: the job writes the log itself
+            cmd = f"cd {REPO_ROOT} && ( {run} ) > {out} 2>&1; echo $? > {ex}.tmp && mv {ex}.tmp {ex}"
             pid = subprocess.Popen(["bash", "-c", cmd], start_new_session=True).pid
             open(os.path.join(state, f"{tid}.pid"), "w").write(str(pid))
             claimed_total += 1
