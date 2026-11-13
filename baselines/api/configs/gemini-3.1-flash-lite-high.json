@@ -1,0 +1,35 @@
+{
+  "media": {
+    "enabled": true,
+    "max_side": 1024,
+    "encode_fps": 2,
+    "crf": 26,
+    "preset": "veryfast",
+    "audio": false,
+    "clip_cut": "source_input_t"
+  },
+  "model": {
+    "backend": "gemini",
+    "name": "gemini-3.1-flash-lite",
+    "api_version": null,
+    "api_key_env": "GEMINI_API_KEY",
+    "thinking_level": "HIGH",
+    "include_thoughts": true,
+    "temperature": null,
+    "seed": 0,
+    "max_output_tokens": 65536,
+    "fps": 1.0,
+    "media_resolution": "MEDIA_RESOLUTION_HIGH",
+    "cache_min_questions": 2,
+    "cache_ttl_s": 7200,
+    "max_retries": 6,
+    "retry_delay_s": 10,
+    "upload_timeout_s": 1800
+  },
+  "runtime": {
+    "max_concurrent_groups": 8,
+    "max_concurrent_requests": 32,
+    "prep_workers": 4,
+    "retry_truncated": false
+  }
+}

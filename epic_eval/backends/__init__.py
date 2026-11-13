@@ -13,6 +13,7 @@ import importlib
 
 BACKENDS = {
     "gemini": "epic_eval.backends.gemini",
+    "openai": "epic_eval.backends.openai",
     "qwen38_vl": "epic_eval.backends.qwen38_vl",
 }
 
