@@ -20,6 +20,8 @@ on:
       - baselines/worldmm/docker/**
       - baselines/api/env/**
       - baselines/api/docker/**
+      - baselines/m3agent/env/**
+      - baselines/m3agent/docker/**
       - .github/workflows/baseline-images.yml
   workflow_dispatch:
 
@@ -46,6 +48,7 @@ jobs:
           - {baseline: worldmm, arm: m8}
           - {baseline: worldmm, arm: m27}   # the server27 venv (transformers 5.8) at /opt/server
           - {baseline: api, arm: cpu}   # API clients and ffmpeg only: no CUDA, a few minutes
+          - {baseline: m3agent, arm: m3}   # two venvs (memorization, control) over one shared torch
     env:
       PUBLISH: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
       TAGS: baselines/${{ matrix.baseline }}/docker/image_tag.sh

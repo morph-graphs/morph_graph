@@ -5,7 +5,7 @@ Run it from a morph_graph checkout of main, on the machine that has the GPUs, wi
 can write morph-graphs/epic-morph-jobs and morph-graphs/epic-morph-results (HF_TOKEN or `hf auth login`):
 
     python coord/worker.py --pool max --launcher docker --slots 0 1 2 3 --baselines merit magic   # one task per GPU
-    python coord/worker.py --pool nexus-test --launcher local --slots 0 --max-tasks 1
+    python coord/worker.py --pool nexus-scavenger --launcher local --slots 0 --max-tasks 1
     python coord/worker.py --pool max --launcher slurm --runtime apptainer --slots 1 2 3 4 \
         --sbatch "--partition=gpu --gres=gpu:1 -c 8 --mem=64G --time=8:00:00"        # a cluster: up to 4 jobs at once
 

@@ -238,6 +238,11 @@ baselines/merit/work/
 # ENV/ above matches env/ on case-insensitive filesystems; the MERIT environment files are code
 !baselines/merit/env/
 baselines/merit/results/
+# M3-Agent runs: clips, intermediate outputs, control runs, results (baselines/m3agent/run_m3agent.sh)
+baselines/m3agent/work/
+!baselines/m3agent/env/
+baselines/m3agent/results/
+
 # MAGIC-Video runs: clips, MERIT captions, server logs, caches; results (baselines/magic/run_magic.sh)
 baselines/magic/work/
 !baselines/magic/env/
