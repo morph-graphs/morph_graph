@@ -141,12 +141,16 @@ qa() {
     [ -s "$OUT/${V}_30sec_4_key.json" ] || build
     qa_file; mkdir -p "$runs"
     local n; n=$("$PY" -c "import json,sys; print(len(json.load(open(sys.argv[1]))))" "$QA")
-    # Pass "full" answers every question (MERIT resumes it from its temp file if interrupted); later passes,
-    # each under a new name so no earlier answers are overwritten, answer only the IDs with no valid answer
-    # yet (MERIT writes "Error" for a failed question). Nothing runs when all are answered.
+    # Question IDs are the bank's keys, and an answer is reused only for an unchanged question (collect_answers.py),
+    # so the answers file of an earlier tranche (or the dataset's) is a source like any run. Pass "full" answers
+    # every question (MERIT resumes it from its temp file if interrupted); later passes, each under a new name so
+    # no earlier answers are overwritten, answer only the IDs with no valid answer yet: new or edited questions,
+    # or ones MERIT failed on (it writes "Error"). Nothing runs when all are answered.
+    local ans=$OUT/answers_$BANK$SUF.json.gz
+    collect() { "$PY" "$M/epic/collect_answers.py" --qa_file "$QA" --runs "$runs/*/*_final.json" --prev "$ans" --out "$ans" | tail -1; }
     for k in 1 2 3; do
-        if ls "$runs"/*/*_final.json >/dev/null 2>&1; then
-            missing=$("$PY" "$M/epic/collect_answers.py" --qa_file "$QA" --runs "$runs/*/*_final.json" --out "$OUT/answers_$BANK$SUF.json.gz" | tail -1)
+        if [ -s "$ans" ] || ls "$runs"/*/*_final.json >/dev/null 2>&1; then
+            missing=$(collect)
             [ -z "$missing" ] && break
             sel=(--question-ids $missing); name=${ARM}_${V}_${BANK}${SUF}_fill$(date +%m%d%H%M%S)
         else
@@ -159,7 +163,7 @@ qa() {
             "${sel[@]}" --output-dir "$runs" --log-dir "$WORK/logs" 2>&1 | tee "$WORK/logs/$name.log" \
             || echo "pass $name exited with an error; the next pass resumes or retries"
     done
-    missing=$("$PY" "$M/epic/collect_answers.py" --qa_file "$QA" --runs "$runs/*/*_final.json" --out "$OUT/answers_$BANK$SUF.json.gz" | tail -1)
+    missing=$(collect)
     [ -z "$missing" ] || { echo "still unanswered after 3 passes: $missing (rerun the same command to retry)"; exit 1; }
     record "qa $BANK$SUF" $((SECONDS - t))
 }

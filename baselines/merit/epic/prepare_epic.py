@@ -9,9 +9,14 @@ Writes (all skip-existing):
 
 The whole video is treated as DAY1 starting at 00:00:00. A streaming question is asked
 at its t_ask; every other question is asked at the end of the video.
+
+A question's ID is its bank `key`, so answers stay attached to it when a tranche adds or reorders a video's
+questions; a file without keys (e.g. M2 probes) keeps the 1-based position. match_answers() reuses an answer
+only while the question's wording, options and gold letter are unchanged (qhash).
 """
 import argparse
 import glob
+import hashlib
 import json
 import math
 import os
@@ -84,17 +89,69 @@ def make_frames(video, frame_root, clip_names, clip_sec, size, threads):
     shutil.rmtree(tmp)
 
 
+def qhash(question, options):
+    """Short hash of a question's wording and options (as in baselines/magic): an edit under the same key changes it."""
+    return hashlib.sha1(json.dumps([question, [str(o) for o in options]]).encode()).hexdigest()[:12]
+
+
+def row_qhash(r):
+    """qhash of a MERIT question row (choice_a..) or answer row (choices dict): both carry the text they were asked."""
+    ch = r.get("choices") or {k: r[f"choice_{k.lower()}"] for k in LETTERS if f"choice_{k.lower()}" in r}
+    return qhash(r["question"], [ch[k] for k in sorted(ch)])
+
+
+def match_answers(qa_rows, answers):
+    """Attach answer rows (MERIT's or blind_qa's, first valid one wins) to the questions of qa_rows:
+    {question ID: answer row}, the row's ID set to the question's and key / qhash / pos added. An answer counts
+    only for the same question text, options and gold letter. It is found by ID; an ID not in qa_rows (a
+    positional ID from before keys, or a key since dropped) is found by that content instead: the one question
+    asked that way, or among several the one at that position (otherwise it is answered again)."""
+    sig = lambda r: (row_qhash(r), r.get("answer"))
+    by_id = {str(q["ID"]): q for q in qa_rows}
+    pos = {str(q["ID"]): i for i, q in enumerate(qa_rows, 1)}
+    by_sig = {}
+    for q in qa_rows:
+        by_sig.setdefault(sig(q), []).append(q)
+    got = {}
+    for r in answers:
+        if (r.get("response") or "").strip() in ("", "Error"):
+            continue
+        q = by_id.get(str(r["ID"]))
+        if q:
+            q = q if sig(q) == sig(r) else None
+        else:   # by content: the only question asked this way, or the one at that position (never a second one,
+            # which a copy of this row already matched elsewhere could otherwise also fill)
+            same = by_sig.get(sig(r), [])
+            q = next((q for q in same if len(same) == 1 or str(pos[str(q["ID"])]) == str(r["ID"])), None)
+        if q and str(q["ID"]) not in got:
+            i = str(q["ID"])
+            got[i] = {**r, "ID": q["ID"], "key": q.get("key"), "qhash": row_qhash(q), "pos": pos[i]}
+    return got
+
+
 def convert_questions(qfile, subject, video_end):
     raw = json.load(open(qfile))
+    keyed = all("key" in q for q in raw["questions"])
+    if keyed:
+        keys = [q["key"] for q in raw["questions"]]
+        assert len(set(keys)) == len(keys), f"duplicate question keys in {qfile}"
     rows = []
     for i, q in enumerate(raw["questions"], 1):
         mcq = q["gemini_mcq"]
         opts = [str(o) for o in mcq["options"]]
         assert 2 <= len(opts) <= 4, (i, opts)
-        t = q["t_ask"] if q.get("streaming") and "t_ask" in q else video_end
+        t = video_end
+        if q.get("streaming") and "t_ask" in q:
+            # MERIT shows a clip once its end <= the query time: ceil(t_ask) could show a clip ending up to 1 s
+            # after the question, so floor it. A question asked in the last second is asked at the end, where
+            # the last clip ends at ceil(duration) (flooring would hide seconds seen before the question).
+            t = video_end if video_end and q["t_ask"] > video_end - 1 else math.floor(q["t_ask"])
         row = {
-            "ID": str(i),
-            "query_time": {"date": "DAY1", "time": hhmmss(math.ceil(t)) + "00"},
+            "ID": q["key"] if keyed else str(i),
+            "key": q.get("key"),
+            "qhash": qhash(q["q"], opts),
+            "pos": i,
+            "query_time": {"date": "DAY1", "time": hhmmss(t) + "00"},
             "type": q["form"],
             "question": q["q"],
             "answer": LETTERS[mcq["answer_index"]],
