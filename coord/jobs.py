@@ -50,7 +50,8 @@ def taken(pools, t=None):
     for name, p in pools.items():
         for tid, c in p.get("claims", {}).items():
             if c["status"] == "done" or (c["status"] == "running" and c.get("lease_until", 0) > t):
-                out[tid] = (name, c)
+                if out.get(tid, (None, {}))[1].get("status") != "done":   # a done claim wins over a running one
+                    out[tid] = (name, c)
     return out
 
 

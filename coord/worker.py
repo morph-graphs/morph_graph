@@ -46,6 +46,15 @@ def command(task, gpus, launcher):
     return f"{run} {stage} {v} {arm} {bank} && {run} upload {v} {arm}"
 
 
+def alive(pidfile):
+    """Is the task's process (pid kept in a local file, since claims are re-read from the board) still there?"""
+    try:
+        os.kill(int(open(pidfile).read().strip()), 0)
+        return True
+    except (OSError, ValueError) as e:
+        return isinstance(e, PermissionError)
+
+
 def gpu_name(gpus):
     try:
         out = subprocess.run(["nvidia-smi", "--query-gpu=index,name", "--format=csv,noheader"], capture_output=True,
@@ -74,17 +83,25 @@ def main():
         mine = pools.get(a.pool, {"pool": a.pool, "claims": {}})
         claims = mine.setdefault("claims", {})
         t = jobs.now()
-        # finished or still running?
+        others = {tid: (n, c) for n, p in pools.items() if n != a.pool for tid, c in p.get("claims", {}).items()}
+        # finished, still running, lost, or taken over by another pool?
         for tid, c in claims.items():
             if c["status"] != "running" or c.get("host") != host:
                 continue
             ex = os.path.join(state, f"{tid}.exit")
+            o = others.get(tid)
+            if o and (o[1]["status"] == "done" or (o[1]["status"] == "running" and o[1].get("claimed", "") > c.get("claimed", ""))):
+                # our lease lapsed and another pool took the task: stop renewing (our copy may still finish; outputs are idempotent)
+                c.update(status="superseded", finished=jobs.iso(), note=f"taken over by pool {o[0]}")
+                continue
             if os.path.exists(ex):
                 code = int(open(ex).read().strip() or 1)
                 c.update(status="done" if code == 0 else "failed", exit=code, finished=jobs.iso(),
                          seconds=int(t - c.get("started_t", t)))
                 if code:
                     c["note"] = open(os.path.join(state, f"{tid}.log")).read()[-400:] if os.path.exists(os.path.join(state, f"{tid}.log")) else ""
+            elif not alive(os.path.join(state, f"{tid}.pid")):
+                c.update(status="failed", exit=-1, finished=jobs.iso(), note="the task's process ended without an exit code (killed or host restarted)")
             else:
                 c["lease_until"] = t + jobs.LEASE_S
         busy = {c["slot"] for c in claims.values() if c["status"] == "running" and c.get("host") == host}
@@ -118,8 +135,12 @@ def main():
         for task, slot in start:   # start only after the claim is committed
             tid = task["id"]
             log, ex = os.path.join(state, f"{tid}.log"), os.path.join(state, f"{tid}.exit")
-            cmd = f"cd {REPO_ROOT} && ( {command(task, slot, a.launcher)} ) > {log} 2>&1; echo $? > {ex}"
-            subprocess.Popen(["bash", "-c", cmd], start_new_session=True)
+            for f in (ex, ex + ".tmp"):   # an exit code from an earlier run of this task must not end this one
+                if os.path.exists(f):
+                    os.remove(f)
+            cmd = f"cd {REPO_ROOT} && ( {command(task, slot, a.launcher)} ) > {log} 2>&1; echo $? > {ex}.tmp && mv {ex}.tmp {ex}"
+            pid = subprocess.Popen(["bash", "-c", cmd], start_new_session=True).pid
+            open(os.path.join(state, f"{tid}.pid"), "w").write(str(pid))
             claimed_total += 1
             print(f"{jobs.iso()} started {tid} on GPU {slot}: {task['baseline']} {task['arm']} {task['stage']} {task['video']}", flush=True)
         running = sum(1 for c in claims.values() if c["status"] == "running" and c.get("host") == host)
