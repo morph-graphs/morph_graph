@@ -171,3 +171,19 @@ What a worker needs for qa, beyond what builds need:
 - The memory comes from the results dataset (qa runs build, which fetches it; CPU only, seconds): a token that
   can read it, and HF_HUB_OFFLINE unset.
 - No code change on the worker: `worker.py` already runs `run.sh qa <video> <arm> <bank> && run.sh upload ...`.
+
+## Every ready baseline on the board
+
+Added 2026-11-13. `EXPERIMENTS` lists build + qa (`t2_agree2`) for MERIT, MAGIC-Video and WorldMM, both arms each,
+in that order (the order is the priority). Pools per (baseline, arm) are in `master.POOLS`: every m8 needs one GPU
+of 40 GB or more (the Nexus A6000 pools, wriva, max); every m27 needs an 80 GB GPU (wriva, max, zaratan), and only
+MERIT's m27 also goes to arm00 (the images are x86; MERIT alone has a native aarch64 environment there). MAGIC's
+build depends on MERIT's build of the same video and arm while that is listed, since it reuses MERIT's captions.
+A memory counts as built when its folder has `runs.jsonl` and the baseline's last memory file (`MEMORY_DONE`).
+
+A worker takes only the baselines it is started with: `worker.py --baselines merit magic worldmm` (default `merit`).
+Name a baseline only once the machine has its images, or every task of it fails there and is held back after two
+failures. All baselines' `docker/run.sh` read the worker's settings: `MERIT_GPU` and `MERIT_RUNTIME` (from
+worker.py), `MERIT_SIF_DIR` (a folder of `<baseline>_<arm>.sif`), `MERIT_HF_CACHE` (the models) and `MERIT_WORK`
+(the cluster's shared work folder; MAGIC and WorldMM work in its `magic/` and `worldmm/` subfolders). Each
+baseline's own `MAGIC_*` / `WORLDMM_*` variable wins when set.
