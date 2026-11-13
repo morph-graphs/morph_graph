@@ -77,7 +77,9 @@ def test_guard(tmp):
     os.remove(f"{tmp}/scancel.log")
     r = guard(env, 101, marker)   # e.g. submitted after 102 started, or scancel lost: no work, no cancelling
     assert r.returncode == 3 and "copy 102" in r.stdout and not os.path.exists(f"{tmp}/scancel.log")
+    open(f"{tmp}/t.rc", "w").write("143")   # from 102's first, preempted start
     assert guard(env, 102, marker).returncode == 0   # 102 preempted and requeued: still its task
+    assert not os.path.exists(f"{tmp}/t.rc")
     assert lines(marker) == ["102"]
 
 
@@ -102,8 +104,10 @@ def test_copies(tmp):
     t = task()
     p = f"{state}/{t['id']}"
     open(p + ".rc", "w").write("0")   # left from an earlier run of this task: must not end this one
+    open(p + ".jobs", "w").write("90 a6000\n91 h200\n")   # copies of an earlier run: cancelled first
     ids = W.submit_copies(t, a, QUEUES, state)
-    assert ids == {"101": "a6000", "102": "h200"}, ids           # "broken" refused; pair48 does not fit m8
+    assert ids == {"101": "a6000", "102": "h200"}, ids
+    assert lines(f"{tmp}/scancel.log") == ["90", "91"]           # "broken" refused; pair48 does not fit m8
     calls = open(f"{tmp}/sbatch.log").read().splitlines()
     assert len(calls) == 3 and all(f"--job-name=board-{t['id']}" in c and "slurm_guard.sh" in c for c in calls)
     assert "invalid partition" in open(p + ".log.submit").read() and not os.path.exists(p + ".rc")
@@ -114,6 +118,7 @@ def test_copies(tmp):
     assert W.copies_state(p, q) == (None, "h200", ["101"])       # 102 runs; 101 still queued: cancel it
     assert W.copies_state(p, {"102"}) == (None, "h200", [])
     open(p + ".rc", "w").write("0\n")
+    assert W.copies_state(p, {"102"}) == (None, "h200", [])      # written, but 102 is still (or again, requeued) queued
     assert W.copies_state(p, set()) == (0, "h200", [])           # done
     os.remove(p + ".rc")
     assert W.copies_state(p, {"101"}) == (-1, "h200", ["101"])   # winner gone without an exit code (time limit, OOM)

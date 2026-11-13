@@ -109,6 +109,8 @@ def submit_copies(task, a, queues, state, sbatch="sbatch"):
     <tid>.log.submit)."""
     tid = task["id"]
     p = os.path.join(state, tid)
+    if os.path.exists(p + ".jobs"):   # copies of an earlier run of it must not run beside this one
+        subprocess.run(["scancel", *[l.split()[0] for l in open(p + ".jobs") if l.strip()]], capture_output=True)
     for ext in (".exit", ".exit.tmp", ".rc", ".rc.tmp", ".ran", ".jobs", ".log.submit"):   # from an earlier run of it
         if os.path.exists(p + ext):
             os.remove(p + ext)
@@ -116,15 +118,14 @@ def submit_copies(task, a, queues, state, sbatch="sbatch"):
             f"cd {REPO_ROOT} && nvidia-smi -L && ( {inner(task, '', a)} ); echo $? > {p}.rc.tmp && mv {p}.rc.tmp {p}.rc")
     ids = {}
     for n in fitting(task, queues):
-        r = subprocess.run([sbatch, "--parsable", f"--job-name=board-{tid[:60]}", f"--output={p}.log", "--open-mode=append",
+        r = subprocess.run([sbatch, "--parsable", f"--job-name=board-{tid}", f"--output={p}.log", "--open-mode=append",
                             *shlex.split(queues[n]["sbatch"]), "--wrap", wrap], capture_output=True, text=True)
         jid = r.stdout.strip().split(";")[0]
         if r.returncode == 0 and jid.isdigit():
             ids[jid] = n
+            open(p + ".jobs", "a").write(f"{jid} {n}\n")   # at once: a worker killed mid-loop still knows this copy
         else:
             open(p + ".log.submit", "a").write(f"queue {n}: sbatch exit {r.returncode}: {r.stdout}{r.stderr}\n")
-    if ids:
-        open(p + ".jobs", "w").write("".join(f"{j} {n}\n" for j, n in ids.items()))
     return ids
 
 
@@ -143,10 +144,10 @@ def copies_state(p, queued):
     jobs = dict(l.split() for l in open(p + ".jobs") if l.strip())
     ran = open(p + ".ran").read().strip() if os.path.exists(p + ".ran") else None
     cancel = [j for j in jobs if j != ran and j in queued] if ran else []   # left over: submitted after the winner started
+    if any(j in queued for j in ([ran] if ran else jobs)):   # (a requeued winner is back in the queue: not over)
+        return None, jobs.get(ran), cancel
     if os.path.exists(p + ".rc"):
         return int(open(p + ".rc").read().strip() or 1), jobs.get(ran), cancel
-    if any(j in queued for j in ([ran] if ran else jobs)):
-        return None, jobs.get(ran), cancel
     return -1, jobs.get(ran), cancel   # every copy left the queue without an exit code
 
 
@@ -198,7 +199,7 @@ def main():
     if a.queues and (a.launcher != "slurm" or a.sbatch):
         ap.error("--queues needs --launcher slurm and replaces --sbatch")
     queues = load_queues(a.queues) if a.queues else None
-    state = a.state or os.path.expanduser(f"~/.cache/coord/{a.pool}")
+    state = os.path.abspath(a.state or os.path.expanduser(f"~/.cache/coord/{a.pool}"))   # the jobs write there too
     os.makedirs(state, exist_ok=True)
     host = socket.gethostname()
     claimed_total = 0
@@ -229,6 +230,8 @@ def main():
                     subprocess.run(["scancel", *cancel])
                 if q:
                     c["queue"] = q
+                if code is None:
+                    c.pop("gone_t", None)
                 if code == -1 and "gone_t" not in c:   # left the queue without an exit code: look again next cycle
                     c.update(gone_t=t, lease_until=t + jobs.LEASE_S)   # (the .rc it wrote may not be visible here yet)
                     continue

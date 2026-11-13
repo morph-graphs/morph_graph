@@ -12,6 +12,7 @@ if ! ( set -C; echo "$me" > "$marker" ) 2>/dev/null && [ "$(cat "$marker" 2>/dev
     echo "job $me: copy $(cat "$marker" 2>/dev/null) of $SLURM_JOB_NAME has this task; exiting without work"
     exit 3
 fi
+rm -f "${marker%.ran}.rc"   # the exit code of this copy's earlier, requeued start is not this run's
 echo "job $me ($SLURM_JOB_PARTITION) runs $SLURM_JOB_NAME; cancelling its pending copies"
 squeue -h -u "$USER" -n "$SLURM_JOB_NAME" -t PENDING -o %i | grep -vx "$me" | xargs -r scancel
 exit 0
