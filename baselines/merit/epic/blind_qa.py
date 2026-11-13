@@ -24,9 +24,15 @@ def main():
     p.add_argument("--qa_file", required=True)
     p.add_argument("--model", default="qwen3vl-8b")
     p.add_argument("--output", required=True)
+    p.add_argument("--context_file", help="JSON {ID: context text}: answer from this given context instead of an empty one "
+                                          "(e.g. the captions of the clips holding the evidence, with no search)")
     args = p.parse_args()
 
     rows = json.load(open(args.qa_file))
+    ctx = json.load(open(args.context_file)) if args.context_file else None
+    if ctx is not None:   # a question missing from the file would silently be answered with no context
+        missing = [r["ID"] for r in rows if str(r["ID"]) not in ctx]
+        assert not missing, f"{args.context_file} has no entry for {len(missing)} questions, e.g. {missing[:3]}"
     done = {r["ID"]: r for r in json.load(open(args.output))} if os.path.exists(args.output) else {}
     llm = LLMModel(model_name=args.model)
     qa_prompt = PromptTemplateManager().render("final_qa_egolife")
@@ -41,7 +47,7 @@ def main():
         # Built exactly as MeritMemory.answer / _build_qa_content, with nothing retrieved.
         query = (f"Query: {row['question']}\nQuery Time: {transform_timestamp(str(until))}"
                  f"\nChoices: " + " ".join(f"({k}) {v}" for k, v in sorted(choices.items())))
-        content = [{"type": "text", "text": query + "\n\nContext:\n"},
+        content = [{"type": "text", "text": query + "\n\nContext:\n" + (ctx[str(row["ID"])] if ctx else "")},
                    {"type": "text", "text": "\nPlease provide only the final answer from the choices given (e.g., A, B, C, or D)."}]
         msgs = copy.deepcopy(qa_prompt) + [{"role": "user", "content": content}]
         response = llm.generate(msgs)

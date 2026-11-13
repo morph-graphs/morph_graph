@@ -24,6 +24,8 @@
 #                  them in the dataset morph-graphs/epic-morph-results at merit/<arm>/<video>/)
 #   MERIT_TAG      a variant name for the answers (answers_<bank>_<tag>.json.gz); MERIT_NO_FRAMES=1 (answer from
 #                  captions only, memory probes) defaults it to "noframes", so variants never overwrite each other
+#   MERIT_CONTEXT  blind only: a JSON file {question ID: context text}; the model answers from that text instead of an
+#                  empty context, with no search. Needs MERIT_TAG (one per context file); written to blind_<bank>_<tag>.json
 #   MERIT_FETCH    0 to never take the memory from the dataset (build normally reuses it when it is there)
 # Every step skips finished work, so rerunning the same command resumes. The memory is built once per video
 # and arm and shared by every bank, probe set and variant.
@@ -162,10 +164,14 @@ qa() {
     record "qa $BANK$SUF" $((SECONDS - t))
 }
 blind() {
-    log "blind $BANK"; local t=$SECONDS
+    local ctx=${MERIT_CONTEXT:-} suf=
+    # a tag per context file: two files sharing one output would reuse each other's answers on resume
+    [ -z "$ctx" ] || suf=_${MERIT_TAG:?MERIT_CONTEXT needs MERIT_TAG, a name for this context condition}
+    [ -z "$ctx" ] || [ -s "$ctx" ] || { echo "MERIT_CONTEXT file missing: $ctx"; exit 1; }
+    log "blind $BANK$suf"; local t=$SECONDS
     qa_file
-    "$PY" "$M/epic/blind_qa.py" --model "$MODEL" --qa_file "$QA" --output "$OUT/blind_$BANK.json"
-    record "blind $BANK" $((SECONDS - t))
+    "$PY" "$M/epic/blind_qa.py" --model "$MODEL" --qa_file "$QA" --output "$OUT/blind_$BANK$suf.json" ${ctx:+--context_file "$ctx"}
+    record "blind $BANK$suf" $((SECONDS - t))
 }
 
 upload() {   # only a finished memory: a half-built folder would overwrite a good one in the dataset
