@@ -1,0 +1,3 @@
+# Its metadata asks for transformers < 5, but it works with 5.8 (MERIT's m27 runs used exactly this). Installed
+# after requirements-server27.txt with --no-deps, so pip cannot downgrade transformers.
+flash-linear-attention==0.4.2

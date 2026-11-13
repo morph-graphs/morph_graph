@@ -1,0 +1,32 @@
+# WorldMM itself (memory building, retrieval, VLM2Vec / Qwen3-Embedding) and the m8 backbone server
+# (Qwen3-VL-8B). Python 3.11, CUDA 12.4. torch/torchvision/flash-attn come first, from setup_env.sh.
+# WorldMM pins transformers >= 4.57.6, < 5 (its VLM2Vec code needs 4.x); the versions below are the ones the
+# first EPIC port ran with (transformers 4.57.6, hf-hub 0.36, sentence-transformers 5.1.2, numpy 1.26).
+# WorldMM and its vendored HippoRAG are not installed: run_worldmm.sh puts the submodule's src/ on PYTHONPATH.
+transformers==4.57.6
+tokenizers==0.22.1
+huggingface-hub==0.36.0
+safetensors==0.7.0
+accelerate==1.12.0
+sentence-transformers==5.1.2
+peft==0.18.1
+qwen-vl-utils==0.0.14
+numpy==1.26.4
+decord==0.6.0
+opencv-python-headless==4.11.0.86
+pillow==11.0.0
+igraph==1.0.0
+pysrt==1.1.2
+scikit-image==0.25.2
+scikit-learn==1.6.1
+scipy==1.15.2
+pandas==2.3.3
+pyarrow==19.0.1   # HippoRAG saves its embedding stores as parquet (pandas imports it lazily)
+networkx==3.5
+tiktoken==0.9.0
+openai==2.8.1
+tenacity==9.1.2
+pydantic==2.12.5
+einops==0.8.1
+tqdm==4.67.1
+filelock==3.20.0

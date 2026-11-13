@@ -242,3 +242,8 @@ baselines/merit/results/
 baselines/magic/work/
 !baselines/magic/env/
 baselines/magic/results/
+
+# WorldMM runs: videos, skeletons, build intermediates, rows, caches (baselines/worldmm/run_worldmm.sh)
+baselines/worldmm/work/
+!baselines/worldmm/env/
+baselines/worldmm/results/

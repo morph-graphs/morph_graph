@@ -10,3 +10,6 @@
 [submodule "baselines/magic/MAGIC-video"]
 	path = baselines/magic/MAGIC-video
 	url = https://github.com/morph-graphs/MAGIC-video.git
+[submodule "baselines/worldmm/WorldMM"]
+	path = baselines/worldmm/WorldMM
+	url = https://github.com/morph-graphs/WorldMM.git
