@@ -307,7 +307,8 @@ def update(out, raw, live, nxq, built_src):
     for name in sorted(set(POOLS) | set(hb), key=lambda n: (list(POOLS).index(n) if n in POOLS else 99, n)):
         site, who, hw = POOLS.get(name, (name, "?", "?"))
         h = hb.get(name, {})
-        mine = [r for r in running if r["pool"] == name]
+        mine = [r for r in running if r["pool"] == name and (r["kind"] == "board task" or name in ("arm00", "zaratan"))]
+        other = sum(1 for r in running if r["pool"] == name and r["kind"] != "board task" and name not in ("arm00", "zaratan"))
         age = (t - _t(h["updated"])) / 60 if h.get("updated") else None
         state = ("worker stale" if age is not None and age > 30 and (h.get("running") or 0) > 0 else
                  "worker up" if age is not None and age <= 30 else
@@ -316,7 +317,7 @@ def update(out, raw, live, nxq, built_src):
                           slots=len(h.get("slots") or []) or None,
                           running=sum(r["state"] == "running" for r in mine), queued=sum(r["state"] == "queued" for r in mine),
                           claimed=sum(r["state"] in ("claimed", "lease lapsed") for r in mine),
-                          done_24h=done24.get(name, 0), problems=prob_pool.get(name, 0), snapshot=snap))
+                          other_jobs=other, done_24h=done24.get(name, 0), problems=prob_pool.get(name, 0), snapshot=snap))
     people = []
     for site in SITES:
         ps = [p for p in pools if p["site"] == site]
@@ -329,7 +330,7 @@ def update(out, raw, live, nxq, built_src):
                            hardware="; ".join(dict.fromkeys(p["hardware"] for p in ps)),
                            state=("working" if S("running") + S("queued") + S("claimed") else
                                   "idle, worker up" if up else "nothing running"),
-                           running=S("running"), queued=S("queued"), claimed=S("claimed"), done_24h=S("done_24h"),
+                           running=S("running"), queued=S("queued"), claimed=S("claimed"), other_jobs=S("other_jobs"), done_24h=S("done_24h"),
                            problems=S("problems"), heartbeat=max(hbs) if hbs else ""))
 
     # attention: current problems only

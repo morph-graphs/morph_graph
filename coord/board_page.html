@@ -72,7 +72,7 @@
     <div class="jb-kpi"><b data-draw="k-running" data-source="summary" data-field="running" data-row="0">—</b><span>tasks running on a GPU</span></div>
     <div class="jb-kpi"><b data-draw="k-queued" data-source="summary" data-field="queued" data-row="0">—</b><span>waiting in our Slurm queues</span></div>
     <div class="jb-kpi"><b data-draw="k-claimed" data-source="summary" data-field="claimed" data-row="0">—</b><span>claimed on other people's clusters (start not visible)</span></div>
-    <div class="jb-kpi"><b data-draw="k-done" data-source="summary" data-field="experiments_done" data-row="0">—</b><span data-draw="k-done-of" data-source="summary">experiments finished</span></div>
+    <div class="jb-kpi"><b data-draw="k-done" data-source="summary" data-field="experiments_done" data-row="0">—</b><span>experiments finished, of <span data-draw="k-exp" data-source="summary" data-field="experiments" data-row="0">—</span></span></div>
     <div class="jb-kpi" id="kpi-prob"><b data-draw="k-prob" data-source="summary" data-field="failing_tasks" data-row="0">—</b><span>open tasks whose last attempt failed</span></div>
   </div>
 
@@ -103,6 +103,7 @@
     <p class="jb-done" data-draw="matrix-done" data-source="matrix">—</p>
 
     <h2 id="h-who">Who is working right now?</h2>
+    <p class="jb-note">Counts are board tasks; "other jobs" are our own Slurm jobs outside the board (smoke tests, ports), listed under Running now.</p>
     <div class="jb-sites jb-ph" data-draw="sites" data-source="people"></div>
   </section>
 
@@ -237,9 +238,8 @@ dash.draw('l-need', (e) => {
   if (!s) { e.textContent = '—'; return; }
   e.textContent = s.problems ? `${s.problems} problem${s.problems > 1 ? 's' : ''} need${s.problems > 1 ? '' : 's'} you (below).` : 'Nothing needs you right now.';
 });
-for (const [name, f] of [['k-running', 'running'], ['k-queued', 'queued'], ['k-claimed', 'claimed'], ['k-done', 'experiments_done'], ['k-prob', 'failing_tasks']])
+for (const [name, f] of [['k-running', 'running'], ['k-queued', 'queued'], ['k-claimed', 'claimed'], ['k-done', 'experiments_done'], ['k-exp', 'experiments'], ['k-prob', 'failing_tasks']])
   dash.draw(name, (e) => { const s = one('summary'); e.textContent = s ? fmt(s[f]) : '—'; });
-dash.draw('k-done-of', (e) => { const s = one('summary'); e.textContent = s ? `experiments finished, of ${s.experiments}` : 'experiments finished'; });
 dash.onData(() => { const s = one('summary'); for (const b of document.querySelectorAll('#kpi-prob')) b.classList.toggle('is-bad', !!(s && s.failing_tasks)); });
 
 dash.draw('attention', (e) => {
@@ -312,6 +312,7 @@ dash.draw('sites', (e) => {
     if (+x.running) parts.push(`${x.running} running`);
     if (+x.queued) parts.push(`${x.queued} queued`);
     if (+x.claimed) parts.push(`${x.claimed} claimed`);
+    if (+x.other_jobs) parts.push(`${x.other_jobs} other job${+x.other_jobs > 1 ? 's' : ''}`);
     c.appendChild(el('div', 'jb-small', parts.length ? parts.join(' · ') : x.state));
     const sub = [`${fmt(+x.done_24h)} done in 24 h`];
     if (+x.problems) sub.push(`${x.problems} failed`);
