@@ -207,6 +207,13 @@ def main():
         for v in open(arm).read().split():
             QUEUED[("merit", "m27", "build", v)] = ("arm00", "arm00 loop (tmux merit-arm), one video at a time in build order from #18; Zaratan's next waves take from the end")
     mark_queued(rows)
+    if a.running and os.path.exists(a.running):   # what the loops report as running right now
+        for live in json.load(open(a.running)):
+            if live.get("state") == "running" and " · " in live.get("what", "") and "build" in live["what"]:
+                v = live["what"].rsplit(" · ", 1)[1].strip()
+                for r in rows:
+                    if r["stage"] == "build" and r["video"] == v and r["pool"] == live["pool"] and r["status"] == "queued":
+                        r["status"] = "running"
     built = set()
     if a.built and os.path.exists(a.built):
         built = {tuple(l.split()) for l in open(a.built) if len(l.split()) == 3}
@@ -218,6 +225,10 @@ def main():
     project(rows, POOLS)
     for i, r in enumerate(rows):
         r["id"] = f"T{i + 1:04d}"
+        # who may take it (a fact of the pools' GPUs) vs who has it (queued/running: a claim or a loop)
+        r["can_run_on"] = ", ".join(p["pool"] for p in POOLS if r.get("family") and r["family"] in p["families"].split(",")
+                                    and p["state"] != "not visible") if r["kind"] == "gpu" else ""
+        r["running_on"] = r["pool"] if r["status"] in ("queued", "running", "done") and r["pool"] not in ("—", "") else ""
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
     for p in POOLS:
         mine = [r for r in rows if r["pool"] == p["pool"]]
@@ -258,9 +269,9 @@ def main():
              why="CMSC has 3.4 kSU left.", options="Decided 2026-11-12: yes, AAC approved."),
         dict(id="D2", question="Who runs wriva, and how many H100s?", owner="Anubhav", status="decided",
              why="Sizing their queue.", options="Decided: Archana and Aaron, 2-4 H100s indefinitely. Still needed: their Nexus usernames."),
-        dict(id="D3", question="Make the MERIT container images public?", owner="Anubhav", status="needs action",
-             why="Checked safe: only the public PyTorch base image and public pip packages, no code, data or credentials.",
-             options="Approved. Anubhav (org owner) flips it: github.com/orgs/morph-graphs/packages, package merit, Package settings, Change visibility, Public."),
+        dict(id="D3", question="Make the MERIT container images public?", owner="Anubhav", status="decided",
+             why="Only the public PyTorch base image and public pip packages.",
+             options="Done 2026-11-13: ghcr.io/morph-graphs/merit is public (anonymous pull works)."),
         dict(id="D4", question="Create the private dataset morph-graphs/epic-morph-jobs?", owner="Anubhav", status="decided",
              why="Job claims apart from results.", options="Done: created and reachable with our token."),
         dict(id="D5", question="Which GPUs may run each model size?", owner="Anubhav", status="decided",

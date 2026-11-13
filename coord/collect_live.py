@@ -12,12 +12,16 @@ import hashlib
 import json
 import os
 import subprocess
+import sys
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
 ARM = "anubhav@vulcan-arm00.umiacs.umd.edu"
 ARM_RUNS = "/fs/cfar-projects/mem_open_vocab/anubhav/merit_runs"
 ZR_RUNS = "/scratch/zt1/project/abhinav2-prj/user/anubhav/merit_runs"
+SRC = {}    # (baseline, arm, video) -> where the memory was seen first: zaratan, arm00, a pool, or the results dataset
+VIEW = {}
 SSH = ["/usr/bin/ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15"]
 
 
@@ -40,7 +44,7 @@ def zaratan(rows, built, alerts):
                         "sacct -n -X -S now-1days -o JobID%20,JobName%20,State%14 | grep merit- | grep -vE 'COMPLETED|PENDING|RUNNING|CANCELLED' || true"])
     if rc != 0 or "===" not in out:
         alerts.append(dict(pool="zaratan", job="—", what="Zaratan not readable", state="alert", since=now(),
-                           note="zr failed (connection down? run `zr login`)"))
+                           note="zr returned nothing: its login lapsed. Run `! zr login` (Duo); until then Zaratan jobs are not shown"))
         return
     q, b, failed = (out.split("===\n") + ["", ""])[:3]
     jobs = {}
@@ -56,6 +60,7 @@ def zaratan(rows, built, alerts):
                          note=f"{j.get('RUNNING', 0)} running, {j.get('PENDING', 0)} pending ({j['reason']})"))
     for v in b.split():
         built.add(("merit", "m27", v))
+        SRC[("merit", "m27", v)] = "zaratan"
     for line in failed.splitlines():
         if line.strip():
             alerts.append(dict(pool="zaratan", job=line.split()[0], what=" ".join(line.split()[1:2]), state="alert",
@@ -78,6 +83,7 @@ def arm00(rows, built, alerts):
     for k, v in kv:
         if k == "BUILT":
             built.add(("merit", "m27", v))
+            SRC[("merit", "m27", v)] = "arm00"
         else:
             d[k] = v
     gpu = [l for l in out.splitlines() if "," in l and "=" not in l]
@@ -100,7 +106,7 @@ def nexus(rows, alerts):
     rc, out = sh(["nx", "squeue -u anubhav -h -o '%i|%j|%P|%T|%M|%R' | grep -v keepalive"], timeout=120)
     if rc not in (0, 1):
         alerts.append(dict(pool="nexus", job="—", what="Nexus not readable", state="alert", since=now(),
-                           note="nx failed (connection down? run `nx login`)"))
+                           note="nx returned nothing: its login lapsed. Run `! nx login` (Duo); until then Nexus jobs are not shown"))
         return
     for line in out.splitlines():
         if line.count("|") < 5:
@@ -129,8 +135,14 @@ def board(rows, built, alerts):
                              note=(f"{c['gpu']}; " + (f"{c['seconds'] // 60} min" if c.get("seconds") else "running")
                                    + (f"; {c['note'][-120:]}" if c["state"] == "failed" else "")
                                    + ("; worker stopped renewing its lease: the task is free again" if c["state"] == "lease lapsed" else ""))))
+    VIEW.update(v)
+    for c in v["claims"]:
+        if c["state"] == "done":
+            b_, arm_, _, v_ = c["task"].split("-", 3)
+            SRC.setdefault((b_, arm_, v_), c["pool"])
     for b, arm, v_ in v["built"]:
         built.add((b, arm, v_))
+        SRC.setdefault((b, arm, v_), "results dataset")
     for name, h in v["pools"].items():
         rows.append(dict(pool=name, job="worker", what=f"board worker on {h.get('host')}", state="active", since=(h.get("updated") or "").replace("T", " ").replace("Z", " UTC"),
                          note=f"slots {h.get('slots')}, {h.get('running')} running; last heartbeat {h.get('updated')}"))
@@ -156,7 +168,9 @@ def main():
                   "--out", a.out])
     if rc != 0:
         raise SystemExit(f"board_snapshot failed: {out}")
-    for name in ("running", "tasks", "pools", "progress", "decisions", "tranches"):
+    import board_views
+    board_views.update(a.out, SRC, VIEW)
+    for name in ("running", "tasks", "pools", "progress", "decisions", "tranches", "matrix", "people", "attention", "events"):
         p = os.path.join(a.out, f"{name}.json")
         print(name, hashlib.sha256(open(p, "rb").read()).hexdigest(), p)
     print("alerts", len(alerts), "| running", sum(r["state"] == "running" for r in rows),
