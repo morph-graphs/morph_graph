@@ -58,14 +58,25 @@ def desired(have):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("action", choices=["publish", "view"])
+    ap.add_argument("action", choices=["publish", "view", "reset"])
+    ap.add_argument("--task", nargs="*", default=[], help="reset: task ids whose failed claims to clear (after fixing the cause)")
     ap.add_argument("--first", nargs="*", default=[], help="task video ids to put at the top (e.g. a test video)")
     ap.add_argument("--only-pools", nargs="*", help="publish: restrict every task to these pools (for a test)")
     a = ap.parse_args()
     api = HfApi()
     have = built(api)
     head, old, pools = jobs.read()
-    if a.action == "publish":
+    if a.action == "reset":   # clear failed claims so the task can be claimed again
+        files = {}
+        for name, p in pools.items():
+            gone = [t for t in a.task if p.get("claims", {}).get(t, {}).get("status") == "failed"]
+            for t in gone:
+                del p["claims"][t]
+            if gone:
+                files[f"pools/{name}.json"] = p
+        ok = files and jobs.commit(files, head, f"master: reset {', '.join(a.task)}")
+        print(f"reset {a.task} in {sorted(files)}" if ok else "nothing reset (or board moved; rerun)")
+    elif a.action == "publish":
         tasks = desired(have)
         if a.first:
             tasks.sort(key=lambda t: (t["video"] not in a.first, t["priority"]))
