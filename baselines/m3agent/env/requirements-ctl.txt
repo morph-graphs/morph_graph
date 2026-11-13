@@ -4,7 +4,9 @@
 # torch 2.6.0 / torchvision 0.21.0 / torchaudio 2.6.0 come first, from setup_env.sh (vllm 0.8.4 pins them), then
 # this complete set, installed without dependency resolution (resolved 2026-11-12 for vllm 0.8.4 with the pins
 # above; transformers 4.51.0 with its tokenizers 0.21.1 and huggingface-hub 0.30.2 put in by hand: vllm 0.8.4
-# asks for transformers >= 4.51.1, and upstream's README installs 4.51.0 over it).
+# asks for transformers >= 4.51.1, and upstream's README installs 4.51.0 over it). accelerate 1.6.0 is added by hand:
+# transformers 4.51.0 cannot load a model without it (NameError: init_empty_weights, fixed in 4.51.1).
+accelerate==1.6.0
 agent-detector==2.0.0
 aiohappyeyeballs==2.7.1
 aiohttp==3.14.5
