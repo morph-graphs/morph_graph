@@ -140,13 +140,18 @@ def convert_questions(qfile, subject, video_end):
         mcq = q["gemini_mcq"]
         opts = [str(o) for o in mcq["options"]]
         assert 2 <= len(opts) <= 4, (i, opts)
-        t = q["t_ask"] if q.get("streaming") and "t_ask" in q else video_end
+        t = video_end
+        if q.get("streaming") and "t_ask" in q:
+            # MERIT shows a clip once its end <= the query time: ceil(t_ask) could show a clip ending up to 1 s
+            # after the question, so floor it. A question asked in the last second is asked at the end, where
+            # the last clip ends at ceil(duration) (flooring would hide seconds seen before the question).
+            t = video_end if video_end and q["t_ask"] > video_end - 1 else math.floor(q["t_ask"])
         row = {
             "ID": q["key"] if keyed else str(i),
             "key": q.get("key"),
             "qhash": qhash(q["q"], opts),
             "pos": i,
-            "query_time": {"date": "DAY1", "time": hhmmss(math.ceil(t)) + "00"},
+            "query_time": {"date": "DAY1", "time": hhmmss(t) + "00"},
             "type": q["form"],
             "question": q["q"],
             "answer": LETTERS[mcq["answer_index"]],
