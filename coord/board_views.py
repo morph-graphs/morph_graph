@@ -119,13 +119,33 @@ def update(out, built_src, view):
         states = [p["state"] for p in pools if p["pool"] in names]
         state = "active" if (mine and any(r["state"] in ("running", "queued") for r in mine)) else \
             ("waiting for access" if states and all(st in ("waiting for access", "not visible", "needs onboarding") for st in states) else "idle")
+        # jobs vs tasks: a job is one Slurm job (an array counts once) or the arm00 loop; a task is one unit of
+        # work (one video's build, one smoke test). Board workers' claims are the tasks inside their GPU jobs.
+        import re as _re
+        jobs_run = jobs_q = tasks_run = tasks_q = 0
+        shown = []
+        for r in mine:
+            job, what, note, st = str(r.get("job", "")), r.get("what", ""), r.get("note", ""), r["state"]
+            if st not in ("running", "queued") or job == "worker" or _re.match(r"^(merit|magic|worldmm|m3agent)-", job):
+                continue                      # heartbeat rows and claims (counted through their GPU jobs)
+            m = _re.match(r"(\d+) running, (\d+) pending", note)
+            if m:                             # a Zaratan array: one job, many tasks
+                nr, nq = int(m.group(1)), int(m.group(2))
+                jobs_run += 1 if nr else 0; jobs_q += 1 if (nq and not nr) else 0
+                tasks_run += nr; tasks_q += nq
+            elif what.startswith("board-worker") or "board-worker" in job:
+                jobs_run += st == "running"; jobs_q += st == "queued"      # a CPU job that submits tasks
+            else:
+                jobs_run += st == "running"; jobs_q += st == "queued"
+                tasks_run += st == "running"; tasks_q += st == "queued"
+            if st == "running":
+                shown.append(r)
         done24 = sum(v for n, v in pool_24h.items() if n in names) + \
             sum(1 for c in claims if c["state"] == "done" and c.get("finished", "") >= _iso(t - 86400))
         people.append(dict(
             pool=site, person=who[site], hardware=hw[site], state=state, note=hb_note,
-            running=[dict(what=r["what"], job=r["job"], since=r.get("since", ""), note=r.get("note", ""))
-                     for r in mine if r["state"] == "running" and r["job"] != "worker"],
-            queued=sum(1 for r in mine if r["state"] == "queued"),
+            running=[dict(what=r["what"], job=r["job"], since=r.get("since", ""), note=r.get("note", "")) for r in shown],
+            queued=tasks_q, tasks_running=tasks_run, tasks_queued=tasks_q, jobs_running=jobs_run, jobs_queued=jobs_q,
             done_24h=done24,
             failed=[c["task"] for c in claims if c["state"] == "failed"],
             rate_per_h=round(sum(v for n, v in pool_rate.items() if n in names), 2) or None,
