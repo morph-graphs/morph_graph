@@ -41,7 +41,7 @@ def make_clips(video, clip_dir, subject, n_clips, clip_sec, size, threads):
     done = os.path.join(clip_dir, f"_clips_{subject}.txt")
     if os.path.exists(done):
         have = [os.path.join(clip_dir, l.strip()) for l in open(done) if l.strip()]
-        if all(os.path.exists(p) for p in have):
+        if have and all(os.path.exists(p) for p in have):
             return have
     elif all(os.path.exists(p) for p in want):
         return want
@@ -56,7 +56,7 @@ def make_clips(video, clip_dir, subject, n_clips, clip_sec, size, threads):
          os.path.join(tmp, "seg_%04d.mp4")], check=True)
     segs = sorted(glob.glob(os.path.join(tmp, "seg_*.mp4")))
     # one fewer is the video ending before the container does (no frames to cut); anything else is an error
-    assert n_clips - 1 <= len(segs) <= n_clips, f"expected {n_clips} segments, got {len(segs)}"
+    assert max(1, n_clips - 1) <= len(segs) <= n_clips, f"expected {n_clips} segments, got {len(segs)}"
     want = want[:len(segs)]
     for s, p in zip(segs, want):
         os.replace(s, p)
