@@ -10,6 +10,8 @@
 #   EPIC_MORPH_DIR  the epic-morph checkout (required)
 #   MERIT_IMAGE     image (default ghcr.io/morph-graphs/merit:<arm>-<env hash>, from image_tag.sh); for
 #                   apptainer, a .sif built once with `apptainer pull merit_<arm>.sif docker://<that image>`
+#   MERIT_SIF_DIR   apptainer: a folder of such files; uses <dir>/merit_<arm>.sif when it exists and MERIT_IMAGE
+#                   is unset, so one worker can run tasks of both arms
 #   MERIT_HF_CACHE  Hugging Face cache on the host (default ~/.cache/huggingface)
 #   HDEPIC_VIDEOS   videos on the host (default $EPIC_MORPH_DIR/data/HD-EPIC/videos), mounted read-only at /videos
 #   MERIT_OUT       optional, a path inside the container (e.g. /repo/baselines/merit/work/check)
@@ -18,6 +20,9 @@ ARM=${3:?usage: run.sh <stage> <video> <arm> [bank]}
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && pwd)
 IMAGE=${MERIT_IMAGE:-ghcr.io/morph-graphs/merit:$(bash "$REPO/baselines/merit/docker/image_tag.sh" "$ARM")}
+if [ -z "${MERIT_IMAGE:-}" ] && [ -n "${MERIT_SIF_DIR:-}" ] && [ -s "$MERIT_SIF_DIR/merit_$ARM.sif" ]; then
+    IMAGE=$MERIT_SIF_DIR/merit_$ARM.sif
+fi
 RUNTIME=${MERIT_RUNTIME:-docker}
 HF=${MERIT_HF_CACHE:-$HOME/.cache/huggingface}
 [ -f "$REPO/baselines/merit/MERIT/eval/evaluate_egolife.py" ] || { echo "run: git submodule update --init baselines/merit/MERIT"; exit 1; }
