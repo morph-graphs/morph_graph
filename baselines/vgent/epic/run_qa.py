@@ -46,7 +46,6 @@ def main():
     ap.add_argument("--memory", help="the results folder of this video and arm (build_graph.py --out)")
     ap.add_argument("--answers", required=True)
     ap.add_argument("--blind", action="store_true", help="no video and no memory: the backbone on the question alone")
-    ap.add_argument("--fix", action="store_true", help="fix the refine_nodes bug (README); answers are marked fix=true")
     ap.add_argument("--max_questions", type=int, help="answer only the first N unanswered questions (smoke test)")
     a = ap.parse_args()
     V = a.video
@@ -60,7 +59,7 @@ def main():
         qh = {r["key"]: r["qhash"] for r in rows}   # a question edited under the same key is redone
         done = {r["key"]: r for r in json.load(opener(a.answers, "rt"))
                 if r.get("version") == VERSION and r.get("memory_hash") == mh and r.get("arm") == a.arm
-                and bool(r.get("fix")) == a.fix and r.get("qhash") == qh.get(r["key"])
+                and r.get("qhash") == qh.get(r["key"])
                 and (r.get("response") or "").strip() not in ("", "Error")}
     todo = [r for r in rows if r["key"] not in done][:a.max_questions]
     print(f"{V}: {len(rows)} questions, {len(done)} done, {len(todo)} to answer (memory {mh})", flush=True)
@@ -77,7 +76,7 @@ def main():
         n = 0 if a.blind else sum(t <= m["t_ask"] for t in times) if m.get("streaming") and m.get("t_ask") is not None else len(times)
         groups.setdefault(n, []).append(r)
     if todo:
-        vg = load_vgent(a.arm, a.fix)
+        vg = load_vgent(a.arm)
         from utils.prompts import PRED_PROMPT
     if todo and not a.blind:
         head = header(V, a.arm, meta)
@@ -131,7 +130,7 @@ def main():
                    "choices": choices, "answer": r["answer"], "response": resp, "raw": raw, "evaluate": resp == r["answer"],
                    "t_ask": r["meta"].get("t_ask"), "cutoff_frames": n, "cutoff": times[n - 1] if n else None,
                    "graph": video_graph is not None, **info, "calls": calls, "seconds": round(time.time() - t0, 1),
-                   "arm": a.arm, "fix": a.fix, "version": VERSION, "memory_hash": mh}
+                   "arm": a.arm, "version": VERSION, "memory_hash": mh}
             if resp != "Error":
                 done[r["key"]] = res
             print(f"{r['key']} @ {n} frames: {raw!r} -> {resp} gold {r['answer']} ({len(calls)} calls, {res['seconds']}s, "

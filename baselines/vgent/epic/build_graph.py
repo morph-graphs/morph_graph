@@ -33,8 +33,6 @@ SRC = os.path.abspath(os.environ.get("VGENT_SRC") or os.path.join(HERE, "..", "V
 MEMORY = ["{video}_nodes.jsonl", "{video}_graph.pkl"]
 # upstream defaults (vgent_graph.py / utils/config.py); task only matters for one MLVU-specific rule
 SETTINGS = dict(chunk_size=64, n_retrieval=20, n_refine=5, fps=1.0, total_pixels=16384, uniform_frame=450, task="epic")
-# the bug in refine_nodes (see README "Upstream as released"): VGENT_FIX=1 applies this one-line fix
-REFINE_BUG = ("info.update(json.loads(", "info = (json.loads(")
 
 
 def load_frames(frame_dir, video):
@@ -44,19 +42,11 @@ def load_frames(frame_dir, video):
     return frames, meta
 
 
-def load_vgent(arm, fix=False):
+def load_vgent(arm):
     """Upstream's Vgent with the arm's backbone (a key of its MODEL_MAP) and BAAI/bge-large-en-v1.5."""
     sys.path.insert(0, SRC)
     import utils.retrieval
-    if fix:   # utils/vgent.py with the one line replaced, loaded under its own name
-        import importlib.util
-        spec = importlib.util.spec_from_file_location("utils.vgent", os.path.join(SRC, "utils", "vgent.py"))
-        code = open(spec.origin).read()
-        assert code.count(REFINE_BUG[0]) == 1, "upstream refine_nodes changed: check REFINE_BUG"
-        uv = sys.modules["utils.vgent"] = importlib.util.module_from_spec(spec)
-        exec(compile(code.replace(*REFINE_BUG), spec.origin, "exec"), uv.__dict__)
-    else:
-        import utils.vgent as uv
+    import utils.vgent as uv
     torch.manual_seed(0)
     vg = uv.Vgent(argparse.Namespace(model_name=arm, **SETTINGS))
     vg.video_llm.eval()
@@ -82,7 +72,6 @@ def load_vgent(arm, fix=False):
     def compute_text_similarity(query_list, key_list, embedding_model, tokenizer, return_all=False):
         sims = embed(query_list) @ embed(key_list).T
         return sims if return_all else torch.mean(sims)
-    vg.exact_similarity = utils.retrieval.compute_text_similarity   # upstream's, for a check
     uv.compute_text_similarity = utils.retrieval.compute_text_similarity = compute_text_similarity
     return vg
 

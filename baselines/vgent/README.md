@@ -23,9 +23,7 @@ All of this is upstream's behaviour, and the default here keeps it. It decides w
   stores the generated sub-questions with `info.update(...)`, which raises; the bare `except` retries five
   times and gives up, so the retrieved chunks go to the answer step unverified (top 5 by similarity).
   Only "order", "action counting" and "how many" questions, which build `info` by rule, get verified.
-  `VGENT_FIX=1` replaces that one line (`info = json.loads(...)`) at import, without touching `Vgent/`, and
-  writes `answers_<bank>_fix.json.gz`. The default is the code as released. (With the fix the sub-questions
-  still fail to parse for some questions: the prompt's own examples are not valid JSON.)
+  We run it as released and do not fix it.
 - Entity linking compares a new entity with the first graph key only (`max(range(len(entity_sim)))` runs
   over a 1-row matrix), so in practice chunks are linked by identical lower-cased names. Retrieval does not
   use the edges. Not changed.

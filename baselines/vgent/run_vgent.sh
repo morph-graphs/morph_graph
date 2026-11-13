@@ -24,7 +24,6 @@
 #   VGENT_OUT       default baselines/vgent/results: per <arm>/<video> the memory (<video>_nodes.jsonl,
 #                   <video>_graph.pkl), <video>_cutoff_nodes.jsonl, answers_<bank>.json.gz, blind_<bank>.json and
 #                   runs.jsonl (`upload` puts them in the dataset morph-graphs/epic-morph-results at vgent/<arm>/<video>/)
-#   VGENT_FIX       1 to fix upstream's refine_nodes bug (README); answers go to answers_<bank>_fix.json.gz
 #   VGENT_TAG       a variant name for the answers (answers_<bank>_<tag>.json.gz)
 #   VGENT_MAX_QUESTIONS  answer only the first N unanswered questions (smoke test)
 #   VGENT_FETCH     0 to never take the memory from the dataset (build normally reuses it when it is there)
@@ -39,7 +38,7 @@ EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && p
 case $ARM in qwenvl25_7b|qwenvl25_3b|qwenvl2_7b|qwenvl2_2b) ;; *) echo "arm must be qwenvl25_7b, qwenvl25_3b, qwenvl2_7b or qwenvl2_2b"; exit 1 ;; esac
 VIDEOS=${HDEPIC_VIDEOS:-$EPIC/data/HD-EPIC/videos}; WORK=${VGENT_WORK:-$M/work}; OUTROOT=${VGENT_OUT:-$M/results}
 OUT=$OUTROOT/$ARM/$V; FRAMES=$WORK/frames
-FIX=${VGENT_FIX:-0}; TAG=${VGENT_TAG:-}; [ "$FIX" = 1 ] && [ -z "$TAG" ] && TAG=fix; SUF=${TAG:+_$TAG}
+TAG=${VGENT_TAG:-}; SUF=${TAG:+_$TAG}
 mkdir -p "$OUT" "$WORK/locks"
 export VGENT_SRC=$R PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 read -ra MEMORY <<< "$("$PY" "$M/epic/build_graph.py" --memory_files)"
@@ -114,11 +113,10 @@ answer() {   # answer <output file> [run_qa.py options]: up to three passes over
     [ $rc = 0 ] || { echo "$STAGE did not finish (exit $rc); rerun the same command to retry"; exit 1; }
 }
 qa() {
-    log "qa $BANK$SUF"; local t=$SECONDS fix=()
+    log "qa $BANK$SUF"; local t=$SECONDS
     have_memory || build
     need_frames; bank_file   # a memory fetched from the dataset comes without the frames
-    [ "$FIX" = 1 ] && fix=(--fix)
-    answer "$OUT/answers_$BANK$SUF.json.gz" --memory "$OUT" ${fix[@]+"${fix[@]}"}
+    answer "$OUT/answers_$BANK$SUF.json.gz" --memory "$OUT"
     record "qa $BANK$SUF" $((SECONDS - t))
 }
 blind() {
