@@ -253,6 +253,11 @@ baselines/worldmm/work/
 !baselines/worldmm/env/
 baselines/worldmm/results/
 
+# VST runs: logs, smoke runs; results (baselines/vst/run_vst.sh)
+baselines/vst/work/
+!baselines/vst/env/
+baselines/vst/results/
+
 # API baselines: epic_eval run folders and encoded clips; results (baselines/api/run_api.sh)
 baselines/api/work/
 !baselines/api/env/
