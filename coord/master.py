@@ -23,10 +23,11 @@ RESULTS = os.environ.get("MERIT_HF_REPO", "morph-graphs/epic-morph-results")
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BUILD_ORDER = os.path.join(ROOT, "baselines", "merit", "build_order.txt")
 
-# (baseline, arm, stage, pools that may run it). MERIT 27B builds run on arm00 and Zaratan outside the board
-# for now (their loops predate it), so they are not listed here.
+# (baseline, arm, stage, pools that may run it). 27B needs an 80 GB GPU (H100 / H200 / GH200) or 2x 48 GB;
+# 8B one GPU of 40 GB or more.
 EXPERIMENTS = [
-    ("merit", "m8", "build", ["max", "nexus", "nexus-test", "wriva"]),
+    ("merit", "m27", "build", ["wriva", "arm00", "zaratan", "max"]),
+    ("merit", "m8", "build", ["max", "nexus", "nexus-slurm", "nexus-test", "wriva"]),
 ]
 
 

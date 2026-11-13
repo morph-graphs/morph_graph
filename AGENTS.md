@@ -104,10 +104,13 @@ that keep branches from drifting:
 Full reference (hardware, QoS caps, billing, example submissions, refresh
 commands): `proj_context/proj_docs/zaratan.md`. What to always follow:
 
-- **Account:** always `-A abhinav2-prj-cmsc`. `abhinav2-prj-aac` only with the
-  user's explicit permission, never as a silent fallback. The SU budget is
-  limited (cmsc 300 kSU); avoid oversized, duplicate or idle jobs.
-- **QoS:** `normal` for every GPU job; `scavenger` is rejected for GPU (CPU only).
+- **Account:** `abhinav2-prj-aac` is approved for EPIC-Morph evaluation runs (Anubhav, 2026-11-12): CMSC
+  is nearly used up (3.2 kSU of 100 left on 2026-11-13). `zr` defaults to CMSC; bill AAC with
+  `ZR_ALLOW_AAC=1 ZR_ACCOUNT=abhinav2-prj-aac zr sbatch ...`. Other work: ask before choosing an account.
+  Avoid oversized, duplicate or idle jobs either way.
+- **QoS:** `normal` for every GPU job; `scavenger` is rejected for GPU (CPU only). For CPU jobs someone waits
+  on, also `normal` (partition `standard`): `scavenger` queues behind everything; move a pending job with
+  `scontrol update jobid=<id> partition=standard qos=normal`.
 - **Always set `-t`** (GPU partitions default to 15 min). Debug/interactive jobs ≤ 4 h,
   and exit them when done.
 - **Test new environments on a MIG slice first:** `-p gpu-a100_1g.5gb --gres=gpu:a100_1g.5gb:1`
