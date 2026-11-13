@@ -29,11 +29,13 @@ COMMITS=(MERIT_REPO_COMMIT="$(git -C "$REPO" rev-parse HEAD)" MERIT_EPIC_COMMIT=
          MERIT_SUBMODULE_COMMIT="$(git -C "$REPO/baselines/merit/MERIT" rev-parse HEAD)")
 if [ "$RUNTIME" = apptainer ]; then
     case $IMAGE in *.sif) ;; *) IMAGE=docker://$IMAGE ;; esac
-    ENVS=EPIC_MORPH_DIR=/epic-morph,HDEPIC_VIDEOS=/videos,HF_HOME=/hf,HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-0},$(IFS=,; echo "${COMMITS[*]}")
+    # through APPTAINERENV_* (the environment), not --env: a command line, token included, is visible in `ps`
+    export APPTAINERENV_EPIC_MORPH_DIR=/epic-morph APPTAINERENV_HDEPIC_VIDEOS=/videos APPTAINERENV_HF_HOME=/hf
+    export APPTAINERENV_HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-0} "${COMMITS[@]/#/APPTAINERENV_}"
     for v in HF_TOKEN MERIT_HF_REPO MERIT_TAG MERIT_NO_FRAMES MERIT_FETCH MERIT_OUT CUDA_VISIBLE_DEVICES; do
-        [ -n "${!v:-}" ] && ENVS="$ENVS,$v=${!v}"
+        [ -n "${!v:-}" ] && export "APPTAINERENV_$v=${!v}"
     done
-    exec apptainer exec --nv --cleanenv --env "$ENVS" --pwd /repo \
+    exec apptainer exec --nv --cleanenv --pwd /repo \
         --bind "$REPO:/repo,$EPIC:/epic-morph,$HF:/hf,$(cd -P "$VIDEOS" && pwd):/videos:ro" \
         "$IMAGE" bash baselines/merit/run_merit.sh "$@"
 fi

@@ -54,9 +54,19 @@ def command(task, gpus, a, log):
         run = f"CUDA_VISIBLE_DEVICES={gpus} bash baselines/{b}/run_{b}.sh"
     inner = f"{run} {stage} {v} {arm} {bank} && {run} upload {v} {arm}"
     if a.launcher == "slurm":   # one job per task; --wait returns the job's exit code when it ends
-        return (f"sbatch --wait --parsable --job-name=board-{task['id'][:60]} --output={log} {a.sbatch} "
-                f"--wrap {shlex.quote(f'cd {REPO_ROOT} && nvidia-smi -L; {inner}')}")
+        return (f"sbatch --wait --parsable --job-name=board-{task['id'][:60]} --output={log} --open-mode=append "
+                f"{a.sbatch} --wrap {shlex.quote(f'cd {REPO_ROOT} && nvidia-smi -L && {inner}')}")
     return inner
+
+
+def slurm_job_alive(submit_log):
+    """The Slurm job of a task whose `sbatch --wait` is gone (worker host restarted): still queued or running?"""
+    try:
+        jid = open(submit_log).readline().strip().split(";")[0]
+        return bool(jid.isdigit() and subprocess.run(["squeue", "-h", "-j", jid], capture_output=True, text=True,
+                                                    timeout=60).stdout.strip())
+    except Exception:
+        return False
 
 
 def alive(pidfile):
@@ -113,9 +123,13 @@ def main():
                 code = int(open(ex).read().strip() or 1)
                 c.update(status="done" if code == 0 else "failed", exit=code, finished=jobs.iso(),
                          seconds=int(t - c.get("started_t", t)))
-                if code:
-                    c["note"] = open(os.path.join(state, f"{tid}.log")).read()[-400:] if os.path.exists(os.path.join(state, f"{tid}.log")) else ""
-            elif not alive(os.path.join(state, f"{tid}.pid")):
+                if code:   # the job's log, or (slurm, job never started) sbatch's own error
+                    for f in (os.path.join(state, f"{tid}.log"), os.path.join(state, f"{tid}.log.submit")):
+                        if os.path.exists(f) and os.path.getsize(f):
+                            c["note"] = open(f).read()[-400:]
+                            break
+            elif not alive(os.path.join(state, f"{tid}.pid")) and not (
+                    a.launcher == "slurm" and slurm_job_alive(os.path.join(state, f"{tid}.log.submit"))):
                 c.update(status="failed", exit=-1, finished=jobs.iso(), note="the task's process ended without an exit code (killed or host restarted)")
             else:
                 c["lease_until"] = t + jobs.LEASE_S
