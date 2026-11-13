@@ -14,6 +14,10 @@
 #                   is unset, so one worker can run tasks of both arms
 #   MERIT_HF_CACHE  Hugging Face cache on the host (default ~/.cache/huggingface)
 #   HDEPIC_VIDEOS   videos on the host (default $EPIC_MORPH_DIR/data/HD-EPIC/videos), mounted read-only at /videos
+#   MERIT_WORK      optional, a host folder for clips, frames, run folders and caches (default: baselines/merit/work
+#                   in the checkout), mounted at /work. One folder per cluster, shared by every worker there, so a
+#                   video is cut once (prep holds a per-video lock) and no checkout fills its owner's quota; files
+#                   are made group-writable (umask 002) so the other workers' users can reuse and reset them
 #   MERIT_OUT       optional, a path inside the container (e.g. /repo/baselines/merit/work/check)
 #   MERIT_CONTEXT   optional, blind only: a context file, as a path inside the container (under /repo or /epic-morph); needs MERIT_TAG
 set -euo pipefail
@@ -31,6 +35,9 @@ mkdir -p "$HF"
 # the videos by their real host path: data/HD-EPIC is often a symlink, which would dangle inside the container
 VIDEOS=${HDEPIC_VIDEOS:-$EPIC/data/HD-EPIC/videos}
 [ -d "$VIDEOS" ] || { echo "no videos at $VIDEOS (set HDEPIC_VIDEOS; epic-morph v3/DATA.md)"; exit 1; }
+if [ -n "${MERIT_WORK:-}" ]; then
+    umask 002; mkdir -p "$MERIT_WORK"; WORK=$(cd -P "$MERIT_WORK" && pwd)
+fi
 COMMITS=(MERIT_REPO_COMMIT="$(git -C "$REPO" rev-parse HEAD)" MERIT_EPIC_COMMIT="$(git -C "$EPIC" rev-parse HEAD)"
          MERIT_SUBMODULE_COMMIT="$(git -C "$REPO/baselines/merit/MERIT" rev-parse HEAD)")
 if [ "$RUNTIME" = apptainer ]; then
@@ -38,11 +45,12 @@ if [ "$RUNTIME" = apptainer ]; then
     # through APPTAINERENV_* (the environment), not --env: a command line, token included, is visible in `ps`
     export APPTAINERENV_EPIC_MORPH_DIR=/epic-morph APPTAINERENV_HDEPIC_VIDEOS=/videos APPTAINERENV_HF_HOME=/hf
     export APPTAINERENV_HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-0} "${COMMITS[@]/#/APPTAINERENV_}"
+    [ -n "${WORK:-}" ] && export APPTAINERENV_MERIT_WORK=/work
     for v in HF_TOKEN MERIT_HF_REPO MERIT_TAG MERIT_NO_FRAMES MERIT_FETCH MERIT_OUT MERIT_CONTEXT CUDA_VISIBLE_DEVICES; do
         [ -n "${!v:-}" ] && export "APPTAINERENV_$v=${!v}"
     done
     exec apptainer exec --nv --cleanenv --pwd /repo \
-        --bind "$REPO:/repo,$EPIC:/epic-morph,$HF:/hf,$(cd -P "$VIDEOS" && pwd):/videos:ro" \
+        --bind "$REPO:/repo,$EPIC:/epic-morph,$HF:/hf,$(cd -P "$VIDEOS" && pwd):/videos:ro${WORK:+,$WORK:/work}" \
         "$IMAGE" bash baselines/merit/run_merit.sh "$@"
 fi
 [ "$RUNTIME" = docker ] || { echo "MERIT_RUNTIME must be docker or apptainer"; exit 1; }
@@ -51,6 +59,7 @@ GPU=${MERIT_GPU:?set MERIT_GPU to the GPU index or indices for this job}
 N=$(echo "$GPU" | tr ',' '\n' | grep -c .); SEEN=$(seq -s, 0 $((N - 1)))
 exec docker run --rm --gpus "\"device=$GPU\"" --shm-size 32g --user "$(id -u):$(id -g)" \
     -v "$REPO:/repo" -v "$EPIC:/epic-morph" -v "$HF:/hf" -v "$(cd -P "$VIDEOS" && pwd):/videos:ro" -w /repo \
+    ${WORK:+-v "$WORK:/work" -e MERIT_WORK=/work} \
     -e CUDA_VISIBLE_DEVICES="$SEEN" -e EPIC_MORPH_DIR=/epic-morph -e HDEPIC_VIDEOS=/videos -e HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-0}" \
     ${HF_TOKEN:+-e HF_TOKEN} ${MERIT_HF_REPO:+-e MERIT_HF_REPO} \
     ${MERIT_TAG:+-e MERIT_TAG} ${MERIT_NO_FRAMES:+-e MERIT_NO_FRAMES} ${MERIT_FETCH:+-e MERIT_FETCH} \
