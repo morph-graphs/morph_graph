@@ -12,7 +12,7 @@ and semantic memories that refer to them. A question is answered by
 
 | path | what |
 |---|---|
-| `m3-agent/` | submodule: [morph-graphs/m3-agent](https://github.com/morph-graphs/m3-agent), branch `epic-morph` = upstream `0e3e419` + our patches (one commit) |
+| `m3-agent/` | submodule: [morph-graphs/m3-agent](https://github.com/morph-graphs/m3-agent), branch `epic-morph` = upstream `0e3e419` + our patches (two commits: the port, then the API arm's plain-key calls) |
 | `epic/m3_epic.py` | one HD-EPIC video -> 30 s clips with audio; a bank -> the control model's input (before_clip from t_ask); control output -> the answers file |
 | `run_m3agent.sh` | one video, one arm, one stage (prep, build, qa, blind, upload, all) |
 | `env/` | the two environments, pinned: `requirements-*`, `wheels-mem.txt`, `install_requirements.sh` (shared by `setup_env.sh` and a future image) |
@@ -53,6 +53,7 @@ CUDA_VISIBLE_DEVICES=0   bash baselines/m3agent/run_m3agent.sh build P05-2024042
 CUDA_VISIBLE_DEVICES=0,1 bash baselines/m3agent/run_m3agent.sh qa    P05-20240425-201444 m3 batch10_agree2
 CUDA_VISIBLE_DEVICES=0,1 bash baselines/m3agent/run_m3agent.sh blind P05-20240425-201444 m3 batch10_agree2
 bash baselines/m3agent/run_m3agent.sh upload P05-20240425-201444 m3
+# the API arm: GEMINI_API_KEY and OPENAI_API_KEY set, arm m3api (see "The API arm")
 ```
 
 **Build once, answer many times.** `build` needs no questions, so every video's memory can be built before its
@@ -64,7 +65,7 @@ which can admit a clip up to 1 s early).
 Questions that are not streaming see the whole video. `M3AGENT_TAG=<name>` writes a variant's answers to
 `answers_<bank>_<name>.json.gz`. Every stage skips finished work: rerun the same command after a failure.
 
-## What comes back (in the Hugging Face dataset, `m3agent/m3/<video>/`)
+## What comes back (in the Hugging Face dataset, `m3agent/<arm>/<video>/`)
 
 - `<video>_m3graph.pkl`: the memory graph (upstream's `VideoGraph`, pickled; load it with the submodule on the
   path), and `<video>_memories.json`: its text memories per clip, readable, with the character mappings;
@@ -80,8 +81,8 @@ The clips, the per-clip face and voice outputs and the control runs stay in `M3A
 
 ## How this differs from the published method
 
-Local models replace upstream's closed APIs (`M3AGENT_BACKEND=local`, the default; `api` keeps upstream's code
-path, untested here):
+In arm `m3`, local models replace upstream's closed APIs (`M3AGENT_BACKEND=local`); arm `m3api` calls the APIs
+instead (see "The API arm" below):
 
 1. **ASR / "diarization": faster-whisper large-v3-turbo instead of Gemini-1.5-Pro.** Upstream asks Gemini for the
    speech segments of each clip (start, end, text), split at speaker turns but without speaker labels; who speaks
@@ -94,7 +95,7 @@ path, untested here):
    are listed after the question ("Answer with the letter of the correct option") and the chosen letter is read
    from the answer (a leading letter, else the option text it contains) and compared with the key.
 
-Other changes, all in the submodule's one commit:
+Other changes, all in the submodule's first commit:
 
 4. Clips are cut as upstream (clip k = [30k, 30k + 30) s) but re-encoded (H.264, AAC, long side 720 px) rather
    than copied with `-c copy`, so each cut is exact instead of snapping to the source's keyframes; HD-EPIC's
@@ -123,6 +124,52 @@ Known approximations: a face or voice node keeps embeddings added by later clips
 reinforce the edges of earlier ones; truncation removes later nodes but not these updates. They can change which
 face-voice equivalence wins (and so the character ids), and an edge weakened to zero by a later clip is missing
 from a search restricted to a character; the text memories themselves and their embeddings are never touched.
+
+## The API arm (`m3api`)
+
+`run_m3agent.sh <stage> <video> m3api [bank]` runs the same two checkpoints with upstream's API calls in place of
+the local ASR and embedding models (`M3AGENT_BACKEND=api`, set by the arm). Its memory, answers and work files are
+kept apart from `m3`'s: `results/m3api/<video>/`, `work/m3api/` (the clips are shared) and `m3agent/m3api/<video>/`
+in the dataset, so neither arm can pick up the other's memory or per-clip voice outputs.
+
+| variable | needed by | what |
+|---|---|---|
+| `GEMINI_API_KEY` | `build` | a Gemini Developer API (AI Studio) key; sent only in the `x-goog-api-key` header |
+| `OPENAI_API_KEY` | `build`, `qa` | an OpenAI key, for `text-embedding-3-large` (memories and search queries) |
+| `M3AGENT_GEMINI_MODEL` | `build` (optional) | the speech-segment model, default `gemini-2.5-pro`; recorded in `runs.jsonl` |
+
+`blind` needs neither key (no memory, no search). A missing key stops the stage before any work.
+
+What the calls do (submodule, `mmagent/utils/chat_api.py`, `mmagent/voice_processing.py`):
+
+- **Speech segments:** each clip's audio (16 kHz WAV, inline) goes to Gemini's REST `generateContent` with
+  upstream's ASR/segmentation prompt, unchanged, and a response schema that forces a JSON list of
+  `{start_time, end_time, asr}`; parsing is upstream's. Upstream sent the clip's video to `gemini-1.5-pro-002`,
+  which is retired. Retries back off on 429, 5xx and network errors. Unlike upstream (20 attempts, then the build
+  stops), a clip with no usable answer after 3 attempts counts as having no speech, with a warning in the log
+  (decoding is near-greedy, so a retry mostly repeats the answer). Segments without text or whose times are not
+  `MM:SS` are dropped.
+- **Embeddings:** `openai.OpenAI()` with upstream's model name `text-embedding-3-large`, 64 texts per request. The
+  search threshold stays at upstream's 0.5, the value upstream used with this model.
+- Still on upstream's Azure config (`configs/api_config.json`), and not used by these scripts: the GPT-4o judge
+  (`control.py --judge`) and the planning call in `retrieve.answer_with_retrieval`.
+
+**Model availability (checked 2026-11-13):** our AI Studio key lists `gemini-2.5-pro`, but `generateContent`
+returns 404 ("no longer available to new users", suggesting `gemini-3.1-pro-preview`). A key from an account that
+used 2.5 Pro before may still reach it; otherwise set `M3AGENT_GEMINI_MODEL`.
+
+Checked (2026-11-13):
+
+- **Live, Gemini:** the real `process_voices` (memorization environment, Nexus) on the first 12 s of P05 clip 31,
+  with `M3AGENT_GEMINI_MODEL=gemini-3.1-pro-preview` (see above), speaker embeddings stubbed (ERes2NetV2 needs a
+  GPU and is unchanged): one call returned `[{"start_time": "00:04", "end_time": "00:06", "asr": "Nine minutes."}]`
+  (Whisper in arm `m3`: 00:05-00:08 "Nine minutes"), kept as one 2 s segment in one voice node.
+- **Mocked, not live:** the OpenAI embedding path. We have no OpenAI key. Checked against a stub client and the
+  real `openai` 1.75.0 SDK on a mocked HTTP transport, in both environments: request URL, model and input, batches
+  of 64, order kept, empty texts padded. The same mocks cover the missing-key errors, Gemini 429/503 retries, a
+  400 raising, the key in the header only, blocked or `{}` answers (3 attempts, then no speech), malformed
+  segments dropped, and `m3` still embedding locally.
+- **Not run:** a full `m3api` build or qa on a video.
 
 ## Checked (2026-11-12/13, P05-20240425-201444, bank batch10_agree2: 59 questions, all streaming)
 
