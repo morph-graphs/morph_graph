@@ -1,0 +1,76 @@
+diff --git a/api/rag/r1rag/utils.py b/api/rag/r1rag/utils.py
+index cf3a471..c061aee 100644
+--- a/api/rag/r1rag/utils.py
++++ b/api/rag/r1rag/utils.py
+@@ -27,13 +27,17 @@ def call_gpt4(prompt: str, system_message: str = "You are an effective first per
+     # Configuration
+     KEY = os.getenv("AZURE_OPENAI_API_KEY")
+     ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
+-    if KEY is None or ENDPOINT is None:
+-        raise ValueError("AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT must be set")
+-    client = AzureOpenAI(  
+-    azure_endpoint=ENDPOINT,  
+-    api_key=KEY,  
+-    api_version="2024-05-01-preview",  
+-    )
++    if KEY and ENDPOINT:
++        client = AzureOpenAI(  
++        azure_endpoint=ENDPOINT,  
++        api_key=KEY,  
++        api_version="2024-05-01-preview",  
++        )
++    elif os.getenv("OPENAI_API_KEY"):   # epic-morph: a plain OpenAI key, same model name
++        from openai import OpenAI
++        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
++    else:
++        raise ValueError("AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT, or OPENAI_API_KEY, must be set")
+     chat_prompt = [
+         {
+             "role": "system",
+diff --git a/api/visual_tools/egor1_videollm_gemini/video_llm.py b/api/visual_tools/egor1_videollm_gemini/video_llm.py
+index 7b4d5d3..f558191 100644
+--- a/api/visual_tools/egor1_videollm_gemini/video_llm.py
++++ b/api/visual_tools/egor1_videollm_gemini/video_llm.py
+@@ -48,7 +48,6 @@ def video_llm_sync(question: str, range_str: str, identity: str, cache_dir: str,
+         raise ValueError("Invalid range format. Please use DAYX_HHMMSSFF-DAYX_HHMMSSFF format.")
+ 
+     video_client = genai.Client(api_key=api_key)
+-    print(f"Using API Key: ...{api_key[-4:]} for video_llm_sync processing (Identity: {identity})")
+ 
+     clear_cache(cache_dir) # Synchronous file operations
+ 
+@@ -97,7 +96,8 @@ def video_llm_sync(question: str, range_str: str, identity: str, cache_dir: str,
+         print(f"Using model: {model_to_use} to generate content for file: {video_file.uri}... (Identity: {identity})")
+ 
+        
+-        response = video_client.models.generate_content(model="gemini-1.5-pro", contents=[video_file, question])
++        # epic-morph: Gemini 1.5 Pro is retired; the port names its replacement in EGOR1_GEMINI_MODEL
++        response = video_client.models.generate_content(model=os.environ.get("EGOR1_GEMINI_MODEL", "gemini-1.5-pro"), contents=[video_file, question])
+         
+         answer_text = ""
+         if response.text:
+diff --git a/api/visual_tools/egor1_vlm/utils.py b/api/visual_tools/egor1_vlm/utils.py
+index 679fefd..20d13e1 100644
+--- a/api/visual_tools/egor1_vlm/utils.py
++++ b/api/visual_tools/egor1_vlm/utils.py
+@@ -38,11 +38,15 @@ identity_mapping_dict ={
+ class GPT():
+     def __init__(self, sys_prompt="You are a helpful assistant.", model: str = "gpt-4o"):
+         self.endpoint, self.deployment, self.subscription_key = model_config[model].values()
+-        self.client = AzureOpenAI(  
+-            azure_endpoint=self.endpoint,  
+-            api_key=self.subscription_key,  
+-            api_version="2024-05-01-preview",  
+-        )
++        if self.endpoint and self.subscription_key:
++            self.client = AzureOpenAI(  
++                azure_endpoint=self.endpoint,  
++                api_key=self.subscription_key,  
++                api_version="2024-05-01-preview",  
++            )
++        else:   # epic-morph: a plain OpenAI key, same model name
++            from openai import OpenAI
++            self.client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+         self.sys_prompt = sys_prompt
+ 
+     def chat(self, message, image_path=None):

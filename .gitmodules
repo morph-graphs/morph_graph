@@ -13,3 +13,6 @@
 [submodule "baselines/worldmm/WorldMM"]
 	path = baselines/worldmm/WorldMM
 	url = https://github.com/morph-graphs/WorldMM.git
+[submodule "baselines/egor1/Ego-R1"]
+	path = baselines/egor1/Ego-R1
+	url = https://github.com/egolife-ai/Ego-R1
