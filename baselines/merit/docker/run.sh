@@ -15,6 +15,7 @@
 #   MERIT_HF_CACHE  Hugging Face cache on the host (default ~/.cache/huggingface)
 #   HDEPIC_VIDEOS   videos on the host (default $EPIC_MORPH_DIR/data/HD-EPIC/videos), mounted read-only at /videos
 #   MERIT_OUT       optional, a path inside the container (e.g. /repo/baselines/merit/work/check)
+#   MERIT_CONTEXT   optional, blind only: a context file, as a path inside the container (under /repo or /epic-morph); needs MERIT_TAG
 set -euo pipefail
 ARM=${3:?usage: run.sh <stage> <video> <arm> [bank]}
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
@@ -37,7 +38,7 @@ if [ "$RUNTIME" = apptainer ]; then
     # through APPTAINERENV_* (the environment), not --env: a command line, token included, is visible in `ps`
     export APPTAINERENV_EPIC_MORPH_DIR=/epic-morph APPTAINERENV_HDEPIC_VIDEOS=/videos APPTAINERENV_HF_HOME=/hf
     export APPTAINERENV_HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-0} "${COMMITS[@]/#/APPTAINERENV_}"
-    for v in HF_TOKEN MERIT_HF_REPO MERIT_TAG MERIT_NO_FRAMES MERIT_FETCH MERIT_OUT CUDA_VISIBLE_DEVICES; do
+    for v in HF_TOKEN MERIT_HF_REPO MERIT_TAG MERIT_NO_FRAMES MERIT_FETCH MERIT_OUT MERIT_CONTEXT CUDA_VISIBLE_DEVICES; do
         [ -n "${!v:-}" ] && export "APPTAINERENV_$v=${!v}"
     done
     exec apptainer exec --nv --cleanenv --pwd /repo \
@@ -54,5 +55,5 @@ exec docker run --rm --gpus "\"device=$GPU\"" --shm-size 32g --user "$(id -u):$(
     ${HF_TOKEN:+-e HF_TOKEN} ${MERIT_HF_REPO:+-e MERIT_HF_REPO} \
     ${MERIT_TAG:+-e MERIT_TAG} ${MERIT_NO_FRAMES:+-e MERIT_NO_FRAMES} ${MERIT_FETCH:+-e MERIT_FETCH} \
     -e "${COMMITS[0]}" -e "${COMMITS[1]}" -e "${COMMITS[2]}" \
-    ${MERIT_OUT:+-e MERIT_OUT="$MERIT_OUT"} \
+    ${MERIT_OUT:+-e MERIT_OUT="$MERIT_OUT"} ${MERIT_CONTEXT:+-e MERIT_CONTEXT="$MERIT_CONTEXT"} \
     "$IMAGE" bash baselines/merit/run_merit.sh "$@"

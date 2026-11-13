@@ -95,7 +95,7 @@ One job per GPU (or GPU set); stages of different videos can run side by side. T
 Per video, at `merit/<arm>/<video>/` in morph-graphs/epic-morph-results (~0.3-0.8 MB a video):
 - `<video>_30sec.json`, `<video>_30sec_4_key.json`: the memory (captions, keys);
 - `answers_<bank>.json.gz`: one row per question, with MERIT's retrieval rounds (the M1 evaluation reads them);
-- `blind_<bank>.json`, when the blind stage ran;
+- `blind_<bank>.json`, when the blind stage ran (`blind_<bank>_<tag>.json` when `MERIT_CONTEXT` gave it a context file, named by `MERIT_TAG`);
 - `runs.jsonl`: one line per finished stage (this repo's commit, the MERIT and epic-morph commits, model,
   torch and transformers versions, GPUs, seconds).
 
