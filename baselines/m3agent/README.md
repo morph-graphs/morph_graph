@@ -15,7 +15,9 @@ and semantic memories that refer to them. A question is answered by
 | `m3-agent/` | submodule: [morph-graphs/m3-agent](https://github.com/morph-graphs/m3-agent), branch `epic-morph` = upstream `0e3e419` + our patches (two commits: the port, then the API arm's plain-key calls) |
 | `epic/m3_epic.py` | one HD-EPIC video -> 30 s clips with audio; a bank -> the control model's input (before_clip from t_ask); control output -> the answers file |
 | `run_m3agent.sh` | one video, one arm, one stage (prep, build, qa, blind, upload, all) |
-| `env/` | the two environments, pinned: `requirements-*`, `wheels-mem.txt`, `install_requirements.sh` (shared by `setup_env.sh` and a future image) |
+| `env/` | the two environments, pinned: `requirements-*`, `wheels-mem.txt`, `install_requirements.sh` (shared by `setup_env.sh` and the image) |
+| `fetch_models.sh` | download the models into one folder (`M3AGENT_MODELS`) at the revisions checked here |
+| `docker/` | the image (`Dockerfile`), `build.sh`, `run.sh` (one job in a container; the job board's entry point), `image_tag.sh` |
 | `VERSION` | the adapter version, in every answer row and `runs.jsonl` line; bumped by hand when the outputs' meaning changes |
 | `../common/hf_results.py` | (shared by all baselines) upload a video's results to the Hugging Face dataset, or download them |
 
@@ -55,6 +57,29 @@ CUDA_VISIBLE_DEVICES=0,1 bash baselines/m3agent/run_m3agent.sh blind P05-2024042
 bash baselines/m3agent/run_m3agent.sh upload P05-20240425-201444 m3
 # the API arm: GEMINI_API_KEY and OPENAI_API_KEY set, arm m3api (see "The API arm")
 ```
+
+**Off our clusters, run only in the Docker image** (rule in `AGENTS.md`): `ghcr.io/morph-graphs/m3agent:m3-<env hash>`,
+built from `docker/Dockerfile` by `.github/workflows/baseline-images.yml`. It holds both environments as
+virtualenvs (`/opt/m3-mem`, `/opt/m3-ctl`, over one CPython 3.11.11 that holds the shared torch 2.6.0 / CUDA 12.4),
+no model weights and no keys. The code is the mounted checkout of `main` (with the submodule);
+`docker/run.sh` picks the image whose tag matches the checkout's environment files (`docker/image_tag.sh`):
+
+```bash
+git submodule update --init baselines/m3agent/m3-agent
+docker pull ghcr.io/morph-graphs/m3agent:$(bash baselines/m3agent/docker/image_tag.sh)
+export M3AGENT_MODELS=<models folder, ~95 GB> EPIC_MORPH_DIR=<epic-morph checkout> HF_TOKEN=<for upload>
+bash baselines/m3agent/docker/run.sh models                                      # once, no GPU
+M3AGENT_GPU=0   bash baselines/m3agent/docker/run.sh build P05-20240425-201444 m3
+M3AGENT_GPU=0,1 bash baselines/m3agent/docker/run.sh qa    P05-20240425-201444 m3 batch10_agree2
+bash baselines/m3agent/docker/run.sh upload P05-20240425-201444 m3
+```
+
+`docker/run.sh` mounts this checkout at `/repo`, the epic-morph checkout at `/epic-morph`, the videos at `/videos`,
+the models at `/models` and the Hugging Face cache (`M3AGENT_HF_CACHE`, default `~/.cache/huggingface`) at `/hf`.
+Keys (`GEMINI_API_KEY`, `OPENAI_API_KEY` for arm `m3api`; `HF_TOKEN`) are handed to the container by name from the shell's
+environment, never on a command line or in the image. `M3AGENT_RUNTIME=apptainer` runs the same image with
+Apptainer (the GPUs are the job's); the job board sets `MERIT_GPU` / `MERIT_RUNTIME` / `MERIT_SIF_DIR`, which
+`run.sh` takes when the `M3AGENT_` ones are unset.
 
 **Build once, answer many times.** `build` needs no questions, so every video's memory can be built before its
 questions exist. It first takes the memory from the dataset when it is there (`M3AGENT_FETCH=0` to skip that), and
@@ -187,3 +212,9 @@ Checked (2026-11-13):
 - `blind` (same hardware): 12/59 (20.3%), 4 answered within the round, 55 through the fallback round.
 - For context, MERIT on the same 59 questions: 8B 21/59, 27B 30/59. Chance over the options is ~25%; M3-Agent's
   14/59 and 12/59 are both within one standard deviation of it.
+- The image (2026-11-13): no Docker was at hand, so its install steps were replayed on Nexus outside Docker (the
+  same uv CPython 3.11.11, torch in it, the two `--system-site-packages` venvs): both venvs hold exactly the
+  package versions of the checked venvs, the Dockerfile's import checks pass, and `prep` with them gives a
+  `clips.json` identical to the checked run's. On an RTX A5000: flash-attn, faster-whisper (CTranslate2 on the
+  GPU), the Qwen3-Embedding helper, cupy and a vLLM engine all run. `fetch_models.sh` gives the same files and
+  sizes as the checked models folder. Not yet run: `docker build` itself, and `build` / `qa` inside the image.

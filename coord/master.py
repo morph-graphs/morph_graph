@@ -38,7 +38,9 @@ BUILD_ORDER = os.path.join(ROOT, "baselines", "merit", "build_order.txt")
 # GH200) or 2x 48 GB; MAGIC one 80 GB GPU or 3+ GPUs; WorldMM one 80 GB GPU or 2x 48 GB. arm00 (GH200, aarch64) runs
 # MERIT only: the images are x86, and only MERIT has a native arm environment there. A worker takes only the
 # baselines it was started with (worker.py --baselines), so listing a baseline here runs nothing until a pool opts in.
-M8 = ["max", "nexus", "nexus-slurm", "nexus-test", "wriva"]
+# our three Nexus workers are named after the queue their tasks go to: tron (QoS high), scavenger, and
+# vulcan-ampere with QoS vulcan-sailon
+M8 = ["max", "nexus-tron", "nexus-sailon", "nexus-scavenger", "wriva"]
 POOLS = {("merit", "m27"): ["wriva", "arm00", "zaratan", "max"], ("merit", "m8"): M8,
          ("magic", "m27"): ["wriva", "zaratan", "max"], ("magic", "m8"): M8,
          ("worldmm", "m27"): ["wriva", "zaratan", "max"], ("worldmm", "m8"): M8}
