@@ -36,3 +36,36 @@ def test_qa_tasks(tmp_path, monkeypatch):
         assert False, "desired() ran without EPIC_MORPH_DIR"
     except SystemExit:
         pass
+
+
+def test_built_from():
+    """A memory counts as built only with runs.jsonl and its baseline's last memory file (a prep-only folder does not)."""
+    v = "P01-20240101-000001"
+    files = {f"merit/m8/{v}/runs.jsonl", f"merit/m8/{v}/{v}_30sec_4_key.json",
+             f"magic/m8/{v}/runs.jsonl", f"magic/m8/{v}/graph.pkl",
+             f"magic/m27/{v}/runs.jsonl",                                    # prep or half a build: not built
+             f"worldmm/m8/{v}/runs.jsonl", f"worldmm/m8/{v}/{v}_visual.pkl",
+             f"other/m8/{v}/runs.jsonl"}
+    have, _ = M.built_from(files)
+    assert have == {("merit", "m8", v), ("magic", "m8", v), ("worldmm", "m8", v)}
+
+
+def test_experiments():
+    """Every baseline on the board has build + qa per arm, qa on the build's pools; arm00 (aarch64) runs MERIT only."""
+    ex = {(b, arm, stage): (pools, bank) for b, arm, stage, pools, bank in M.EXPERIMENTS}
+    for b in M.MEMORY_DONE:
+        for arm in ("m8", "m27"):
+            assert ex[b, arm, "build"] == (M.POOLS[b, arm], None)
+            assert ex[b, arm, "qa"] == (M.POOLS[b, arm], "t2_agree2")
+            assert ("arm00" in M.POOLS[b, arm]) == (b == "merit" and arm == "m27")
+
+
+def test_build_waits_on_base(monkeypatch, tmp_path):
+    """MAGIC's build waits for MERIT's build of the same video and arm while that is listed (it reuses its captions)."""
+    order = tmp_path / "order.txt"
+    order.write_text("P01-20240101-000001\nP01-20240101-000002\n")
+    monkeypatch.setattr(M, "BUILD_ORDER", str(order))
+    monkeypatch.setattr(M, "EXPERIMENTS", [("merit", "m8", "build", ["p"], None), ("magic", "m8", "build", ["p"], None)])
+    tasks = {t["id"]: t for t in M.desired({("merit", "m8", "P01-20240101-000001")}, set())}
+    assert tasks["magic-m8-build-P01-20240101-000001"]["deps"] == []   # MERIT's memory exists
+    assert tasks["magic-m8-build-P01-20240101-000002"]["deps"] == ["merit-m8-build-P01-20240101-000002"]

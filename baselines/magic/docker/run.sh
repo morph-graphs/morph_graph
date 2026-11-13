@@ -12,8 +12,12 @@
 #   EPIC_MORPH_DIR  the epic-morph checkout (required)
 #   MAGIC_IMAGE     image (default ghcr.io/morph-graphs/magic:<arm>-<env hash>, from image_tag.sh); for
 #                   apptainer, a .sif built once with `apptainer pull magic_<arm>.sif docker://<that image>`
-#   MAGIC_HF_CACHE  Hugging Face cache on the host (default ~/.cache/huggingface): Qwen/Qwen3-VL-8B-Instruct or
-#                   Qwen/Qwen3.8-27B, Qwen/Qwen3-Embedding-4B, VLM2Vec/VLM2Vec-V2.0, Qwen/Qwen2-VL-2B-Instruct
+#   MAGIC_SIF_DIR   apptainer: a folder of such files (default MERIT_SIF_DIR); uses <dir>/magic_<arm>.sif when it
+#                   exists and MAGIC_IMAGE is unset, so one board worker runs every baseline and arm
+#   MERIT_WORK      optional, the cluster's shared host work folder (MERIT's), mounted at /work; MAGIC's work
+#                   folder is then /work/magic (unless MAGIC_WORK is set), group-writable
+#   MAGIC_HF_CACHE  Hugging Face cache on the host (default MERIT_HF_CACHE, else ~/.cache/huggingface):
+#                   Qwen/Qwen3-VL-8B-Instruct or Qwen/Qwen3.8-27B, Qwen/Qwen3-Embedding-4B, VLM2Vec/VLM2Vec-V2.0, Qwen/Qwen2-VL-2B-Instruct
 #   HDEPIC_VIDEOS   videos on the host (default $EPIC_MORPH_DIR/data/HD-EPIC/videos), mounted read-only at /videos
 #   MAGIC_OUT, MAGIC_WORK  optional, paths inside the container (e.g. /repo/baselines/magic/work/check)
 #   passed through when set: HF_TOKEN MERIT_HF_REPO MAGIC_TAG MAGIC_FETCH TOKEN_BUDGET MAX_BATCH MAGIC_PORT
@@ -27,6 +31,10 @@ REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && pwd)
 IMAGE=${MAGIC_IMAGE:-ghcr.io/morph-graphs/magic:$(bash "$REPO/baselines/magic/docker/image_tag.sh" "$ARM")}
 RUNTIME=${MAGIC_RUNTIME:-${MERIT_RUNTIME:-docker}}
+SIFS=${MAGIC_SIF_DIR:-${MERIT_SIF_DIR:-}}
+if [ "$RUNTIME" = apptainer ] && [ -z "${MAGIC_IMAGE:-}" ] && [ -n "$SIFS" ] && [ -s "$SIFS/magic_$ARM.sif" ]; then
+    IMAGE=$SIFS/magic_$ARM.sif
+fi
 HF=${MAGIC_HF_CACHE:-${MERIT_HF_CACHE:-$HOME/.cache/huggingface}}
 for s in baselines/magic/MAGIC-video/src/worldmm baselines/merit/MERIT/eval; do   # MAGIC uses MERIT's prep and captions
     [ -d "$REPO/$s" ] || { echo "run: git submodule update --init baselines/magic/MAGIC-video baselines/merit/MERIT"; exit 1; }
@@ -35,6 +43,10 @@ mkdir -p "$HF"
 # the videos by their real host path: data/HD-EPIC is often a symlink, which would dangle inside the container
 VIDEOS=${HDEPIC_VIDEOS:-$EPIC/data/HD-EPIC/videos}
 [ -d "$VIDEOS" ] || { echo "no videos at $VIDEOS (set HDEPIC_VIDEOS; epic-morph v3/DATA.md)"; exit 1; }
+BINDS=("$REPO:/repo" "$EPIC:/epic-morph" "$HF:/hf" "$(cd -P "$VIDEOS" && pwd):/videos:ro")
+if [ -n "${MERIT_WORK:-}" ]; then   # the shared work folder: MAGIC's own subfolder in it
+    umask 002; mkdir -p "$MERIT_WORK"; BINDS+=("$(cd -P "$MERIT_WORK" && pwd):/work"); export MAGIC_WORK=${MAGIC_WORK:-/work/magic}
+fi
 # the container cannot run git on the checkout (a worktree's .git points outside /repo): pass the commits.
 # MAGIC_REPO_COMMIT etc. may be set by the caller (a synced copy without .git).
 rev() { git -C "$1" rev-parse HEAD 2>/dev/null || true; }
@@ -59,8 +71,7 @@ if [ "$RUNTIME" = apptainer ]; then
         [ -n "${!v:-}" ] && export "APPTAINERENV_$v=${!v}"
     done
     exec apptainer exec --nv --cleanenv --pwd /repo \
-        --bind "$REPO:/repo,$EPIC:/epic-morph,$HF:/hf,$(cd -P "$VIDEOS" && pwd):/videos:ro" \
-        "$IMAGE" bash baselines/magic/run_magic.sh "$@"
+        --bind "$(IFS=,; echo "${BINDS[*]}")" "$IMAGE" bash baselines/magic/run_magic.sh "$@"
 fi
 [ "$RUNTIME" = docker ] || { echo "MAGIC_RUNTIME must be docker or apptainer"; exit 1; }
 GPU=${MAGIC_GPU:-${MERIT_GPU:?set MAGIC_GPU to the GPU index or indices for this job}}
@@ -71,6 +82,6 @@ export EPIC_MORPH_DIR=/epic-morph HDEPIC_VIDEOS=/videos HF_HUB_OFFLINE=${HF_HUB_
 ENVS=(-e CUDA_VISIBLE_DEVICES -e EPIC_MORPH_DIR -e HDEPIC_VIDEOS -e HF_HUB_OFFLINE)
 for c in "${COMMITS[@]}"; do ENVS+=(-e "${c%%=*}"); done
 for v in "${PASS[@]}"; do [ -n "${!v:-}" ] && ENVS+=(-e "$v"); done
+for b in "${BINDS[@]}"; do ENVS+=(-v "$b"); done
 exec docker run --rm --gpus "\"device=$GPU\"" --shm-size 32g --user "$(id -u):$(id -g)" \
-    -v "$REPO:/repo" -v "$EPIC:/epic-morph" -v "$HF:/hf" -v "$(cd -P "$VIDEOS" && pwd):/videos:ro" -w /repo \
-    "${ENVS[@]}" "$IMAGE" bash baselines/magic/run_magic.sh "$@"
+    -w /repo "${ENVS[@]}" "$IMAGE" bash baselines/magic/run_magic.sh "$@"

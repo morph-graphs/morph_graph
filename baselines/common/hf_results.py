@@ -18,6 +18,7 @@ for upload. MERIT_HF_REPO picks another dataset.
     python baselines/common/hf_results.py fetch-memory --baseline merit --arm m8 --video <V> --dir <local folder>
     python baselines/common/hf_results.py download     --baseline merit --arm m8 --video <V> --dest <local root>
     --memory '{video}_graph.pkl' '{video}_captions.json'   (another baseline's memory files)
+    --memory none                                         (a baseline without a memory: baselines/api)
 """
 import argparse
 import os
@@ -56,14 +57,14 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("action", choices=["upload", "fetch-memory", "download"])
     ap.add_argument("--baseline", default="merit", help="top-level folder in the dataset (merit, worldmm, ...)")
-    ap.add_argument("--memory", nargs="+", help="the memory's file names, with {video}; default MERIT's")
+    ap.add_argument("--memory", nargs="+", help="the memory's file names, with {video}; default MERIT's; `none` for a baseline without one")
     ap.add_argument("--arm", required=True)
     ap.add_argument("--video", required=True)
     ap.add_argument("--dir", help="upload / fetch-memory: the local results folder of this video and arm")
     ap.add_argument("--dest", help="download: local root; files land in <dest>/merit/<arm>/<video>/")
     a = ap.parse_args()
-    if a.memory:
-        MEMORY[:] = a.memory
+    if a.memory:   # "none": a baseline with no memory (API models); its folder is answers + runs.jsonl
+        MEMORY[:] = [] if a.memory == ["none"] else a.memory
     path = f"{a.baseline}/{a.arm}/{a.video}"
     if a.action == "fetch-memory":
         os.makedirs(a.dir, exist_ok=True)
