@@ -9,6 +9,9 @@ can write morph-graphs/epic-morph-jobs and morph-graphs/epic-morph-results (HF_T
     python coord/worker.py --pool max --launcher slurm --runtime apptainer --slots 1 2 3 4 \
         --sbatch "--partition=gpu --gres=gpu:1 -c 8 --mem=64G --time=8:00:00"        # a cluster: up to 4 jobs at once
 
+Builds need the videos; qa tasks also need EPIC_MORPH_DIR, an epic-morph checkout that has the task's bank (DESIGN.md,
+"Answer (qa) tasks").
+
 With --launcher slurm the worker runs where `sbatch` works (a login node) and each task becomes one
 `sbatch --wait` job that runs the baseline's container on a GPU node (the scheduler picks the GPU); slots are
 just how many jobs may be queued or running at once.
