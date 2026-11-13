@@ -16,6 +16,8 @@ on:
       - baselines/merit/docker/**
       - baselines/magic/env/**
       - baselines/magic/docker/**
+      - baselines/worldmm/env/**
+      - baselines/worldmm/docker/**
       - .github/workflows/baseline-images.yml
   workflow_dispatch:
 
@@ -39,6 +41,8 @@ jobs:
           - {baseline: merit, arm: m27}
           - {baseline: magic, arm: m8}
           - {baseline: magic, arm: m27}   # MERIT's m27 server stack in a venv over the client environment
+          - {baseline: worldmm, arm: m8}
+          - {baseline: worldmm, arm: m27}   # the server27 venv (transformers 5.8) at /opt/server
     env:
       PUBLISH: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
       TAGS: baselines/${{ matrix.baseline }}/docker/image_tag.sh
