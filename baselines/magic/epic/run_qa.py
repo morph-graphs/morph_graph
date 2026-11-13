@@ -13,7 +13,8 @@ Hyperparameters are eval/eval_egolife.py's paper defaults (unified graph, chain_
 
 Writes --answers (.json.gz): one row per question in bank order, keyed by `key`, with the chosen option,
 correctness and MAGIC's retrieval rounds (what was retrieved, with its time stamps). Resumes from it: a row
-counts as done when it has a valid answer from this VERSION and this memory (memory_hash). Exit code 2 when
+counts as done when it has a valid answer from this VERSION, this memory (memory_hash) and the same question
+(qhash). Exit code 2 when
 some questions are still unanswered (MAGIC returned an error): run it again to retry them.
 
     python run_qa.py --video <V> --bank_file <V>_questions.json --memory <memory dir> --clip_root <clips> \
@@ -24,7 +25,6 @@ import gzip
 import hashlib
 import json
 import logging
-import math
 import os
 import sys
 import time
@@ -84,8 +84,9 @@ def main():
     done = {}
     if os.path.exists(a.answers):
         old = json.load(gzip.open(a.answers, "rt"))
+        qh = {r["key"]: r["qhash"] for r in rows}   # a question edited under the same key is redone
         done = {r["key"]: r for r in old if r.get("version") == VERSION and r.get("memory_hash") == mh
-                and (r.get("response") or "").strip() not in ("", "Error")}
+                and r.get("qhash") == qh.get(r["key"]) and (r.get("response") or "").strip() not in ("", "Error")}
     todo = [r for r in rows if r["key"] not in done]
     log.info(f"{V}: {len(rows)} questions, {len(done)} done, {len(todo)} to answer (memory {mh})")
     os.chdir(a.clip_root)   # the memory's clip paths are relative to it
@@ -100,7 +101,7 @@ def main():
     groups = {}
     for r in todo:
         groups.setdefault(secs(r["query_time"]["time"]), []).append(r)
-    chain_dirs = ensure_chains(M, V, list(groups)) if groups else {}
+    chain_dirs = ensure_chains(M, V, list(groups), mh) if groups else {}
     emb = EmbeddingModel(text_model_name=TEXT_EMB, vis_model_name=VIS_EMB) if groups else None
     ptm = PromptTemplateManager()
     for cut, grp in sorted(groups.items()):
@@ -149,9 +150,9 @@ def main():
         save()
         wm.cleanup()
     save()
-    right = sum(bool(r["evaluate"]) for r in done.values())
+    right = sum(bool(done[r["key"]]["evaluate"]) for r in rows if r["key"] in done)
     missing = [r["key"] for r in rows if r["key"] not in done]
-    print(f"# {len(done)}/{len(rows)} answered, {right} right, {len(missing)} missing -> {a.answers}", flush=True)
+    print(f"# {len(rows) - len(missing)}/{len(rows)} answered, {right} right, {len(missing)} missing -> {a.answers}", flush=True)
     sys.exit(2 if missing else 0)
 
 

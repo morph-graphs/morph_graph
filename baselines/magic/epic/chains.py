@@ -7,13 +7,13 @@ captions, 3 min summaries and semantic-extraction groups ending <= the cutoff. T
 (run_qa.py), cached per cutoff under <memory dir>/chains/c<seconds>/ and reused by every bank that asks at
 the same second. A topic prompt whose input did not change since an earlier cutoff is answered from
 chains/topic_cache.json.
-
 """
 import copy
 import json
 import logging
 import os
 import re
+import shutil
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 
@@ -261,9 +261,15 @@ def chains_at(cut, caps, m3, sem_triples, model, topic_cache):
     return topics, enriched
 
 
-def ensure_chains(mem, video, cuts):
-    """Chains for every cutoff (seconds) in cuts, built when missing; returns {cutoff: chain dir}."""
-    cdir = os.path.join(mem, "chains")
+def ensure_chains(mem, video, cuts, memory_hash):
+    """Chains for every cutoff (seconds) in cuts, built when missing; returns {cutoff: chain dir}. Chains made
+    from another memory (a rebuild) are removed first."""
+    cdir, stamp = os.path.join(mem, "chains"), os.path.join(mem, "chains", "memory_hash")
+    if os.path.isdir(cdir) and (not os.path.exists(stamp) or open(stamp).read().strip() != memory_hash):
+        log.info(f"chains in {cdir} were made from another memory: removing them")
+        shutil.rmtree(cdir)
+    os.makedirs(cdir, exist_ok=True)
+    open(stamp, "w").write(memory_hash + "\n")
     todo = [c for c in sorted(set(cuts)) if not os.path.exists(os.path.join(cdir, f"c{c:05d}", "step3_enriched_chains.json"))]
     if todo:
         caps, m3 = jload(os.path.join(mem, f"{video}_30sec.json")), jload(os.path.join(mem, f"{video}_3min.json"))

@@ -125,7 +125,8 @@ def step_multi(a):
         msgs = [{"role": "system", "content": system}, {"role": "user", "content": prompt}]
         return (model.generate(msgs, **kw) or "").strip()
 
-    # 3 min: aligned 180 s windows over the 30 s captions (gen_event.process_day)
+    # 3 min: aligned 180 s windows over the 30 s captions (gen_event.process_day); a window ends with its last
+    # caption, so the video's last, partial window is visible to questions at the end of the video
     win = defaultdict(list)
     for c in caps:
         win[secs(c["start_time"]) // 180].append(c)
@@ -133,7 +134,7 @@ def step_multi(a):
     def one3(k):
         ctx = [c["text"] for c in win[k]]
         return {"text": gpt(sm["system_message_3m"], f"All descriptions: {ctx}", max_tokens=2048, temperature=0.7, top_p=0.95),
-                "date": "DAY1", "start_time": hhmmssff(k * 180), "end_time": hhmmssff(k * 180 + 180)}
+                "date": "DAY1", "start_time": hhmmssff(k * 180), "end_time": win[k][-1]["end_time"]}
     with ThreadPoolExecutor(16) as ex:
         m3 = list(ex.map(one3, sorted(win)))
 

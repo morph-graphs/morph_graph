@@ -8,10 +8,10 @@
 #                 with MERIT), summaries, OpenIE, semantic memory, clip embeddings, memory graph  GPU
 #          qa     narrative chains per question cutoff (cached), then MAGIC answers every question of
 #                 <bank> for this video                                                  GPU (needs build)
-#          blind  MERIT's answer prompt with no context, same backbone: the no-memory floor (identical to
-#                 MERIT's blind stage for the arm, which already covers it)              GPU (no build needed)
 #          upload this video and arm's results folder to the Hugging Face dataset  (needs a write token)
-#          all    prep + build, then qa + blind when a bank is given (no upload)
+#          all    prep + build, then qa when a bank is given (no upload)
+# No blind stage: the no-memory floor depends only on the backbone, and MERIT's blind stage for the same arm
+# (same model, same question rows) already measures it.
 #   arm    m8   Qwen3-VL-8B-Instruct for every LLM role       one GPU with >= 40 GB, or 2 GPUs (server | MAGIC)
 #          m27  Qwen3.8-27B (non-thinking) for every role     one 80 GB GPU, or 2x 48 GB / 3+ GPUs (server on all
 #                                                             but the last, MAGIC's embedders on the last)
@@ -21,20 +21,20 @@
 # Environment (see README.md):
 #   PY               python of the client environment (env/setup_env.sh client): MAGIC itself, and the m8 server
 #   MAGIC_SERVER_PY  python of the m27 environment (env/setup_env.sh m27), for the m27 server; m8 uses PY
-#   MERIT_PY         python for MERIT's steps (captions when the dataset has none, blind); default the server's
+#   MERIT_PY         python for MERIT's captions when the dataset has none; default the server's
 #   EPIC_MORPH_DIR   an epic-morph checkout (required): the banks, and by default the videos
 #   HDEPIC_VIDEOS    default $EPIC_MORPH_DIR/data/HD-EPIC/videos (<P>/<video>.mp4)
 #   MAGIC_MODELS     a folder with local copies of the models (Qwen3-VL-8B-Instruct, Qwen3.8-27B, Qwen3-Embedding-4B,
 #                    VLM2Vec-V2.0 with its Qwen2-VL-2B-Instruct base); default the Hugging Face ids (cache)
 #   MAGIC_WORK       default baselines/magic/work: clips, frames, MERIT's captions, server logs, caches
 #   MAGIC_OUT        default baselines/magic/results: per <arm>/<video> the memory, chains/ (per cutoff),
-#                    answers_<bank>.json.gz, blind_<bank>.json and runs.jsonl (`upload` puts them in the
+#                    answers_<bank>.json.gz and runs.jsonl (`upload` puts them in the
 #                    dataset morph-graphs/epic-morph-results at magic/<arm>/<video>/)
 #   MAGIC_TAG        a variant name for the answers (answers_<bank>_<tag>.json.gz)
 #   MAGIC_FETCH      0 to never take the memory from the dataset (build normally reuses it when it is there)
 # Every step skips finished work, so rerunning the same command resumes.
 set -euo pipefail
-STAGE=${1:?usage: run_magic.sh <prep|build|qa|blind|upload|all> <video> <m8|m27> [bank]}
+STAGE=${1:?usage: run_magic.sh <prep|build|qa|upload|all> <video> <m8|m27> [bank]}
 V=${2:?video id}; ARM=${3:?arm m8 or m27}; BANK=${4:-}
 M=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); REPO=$(cd "$M/../.." && pwd); R=$M/MAGIC-video   # R: the submodule
 PY=${PY:?set PY to the python of the client environment}
@@ -86,7 +86,7 @@ start_server() {   # the arm's backbone behind an OpenAI-compatible endpoint; MA
     [ -n "$SPID" ] && return
     [ -n "$SRV_PY" ] || { echo "set MAGIC_SERVER_PY to the python of the m27 environment"; exit 1; }
     local ids n g0 gmem budget slog
-    ALL_GPUS=${CUDA_VISIBLE_DEVICES:-$(seq -s, 0 $(( $(nvidia-smi -L | wc -l) - 1 )))}; ids=$ALL_GPUS
+    ids=${CUDA_VISIBLE_DEVICES:-$(seq -s, 0 $(( $(nvidia-smi -L | wc -l) - 1 )))}
     IFS=, read -ra G <<< "$ids"; n=${#G[@]}
     # GPU split: m8 on 2+ GPUs -> server on the first, MAGIC (embedders) on the last; m27 on 3+ GPUs -> server
     # on all but the last; otherwise both share every GPU
@@ -117,17 +117,13 @@ start_server() {   # the arm's backbone behind an OpenAI-compatible endpoint; MA
     export CUDA_VISIBLE_DEVICES=$MAGIC_GPUS MAGIC_LLM_BASE_URL=http://127.0.0.1:$PORT/v1 MAGIC_LLM_MODEL=local MAGIC_SEED=0
     export SRV_TF=$("$SRV_PY" -c "import transformers; print(transformers.__version__)")
 }
-stop_server() {   # frees the GPU(s) for MERIT's own model (blind)
-    [ -n "$SPID" ] || return 0
-    kill "$SPID" 2>/dev/null || true; wait "$SPID" 2>/dev/null || true; SPID=
-    export CUDA_VISIBLE_DEVICES=$ALL_GPUS
-}
 
 prep() {
     log prep; local t=$SECONDS
     PY=$PY merit prep "$V" "$ARM"
     record prep $((SECONDS - t))
 }
+need_clips() { [ -s "$WORK/merit/prep/captions/$V/${V}_30sec_skeleton.json" ] || prep; }
 build() {
     log build; local t=$SECONDS rc
     # the memory depends only on the video and the model: take it from the dataset when it is there and no
@@ -143,7 +139,7 @@ build() {
         esac
     fi
     if ! have_memory; then
-        [ -s "$WORK/merit/prep/captions/$V/${V}_30sec_skeleton.json" ] || prep
+        need_clips
         # MERIT's captions for the arm: from the dataset (merit/<arm>/<video>), else built here with MERIT
         if [ ! -s "$OUT/${V}_30sec.json" ] && [ ! -s "$MC/${V}_30sec.json" ]; then
             rc=0; "$PY" "$M/../common/hf_results.py" fetch-memory --baseline merit --arm "$ARM" --video "$V" --dir "$MC" || rc=$?
@@ -161,7 +157,7 @@ build() {
     record build $((SECONDS - t))
 }
 bank_file() {   # this bank's questions for the video (banks are generated in epic-morph, not committed)
-    local bank=${BANK:?qa and blind need a bank}; BF=$EPIC/outputs/v3/banks/$bank/${V}_questions.json
+    local bank=${BANK:?qa needs a bank}; BF=$EPIC/outputs/v3/banks/$bank/${V}_questions.json
     if [ ! -s "$BF" ]; then
         mkdir -p "$EPIC/outputs/v3/banks"
         ( command -v flock >/dev/null && flock 9
@@ -173,7 +169,7 @@ bank_file() {   # this bank's questions for the video (banks are generated in ep
 qa() {
     log "qa $BANK$SUF"; local t=$SECONDS k rc=0
     have_memory || build
-    bank_file; start_server
+    need_clips; bank_file; start_server   # a memory fetched from the dataset comes without the clips
     # each pass answers what has no valid answer yet (MAGIC errors are retried); nothing runs when all are done
     for k in 1 2 3; do
         rc=0; "$PY" "$M/epic/run_qa.py" --video "$V" --bank_file "$BF" --memory "$OUT" --clip_root "$CLIPS" \
@@ -183,15 +179,6 @@ qa() {
     [ $rc = 0 ] || { echo "qa did not finish (exit $rc); rerun the same command to retry"; exit 1; }
     record "qa $BANK$SUF" $((SECONDS - t))
 }
-blind() {   # MERIT's blind stage with the arm's model; copied here so the folder holds its floor
-    log "blind $BANK"; local t=$SECONDS
-    bank_file
-    [ -s "$WORK/merit/prep/captions/$V/${V}_30sec_skeleton.json" ] || prep
-    stop_server
-    PY=${MERIT_PY:-$SRV_PY} merit blind "$V" "$ARM" "$BANK"
-    cp "$MC/blind_$BANK.json" "$OUT/blind_$BANK.json"
-    record "blind $BANK" $((SECONDS - t))
-}
 upload() {   # only a finished memory: a half-built folder would overwrite a good one in the dataset
     log upload
     have_memory || { echo "no finished memory in $OUT: run build first"; exit 1; }
@@ -199,8 +186,8 @@ upload() {   # only a finished memory: a half-built folder would overwrite a goo
 }
 
 case $STAGE in
-    prep) prep ;; build) build ;; qa) qa ;; blind) blind ;; upload) upload ;;
-    all) prep; build; [ -z "$BANK" ] || { qa; blind; } ;;
-    *) echo "stage must be prep, build, qa, blind, upload or all"; exit 1 ;;
+    prep) prep ;; build) build ;; qa) qa ;; upload) upload ;;
+    all) prep; build; [ -z "$BANK" ] || qa ;;
+    *) echo "stage must be prep, build, qa, upload or all"; exit 1 ;;
 esac
 echo "=== $V $ARM $STAGE done"

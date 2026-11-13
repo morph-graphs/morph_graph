@@ -15,7 +15,7 @@ retrieval, answering) is the arm's backbone, served locally; no paid API.
 | `epic/build_memory.py` | the question-independent memory of one video (captions, summaries, OpenIE, semantic memory, clip embeddings, graph) |
 | `epic/chains.py` | the Narrative Memory Chain at one question cutoff, from the memory before it |
 | `epic/run_qa.py` | answers one video's questions of a bank, grouped by cutoff; writes `answers_<bank>.json.gz` |
-| `run_magic.sh` | one video, one arm, one stage (prep, build, qa, blind, upload, all) |
+| `run_magic.sh` | one video, one arm, one stage (prep, build, qa, upload, all) |
 | `env/` | the environments, pinned: `wheels-client.txt`, `requirements-client.txt`, `install_requirements.sh`, `setup_env.sh` |
 | `../merit/` | MAGIC reuses MERIT's clips (`prep`), MERIT's 30 s captions and MERIT's question conversion |
 | `../common/hf_results.py` | (shared by all baselines) upload a video's results to the Hugging Face dataset, or download them |
@@ -80,9 +80,9 @@ to nodes ending before the cutoff and the semantic memory to the last snapshot b
 filter). So a question sees only memory up to its `t_ask`.
 
 `qa` retries questions MAGIC failed on (up to three passes; rerun the same command for more). Every stage skips
-finished work. `MAGIC_TAG=<name>` writes `answers_<bank>_<name>.json.gz`. `blind` runs MERIT's no-context
-stage with the same backbone (MERIT's `blind_<bank>.json` for the arm is the same floor, so it is not needed when
-MERIT's exists). The clips, MERIT's files, index caches and server logs stay in `baselines/magic/work/`
+finished work. `MAGIC_TAG=<name>` writes `answers_<bank>_<name>.json.gz`. There is no blind stage: the
+no-memory floor depends only on the backbone and the questions, and MERIT's `blind` stage for the same arm (same
+model, same question rows) already measures it (`merit/<arm>/<video>/blind_<bank>.json` in the dataset). The clips, MERIT's files, index caches and server logs stay in `baselines/magic/work/`
 (`MAGIC_WORK`).
 
 ## What comes back (in the Hugging Face dataset)
@@ -96,6 +96,5 @@ Per video, at `magic/<arm>/<video>/`:
   question and options, and the positional `ID`), with the chosen option (`response`), `evaluate`, the cutoff and
   MAGIC's retrieval rounds (`round_history`: each round's query and the retrieved items with their time stamps),
   `version` and the `memory_hash` the answer was made from (a row from another version or memory is redone);
-- `blind_<bank>.json`, when the blind stage ran;
 - `runs.jsonl`: one line per finished stage (commits of this repo, the submodule and epic-morph; backbone; torch
   and transformers versions of MAGIC and of the server; GPUs; seconds).
