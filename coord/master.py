@@ -40,10 +40,13 @@ BUILD_ORDER = os.path.join(ROOT, "baselines", "merit", "build_order.txt")
 # baselines it was started with (worker.py --baselines), so listing a baseline here runs nothing until a pool opts in.
 # our three Nexus workers are named after the queue their tasks go to: tron (QoS high), scavenger, and
 # vulcan-ampere with QoS vulcan-sailon
-M8 = ["max", "nexus-tron", "nexus-sailon", "nexus-scavenger", "wriva"]
-POOLS = {("merit", "m27"): ["wriva", "arm00", "zaratan", "max"], ("merit", "m8"): M8,
-         ("magic", "m27"): ["wriva", "zaratan", "max"], ("magic", "m8"): M8,
-         ("worldmm", "m27"): ["wriva", "zaratan", "max"], ("worldmm", "m8"): M8}
+# Vatsal's two workers, under his own account (so his own vulcan-sailon GPU quota): vatsal-sailon (A6000 on
+# vulcan-ampere, QoS vulcan-sailon) for 8B, vatsal-h200 (QoS vulcan-high-h200) for 27B and 8B
+M8 = ["max", "nexus-tron", "nexus-sailon", "nexus-scavenger", "wriva", "vatsal-sailon", "vatsal-h200"]
+M27 = ["wriva", "zaratan", "max", "vatsal-h200"]
+POOLS = {("merit", "m27"): M27 + ["arm00"], ("merit", "m8"): M8,
+         ("magic", "m27"): M27, ("magic", "m8"): M8,
+         ("worldmm", "m27"): M27, ("worldmm", "m8"): M8}
 BANK = "t2_agree2"   # tranche 2 (epic-morph v3/tranche2.txt)
 # Closed-source API models (baselines/api): no GPU and no memory, one qa task per video and config. They need the
 # provider's key (GEMINI_API_KEY / OPENAI_API_KEY in the worker's environment), which only Max's machine has, so no

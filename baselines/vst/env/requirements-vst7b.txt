@@ -1,0 +1,25 @@
+# VST-7B (Qwen2.5-VL-7B weights) through upstream's lmms-eval model class.
+# Python 3.11, CUDA 12.4; torch/torchvision/flash-attn come first, from setup_env.sh.
+# Upstream asks for transformers>=4.50, torch>=2.5, flash-attn>=2.7, decord 0.6.0 (requirements_eval.txt);
+# the exact versions below are the ones its training environment pins (VST-SFT/requirements.txt), except
+# transformers: the released VST-7B config was saved with 4.52.3 and does not load in 4.50.0
+# (AttributeError: 'dict' object has no attribute 'to_dict').
+transformers==4.52.3
+tokenizers==0.21.2
+huggingface-hub==0.33.0
+accelerate==1.8.1
+safetensors==0.5.3
+qwen-vl-utils==0.0.11
+decord==0.6.0
+av==12.0.0
+numpy==2.2.6
+pillow==11.2.1
+# imported by lmms_eval on the way to the model class (the evaluation harness itself is not run)
+loguru==0.7.3
+sqlitedict==2.1.0
+evaluate==0.4.3
+datasets==3.6.0
+pytz==2025.2
+PyYAML==6.0.2
+Jinja2==3.1.6
+tqdm==4.67.1

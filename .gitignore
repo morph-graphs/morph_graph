@@ -253,10 +253,20 @@ baselines/worldmm/work/
 !baselines/worldmm/env/
 baselines/worldmm/results/
 
+# VST runs: logs, smoke runs; results (baselines/vst/run_vst.sh)
+baselines/vst/work/
+!baselines/vst/env/
+baselines/vst/results/
+
 # API baselines: epic_eval run folders and encoded clips; results (baselines/api/run_api.sh)
 baselines/api/work/
 !baselines/api/env/
 baselines/api/results/
+
+# Vgent runs: frames, locks; results (baselines/vgent/run_vgent.sh)
+baselines/vgent/work/
+!baselines/vgent/env/
+baselines/vgent/results/
 
 # job board: results a worker started with --outbox leaves for the relay (coord/worker.py)
 /outbox/

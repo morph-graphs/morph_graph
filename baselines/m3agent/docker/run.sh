@@ -4,7 +4,7 @@
 # dataset), the epic-morph checkout at /epic-morph (the banks), the videos read-only at /videos, the models at
 # /models. The stage `models` downloads the models into M3AGENT_MODELS first (fetch_models.sh; no GPU).
 #   M3AGENT_MODELS=<dir> bash baselines/m3agent/docker/run.sh models
-#   M3AGENT_GPU=0 M3AGENT_MODELS=<dir> EPIC_MORPH_DIR=<epic-morph checkout> bash baselines/m3agent/docker/run.sh <stage> <video> m3 [bank]
+#   M3AGENT_GPU=0 M3AGENT_MODELS=<dir> EPIC_MORPH_DIR=<epic-morph checkout> bash baselines/m3agent/docker/run.sh <stage> <video> <m3|m3api> [bank]
 # The job board (coord/worker.py) sets MERIT_GPU / MERIT_RUNTIME / MERIT_SIF_DIR, read here as fallbacks.
 #   M3AGENT_RUNTIME  docker (default) or apptainer (clusters without Docker: the same image, run with
 #                    `apptainer exec`; GPUs are the ones the scheduler gave the job, so M3AGENT_GPU is not needed)
@@ -12,9 +12,9 @@
 #                    M3AGENT_TP=1) for qa and blind
 #   M3AGENT_MODELS   the models folder on the host (required), mounted at /models (writable: `models` fills it)
 #   EPIC_MORPH_DIR   the epic-morph checkout (required, except for `models`)
-#   M3AGENT_BACKEND  local (default: faster-whisper and Qwen3-Embedding stand in for the closed APIs) or api
-#                    (upstream's Gemini speech segments and OpenAI text-embedding-3-large)
-#   GEMINI_API_KEY, OPENAI_API_KEY  the API keys for M3AGENT_BACKEND=api. Export them in the shell: they are
+#   arm              m3 (faster-whisper and Qwen3-Embedding stand in for the closed APIs) or m3api (Gemini speech
+#                    segments, OpenAI text-embedding-3-large; same image; see README.md, "The API arm")
+#   GEMINI_API_KEY, OPENAI_API_KEY  the API keys for arm m3api. Export them in the shell: they are
 #                    handed to the container by name, so they never appear on a command line, in a file or in the image
 #   HF_TOKEN         for upload; or `hf auth login` on the host (the cache, with its token, is mounted)
 #   M3AGENT_IMAGE    image (default ghcr.io/morph-graphs/m3agent:m3-<env hash>, from image_tag.sh); for
@@ -24,10 +24,10 @@
 #   HDEPIC_VIDEOS    videos on the host (default $EPIC_MORPH_DIR/data/HD-EPIC/videos)
 #   M3AGENT_WORK     optional, a host folder for clips, intermediate outputs and control runs (default
 #                    baselines/m3agent/work in the checkout), mounted at /work; files made group-writable (umask 002)
-#   passed through when set: M3AGENT_TAG M3AGENT_FETCH M3AGENT_TP M3AGENT_GPU_UTIL M3AGENT_MAX_LEN
+#   passed through when set: M3AGENT_GEMINI_MODEL M3AGENT_TAG M3AGENT_FETCH M3AGENT_TP M3AGENT_GPU_UTIL M3AGENT_MAX_LEN
 #                    M3AGENT_EMBED_DEVICE M3AGENT_MEM_RETRIES THREADS MERIT_HF_REPO M3AGENT_OUT (a path inside the container)
 set -euo pipefail
-STAGE=${1:?usage: run.sh <models|prep|build|qa|blind|upload|all> [<video> m3 [bank]]}
+STAGE=${1:?usage: run.sh <models|prep|build|qa|blind|upload|all> [<video> <m3|m3api> [bank]]}
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 IMAGE=${M3AGENT_IMAGE:-ghcr.io/morph-graphs/m3agent:$(bash "$REPO/baselines/m3agent/docker/image_tag.sh" m3)}
 SIF_DIR=${M3AGENT_SIF_DIR:-${MERIT_SIF_DIR:-}}
@@ -37,12 +37,12 @@ HF=${M3AGENT_HF_CACHE:-$HOME/.cache/huggingface}
 umask 002; mkdir -p "$HF" "${M3AGENT_MODELS:?set M3AGENT_MODELS to the models folder on the host}"
 BINDS=("$REPO:/repo" "$HF:/hf" "$(cd -P "$M3AGENT_MODELS" && pwd):/models")
 ENVS=(HF_HOME=/hf HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-0}" M3AGENT_MODELS=/models)
-PASS=(HF_TOKEN MERIT_HF_REPO MERIT_OUTBOX GEMINI_API_KEY OPENAI_API_KEY M3AGENT_BACKEND M3AGENT_TAG M3AGENT_FETCH M3AGENT_TP
+PASS=(HF_TOKEN MERIT_HF_REPO MERIT_OUTBOX GEMINI_API_KEY OPENAI_API_KEY M3AGENT_BACKEND M3AGENT_GEMINI_MODEL M3AGENT_TAG M3AGENT_FETCH M3AGENT_TP
       M3AGENT_GPU_UTIL M3AGENT_MAX_LEN M3AGENT_EMBED_DEVICE M3AGENT_MEM_RETRIES THREADS M3AGENT_OUT)
 if [ "$STAGE" = models ]; then
     CMD=(bash baselines/m3agent/fetch_models.sh /models)
 else
-    : "${3:?usage: run.sh <stage> <video> m3 [bank]}"
+    : "${3:?usage: run.sh <stage> <video> <m3|m3api> [bank]}"
     [ -f "$REPO/baselines/m3agent/m3-agent/m3_agent/control.py" ] || { echo "run: git submodule update --init baselines/m3agent/m3-agent"; exit 1; }
     EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && pwd)
     # the videos by their real host path: data/HD-EPIC is often a symlink, which would dangle inside the container
