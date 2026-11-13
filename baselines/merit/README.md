@@ -44,7 +44,7 @@ The results are not in git: they are written to `baselines/merit/results/<arm>/<
 | `m27` | Qwen/Qwen3.8-27B | one 80 GB GPU (H100); also runs on 2x 48 GB or 4x 24 GB | transformers 5.8.0 (5.2 loads it but generates garbage) |
 
 **Off our clusters, run only in the Docker images** (rule in `AGENTS.md`): `ghcr.io/morph-graphs/merit:<arm>-<env
-hash>`, built from `docker/Dockerfile` by `.github/workflows/merit-images.yml`. The image holds the environment
+hash>`, built from `docker/Dockerfile` by `.github/workflows/baseline-images.yml`. The image holds the environment
 (`env/`: prebuilt CUDA wheels, pinned requirements, causal-conv1d compiled for m27); the code is the mounted
 checkout of `main`. `docker/run.sh` picks the image whose tag matches the checkout's environment files
 (`docker/image_tag.sh`):

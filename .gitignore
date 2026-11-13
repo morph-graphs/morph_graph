@@ -238,6 +238,10 @@ baselines/merit/work/
 # ENV/ above matches env/ on case-insensitive filesystems; the MERIT environment files are code
 !baselines/merit/env/
 baselines/merit/results/
+# MAGIC-Video runs: clips, MERIT captions, server logs, caches; results (baselines/magic/run_magic.sh)
+baselines/magic/work/
+!baselines/magic/env/
+baselines/magic/results/
 
 # WorldMM runs: videos, skeletons, build intermediates, rows, caches (baselines/worldmm/run_worldmm.sh)
 baselines/worldmm/work/

@@ -16,6 +16,7 @@ each package has its own README (`epic_eval/`, `event_eval/`).
 | `event_eval/` | oracle event annotation (Gemini/Claude/GPT/Kimi), TSM comparison, viewer |
 | `epic_eval/` | sandboxed EPIC-Morph MCQ eval on SLURM (Gemini API or local Qwen3.8) |
 | `baselines/merit/` | MERIT memory baseline on EPIC-Morph: run script, Docker images, MERIT fork as a submodule |
+| `baselines/magic/` | MAGIC-Video memory baseline on EPIC-Morph: run script, Docker images, MAGIC-video fork as a submodule |
 | `baselines/worldmm/` | WorldMM memory baseline on EPIC-Morph: run script, environments, WorldMM fork as a submodule |
 | `proj_context/` | design docs, notes; `setup/` holds the container definition + pinned versions |
 
@@ -55,12 +56,27 @@ that keep branches from drifting:
 - **Every compute job handed to Max (or anyone running off the UMIACS/Zaratan clusters) runs in a Docker
   image built from this repo, from a commit on `main`.** Never send venv, conda or container-path
   instructions, or commands that name our clusters' paths.
-- The images: `baselines/merit/docker/` (Dockerfile, `build.sh`, `run.sh`, `image_tag.sh`), published by
-  `.github/workflows/merit-images.yml` as `ghcr.io/morph-graphs/merit:<arm>-<env hash>`. The image holds
+- The images: `baselines/<baseline>/docker/` (Dockerfile, `build.sh`, `run.sh`, `image_tag.sh`; MERIT and
+  MAGIC-Video so far), published by `.github/workflows/baseline-images.yml` as
+  `ghcr.io/morph-graphs/<baseline>:<arm>-<env hash>`. The image holds
   the environment; the code is the mounted checkout. A new kind of job (another baseline, a new stage) first
   gets its dependencies into an image here, merged to main and built, before any note to Max is written.
 - Publishing costs Actions minutes (2,000 a month, shared): run the workflow by hand on `main` after a merge
-  that changes `baselines/merit/env/` or `docker/`; code-only merges keep the same image tag.
+  that changes a baseline's `env/` or `docker/`; code-only merges keep the same image tag. A new baseline adds
+  its (baseline, arm) rows to that workflow's matrix and its paths to its trigger.
+
+## Compute jobs go through the job board (`coord/`)
+
+- Baseline runs are tasks on the job board, not hand-written job lists: `coord/master.py publish` lists what
+  should exist minus what the results dataset already holds, in the private dataset
+  [morph-graphs/epic-morph-jobs](https://huggingface.co/datasets/morph-graphs/epic-morph-jobs), and each
+  machine pool runs `coord/worker.py --pool <name>`, which claims, runs, uploads and reports. Design and
+  reasons: `coord/DESIGN.md`.
+- Don't run a listed task by hand without the board knowing: another pool may claim it too. New kinds of
+  work are new entries in `EXPERIMENTS` in `coord/master.py`; a task that failed twice waits for a fix, then
+  `coord/master.py reset --task <id>`.
+- Workers are plain programs; an agent starts one, reads its log and handles failures, but never changes a
+  task's settings to make it pass: environment fixes go into the baseline's `env/` files for everyone.
 
 ## Generated outputs go to the Hugging Face dataset, never into git
 
@@ -92,10 +108,13 @@ that keep branches from drifting:
 Full reference (hardware, QoS caps, billing, example submissions, refresh
 commands): `proj_context/proj_docs/zaratan.md`. What to always follow:
 
-- **Account:** always `-A abhinav2-prj-cmsc`. `abhinav2-prj-aac` only with the
-  user's explicit permission, never as a silent fallback. The SU budget is
-  limited (cmsc 300 kSU); avoid oversized, duplicate or idle jobs.
-- **QoS:** `normal` for every GPU job; `scavenger` is rejected for GPU (CPU only).
+- **Account:** `abhinav2-prj-aac` is approved for EPIC-Morph evaluation runs (Anubhav, 2026-11-12): CMSC
+  is nearly used up (3.2 kSU of 100 left on 2026-11-13). `zr` defaults to CMSC; bill AAC with
+  `ZR_ALLOW_AAC=1 ZR_ACCOUNT=abhinav2-prj-aac zr sbatch ...`. Other work: ask before choosing an account.
+  Avoid oversized, duplicate or idle jobs either way.
+- **QoS:** `normal` for every GPU job; `scavenger` is rejected for GPU (CPU only). For CPU jobs someone waits
+  on, also `normal` (partition `standard`): `scavenger` queues behind everything; move a pending job with
+  `scontrol update jobid=<id> partition=standard qos=normal`.
 - **Always set `-t`** (GPU partitions default to 15 min). Debug/interactive jobs ≤ 4 h,
   and exit them when done.
 - **Test new environments on a MIG slice first:** `-p gpu-a100_1g.5gb --gres=gpu:a100_1g.5gb:1`
