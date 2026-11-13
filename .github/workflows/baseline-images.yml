@@ -1,0 +1,90 @@
+# Environment images of the baselines (baselines/<baseline>/docker/Dockerfile), one per (baseline, arm), for
+# runs outside our clusters: ghcr.io/morph-graphs/<baseline>:<arm>-<env hash>, the tag from the baseline's own
+# docker/image_tag.sh (any commit with the same environment files maps to the same tag).
+# The org's private repos share 2,000 Actions minutes a month and a build is ~20-30 min per image, so:
+# - pull_request touching image files: build only the images whose tag the PR changes, push nothing
+#   (does it still build?); an image whose tag is the same as on the base branch is skipped in seconds;
+# - workflow_dispatch on main: build and publish every image whose tag is not in GHCR yet (code-only
+#   commits keep their tags, so they need no new image). No schedule.
+# A new baseline: add its (baseline, arm) rows to the matrix and its paths to the trigger.
+name: baseline-images
+
+on:
+  pull_request:
+    paths:
+      - baselines/merit/env/**
+      - baselines/merit/docker/**
+      - baselines/magic/env/**
+      - baselines/magic/docker/**
+      - baselines/worldmm/env/**
+      - baselines/worldmm/docker/**
+      - baselines/api/env/**
+      - baselines/api/docker/**
+      - .github/workflows/baseline-images.yml
+  workflow_dispatch:
+
+concurrency:
+  group: baseline-images-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  image:
+    name: ${{ matrix.baseline }}:${{ matrix.arm }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {baseline: merit, arm: m8}
+          - {baseline: merit, arm: m27}
+          - {baseline: magic, arm: m8}
+          - {baseline: magic, arm: m27}   # MERIT's m27 server stack in a venv over the client environment
+          - {baseline: worldmm, arm: m8}
+          - {baseline: worldmm, arm: m27}   # the server27 venv (transformers 5.8) at /opt/server
+          - {baseline: api, arm: cpu}   # API clients and ffmpeg only: no CUDA, a few minutes
+    env:
+      PUBLISH: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
+      TAGS: baselines/${{ matrix.baseline }}/docker/image_tag.sh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the PR's base commit, to compare tags
+      - name: Tag
+        id: tag
+        run: echo "image=ghcr.io/morph-graphs/${{ matrix.baseline }}:$(bash "$TAGS" ${{ matrix.arm }})" >> "$GITHUB_OUTPUT"
+      - name: Same tag as the base branch?
+        id: same
+        if: github.event_name == 'pull_request'
+        run: |
+          git worktree add -q /tmp/base "${{ github.event.pull_request.base.sha }}"
+          base=$( [ -f "/tmp/base/$TAGS" ] && bash "/tmp/base/$TAGS" ${{ matrix.arm }} || true)
+          if [ "ghcr.io/morph-graphs/${{ matrix.baseline }}:$base" = "${{ steps.tag.outputs.image }}" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"; echo "${{ steps.tag.outputs.image }}: unchanged by this PR; nothing to build"
+          fi
+      - name: Log in to GHCR
+        if: env.PUBLISH == 'true'
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Already published?
+        id: have
+        if: env.PUBLISH == 'true'
+        run: |
+          if docker manifest inspect "${{ steps.tag.outputs.image }}" >/dev/null 2>&1; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"; echo "${{ steps.tag.outputs.image }} exists; nothing to build"
+          fi
+      - name: Free disk (the CUDA base image is ~10 GB)
+        if: steps.have.outputs.skip != 'true' && steps.same.outputs.skip != 'true'
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          docker system prune -af >/dev/null; df -h /
+      - name: Build
+        if: steps.have.outputs.skip != 'true' && steps.same.outputs.skip != 'true'
+        run: |
+          docker build -f baselines/${{ matrix.baseline }}/docker/Dockerfile --build-arg ARM=${{ matrix.arm }} \
+            --build-arg COMMIT=$(git rev-parse --short HEAD) -t "${{ steps.tag.outputs.image }}" .
+      - name: Push
+        if: env.PUBLISH == 'true' && steps.have.outputs.skip != 'true'
+        run: docker push "${{ steps.tag.outputs.image }}"
