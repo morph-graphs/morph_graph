@@ -7,3 +7,6 @@
 [submodule "baselines/merit/MERIT"]
 	path = baselines/merit/MERIT
 	url = https://github.com/morph-graphs/MERIT.git
+[submodule "baselines/m3agent/m3-agent"]
+	path = baselines/m3agent/m3-agent
+	url = https://github.com/morph-graphs/m3-agent.git
