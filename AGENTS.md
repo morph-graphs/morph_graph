@@ -16,6 +16,7 @@ each package has its own README (`epic_eval/`, `event_eval/`).
 | `event_eval/` | oracle event annotation (Gemini/Claude/GPT/Kimi), TSM comparison, viewer |
 | `epic_eval/` | sandboxed EPIC-Morph MCQ eval on SLURM (Gemini API or local Qwen3.8) |
 | `baselines/merit/` | MERIT memory baseline on EPIC-Morph: run script, Docker images, MERIT fork as a submodule |
+| `baselines/magic/` | MAGIC-Video memory baseline on EPIC-Morph: run script, Docker images, MAGIC-video fork as a submodule |
 | `proj_context/` | design docs, notes; `setup/` holds the container definition + pinned versions |
 
 The repo root is the package (`morph_graph.*` imports), except `epic_eval`, which
@@ -54,12 +55,14 @@ that keep branches from drifting:
 - **Every compute job handed to Max (or anyone running off the UMIACS/Zaratan clusters) runs in a Docker
   image built from this repo, from a commit on `main`.** Never send venv, conda or container-path
   instructions, or commands that name our clusters' paths.
-- The images: `baselines/merit/docker/` (Dockerfile, `build.sh`, `run.sh`, `image_tag.sh`), published by
-  `.github/workflows/merit-images.yml` as `ghcr.io/morph-graphs/merit:<arm>-<env hash>`. The image holds
+- The images: `baselines/<baseline>/docker/` (Dockerfile, `build.sh`, `run.sh`, `image_tag.sh`; MERIT and
+  MAGIC-Video so far), published by `.github/workflows/baseline-images.yml` as
+  `ghcr.io/morph-graphs/<baseline>:<arm>-<env hash>`. The image holds
   the environment; the code is the mounted checkout. A new kind of job (another baseline, a new stage) first
   gets its dependencies into an image here, merged to main and built, before any note to Max is written.
 - Publishing costs Actions minutes (2,000 a month, shared): run the workflow by hand on `main` after a merge
-  that changes `baselines/merit/env/` or `docker/`; code-only merges keep the same image tag.
+  that changes a baseline's `env/` or `docker/`; code-only merges keep the same image tag. A new baseline adds
+  its (baseline, arm) rows to that workflow's matrix and its paths to its trigger.
 
 ## Compute jobs go through the job board (`coord/`)
 

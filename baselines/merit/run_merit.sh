@@ -91,7 +91,7 @@ build() {
     # the memory depends only on the video and the model: take it from the dataset when it is there and no
     # local one is started (a half-built local memory is resumed, never overwritten)
     if [ ! -s "$CAP" ] && [ ! -s "$OUT/${V}_30sec_4_key.json" ] && [ "${MERIT_FETCH:-1}" != 0 ]; then
-        local rc=0; "$PY" "$M/epic/hf_results.py" fetch-memory --arm "$ARM" --video "$V" --dir "$OUT" || rc=$?
+        local rc=0; "$PY" "$M/../common/hf_results.py" fetch-memory --arm "$ARM" --video "$V" --dir "$OUT" || rc=$?
         case $rc in
             0) # anything made from an earlier local memory is stale: embeddings, answering runs, answers
                rm -rf "$WORK/cache/${ARM}_$V" "$WORK/runs/$ARM/$V"; rm -f "$OUT"/answers_*.json.gz ;;
@@ -171,7 +171,7 @@ blind() {
 upload() {   # only a finished memory: a half-built folder would overwrite a good one in the dataset
     log upload
     [ -s "$CAP" ] && [ -s "$OUT/${V}_30sec_4_key.json" ] || { echo "no finished memory in $OUT: run build first"; exit 1; }
-    "$PY" "$M/epic/hf_results.py" upload --arm "$ARM" --video "$V" --dir "$OUT"
+    "$PY" "$M/../common/hf_results.py" upload --arm "$ARM" --video "$V" --dir "$OUT"
 }
 
 case $STAGE in
