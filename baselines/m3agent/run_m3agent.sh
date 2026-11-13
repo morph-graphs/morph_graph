@@ -11,7 +11,9 @@
 #          blind  the control model with no memory: the no-memory floor (no build needed)    as qa
 #          upload this video's results folder to the Hugging Face dataset (m3agent/<arm>/<video>/)
 #          all    prep + build, then qa + blind when a bank is given (no upload)
-#   arm    m3     the published checkpoints (M3-Agent-Memorization, M3-Agent-Control)
+#   arm    m3     the published checkpoints (M3-Agent-Memorization, M3-Agent-Control), local ASR and embeddings
+#          m3api  the same checkpoints with upstream's API calls (M3AGENT_BACKEND=api): Gemini speech segments
+#                 and OpenAI embeddings; its memory and answers are kept apart from m3's (results/m3api/...)
 #   bank   a named bank of the epic-morph checkout, e.g. batch10_agree2 (generated there with
 #          v3/export_bank.py <bank> when missing)
 #
@@ -21,24 +23,28 @@
 #   EPIC_MORPH_DIR  an epic-morph checkout (required for qa and blind): the banks, and by default the videos
 #   HDEPIC_VIDEOS   default $EPIC_MORPH_DIR/data/HD-EPIC/videos (<P>/<video>.mp4)
 #   M3AGENT_WORK    default baselines/m3agent/work: clips, intermediate outputs (faces, voices), control runs
+#                   (arm m3api keeps its own under $M3AGENT_WORK/m3api; the clips are shared)
 #   M3AGENT_OUT     default baselines/m3agent/results: per <arm>/<video> the memory ({video}_m3graph.pkl,
 #                   {video}_memories.json), answers_<bank>.json.gz, blind_<bank>.json and runs.jsonl
 #   M3AGENT_MODELS  default $M3AGENT_WORK/models: M3-Agent-Memorization, M3-Agent-Control, Qwen3-Embedding-4B,
 #                   faster-whisper-large-v3-turbo, pretrained_eres2netv2.ckpt, insightface/ (each overridable:
 #                   M3AGENT_MEM_CKPT, M3AGENT_CONTROL_CKPT, M3AGENT_EMBED_MODEL, M3AGENT_ASR_MODEL,
 #                   M3AGENT_ERES2NET, M3AGENT_INSIGHTFACE_ROOT)
-#   M3AGENT_BACKEND local (default: local ASR and embeddings) or api (upstream's Gemini / OpenAI calls; untested)
+#   GEMINI_API_KEY, OPENAI_API_KEY  arm m3api only: build needs both, qa needs OPENAI_API_KEY (blind neither)
+#   M3AGENT_GEMINI_MODEL  arm m3api: the Gemini model for speech segments (default gemini-2.5-pro)
 #   M3AGENT_TAG     a variant name for the answers (answers_<bank>_<tag>.json.gz)
 #   M3AGENT_FETCH   0 to never take the memory from the dataset (build normally reuses it when it is there)
 #   M3AGENT_GPU_UTIL, M3AGENT_MAX_LEN  vLLM's gpu_memory_utilization (0.8) and max_model_len (16384)
 # Every stage skips finished work, so rerunning the same command resumes (build resumes after its last clip).
 set -euo pipefail
 STAGE=${1:?usage: run_m3agent.sh <prep|build|qa|blind|upload|all> <video> <arm> [bank]}
-V=${2:?video id}; ARM=${3:?arm: m3}; BANK=${4:-}
-[ "$ARM" = m3 ] || { echo "arm must be m3"; exit 1; }
+V=${2:?video id}; ARM=${3:?arm: m3 or m3api}; BANK=${4:-}
+case $ARM in m3) BACKEND=local ;; m3api) BACKEND=api ;; *) echo "arm must be m3 or m3api"; exit 1 ;; esac
+[ -z "${M3AGENT_BACKEND:-}" ] || [ "$M3AGENT_BACKEND" = "$BACKEND" ] || { echo "arm $ARM uses M3AGENT_BACKEND=$BACKEND (unset M3AGENT_BACKEND)"; exit 1; }
 M=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); REPO=$(cd "$M/../.." && pwd); R=$M/m3-agent   # R: the submodule
 [ -f "$R/m3_agent/control.py" ] || { echo "m3-agent submodule missing: git submodule update --init baselines/m3agent/m3-agent"; exit 1; }
 WORK=${M3AGENT_WORK:-$M/work}; OUTROOT=${M3AGENT_OUT:-$M/results}; MODELS=${M3AGENT_MODELS:-$WORK/models}
+AW=$WORK; [ "$ARM" = m3 ] || AW=$WORK/$ARM   # per-arm work (partial graph, per-clip voices, qa, runs); clips shared
 OUT=$OUTROOT/$ARM/$V; CLIPS=$WORK/clips/$V; MEM=$OUT/${V}_m3graph.pkl; MEMJSON=$OUT/${V}_memories.json
 TAG=${M3AGENT_TAG:-}; SUF=${TAG:+_$TAG}
 VIDEOS=${HDEPIC_VIDEOS:-${EPIC_MORPH_DIR:+$EPIC_MORPH_DIR/data/HD-EPIC/videos}}
@@ -48,13 +54,14 @@ export M3AGENT_EMBED_MODEL=${M3AGENT_EMBED_MODEL:-$MODELS/Qwen3-Embedding-4B}
 export M3AGENT_ASR_MODEL=${M3AGENT_ASR_MODEL:-$MODELS/faster-whisper-large-v3-turbo}
 export M3AGENT_ERES2NET=${M3AGENT_ERES2NET:-$MODELS/pretrained_eres2netv2.ckpt}
 export M3AGENT_INSIGHTFACE_ROOT=${M3AGENT_INSIGHTFACE_ROOT:-$MODELS/insightface}
-export M3AGENT_BACKEND=${M3AGENT_BACKEND:-local} MPLBACKEND=Agg TOKENIZERS_PARALLELISM=false NO_ALBUMENTATIONS_UPDATE=1
+export M3AGENT_BACKEND=$BACKEND MPLBACKEND=Agg TOKENIZERS_PARALLELISM=false NO_ALBUMENTATIONS_UPDATE=1
 export PYTHONPATH="$R${PYTHONPATH:+:$PYTHONPATH}" PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-mkdir -p "$OUT" "$WORK/logs"
+mkdir -p "$OUT" "$AW/logs"
 NGPU=$( (nvidia-smi -L 2>/dev/null || true) | wc -l | tr -d ' ')
 [ -n "${CUDA_VISIBLE_DEVICES:-}" ] && NGPU=$(echo "$CUDA_VISIBLE_DEVICES" | tr ',' '\n' | grep -c .)
 log() { echo "=== $V $ARM $1 ($(date '+%F %H:%M'), $NGPU GPU)"; }
 need() { local v=$1; [ -n "${!v:-}" ] || { echo "set $v to the python of the ${2} environment (env/setup_env.sh)"; exit 1; }; }
+keys() { [ "$BACKEND" = api ] || return 0; local k; for k in "$@"; do [ -n "${!k:-}" ] || { echo "arm $ARM: set $k"; exit 1; }; done; }
 record() {   # one line per finished stage: record <python> <stage> <seconds>
     "$1" - "$2" "$3" "$OUT/runs.jsonl" <<'EOF'
 import json, os, platform, subprocess, sys, time
@@ -74,7 +81,9 @@ gpus = [torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())]
 open(sys.argv[3], "a").write(json.dumps({"stage": sys.argv[1], "seconds": int(float(sys.argv[2])), "commit": commit, "dirty": dirty,
                   "m3agent_commit": sub, "epic_morph_commit": bank,
                   "version": open(os.path.join(repo, "baselines/m3agent/VERSION")).read().strip(),
-                  "backend": os.environ.get("M3AGENT_BACKEND"), "torch": torch.__version__,
+                  "backend": os.environ.get("M3AGENT_BACKEND"),
+                  "gemini_model": os.environ.get("M3AGENT_GEMINI_MODEL", "gemini-2.5-pro") if os.environ.get("M3AGENT_BACKEND") == "api" else None,
+                  "torch": torch.__version__,
                   "transformers": transformers.__version__, "vllm": vv,
                   "gpus": gpus, "host": platform.node(), "finished": time.strftime("%Y-%m-%dT%H:%M:%S%z")}) + "\n")
 EOF
@@ -94,22 +103,22 @@ build() {
     [ -s "$MEM" ] && [ -s "$MEMJSON" ] && { echo "memory already built: $MEM"; return 0; }
     # the memory depends only on the video and the model: take it from the dataset when it is there and no
     # local build is under way (a half-built local memory is resumed, never overwritten)
-    if [ ! -s "$WORK/partial/$V.pkl" ] && [ "${M3AGENT_FETCH:-1}" != 0 ]; then
+    if [ ! -s "$AW/partial/$V.pkl" ] && [ "${M3AGENT_FETCH:-1}" != 0 ]; then
         need PY_CTL control; local rc=0
         "$PY_CTL" "$M/../common/hf_results.py" fetch-memory --baseline m3agent --memory '{video}_m3graph.pkl' '{video}_memories.json' \
             --arm "$ARM" --video "$V" --dir "$OUT" || rc=$?
         case $rc in
-            0) rm -rf "$WORK/runs/$V"; rm -f "$OUT"/answers_*.json.gz; return 0 ;;   # answers from an earlier memory are stale
+            0) rm -rf "$AW/runs/$V"; rm -f "$OUT"/answers_*.json.gz; return 0 ;;   # answers from an earlier memory are stale
             3) echo "no memory in the dataset yet: building it here" ;;
             *) echo "could not reach the dataset; M3AGENT_FETCH=0 builds the memory here instead"; exit 1 ;;
         esac
     fi
-    need PY_MEM memorization; need PY_CTL control
+    need PY_MEM memorization; need PY_CTL control; keys GEMINI_API_KEY OPENAI_API_KEY
     [ -s "$CLIPS/clips.json" ] || prep
-    mkdir -p "$WORK/partial" "$WORK/intermediate/$V"
-    local data=$WORK/partial/$V.jsonl
+    mkdir -p "$AW/partial" "$AW/intermediate/$V"
+    local data=$AW/partial/$V.jsonl
     "$PY_MEM" -c "import json,sys; print(json.dumps(dict(zip(['id','clip_path','mem_path','json_path','partial_path','intermediate_outputs'], sys.argv[1:]))))" \
-        "$V" "$CLIPS" "$MEM" "$MEMJSON" "$WORK/partial/$V.pkl" "$WORK/intermediate/$V" > "$data"
+        "$V" "$CLIPS" "$MEM" "$MEMJSON" "$AW/partial/$V.pkl" "$AW/intermediate/$V" > "$data"
     rm -f "$MEM" "$MEMJSON"   # one without the other is from an interrupted write
     # upstream reads configs/ from the working directory; the embedding model runs in the control environment
     (cd "$R" && PATH="$(dirname "$PY_MEM"):$PATH" M3AGENT_EMBED_PY=$PY_CTL "$PY_MEM" m3_agent/memorization_memory_graphs.py --data_file "$data")
@@ -118,7 +127,7 @@ build() {
 }
 qa_file() {   # this bank's questions for the video in M3-Agent's control format, with before_clip from t_ask
     local bank=${BANK:?qa and blind need a bank}; EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && pwd)
-    local src=$EPIC/outputs/v3/banks/$bank/${V}_questions.json; QA=$WORK/qa/$bank/$V.json
+    local src=$EPIC/outputs/v3/banks/$bank/${V}_questions.json; QA=$AW/qa/$bank/$V.json
     if [ ! -s "$src" ]; then   # banks are generated, not committed; one generator at a time
         mkdir -p "$EPIC/outputs/v3/banks"
         ( command -v flock >/dev/null && flock 9
@@ -137,11 +146,11 @@ control() {   # control <run jsonl> [--blind]: answer the questions not yet in t
         --gpu_memory_utilization "${M3AGENT_GPU_UTIL:-0.8}" --max_model_len "${M3AGENT_MAX_LEN:-16384}" "${@:2}")
 }
 qa() {
-    log "qa $BANK$SUF"; need PY_CTL control; local t=$SECONDS run=$WORK/runs/$V/${BANK}${SUF}.jsonl missing
+    log "qa $BANK$SUF"; need PY_CTL control; keys OPENAI_API_KEY; local t=$SECONDS run=$AW/runs/$V/${BANK}${SUF}.jsonl missing
     [ -s "$MEM" ] || build
     qa_file; mkdir -p "$(dirname "$run")"
     for k in 1 2; do   # a crashed pass leaves the questions answered so far; the second pass does the rest
-        control "$run" 2>&1 | tee -a "$WORK/logs/${V}_${BANK}${SUF}.log" || echo "pass $k exited with an error"
+        control "$run" 2>&1 | tee -a "$AW/logs/${V}_${BANK}${SUF}.log" || echo "pass $k exited with an error"
         missing=$("$PY_CTL" "$M/epic/m3_epic.py" collect --questions "$QA" --clips "$CLIPS/clips.json" --runs "$run" --mem_path "$MEM" \
             --out "$OUT/answers_$BANK$SUF.json.gz" | tail -1)
         [ -z "$missing" ] && break
@@ -150,9 +159,9 @@ qa() {
     record "$PY_CTL" "qa $BANK$SUF" $((SECONDS - t))
 }
 blind() {
-    log "blind $BANK"; need PY_CTL control; local t=$SECONDS run=$WORK/runs/$V/blind_${BANK}.jsonl
+    log "blind $BANK"; need PY_CTL control; local t=$SECONDS run=$AW/runs/$V/blind_${BANK}.jsonl
     qa_file; mkdir -p "$(dirname "$run")"
-    control "$run" --blind 2>&1 | tee -a "$WORK/logs/${V}_blind_${BANK}.log"
+    control "$run" --blind 2>&1 | tee -a "$AW/logs/${V}_blind_${BANK}.log"
     local missing; missing=$("$PY_CTL" "$M/epic/m3_epic.py" collect --questions "$QA" --clips "$CLIPS/clips.json" --runs "$run" \
         --out "$OUT/blind_$BANK.json" | tail -1)
     [ -z "$missing" ] || { echo "blind: still unanswered: $missing"; exit 1; }
