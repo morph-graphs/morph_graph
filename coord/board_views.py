@@ -25,17 +25,22 @@ RATE_WINDOW_H = 6
 NAMES = {"merit": "MERIT", "magic": "MAGIC-Video", "worldmm": "WorldMM", "m3agent": "M3-Agent", "api": "API"}
 MODELS = {"m8": "8B", "m27": "27B"}
 # pool -> (site, who runs it, hardware). Sites are what the People view shows.
-POOLS = {
-    "nexus": ("Nexus", "Anubhav's agent", "Nexus Slurm, tron (QoS high)"),
-    "nexus-test": ("Nexus", "Anubhav's agent", "Nexus Slurm, scavenger"),
-    "nexus-slurm": ("Nexus", "Anubhav's agent", "Nexus Slurm, vulcan-ampere (QoS vulcan-sailon)"),
+POOLS = {   # the old Nexus names (nexus, nexus-test, nexus-slurm) until their last claims end (renamed in #28)
+    "nexus-tron": ("Nexus", "Anubhav's agent", "Nexus Slurm, tron (QoS high)"),
+    "nexus-scavenger": ("Nexus", "Anubhav's agent", "Nexus Slurm, scavenger"),
+    "nexus-sailon": ("Nexus", "Anubhav's agent", "Nexus Slurm, vulcan-ampere (QoS vulcan-sailon)"),
+    "nexus": ("Nexus", "Anubhav's agent", "Nexus Slurm, tron (QoS high); old name of nexus-tron"),
+    "nexus-test": ("Nexus", "Anubhav's agent", "Nexus Slurm, scavenger; old name of nexus-scavenger"),
+    "nexus-slurm": ("Nexus", "Anubhav's agent", "Nexus Slurm, vulcan-sailon; old name of nexus-sailon"),
+    "vatsal-sailon": ("Nexus", "Vatsal's agent", "Nexus Slurm, vulcan-ampere (his QoS vulcan-sailon)"),
+    "vatsal-h200": ("Nexus", "Vatsal's agent", "Nexus Slurm, H200 (his QoS vulcan-high-h200)"),
     "wriva": ("wriva", "Archana and Aaron", "4x H100 (cml-wriva, their accounts)"),
     "max": ("Max", "Max's agent", "H100 80 GB on his Slurm cluster"),
     "zaratan": ("Zaratan", "Anubhav's agent", "H100 / A100 (AAC)"),
     "arm00": ("arm00", "Anubhav's agent", "1x GH200 96 GB, tmux loop"),
 }
 SITES = ["Nexus", "wriva", "Max", "Zaratan", "arm00"]
-OURS = {"nexus", "nexus-test", "nexus-slurm", "wriva"}   # pools on Nexus: the collector's squeue shows their jobs
+OURS = {p for p, v in POOLS.items() if v[0] in ("Nexus", "wriva")}   # pools on Nexus: the collector's squeue shows their jobs
 VID = re.compile(r"P\d\d-\d{8}-\d{6}")
 
 TRANCHES = [
