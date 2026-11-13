@@ -7,12 +7,21 @@
 [submodule "baselines/merit/MERIT"]
 	path = baselines/merit/MERIT
 	url = https://github.com/morph-graphs/MERIT.git
+[submodule "baselines/m3agent/m3-agent"]
+	path = baselines/m3agent/m3-agent
+	url = https://github.com/morph-graphs/m3-agent.git
 [submodule "baselines/magic/MAGIC-video"]
 	path = baselines/magic/MAGIC-video
 	url = https://github.com/morph-graphs/MAGIC-video.git
 [submodule "baselines/worldmm/WorldMM"]
 	path = baselines/worldmm/WorldMM
 	url = https://github.com/morph-graphs/WorldMM.git
+[submodule "baselines/vst/VST"]
+	path = baselines/vst/VST
+	url = https://github.com/1ranGuan/VST.git
+[submodule "baselines/vgent/Vgent"]
+	path = baselines/vgent/Vgent
+	url = https://github.com/xiaoqian-shen/Vgent
 [submodule "baselines/egor1/Ego-R1"]
 	path = baselines/egor1/Ego-R1
 	url = https://github.com/egolife-ai/Ego-R1

@@ -10,7 +10,12 @@
 #   EPIC_MORPH_DIR   the epic-morph checkout (required)
 #   WORLDMM_IMAGE    image (default ghcr.io/morph-graphs/worldmm:<arm>-<env hash>, from image_tag.sh); for
 #                    apptainer, a .sif built once with `apptainer pull worldmm_<arm>.sif docker://<that image>`
-#   WORLDMM_HF_CACHE Hugging Face cache on the host (default ~/.cache/huggingface), mounted at /hf
+#   WORLDMM_SIF_DIR  apptainer: a folder of such files (default MERIT_SIF_DIR); uses <dir>/worldmm_<arm>.sif when
+#                    it exists and WORLDMM_IMAGE is unset, so one board worker runs every baseline and arm
+#   WORLDMM_HF_CACHE Hugging Face cache on the host (default MERIT_HF_CACHE, else ~/.cache/huggingface), mounted at /hf
+#   MERIT_WORK       optional, the cluster's shared host work folder (MERIT's), mounted at /work; WorldMM's work
+#                    folder is then /work/worldmm (unless WORLDMM_WORK is set), group-writable
+#   The job board (coord/worker.py) sets MERIT_GPU / MERIT_RUNTIME, read here when the WORLDMM_ ones are unset.
 #   WORLDMM_MODEL_DIR optional, a host folder of model folders, mounted read-only at /models
 #   HDEPIC_VIDEOS    videos on the host (default $EPIC_MORPH_DIR/data/HD-EPIC/videos), mounted read-only at /videos
 #   WORLDMM_OUT, WORLDMM_WORK  optional, paths inside the container (e.g. /repo/baselines/worldmm/work/check)
@@ -21,8 +26,12 @@ ARM=${3:?usage: run.sh <stage> <video> <arm> [bank]}
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && pwd)
 IMAGE=${WORLDMM_IMAGE:-ghcr.io/morph-graphs/worldmm:$(bash "$REPO/baselines/worldmm/docker/image_tag.sh" "$ARM")}
-RUNTIME=${WORLDMM_RUNTIME:-docker}
-HF=${WORLDMM_HF_CACHE:-$HOME/.cache/huggingface}
+RUNTIME=${WORLDMM_RUNTIME:-${MERIT_RUNTIME:-docker}}
+SIFS=${WORLDMM_SIF_DIR:-${MERIT_SIF_DIR:-}}
+if [ "$RUNTIME" = apptainer ] && [ -z "${WORLDMM_IMAGE:-}" ] && [ -n "$SIFS" ] && [ -s "$SIFS/worldmm_$ARM.sif" ]; then
+    IMAGE=$SIFS/worldmm_$ARM.sif
+fi
+HF=${WORLDMM_HF_CACHE:-${MERIT_HF_CACHE:-$HOME/.cache/huggingface}}
 [ -f "$REPO/baselines/worldmm/WorldMM/src/worldmm/memory/memory.py" ] || { echo "run: git submodule update --init baselines/worldmm/WorldMM"; exit 1; }
 mkdir -p "$HF"
 # the videos by their real host path: data/HD-EPIC is often a symlink, which would dangle inside the container
@@ -32,6 +41,9 @@ BINDS=("$REPO:/repo" "$EPIC:/epic-morph" "$HF:/hf" "$(cd -P "$VIDEOS" && pwd):/v
 ENVS=(EPIC_MORPH_DIR=/epic-morph HDEPIC_VIDEOS=/videos HF_HOME=/hf HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-0}"
       WORLDMM_REPO_COMMIT="$(git -C "$REPO" rev-parse HEAD)" WORLDMM_EPIC_COMMIT="$(git -C "$EPIC" rev-parse HEAD)"
       WORLDMM_SUBMODULE_COMMIT="$(git -C "$REPO/baselines/worldmm/WorldMM" rev-parse HEAD)")
+if [ -n "${MERIT_WORK:-}" ]; then   # the shared work folder: WorldMM's own subfolder in it
+    umask 002; mkdir -p "$MERIT_WORK"; BINDS+=("$(cd -P "$MERIT_WORK" && pwd):/work"); export WORLDMM_WORK=${WORLDMM_WORK:-/work/worldmm}
+fi
 if [ -n "${WORLDMM_MODEL_DIR:-}" ]; then BINDS+=("$(cd -P "$WORLDMM_MODEL_DIR" && pwd):/models:ro"); ENVS+=(WORLDMM_MODEL_DIR=/models); fi
 PASS=(HF_TOKEN MERIT_HF_REPO WORLDMM_TAG WORLDMM_FETCH WORLDMM_EMB_BATCH WORLDMM_MAX_MEMORY MAX_BATCH THREADS
       WORLDMM_OUT WORLDMM_WORK)
@@ -46,7 +58,7 @@ if [ "$RUNTIME" = apptainer ]; then
         "$IMAGE" bash baselines/worldmm/run_worldmm.sh "$@"
 fi
 [ "$RUNTIME" = docker ] || { echo "WORLDMM_RUNTIME must be docker or apptainer"; exit 1; }
-GPU=${WORLDMM_GPU:?set WORLDMM_GPU to the GPU index or indices for this job}
+GPU=${WORLDMM_GPU:-${MERIT_GPU:?set WORLDMM_GPU to the GPU index or indices for this job}}
 # the container sees only the chosen GPUs, renumbered from 0
 N=$(echo "$GPU" | tr ',' '\n' | grep -c .); SEEN=$(seq -s, 0 $((N - 1)))
 ARGS=(); for b in "${BINDS[@]}"; do ARGS+=(-v "$b"); done
