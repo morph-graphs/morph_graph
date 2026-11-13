@@ -13,7 +13,7 @@ several rounds. It is the first memory baseline of the EPIC-Morph benchmark pape
 | `epic/prepare_epic.py` | one HD-EPIC video -> 30 s clips (448 px), 1 fps frames, the clip list; a bank -> MERIT's question format |
 | `epic/caption_clips_qwen.py` | MERIT's memory, step 1: one caption per clip with the arm's model |
 | `epic/blind_qa.py` | MERIT's answer prompt with no context: what the model gets from question and options alone |
-| `epic/collect_answers.py`, `epic/compare_answers.py` | merge a video's answer files and list unanswered IDs; compare two runs |
+| `epic/collect_answers.py`, `epic/compare_answers.py` | merge a video's answer files (reusing those of unchanged questions) and list unanswered IDs; compare two runs |
 | `../common/hf_results.py` | (shared by all baselines) upload a video's results to the Hugging Face dataset, or download them |
 | `run_merit.sh` | one video, one arm, one stage (prep, build, qa, blind, upload, all) |
 | `env/` | the two environments, pinned: `wheels-*`, `requirements-*`, `install_requirements.sh` (shared by the image and `setup_env.sh`) |
@@ -78,7 +78,16 @@ for memory probes) defaults the tag to `noframes`. `upload` adds files to the da
 then the rest longest first. `build` makes the clips and frames first if needed. `qa` answers every question
 of the bank for the video; a question MERIT fails on (it writes "Error", e.g. after a CUDA out-of-memory) is
 retried by ID, up to three passes. Every stage skips finished work, so rerun the same command after a
-failure. One job per GPU (or GPU set); stages of different videos can run side by side. The clips and frames
+failure.
+
+**Question identity.** A question's ID is its bank `key` (files without keys, such as M2 probes, keep the
+1-based position), and each answer row also records `key`, `qhash` (a hash of the wording and options) and
+`pos` (its position in the bank file). `qa` reuses the answers file already in `MERIT_OUT` (from an earlier
+tranche, or `hf_results.py download`): an answer is kept while its question's wording, options and gold letter
+are unchanged, so after a tranche adds or edits questions of a video only those are answered. Answer files from
+before keys (positional IDs) are matched by the question they carry, and read the same.
+
+One job per GPU (or GPU set); stages of different videos can run side by side. The clips and frames
 (~300 MB a video) and MERIT's run folders stay in `baselines/merit/work/` (not committed).
 
 ## What comes back (in the Hugging Face dataset)
