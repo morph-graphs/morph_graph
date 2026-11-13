@@ -232,17 +232,20 @@ const matrixRows = (full) => (body) => {
 dash.draw('matrix-short', matrixRows(false));
 dash.draw('matrix-full', matrixRows(true));
 
+// The Data type hands nested arrays (running, failed, next) to the page as JSON text; parse them back.
+const list = (v) => { if (Array.isArray(v)) return v; if (typeof v !== 'string' || !v) return []; try { const a = JSON.parse(v); return Array.isArray(a) ? a : []; } catch (_) { return []; } };
+const personRow = (x) => ({...x, running: list(x.running), failed: list(x.failed), next: list(x.next)});
 const fresh = (hb) => { const t = parseT(hb); if (t == null) return 'var(--color-border-line)'; const m = (Date.now() - t) / 60000; return m < 30 ? 'var(--color-ok)' : m < 120 ? 'var(--color-warn)' : 'var(--color-bad)'; };
 dash.draw('pstrip', (e) => {
   const p = dash.data('people');
   e.replaceChildren();
   if (p.status !== 'ok') { e.textContent = '—'; return; }
-  for (const x of p.data) {
+  for (const x of p.data.map(personRow)) {
     if (x.state === 'not visible' || x.state === 'waiting for access') continue;
     const c = el('div', 'jb-pmini');
     const h = el('div', 'jb-small'); const dot = el('span', 'jb-dot'); dot.style.background = fresh(x.heartbeat); h.appendChild(dot); h.appendChild(document.createTextNode(`${x.pool} · ${x.person}`));
-    c.appendChild(h); c.appendChild(el('b', '', `${x.running.length} running`));
-    c.appendChild(el('div', 'jb-muted', `${x.queued} queued · ${x.done_24h} done in 24 h` + (x.failed.length ? ` · ${x.failed.length} failed` : '')));
+    c.appendChild(h); c.appendChild(el('b', '', `${x.tasks_running ?? x.running.length} tasks running`));
+    c.appendChild(el('div', 'jb-muted', `across ${x.jobs_running ?? 0} job${x.jobs_running === 1 ? '' : 's'} · ${x.tasks_queued ?? x.queued} tasks queued (${x.jobs_queued ?? 0} job${x.jobs_queued === 1 ? '' : 's'}) · ${x.done_24h} done in 24 h` + (x.failed.length ? ` · ${x.failed.length} failed` : '')));
     e.appendChild(c);
   }
 });
@@ -251,12 +254,13 @@ dash.draw('people', (e) => {
   const p = dash.data('people');
   e.replaceChildren();
   if (p.status !== 'ok') { e.textContent = '—'; return; }
-  for (const x of p.data) {
+  for (const x of p.data.map(personRow)) {
     const c = el('div', 'jb-card');
     const h = el('div', 'jb-card-head'); const t = el('h3'); const dot = el('span', 'jb-dot'); dot.style.background = fresh(x.heartbeat); t.appendChild(dot); t.appendChild(document.createTextNode(x.pool));
     h.appendChild(t); chip(h, x.state); c.appendChild(h);
     c.appendChild(el('div', 'jb-muted', `${x.person} · ${x.hardware}`));
-    c.appendChild(el('div', 'jb-small', `${x.running.length} running · ${x.queued} queued · ${x.done_24h} done in the last 24 h` + (x.rate_per_h ? ` · ${x.rate_per_h}/h` : '') + ` · heartbeat ${ago(x.heartbeat)}`));
+    c.appendChild(el('div', 'jb-small', `${x.tasks_running ?? x.running.length} tasks running across ${x.jobs_running ?? 0} jobs · ${x.tasks_queued ?? x.queued} tasks queued in ${x.jobs_queued ?? 0} jobs · ${x.done_24h} done in the last 24 h` + (x.rate_per_h ? ` · ${x.rate_per_h}/h` : '') + ` · last seen ${ago(x.heartbeat)}`));
+    c.appendChild(el('div', 'jb-muted', 'A job is one Slurm job (an array counts once) or the arm00 loop; a task is one unit of work, such as one video\'s memory build.'));
     if (x.running.length) {
       c.appendChild(el('div', 'jb-muted', 'Running now'));
       const ul = el('ul', 'jb-list'); for (const r of x.running) ul.appendChild(el('li', '', `${r.what} — ${r.note || r.job}`)); c.appendChild(ul);
