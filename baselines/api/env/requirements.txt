@@ -1,0 +1,4 @@
+# baselines/api: the API clients epic_eval's backends use, and the results upload. Python 3.11, no GPU.
+google-genai==2.18.1
+openai==2.46.0
+huggingface-hub==0.36.0

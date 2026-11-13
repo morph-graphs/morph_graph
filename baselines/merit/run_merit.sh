@@ -38,6 +38,7 @@ EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && p
 [ -f "$R/eval/evaluate_egolife.py" ] || { echo "MERIT submodule missing: git submodule update --init baselines/merit/MERIT"; exit 1; }
 case $ARM in m8) MODEL=qwen3vl-8b ;; m27) MODEL=qwen38-27b ;; *) echo "arm must be m8 or m27"; exit 1 ;; esac
 VIDEOS=${HDEPIC_VIDEOS:-$EPIC/data/HD-EPIC/videos}; WORK=${MERIT_WORK:-$M/work}; OUTROOT=${MERIT_OUT:-$M/results}
+[ -n "${MERIT_WORK:-}" ] && umask 002   # a shared work folder: files the other workers' users can reuse and reset
 OUT=$OUTROOT/$ARM/$V; PREP=$WORK/prep; CAP=$OUT/${V}_30sec.json
 TAG=${MERIT_TAG:-}; [ "${MERIT_NO_FRAMES:-0}" = 1 ] && [ -z "$TAG" ] && TAG=noframes; SUF=${TAG:+_$TAG}
 mkdir -p "$OUT" "$WORK/logs"
@@ -134,13 +135,15 @@ qa_file() {   # this bank's questions for the video, in MERIT's format (asked at
     [ -s "$PREP/captions/$V/${V}_30sec_skeleton.json" ] || prep
     mkdir -p "$(dirname "$QA")"
     "$PY" - "$EPIC/outputs/v3/banks/$bank/${V}_questions.json" "$V" "$PREP/captions/$V/${V}_30sec_skeleton.json" "$QA" <<'EOF'
-import json, sys
+import json, os, sys
 sys.path.insert(0, "baselines/merit/epic")
 from prepare_epic import convert_questions
 bank, v, skel, out = sys.argv[1:]
 end = json.load(open(skel))[-1]["end_time"]                      # HHMMSS00
 end_s = int(end[:2]) * 3600 + int(end[2:4]) * 60 + int(end[4:6])
-json.dump(convert_questions(bank, v, end_s), open(out, "w"), indent=2)
+tmp = f"{out}.{os.getpid()}"   # then rename: an m8 and an m27 task of the video may write it at once (shared work)
+json.dump(convert_questions(bank, v, end_s), open(tmp, "w"), indent=2)
+os.replace(tmp, out)
 EOF
 }
 qa() {
