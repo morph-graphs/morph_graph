@@ -9,7 +9,7 @@
             the whole video
   collect   control output (jsonl) -> answers file, one row per bank question keyed by its `key`, with the
             chosen option, correctness and the clips each search returned (with times, for evidence scoring);
-            prints a summary line, then the keys still unanswered (empty line when none)
+            prints a summary line (stderr), then the keys still unanswered (stdout; empty line when none)
 """
 import argparse
 import gzip
@@ -18,6 +18,7 @@ import json
 import math
 import os
 import subprocess
+import sys
 from concurrent.futures import ThreadPoolExecutor
 
 CLIP_SEC = 30
@@ -117,7 +118,7 @@ def collect(a):
     strict = sum(r["correct"] and bool(r["answered_in_loop"]) for r in rows)
     print(f"# {len(rows)}/{len(v['qa_list'])} answered, {right} right ({strict} answered within the rounds, upstream's protocol), "
           f"{sum(r['chosen'] is None for r in rows)} with no option, "
-          f"{len(missing)} missing -> {a.out}", flush=True)
+          f"{len(missing)} missing -> {a.out}", file=sys.stderr, flush=True)
     print(" ".join(missing))
 
 

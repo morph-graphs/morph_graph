@@ -143,7 +143,7 @@ qa() {
     for k in 1 2; do   # a crashed pass leaves the questions answered so far; the second pass does the rest
         control "$run" 2>&1 | tee -a "$WORK/logs/${V}_${BANK}${SUF}.log" || echo "pass $k exited with an error"
         missing=$("$PY_CTL" "$M/epic/m3_epic.py" collect --questions "$QA" --clips "$CLIPS/clips.json" --runs "$run" --mem_path "$MEM" \
-            --out "$OUT/answers_$BANK$SUF.json.gz" | tee /dev/stderr | tail -1)
+            --out "$OUT/answers_$BANK$SUF.json.gz" | tail -1)
         [ -z "$missing" ] && break
     done
     [ -z "$missing" ] || { echo "still unanswered: $missing (rerun the same command to retry)"; exit 1; }
@@ -154,7 +154,7 @@ blind() {
     qa_file; mkdir -p "$(dirname "$run")"
     control "$run" --blind 2>&1 | tee -a "$WORK/logs/${V}_blind_${BANK}.log"
     local missing; missing=$("$PY_CTL" "$M/epic/m3_epic.py" collect --questions "$QA" --clips "$CLIPS/clips.json" --runs "$run" \
-        --out "$OUT/blind_$BANK.json" | tee /dev/stderr | tail -1)
+        --out "$OUT/blind_$BANK.json" | tail -1)
     [ -z "$missing" ] || { echo "blind: still unanswered: $missing"; exit 1; }
     record "$PY_CTL" "blind $BANK" $((SECONDS - t))
 }
