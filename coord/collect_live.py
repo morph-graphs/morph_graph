@@ -115,8 +115,7 @@ def nexus(rows, alerts):
 def board(rows, built, alerts):
     """Claims from every pool's worker (the jobs dataset) and every memory in the results dataset."""
     rc, out = sh(["nx", "cd /fs/cfar-projects/mem_open_vocab/morph_graphs/anubhav/pkg/wt-coord && HF_TOKEN=$(cat ~/.config/hf_write_token) "
-                        "P=/fs/nexus-scratch/anubhav/merit_envs/m8/bin/python; $P coord/master.py publish >/dev/null 2>&1; "
-                        "$P coord/master.py view 2>/dev/null | tail -1"], timeout=240)
+                        "/fs/nexus-scratch/anubhav/merit_envs/m8/bin/python coord/master.py view 2>/dev/null | tail -1"], timeout=240)
     try:
         v = json.loads(out.strip().splitlines()[-1])
     except Exception:

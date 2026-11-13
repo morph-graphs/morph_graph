@@ -26,7 +26,7 @@ BUILD_ORDER = os.path.join(ROOT, "baselines", "merit", "build_order.txt")
 # (baseline, arm, stage, pools that may run it). MERIT 27B builds run on arm00 and Zaratan outside the board
 # for now (their loops predate it), so they are not listed here.
 EXPERIMENTS = [
-    ("merit", "m8", "build", ["max", "nexus", "nexus-test", "wriva"]),
+    ("merit", "m8", "build", ["max", "nexus", "nexus-test", "nexus-slurm", "wriva"]),
 ]
 
 
