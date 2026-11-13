@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Install one MAGIC environment's pinned packages into a Python that already has torch 2.6.0 (CUDA 12.4).
-# Used by setup_env.sh (virtualenv) and later by a Docker image, so both get the same stack.
+# Used by setup_env.sh (virtualenv) and docker/Dockerfile (image), so both get the same stack.
 #   bash install_requirements.sh <client|m27> <python>
 #   client  MAGIC's own process (both arms) and the m8 server (Qwen3-VL-8B): transformers 4.57
 #   m27     the m27 server (Qwen3.8-27B, transformers 5.8): exactly MERIT's m27 stack, installed by MERIT's script

@@ -16,7 +16,8 @@ retrieval, answering) is the arm's backbone, served locally; no paid API.
 | `epic/chains.py` | the Narrative Memory Chain at one question cutoff, from the memory before it |
 | `epic/run_qa.py` | answers one video's questions of a bank, grouped by cutoff; writes `answers_<bank>.json.gz` |
 | `run_magic.sh` | one video, one arm, one stage (prep, build, qa, upload, all) |
-| `env/` | the environments, pinned: `wheels-client.txt`, `requirements-client.txt`, `install_requirements.sh`, `setup_env.sh` |
+| `env/` | the environments, pinned: `wheels-client.txt`, `requirements-client.txt`, `install_requirements.sh` (shared by the image and `setup_env.sh`), `setup_env.sh` |
+| `docker/` | the image (`Dockerfile`), `build.sh`, `run.sh` (one job in a container; the job board's entry point), `image_tag.sh` |
 | `../merit/` | MAGIC reuses MERIT's clips (`prep`), MERIT's 30 s captions and MERIT's question conversion |
 | `../common/hf_results.py` | (shared by all baselines) upload a video's results to the Hugging Face dataset, or download them |
 
@@ -47,6 +48,27 @@ MAGIC's own process needs transformers 4.x (VLM2Vec-V2.0, the visual embedder, d
 backbone runs in a separate server process. The `client` environment (transformers 4.57.6) runs MAGIC for both
 arms and also serves Qwen3-VL-8B. The `m27` environment serves Qwen3.8-27B: it is exactly MERIT's m27 environment
 (transformers 5.8; with 5.2 Qwen3.8 loads but generates garbage), installed by MERIT's `env/install_requirements.sh`.
+
+**Off our clusters, run only in the Docker images** (rule in `AGENTS.md`): `ghcr.io/morph-graphs/magic:<arm>-<env
+hash>`, built from `docker/Dockerfile` by `.github/workflows/baseline-images.yml`. Both images hold the client
+environment; `m27`'s also holds the m27 server environment in `/opt/m27` (a venv over the client's torch, with
+MERIT's m27 pins), so one container runs the server and MAGIC. The code is the mounted checkout of `main`;
+`docker/run.sh` picks the image whose tag matches the checkout's environment files (`docker/image_tag.sh`):
+
+```bash
+docker pull ghcr.io/morph-graphs/magic:$(bash baselines/magic/docker/image_tag.sh m8)
+MAGIC_GPU=0 EPIC_MORPH_DIR=<epic-morph checkout> bash baselines/magic/docker/run.sh build P05-20240425-201444 m8
+MAGIC_GPU=0 EPIC_MORPH_DIR=<epic-morph checkout> bash baselines/magic/docker/run.sh qa P05-20240425-201444 m8 batch10_agree2
+MAGIC_GPU=0 EPIC_MORPH_DIR=<epic-morph checkout> bash baselines/magic/docker/run.sh upload P05-20240425-201444 m8
+```
+
+`docker/run.sh` mounts this checkout at `/repo`, the epic-morph checkout at `/epic-morph`, the videos at `/videos`
+and the Hugging Face cache (`MAGIC_HF_CACHE`, default `~/.cache/huggingface`) at `/hf`; the token comes from
+`HF_TOKEN` or that cache. `MAGIC_RUNTIME=apptainer` runs the same image with Apptainer (clusters without Docker;
+the GPUs are the job's). The job board (`coord/worker.py`) calls it with `MERIT_GPU` / `MERIT_RUNTIME`, which
+`run.sh` takes when the `MAGIC_` ones are unset. Download the models into that cache once (list below).
+
+On our own clusters, virtualenvs:
 
 ```bash
 bash baselines/magic/env/setup_env.sh client <venv dir>   # Python 3.11 (PYTHON=...), CUDA 12.4 wheels
