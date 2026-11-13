@@ -110,7 +110,8 @@ nodes, 351 edges, 56 entity keys); qa 39 min: 5 questions asked before 21:20 wit
 about 10 s each) and 54 with the graph (7 calls and about 36 s for an ordinary question, 5 of the calls being
 the failed sub-question attempts above; 22 calls and about 160 s for the 3 the rules verify); blind 41 s. Peak
 GPU memory 24.3 GB. Of the 156 HD-EPIC videos (41.3 h), 116 are shorter than 1280 s, so as released Vgent
-builds a graph for 40 of them.
+builds a graph for 40 of them. The same build on an L40S gave a different graph (62 entity keys, other chunk
+texts) and some different answers: the extraction depends on the GPU model, so a table needs one GPU family.
 
 ## What comes back (in the Hugging Face dataset)
 
