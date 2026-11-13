@@ -13,3 +13,6 @@
 [submodule "baselines/worldmm/WorldMM"]
 	path = baselines/worldmm/WorldMM
 	url = https://github.com/morph-graphs/WorldMM.git
+[submodule "baselines/vst/VST"]
+	path = baselines/vst/VST
+	url = https://github.com/1ranGuan/VST.git
