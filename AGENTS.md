@@ -61,6 +61,19 @@ that keep branches from drifting:
 - Publishing costs Actions minutes (2,000 a month, shared): run the workflow by hand on `main` after a merge
   that changes `baselines/merit/env/` or `docker/`; code-only merges keep the same image tag.
 
+## Compute jobs go through the job board (`coord/`)
+
+- Baseline runs are tasks on the job board, not hand-written job lists: `coord/master.py publish` lists what
+  should exist minus what the results dataset already holds, in the private dataset
+  [morph-graphs/epic-morph-jobs](https://huggingface.co/datasets/morph-graphs/epic-morph-jobs), and each
+  machine pool runs `coord/worker.py --pool <name>`, which claims, runs, uploads and reports. Design and
+  reasons: `coord/DESIGN.md`.
+- Don't run a listed task by hand without the board knowing: another pool may claim it too. New kinds of
+  work are new entries in `EXPERIMENTS` in `coord/master.py`; a task that failed twice waits for a fix, then
+  `coord/master.py reset --task <id>`.
+- Workers are plain programs; an agent starts one, reads its log and handles failures, but never changes a
+  task's settings to make it pass: environment fixes go into the baseline's `env/` files for everyone.
+
 ## Generated outputs go to the Hugging Face dataset, never into git
 
 - Baseline outputs (memories, captions, answers, run logs) belong in the private dataset
