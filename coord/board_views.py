@@ -207,7 +207,8 @@ def update(out, raw, live, nxq, built_src):
             if j:
                 if j["state"] == "RUNNING":
                     return "running", f"{place(c['pool'])} · {j['where']}, {j['elapsed']} elapsed", c.get("started", "")
-                return "queued", f"{place(c['pool'])} · waiting ({j['where']})", c.get("claimed", "")
+                why = f" ({j['where']})" if j["where"] not in ("", "None") else ""
+                return "queued", f"{place(c['pool'])} · waiting{why}", c.get("claimed", "")
             return "claimed", f"{place(c['pool'])} · no Slurm job seen yet", c.get("claimed", "")
         # someone else's Slurm: the claim cannot say whether the job has started
         return "claimed", f"{place(c['pool'])} · start not visible", c.get("claimed", "")
