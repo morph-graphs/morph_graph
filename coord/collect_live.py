@@ -36,7 +36,7 @@ def now():
 def zaratan(rows, built, alerts):
     rc, out = sh(["zr", "squeue -u $USER -h -r -o '%i|%j|%T|%R|%M'; echo ===; "
                         f"ls {ZR_RUNS}/results/m27 2>/dev/null | while read v; do "
-                        f"[ -s {ZR_RUNS}/results/m27/$v/${{v}}_30sec_4_key.json ] && echo $v; done; echo ===; "
+                        f"grep -qs '\"stage\": \"build\"' {ZR_RUNS}/results/m27/$v/runs.jsonl && echo $v; done; echo ===; "
                         "sacct -n -X -S now-1days -o JobID%20,JobName%20,State%14 | grep merit- | grep -vE 'COMPLETED|PENDING|RUNNING|CANCELLED' || true"])
     if rc != 0 or "===" not in out:
         alerts.append(dict(pool="zaratan", job="—", what="Zaratan not readable", state="alert", since=now(),
@@ -65,7 +65,7 @@ def zaratan(rows, built, alerts):
 def arm00(rows, built, alerts):
     script = (f"tmux has-session -t merit-arm 2>/dev/null && echo LOOP=up || echo LOOP=down; "
               f"nvidia-smi --query-gpu=memory.used,utilization.gpu --format=csv,noheader,nounits; "
-              f"for v in $(ls {ARM_RUNS}/results/m27 2>/dev/null); do [ -s {ARM_RUNS}/results/m27/$v/${{v}}_30sec_4_key.json ] && echo BUILT=$v; done; "
+              f"for v in $(ls {ARM_RUNS}/results/m27 2>/dev/null); do grep -qs '\"stage\": \"build\"' {ARM_RUNS}/results/m27/$v/runs.jsonl && echo BUILT=$v; done; "
               f"f=$(ls -t {ARM_RUNS}/logs/arm-build-*.log 2>/dev/null | head -1); [ -n \"$f\" ] && echo CUR=$(basename $f .log | sed s/arm-build-//) && "
               f"echo LAST=$(grep '^===' $f | tail -1) && echo TAIL=$(tail -c 400 $f | tr '\\r' '\\n' | grep -v '^\\s*$' | tail -1 | cut -c1-90) && echo AGE=$(( $(date +%s) - $(stat -c %Y $f) ))")
     rc, out = sh(SSH + [ARM, script], timeout=60)
