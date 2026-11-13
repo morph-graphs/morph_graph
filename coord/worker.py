@@ -15,6 +15,7 @@ tasks keep going, and a restarted worker picks them up again from its state fold
 """
 import argparse
 import json
+import re
 import os
 import socket
 import subprocess
@@ -25,6 +26,14 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import jobs  # noqa: E402
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# A task's fields go into a shell command, so only these shapes are ever run (anything else is skipped).
+VALID = dict(baseline=re.compile(r"^(merit|worldmm|magic|m3agent)$"), arm=re.compile(r"^m(8|27|3)$"),
+             stage=re.compile(r"^(prep|build|qa|blind)$"), video=re.compile(r"^P\d\d-\d{8}-\d{6}$"),
+             bank=re.compile(r"^[A-Za-z0-9_]*$"), id=re.compile(r"^[A-Za-z0-9_.-]+$"))
+
+
+def valid(task):
+    return all(VALID[k].match(str(task.get(k) or "")) for k in VALID)
 
 
 def command(task, gpus, launcher):
@@ -88,6 +97,9 @@ def main():
             if not free or (a.max_tasks and claimed_total + len(start) >= a.max_tasks):
                 break
             tid = task["id"]
+            if not valid(task):
+                print(f"{jobs.iso()} skipping malformed task {str(tid)[:80]!r}", flush=True)
+                continue
             if tid in held or fails.get(tid, 0) >= 2 or (claims.get(tid, {}).get("status") == "failed"):
                 continue
             if a.pool not in task.get("pools", []) and "*" not in task.get("pools", []):
