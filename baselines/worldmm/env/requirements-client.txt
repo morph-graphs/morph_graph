@@ -21,6 +21,7 @@ scikit-image==0.25.2
 scikit-learn==1.6.1
 scipy==1.15.2
 pandas==2.3.3
+pyarrow==19.0.1   # HippoRAG saves its embedding stores as parquet (pandas imports it lazily)
 networkx==3.5
 tiktoken==0.9.0
 openai==2.8.1
