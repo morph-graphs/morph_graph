@@ -38,13 +38,15 @@ def now():
 
 
 def zaratan(rows, built, alerts):
-    rc, out = sh(["zr", "squeue -u $USER -h -r -o '%i|%j|%T|%R|%M'; echo ===; "
+    # plain ssh over the existing master connection, not `zr`: zr flushes the file sync first, and a busy sync
+    # (new worktrees, 2026-11-13) made every zr command hang, hiding Zaratan's jobs from the board
+    rc, out = sh(SSH + ["-o", "RemoteCommand=none", "-o", "RequestTTY=no", "zaratan", "squeue -u $USER -h -r -o '%i|%j|%T|%R|%M'; echo ===; "
                         f"ls {ZR_RUNS}/results/m27 2>/dev/null | while read v; do "
                         f"grep -qs '\"stage\": \"build\"' {ZR_RUNS}/results/m27/$v/runs.jsonl && echo $v; done; echo ===; "
                         "sacct -n -X -S now-1days -o JobID%20,JobName%20,State%14 | grep merit- | grep -vE 'COMPLETED|PENDING|RUNNING|CANCELLED' || true"])
     if rc != 0 or "===" not in out:
         alerts.append(dict(pool="zaratan", job="—", what="Zaratan not readable", state="alert", since=now(),
-                           note="zr returned nothing: its login lapsed. Run `! zr login` (Duo); until then Zaratan jobs are not shown"))
+                           note="ssh to Zaratan failed: the login may have lapsed. Run `! zr login` (Duo); until then Zaratan jobs are not shown"))
         return
     q, b, failed = (out.split("===\n") + ["", ""])[:3]
     jobs = {}
