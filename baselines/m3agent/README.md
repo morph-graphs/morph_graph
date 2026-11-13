@@ -124,14 +124,19 @@ reinforce the edges of earlier ones; truncation removes later nodes but not thes
 face-voice equivalence wins (and so the character ids), and an edge weakened to zero by a later clip is missing
 from a search restricted to a character; the text memories themselves and their embeddings are never touched.
 
-## Checked (2026-11-12, P05-20240425-201444, bank batch10_agree2: 59 questions, all streaming)
+## Checked (2026-11-12/13, P05-20240425-201444, bank batch10_agree2: 59 questions, all streaming)
 
 - Both environments build from `env/` (Python 3.11.11, CPU job, 12 and 15 min); `pip check` is clean for `mem` and
   reports only the expected transformers pin for `ctl`.
-- `prep`: the 27 min video (1408 px, AAC stereo) gives 55 clips of exactly 30.0 s (video and audio), the last
-  one 9.8 s; questions map to before_clip 8..53.
-- `blind` on 4x RTX A5000 (`M3AGENT_TP=4`, vLLM loads the 66 GB checkpoint in ~4 min, then ~2 min of
-  compilation): 12/59 right (20.3%; chance 25.4% over the options), only 4 answered within the round, 55 through
-  the fallback round. MERIT on the same questions: 8B 21/59, 27B 30/59.
-- `build`: not finished yet at the time of writing. A 24 GB card runs out of memory in the first clip (above).
-
+- `prep`: the 27.2 min video (1408 px, AAC stereo) gives 55 clips of exactly 30.0 s (video and audio), the last
+  9.8 s; questions map to before_clip 8..53.
+- `build` on one RTX A6000: 72 min (2.65 GPU-hours per video-hour), ~60 s a clip, a few clips up to 6 min
+  (memorization retries). Memory: 55 clips, 1299 nodes, 13.5 MB pickle + 0.12 MB JSON; 0 face nodes (egocentric
+  video: no face passes the quality filter) and 1 voice node (Whisper with VAD found speech twice in the video;
+  without VAD it hallucinates "Thank you." on kitchen noise).
+- `qa` on 4x RTX A5000 (TP 4, embedding model on the CPU): 14/59 right (23.7%), every question answered within
+  the 5 rounds; 138 searches, 37 returned nothing (threshold 0.5); all 171 retrieved clips ended before t_ask.
+  67 min, mostly the CPU embedding model running on one thread (fixed since: it now uses the job's cores).
+- `blind` (same hardware): 12/59 (20.3%), 4 answered within the round, 55 through the fallback round.
+- For context, MERIT on the same 59 questions: 8B 21/59, 27B 30/59. Chance over the options is ~25%; M3-Agent's
+  14/59 and 12/59 are both within one standard deviation of it.
