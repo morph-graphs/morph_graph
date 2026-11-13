@@ -5,35 +5,42 @@
 .jb-title{font-family:var(--font-anthropic-serif);font-weight:400;font-size:var(--cds-font-size-title);margin:0;text-wrap:balance}
 .jb-lede{margin:0;max-width:72ch}
 .jb-note{margin:0;font-size:var(--cds-font-size-caption);color:var(--color-fg-muted);max-width:82ch}
+.jb-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:var(--cds-gap-sm)}
+.jb-kpi{background:var(--color-panel);border:1px solid var(--color-border-line);border-radius:var(--cds-radius);padding:var(--cds-pad-md);display:flex;flex-direction:column;gap:2px;min-width:0}
+.jb-kpi b{font-family:var(--font-anthropic-serif);font-weight:400;font-size:var(--cds-font-size-title);font-variant-numeric:tabular-nums;line-height:1.1}
+.jb-kpi span{font-size:var(--cds-font-size-caption);color:var(--color-fg-muted)}
+.jb-kpi.is-bad{border-color:var(--color-bad)}
+.jb-kpi.is-bad b{color:var(--color-bad)}
 .jb-tabs{display:flex;flex-wrap:wrap;gap:var(--cds-gap-xs);border-bottom:1px solid var(--color-border-line)}
 .jb-tab{font:inherit;background:none;border:0;border-bottom:2px solid transparent;padding:var(--cds-pad-sm) var(--cds-pad-md);color:var(--color-fg-muted);cursor:pointer}
 .jb-tab[aria-selected="true"]{color:var(--color-fg);border-bottom-color:var(--color-fg)}
 .jb-tab:focus-visible{outline:2px solid var(--color-fg);outline-offset:2px}
 .jb-sec{display:flex;flex-direction:column;gap:var(--cds-gap-md)}
-.jb-sec h2{font-size:var(--cds-font-size-heading);font-weight:var(--cds-font-weight-medium);margin:0;text-wrap:balance}
+.jb-sec h2{font-size:var(--cds-font-size-heading);font-weight:var(--cds-font-weight-medium);margin:var(--cds-gap-sm) 0 0;text-wrap:balance}
 .jb-sec h3{font-size:var(--cds-font-size-body);font-weight:var(--cds-font-weight-medium);margin:0}
-.jb-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:var(--cds-gap-md)}
-.jb-card{background:var(--color-panel);border:1px solid var(--color-border-line);border-radius:var(--cds-radius);padding:var(--cds-pad-lg);display:flex;flex-direction:column;gap:var(--cds-gap-sm);min-width:0}
-.jb-card-head{display:flex;justify-content:space-between;gap:var(--cds-gap-sm);align-items:baseline;flex-wrap:wrap}
 .jb-muted{color:var(--color-fg-muted);font-size:var(--cds-font-size-caption)}
 .jb-small{font-size:var(--cds-font-size-caption)}
-.jb-chip{display:inline-block;font-size:var(--cds-font-size-caption);padding:1px 8px;border-radius:99px;border:1px solid var(--color-border-line);white-space:nowrap}
-.s-done,.s-active,.s-built{color:var(--color-ok);border-color:var(--color-ok)}
-.s-running,.s-claimed{color:var(--color-fg);border-color:var(--color-fg)}
-.s-queued,.s-in-progress{color:var(--color-fg);border-style:dashed}
-.s-blocked,.s-failed,.s-alert,.s-needs-approval,.s-failed-task,.s-stale-worker{color:var(--color-bad);border-color:var(--color-bad)}
-.s-unverified,.s-needs-onboarding,.s-busy,.s-idle-capacity,.s-decision,.s-lease-lapsed{color:var(--color-warn);border-color:var(--color-warn)}
-.s-held,.s-decided,.s-not-visible,.s-waiting-for-access,.s-superseded{color:var(--color-fg-muted)}
+.jb-chip{display:inline-block;font-size:var(--cds-font-size-caption);padding:0 8px;border-radius:99px;border:1px solid var(--color-border-line);color:var(--color-fg-muted);white-space:nowrap}
+.jb-chip.is-run{color:var(--color-fg);border-color:var(--color-fg)}
+.jb-chip.is-bad{color:var(--color-bad);border-color:var(--color-bad)}
+.jb-chip.is-warn{color:var(--color-warn);border-color:var(--color-warn)}
 .jb-att{display:flex;flex-direction:column;gap:6px}
-.jb-att-row{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--cds-gap-sm);align-items:baseline;padding:8px 12px;border:1px solid var(--color-border-line);border-radius:var(--cds-radius);background:var(--color-panel)}
-.jb-att-row div{min-width:0;overflow-wrap:anywhere}
-.jb-ok{padding:10px 14px;border:1px solid var(--color-ok);border-radius:var(--cds-radius);color:var(--color-ok);font-size:var(--cds-font-size-caption)}
+.jb-att-row{display:grid;grid-template-columns:3.2em minmax(0,1fr);gap:var(--cds-gap-sm);align-items:baseline;padding:10px 12px;border:1px solid var(--color-border-line);border-left:3px solid var(--color-bad);border-radius:var(--cds-radius);background:var(--color-panel)}
+.jb-att-row.is-warn{border-left-color:var(--color-warn)}
+.jb-att-row b{font-family:var(--font-anthropic-serif);font-weight:400;font-size:var(--cds-font-size-heading);font-variant-numeric:tabular-nums;text-align:right}
+.jb-att-row div{min-width:0;overflow-wrap:anywhere;display:flex;flex-direction:column;gap:2px}
+.jb-att-row code{font-size:var(--cds-font-size-caption);color:var(--color-fg)}
+.jb-ok{padding:10px 14px;border:1px solid var(--color-border-line);border-radius:var(--cds-radius);color:var(--color-fg-muted);font-size:var(--cds-font-size-caption)}
 .jb-tablewrap{overflow-x:auto;border:1px solid var(--color-border-line);border-radius:var(--cds-radius)}
 .jb-table{width:100%;border-collapse:collapse;font-size:var(--cds-font-size-caption)}
 .jb-table th{text-align:left;font-weight:var(--cds-font-weight-medium);color:var(--color-fg-muted);padding:8px 10px;border-bottom:1px solid var(--color-border-line);white-space:nowrap}
 .jb-table td{padding:7px 10px;border-bottom:1px solid var(--color-border-line);vertical-align:top}
+.jb-table tr:last-child td{border-bottom:0}
+.jb-table tr.is-muted td{color:var(--color-fg-muted)}
+.jb-table td.jb-group{font-weight:var(--cds-font-weight-medium);color:var(--color-fg-muted);background:var(--color-bg);padding-top:10px}
 .jb-num{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
-.jb-stack{display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--cds-chart-grid);min-width:110px}
+.jb-nowrap{white-space:nowrap}
+.jb-stack{display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--cds-chart-grid);min-width:110px}
 .jb-stack i{display:block;height:100%}
 .jb-legend{display:flex;flex-wrap:wrap;gap:var(--cds-gap-md);font-size:var(--cds-font-size-caption);color:var(--color-fg-muted)}
 .jb-legend span{display:inline-flex;align-items:center;gap:6px}
@@ -41,12 +48,14 @@
 .jb-filters{display:flex;flex-wrap:wrap;gap:var(--cds-gap-sm);align-items:center}
 .jb-search{font:inherit;padding:6px 10px;border:1px solid var(--color-border-line);border-radius:var(--cds-radius);background:var(--color-bg);color:var(--color-fg);min-width:0;flex:1 1 180px}
 .jb-more{font:inherit;align-self:flex-start;padding:6px 14px;border:1px solid var(--color-border-line);border-radius:var(--cds-radius);background:var(--color-panel);color:var(--color-fg);cursor:pointer}
-.jb-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px}
-.jb-list li{font-size:var(--cds-font-size-caption);min-width:0;overflow-wrap:anywhere}
-.jb-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
-.jb-pstrip{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:var(--cds-gap-sm)}
-.jb-pmini{background:var(--color-panel);border:1px solid var(--color-border-line);border-radius:var(--cds-radius);padding:var(--cds-pad-md);display:flex;flex-direction:column;gap:2px;min-width:0}
-.jb-pmini b{font-family:var(--font-anthropic-serif);font-weight:400;font-size:var(--cds-font-size-heading);font-variant-numeric:tabular-nums}
+.jb-sites{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:var(--cds-gap-sm)}
+.jb-site{background:var(--color-panel);border:1px solid var(--color-border-line);border-radius:var(--cds-radius);padding:var(--cds-pad-md);display:flex;flex-direction:column;gap:4px;min-width:0}
+.jb-site-head{display:flex;justify-content:space-between;gap:var(--cds-gap-sm);align-items:baseline}
+.jb-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle;background:var(--color-border-line)}
+.jb-done{margin:0;font-size:var(--cds-font-size-caption);color:var(--color-fg-muted)}
+.jb-ctx{display:flex;flex-direction:column;gap:6px}
+.jb-ctx details{border:1px solid var(--color-border-line);border-radius:var(--cds-radius);padding:8px 12px;background:var(--color-panel)}
+.jb-ctx summary{cursor:pointer;font-size:var(--cds-font-size-caption)}
 [data-dash-source-state=refreshing]{opacity:.5}
 .jb-ph{min-height:3em}
 </style>
@@ -55,73 +64,94 @@
   <header style="display:flex;flex-direction:column;gap:6px">
     <div class="jb-eyebrow">EPIC-Morph · job board</div>
     <h1 class="jb-title" id="title">EPIC-Morph Job Board</h1>
-    <p class="jb-lede" id="lede"><span data-draw="lede" data-source="matrix attention">—</span></p>
-    <p class="jb-note">Read from the clusters, the arm00 loop and the workers' records every 15 minutes. Snapshot <span data-draw="snap" data-source="pools">—</span>.</p>
+    <p class="jb-lede" id="lede"><b data-draw="l-open" data-source="summary" data-field="open" data-row="0">—</b> tasks open on the board. <span data-draw="l-need" data-source="summary">—</span></p>
+    <p class="jb-note">Read from the job board, our Nexus and Zaratan queues and the arm00 loop every 15 minutes. Snapshot <span data-draw="snap" data-source="pools">—</span>.</p>
   </header>
+
+  <div class="jb-kpis" id="kpis">
+    <div class="jb-kpi"><b data-draw="k-running" data-source="summary" data-field="running" data-row="0">—</b><span>tasks running on a GPU</span></div>
+    <div class="jb-kpi"><b data-draw="k-queued" data-source="summary" data-field="queued" data-row="0">—</b><span>waiting in our Slurm queues</span></div>
+    <div class="jb-kpi"><b data-draw="k-claimed" data-source="summary" data-field="claimed" data-row="0">—</b><span>claimed on other people's clusters (start not visible)</span></div>
+    <div class="jb-kpi"><b data-draw="k-done" data-source="summary" data-field="experiments_done" data-row="0">—</b><span data-draw="k-done-of" data-source="summary">experiments finished</span></div>
+    <div class="jb-kpi" id="kpi-prob"><b data-draw="k-prob" data-source="summary" data-field="failing_tasks" data-row="0">—</b><span>open tasks whose last attempt failed</span></div>
+  </div>
 
   <nav class="jb-tabs" role="tablist" aria-label="Board views">
     <button class="jb-tab" role="tab" data-tab="overview" aria-selected="true">Overview</button>
-    <button class="jb-tab" role="tab" data-tab="progress" aria-selected="false">Progress</button>
-    <button class="jb-tab" role="tab" data-tab="people" aria-selected="false">People</button>
+    <button class="jb-tab" role="tab" data-tab="experiments" aria-selected="false">Experiments</button>
+    <button class="jb-tab" role="tab" data-tab="now" aria-selected="false">Running now</button>
+    <button class="jb-tab" role="tab" data-tab="machines" aria-selected="false">Machines</button>
     <button class="jb-tab" role="tab" data-tab="queue" aria-selected="false">Work queue</button>
     <button class="jb-tab" role="tab" data-tab="activity" aria-selected="false">Activity</button>
-    <button class="jb-tab" role="tab" data-tab="decisions" aria-selected="false">Decisions</button>
+    <button class="jb-tab" role="tab" data-tab="context" aria-selected="false">Context</button>
   </nav>
 
   <section class="jb-sec" id="overview">
-    <h2>What needs you?</h2>
+    <h2 id="h-need">What needs you?</h2>
+    <p class="jb-note">Current problems only: failures of tasks that are still open and that nobody has claimed since, grouped by machine, experiment and cause. Failures that were later fixed, and jobs we cancelled, are in Activity.</p>
     <div class="jb-att jb-ph" data-draw="attention" data-source="attention"></div>
-    <h2>How far along is each experiment?</h2>
-    <p class="jb-note">Memories are built once per video and shared by every question set; question runs repeat on each tranche. Rate is memories finished per hour over the last 6 hours; ETA assumes that rate holds.</p>
-    <div class="jb-legend"><span><i style="background:var(--color-ok)"></i>done</span><span><i style="background:var(--color-fg)"></i>running</span><span><i style="background:var(--color-fg-muted)"></i>queued</span><span><i style="background:var(--cds-chart-grid)"></i>not started</span></div>
+
+    <h2 id="h-progress">What is moving?</h2>
+    <p class="jb-note">Experiments with open tasks. One task is one video: a memory build, or the answers to one question bank. "Claimed" means a worker on someone else's cluster took the task; whether its job has started there is not visible.</p>
+    <div class="jb-legend"><span><i style="background:var(--color-fg-muted)"></i>done</span><span><i style="background:var(--color-fg)"></i>running</span><span><i style="background:var(--cds-chart-muted)"></i>queued or claimed</span><span><i style="background:var(--color-bad)"></i>last attempt failed</span><span><i style="background:var(--cds-chart-grid)"></i>not started or waiting on a build</span></div>
     <div class="jb-tablewrap">
-      <table class="jb-table" data-source="matrix" data-row-key="experiment,tranche">
-        <thead><tr><th data-field="experiment">Experiment</th><th data-field="tranche">Tranche</th><th>Progress</th><th data-field="done" class="jb-num">Done</th><th data-field="running" class="jb-num">Running</th><th data-field="queued" class="jb-num">Queued</th><th data-field="rate_per_h" class="jb-num">Per hour</th><th data-field="eta_h" class="jb-num">ETA</th><th data-field="state">State</th></tr></thead>
-        <tbody data-draw="matrix-short"></tbody>
+      <table class="jb-table" data-source="matrix" data-row-key="experiment">
+        <thead><tr><th data-field="experiment">Experiment</th><th>Progress</th><th data-field="done" class="jb-num">Done</th><th data-field="total" class="jb-num">Of</th><th data-field="running" class="jb-num">Running</th><th data-field="queued" class="jb-num">Queued</th><th data-field="claimed" class="jb-num">Claimed</th><th data-field="failing" class="jb-num">Failed</th><th data-field="state">State</th></tr></thead>
+        <tbody data-draw="matrix-open"></tbody>
       </table>
     </div>
-    <h2>Who is working right now?</h2>
-    <div class="jb-pstrip jb-ph" data-draw="pstrip" data-source="people"></div>
+    <p class="jb-done" data-draw="matrix-done" data-source="matrix">—</p>
+
+    <h2 id="h-who">Who is working right now?</h2>
+    <div class="jb-sites jb-ph" data-draw="sites" data-source="people"></div>
   </section>
 
-  <section class="jb-sec" id="progress" hidden>
-    <h2>Every experiment, by tranche</h2>
-    <p class="jb-note">Tranche t1 is the frozen 598-question batch10 bank; t2 is Max's next 129 videos, whose question runs start when the questions land. Notes say where a number comes from or why it is held.</p>
+  <section class="jb-sec" id="experiments" hidden>
+    <h2>How far along is every experiment?</h2>
+    <p class="jb-note">Done counts what the results dataset holds (memories with their last file, answer files per bank); the open tasks are the board's list. Per hour is tasks finished over the last 6 hours; the ETA assumes that rate holds and is blank when nothing finished recently.</p>
     <div class="jb-tablewrap">
-      <table class="jb-table" data-source="matrix" data-row-key="experiment,tranche">
-        <thead><tr><th data-field="experiment">Experiment</th><th data-field="tranche">Tranche</th><th>Progress</th><th data-field="done" class="jb-num">Done</th><th data-field="total" class="jb-num">Of</th><th data-field="unit">Unit</th><th data-field="rate_per_h" class="jb-num">Per hour</th><th data-field="eta_h" class="jb-num">ETA</th><th data-field="state">State</th><th data-field="note">Note</th></tr></thead>
+      <table class="jb-table" data-source="matrix" data-row-key="experiment">
+        <thead><tr><th data-field="experiment">Experiment</th><th>Progress</th><th data-field="done" class="jb-num">Done</th><th data-field="total" class="jb-num">Of</th><th data-field="running" class="jb-num">Running</th><th data-field="queued" class="jb-num">Queued</th><th data-field="claimed" class="jb-num">Claimed</th><th data-field="failing" class="jb-num">Failed</th><th data-field="waiting" class="jb-num">Waiting</th><th data-field="ready" class="jb-num">Ready</th><th data-field="rate_per_h" class="jb-num">Per hour</th><th data-field="eta_h" class="jb-num">ETA</th><th data-field="pools">Pools</th></tr></thead>
         <tbody data-draw="matrix-full"></tbody>
       </table>
     </div>
-    <h2>How many memories are built in each kitchen?</h2>
-    <p class="jb-note">HD-EPIC has 9 kitchens (P01 to P09). A memory is per video, because each question is asked inside one video; memories need no questions, so every video can be built before the benchmark reaches it.</p>
+  </section>
+
+  <section class="jb-sec" id="now" hidden>
+    <h2>What is running or waiting right now?</h2>
+    <p class="jb-note">Board tasks held by a worker, and our other jobs. On Nexus a task's state comes from our own Slurm queue; on wriva and Max's cluster the board only knows the task was claimed.</p>
     <div class="jb-tablewrap">
-      <table class="jb-table" data-source="kitchens" data-row-key="kitchen,memory">
-        <thead><tr><th data-field="kitchen">Kitchen</th><th data-field="memory">Memory</th><th data-field="videos" class="jb-num">Videos</th><th data-field="minutes" class="jb-num">Minutes</th><th>Built / running or queued / ready / blocked</th><th data-field="built" class="jb-num">Built</th></tr></thead>
-        <tbody data-draw="kitchens"></tbody>
+      <table class="jb-table" data-source="running">
+        <thead><tr><th>Pool</th><th>What</th><th>State</th><th>Where</th><th>Since (UTC)</th></tr></thead>
+        <tbody data-draw="running"></tbody>
       </table>
     </div>
   </section>
 
-  <section class="jb-sec" id="people" hidden>
-    <h2>What is each person's machine doing?</h2>
-    <p class="jb-note">Facts from the workers' records and the loops we can read: what is running, what finished in the last 24 hours, failures and heartbeat. "Next" is what that pool will claim when a slot frees, not an assignment.</p>
-    <div class="jb-grid jb-ph" data-draw="people" data-source="people"></div>
+  <section class="jb-sec" id="machines" hidden>
+    <h2>Is every machine's worker alive?</h2>
+    <p class="jb-note">One row per board pool. A worker writes a heartbeat about every minute; over 30 minutes without one while it holds tasks is flagged. Done counts tasks finished in the last 24 hours (for arm00 and Zaratan, memories that appeared).</p>
+    <div class="jb-tablewrap">
+      <table class="jb-table" data-source="pools" data-row-key="pool">
+        <thead><tr><th data-field="pool">Pool</th><th data-field="person">Run by</th><th data-field="hardware">Hardware</th><th data-field="state">Worker</th><th data-field="heartbeat">Last heartbeat</th><th data-field="running" class="jb-num">Running</th><th data-field="queued" class="jb-num">Queued</th><th data-field="claimed" class="jb-num">Claimed</th><th data-field="done_24h" class="jb-num">Done, 24 h</th><th data-field="problems" class="jb-num">Failed</th></tr></thead>
+        <tbody data-draw="pools"></tbody>
+      </table>
+    </div>
   </section>
 
   <section class="jb-sec" id="queue" hidden>
-    <h2>Which tasks are moving, and where?</h2>
-    <p class="jb-note">"Running on" is where a task is queued, running or was done (a worker's claim or one of our loops). "Can run on" lists every pool whose GPUs fit it. By default only active work is shown.</p>
+    <h2>Which tasks are where?</h2>
+    <p class="jb-note">Every open task, in the board's priority order. Ready tasks go to the first pool listed for them that has a free slot and runs that baseline; a task that failed twice is held until someone fixes the cause and resets it.</p>
     <div class="jb-filters">
-      <select class="dash-select" id="f-view" aria-label="Show" data-draw="f-view" data-source="tasks"></select>
-      <select class="dash-select" id="f-method" aria-label="Method" data-draw="f-method" data-source="tasks"></select>
-      <select class="dash-select" id="f-pool" aria-label="Running on" data-draw="f-pool" data-source="tasks"></select>
-      <input class="jb-search" id="f-q" type="search" placeholder="Search video, stage, note" aria-label="Search tasks">
+      <select class="dash-select" aria-label="State" data-draw="f-state" data-source="tasks"></select>
+      <select class="dash-select" aria-label="Experiment" data-draw="f-exp" data-source="tasks"></select>
+      <select class="dash-select" aria-label="Pool" data-draw="f-pool" data-source="tasks"></select>
+      <input class="jb-search" id="f-q" type="search" placeholder="Search video or note" aria-label="Search tasks">
       <span class="jb-muted" data-draw="count" data-source="tasks">—</span>
     </div>
     <div class="jb-tablewrap">
       <table class="jb-table" data-source="tasks" data-row-key="id">
-        <thead><tr><th data-field="method">Method</th><th data-field="arm">Arm</th><th data-field="stage">Stage</th><th data-field="video">Video</th><th data-field="status">State</th><th data-field="running_on">Running on</th><th data-field="can_run_on">Can run on</th><th data-field="est_gpu_h" class="jb-num">GPU-h</th></tr></thead>
+        <thead><tr><th data-field="experiment">Experiment</th><th data-field="video">Video</th><th data-field="state">State</th><th data-field="on">On</th><th data-field="where">Where</th><th data-field="note">Why</th><th data-field="can_run_on">Can run on</th></tr></thead>
         <tbody data-draw="rows"></tbody>
       </table>
     </div>
@@ -130,84 +160,109 @@
 
   <section class="jb-sec" id="activity" hidden>
     <h2>What happened recently?</h2>
-    <p class="jb-note">The last 200 events, newest first: memories that appeared (and where), and every claim, completion and failure from the workers.</p>
+    <p class="jb-note">Newest first. Claims still running, every finished claim (done, failed, cancelled, taken over by another pool) and memories built off the board, grouped when one pool did the same thing within 30 minutes. A failure marked "since resolved" was later done, claimed again or dropped from the list.</p>
     <div class="jb-tablewrap">
       <table class="jb-table" data-source="events">
-        <thead><tr><th>When (UTC)</th><th>Pool</th><th>Event</th><th>What</th><th>Note</th></tr></thead>
+        <thead><tr><th>When (UTC)</th><th>Pool</th><th>Event</th><th class="jb-num">Tasks</th><th>What</th><th>Note</th></tr></thead>
         <tbody data-draw="events"></tbody>
       </table>
     </div>
   </section>
 
-  <section class="jb-sec" id="decisions" hidden>
-    <h2>What does Anubhav need to decide?</h2>
-    <div class="jb-grid jb-ph" data-draw="decisions" data-source="decisions"></div>
+  <section class="jb-sec" id="context" hidden>
+    <h2>Which question banks are there?</h2>
+    <div class="jb-tablewrap">
+      <table class="jb-table" data-source="tranches" data-row-key="tranche">
+        <thead><tr><th data-field="tranche">Tranche</th><th data-field="bank">Bank</th><th data-field="videos" class="jb-num">Videos</th><th data-field="questions" class="jb-num">Questions</th><th data-field="state">State</th><th data-field="source">Source</th></tr></thead>
+        <tbody data-draw="tranches"></tbody>
+      </table>
+    </div>
+    <h2>What did tranche 1 produce before the board?</h2>
+    <p class="jb-note">Run by hand on 2026-11-11 and 12; fixed numbers, not read live.</p>
+    <div class="jb-tablewrap">
+      <table class="jb-table" data-source="progress" data-row-key="experiment">
+        <thead><tr><th data-field="experiment">Experiment</th><th data-field="done" class="jb-num">Done</th><th data-field="total" class="jb-num">Of</th><th data-field="unit">Unit</th><th data-field="note">Note</th></tr></thead>
+        <tbody data-draw="progress"></tbody>
+      </table>
+    </div>
+    <h2>What has Anubhav decided?</h2>
+    <div class="jb-ctx" data-draw="decisions" data-source="decisions"></div>
   </section>
 </div>
 
 <script>
-dash.calc('kitchens', {
-  inputs: ['tasks'],
-  title: 'Memories by kitchen',
-  description: 'Build tasks grouped by kitchen (participant id in the video name) and memory (method and model size), counted by state.',
-  fn: (tasks) => {
-    const m = new Map();
-    for (const t of tasks) if (t.stage === 'build') {
-      const kitchen = String(t.video).slice(0, 3), memory = `${t.method} ${t.arm}`;
-      const e = m.get(kitchen + '|' + memory) || {kitchen, memory, videos: 0, minutes: 0, built: 0, queued: 0, ready: 0, blocked: 0};
-      e.videos += 1; e.minutes += +t.video_min || 0;
-      if (t.status === 'done') e.built += 1; else if (t.status === 'queued' || t.status === 'running') e.queued += 1;
-      else if (t.status === 'ready') e.ready += 1; else e.blocked += 1;
-      m.set(kitchen + '|' + memory, e);
-    }
-    return [...m.values()].map((e) => ({...e, minutes: Math.round(e.minutes)})).sort((a, b) => a.kitchen.localeCompare(b.kitchen) || a.memory.localeCompare(b.memory));
+dash.calc('summary', {
+  inputs: ['running', 'tasks', 'attention', 'matrix'],
+  title: 'Board summary',
+  description: 'Board tasks running, queued in our Slurm and claimed elsewhere (from running); open tasks and those whose last attempt failed (from tasks); experiments finished (from matrix); problem groups (from attention).',
+  fn: (running, tasks, attention, matrix) => {
+    const board = running.filter((r) => r.kind === 'board task');
+    return [{
+      running: board.filter((r) => r.state === 'running').length,
+      queued: board.filter((r) => r.state === 'queued').length,
+      claimed: board.filter((r) => r.state === 'claimed' || r.state === 'lease lapsed').length,
+      open: tasks.length,
+      failing_tasks: tasks.filter((t) => t.state === 'failed' || t.state === 'held').length,
+      problems: attention.length,
+      experiments_done: matrix.filter((m) => m.state === 'done').length,
+      experiments: matrix.length,
+    }];
   },
 });
 
-window.jb = window.jb || {shown: 50, q: '', view: 'active', method: '', pool: ''};
+window.jb = window.jb || {shown: 50, q: '', state: 'moving', exp: '', pool: ''};
 const fmt = d3.format(',');
-const chip = (parent, text) => {
-  const c = document.createElement('span');
-  c.className = 'jb-chip s-' + String(text).replace(/\s+/g, '-');
-  c.textContent = text; parent.appendChild(c); return c;
-};
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
-const parseT = (s) => { if (!s) return null; const t = Date.parse(String(s).replace(' UTC', 'Z').replace(' ', 'T')); return isNaN(t) ? null : t; };
+const BAD = new Set(['failed', 'failing', 'held', 'unreachable', 'worker stale']);
+const WARN = new Set(['stale worker', 'lease lapsed', 'cancelled', 'decision']);
+const RUN = new Set(['running', 'worker up', 'working']);
+const chip = (parent, text) => {
+  const c = el('span', 'jb-chip' + (BAD.has(text) ? ' is-bad' : WARN.has(text) ? ' is-warn' : RUN.has(text) ? ' is-run' : ''), text);
+  parent.appendChild(c); return c;
+};
+const parseT = (s) => { if (!s) return null; const t = Date.parse(String(s)); return isNaN(t) ? null : t; };
 const ago = (s) => { const t = parseT(s); if (t == null) return '—'; const m = Math.round((Date.now() - t) / 60000); return m < 60 ? `${m} min ago` : m < 2880 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`; };
-const eta = (h) => h == null ? '—' : h < 1 ? `${Math.round(h * 60)} min` : h < 48 ? `${h.toFixed(1)} h` : `${(h / 24).toFixed(1)} d`;
+const hhmm = (s) => s ? String(s).replace('T', ' ').replace(/:\d\dZ$|Z$/, '') : '—';
+const eta = (h) => h == null ? '—' : h < 1 ? `${Math.round(h * 60)} min` : h < 48 ? `${(+h).toFixed(1)} h` : `${(h / 24).toFixed(1)} d`;
+const num = (n) => n ? fmt(n) : '—';
+const one = (id) => { const d = dash.data(id); return d.status === 'ok' && d.data && d.data[0] ? d.data[0] : null; };
 
 dash.draw('snap', (e) => {
   const p = dash.data('pools');
-  e.textContent = p.status === 'ok' && p.data[0] ? `${p.data[0].snapshot.replace('T', ' ').replace('Z', ' UTC')} (${ago(p.data[0].snapshot)})` : '—';
+  e.textContent = p.status === 'ok' && p.data[0] ? `${hhmm(p.data[0].snapshot)} UTC (${ago(p.data[0].snapshot)})` : '—';
 });
-
-dash.draw('lede', (e) => {
-  const m = dash.data('matrix'), a = dash.data('attention');
-  if (m.status !== 'ok' || a.status !== 'ok') { e.textContent = '—'; return; }
-  const mem = m.data.filter((r) => r.experiment.startsWith('Memories'));
-  const parts = mem.map((r) => `${r.experiment.replace('Memories · ', '')} memories ${r.done} of ${r.total}` + (r.eta_h != null ? ` (about ${eta(r.eta_h)} to go)` : ''));
-  const need = a.data.length;
-  e.textContent = parts.join('; ') + '. ' + (need ? `${need} item${need > 1 ? 's' : ''} need${need > 1 ? '' : 's'} you.` : 'Nothing needs you right now.');
+dash.draw('l-open', (e) => { const s = one('summary'); e.textContent = s ? fmt(s.open) : '—'; });
+dash.draw('l-need', (e) => {
+  const s = one('summary');
+  if (!s) { e.textContent = '—'; return; }
+  e.textContent = s.problems ? `${s.problems} problem${s.problems > 1 ? 's' : ''} need${s.problems > 1 ? '' : 's'} you (below).` : 'Nothing needs you right now.';
 });
+for (const [name, f] of [['k-running', 'running'], ['k-queued', 'queued'], ['k-claimed', 'claimed'], ['k-done', 'experiments_done'], ['k-prob', 'failing_tasks']])
+  dash.draw(name, (e) => { const s = one('summary'); e.textContent = s ? fmt(s[f]) : '—'; });
+dash.draw('k-done-of', (e) => { const s = one('summary'); e.textContent = s ? `experiments finished, of ${s.experiments}` : 'experiments finished'; });
+dash.onData(() => { const s = one('summary'); for (const b of document.querySelectorAll('#kpi-prob')) b.classList.toggle('is-bad', !!(s && s.failing_tasks)); });
 
 dash.draw('attention', (e) => {
   const a = dash.data('attention');
   e.replaceChildren();
   if (a.status !== 'ok') { e.textContent = '—'; return; }
-  if (!a.data.length) { e.appendChild(el('div', 'jb-ok', 'Nothing needs you: no failures, stale workers, idle capacity or open decisions.')); return; }
-  const order = {alert: 0, 'failed task': 1, 'stale worker': 2, 'idle capacity': 3, decision: 4};
-  for (const x of [...a.data].sort((p, q) => (order[p.kind] ?? 9) - (order[q.kind] ?? 9))) {
-    const r = el('div', 'jb-att-row'); chip(r, x.kind);
-    const d = el('div'); d.appendChild(el('div', 'jb-small', x.what)); if (x.note) d.appendChild(el('div', 'jb-muted', x.note));
+  if (!a.data.length) { e.appendChild(el('div', 'jb-ok', 'Nothing needs you: no current failures, unreachable machines, stale workers or open decisions.')); return; }
+  for (const x of a.data) {
+    const r = el('div', 'jb-att-row' + (x.severity === 'warn' ? ' is-warn' : ''));
+    r.appendChild(el('b', '', x.count != null ? fmt(x.count) : '·'));
+    const d = el('div');
+    d.appendChild(el('div', 'jb-small', `${x.what}` + (x.count != null ? ` (${x.count === 1 ? 'task' : 'tasks'})` : '')));
+    if (x.cause) d.appendChild(el('code', '', x.cause));
+    if (x.fix) d.appendChild(el('div', 'jb-muted', x.fix));
     r.appendChild(d); e.appendChild(r);
   }
 });
 
 const stackCell = (x) => {
   const td = el('td'); const st = el('div', 'jb-stack');
-  const tot = x.total || 1, done = x.done || 0, run = x.running || 0, q = x.queued || 0;
-  for (const [n, col] of [[done, 'var(--color-ok)'], [run, 'var(--color-fg)'], [q, 'var(--color-fg-muted)']]) {
-    if (!n) continue; const i = el('i'); i.style.width = Math.min(100, 100 * n / tot) + '%'; i.style.background = col; st.appendChild(i);
+  const tot = +x.total || 1;
+  for (const [n, col] of [[x.done, 'var(--color-fg-muted)'], [x.running, 'var(--color-fg)'], [(+x.queued || 0) + (+x.claimed || 0), 'var(--cds-chart-muted)'], [x.failing, 'var(--color-bad)']]) {
+    if (!+n) continue; const i = el('i'); i.style.width = Math.min(100, 100 * n / tot) + '%'; i.style.background = col; st.appendChild(i);
   }
   td.appendChild(st); return td;
 };
@@ -215,82 +270,111 @@ const matrixRows = (full) => (body) => {
   const m = dash.data('matrix');
   body.replaceChildren();
   if (m.status !== 'ok') return;
-  const rows = full ? m.data : m.data.filter((r) => r.tranche !== 't2' && r.state !== 'held' && r.state !== 'blocked');
+  const rows = full ? m.data : m.data.filter((r) => +r.open > 0);
+  let last = '';
   for (const x of rows) {
-    const tr = el('tr'); tr.dataset.key = `${encodeURIComponent(x.experiment)},${encodeURIComponent(x.tranche)}`;
-    tr.appendChild(el('td', '', x.experiment)); tr.appendChild(el('td', '', x.tranche)); tr.appendChild(stackCell(x));
-    tr.appendChild(el('td', 'jb-num', fmt(x.done)));
-    if (full) { tr.appendChild(el('td', 'jb-num', fmt(x.total))); tr.appendChild(el('td', 'jb-muted', x.unit)); }
-    else { tr.appendChild(el('td', 'jb-num', x.running ? fmt(x.running) : '—')); tr.appendChild(el('td', 'jb-num', x.queued ? fmt(x.queued) : '—')); }
-    tr.appendChild(el('td', 'jb-num', x.rate_per_h != null ? x.rate_per_h.toFixed(1) : '—'));
-    tr.appendChild(el('td', 'jb-num', eta(x.eta_h)));
-    const s = el('td'); chip(s, x.state); tr.appendChild(s);
-    if (full) tr.appendChild(el('td', 'jb-muted', x.note || ''));
+    if (full && x.method !== last) { const g = el('tr'); const td = el('td', 'jb-group', x.method); td.colSpan = 13; g.appendChild(td); body.appendChild(g); last = x.method; }
+    const tr = el('tr'); tr.dataset.key = x.experiment;
+    if (x.state === 'done') tr.className = 'is-muted';
+    tr.appendChild(el('td', '', x.experiment)); tr.appendChild(stackCell(x));
+    tr.appendChild(el('td', 'jb-num', fmt(+x.done))); tr.appendChild(el('td', 'jb-num', fmt(+x.total)));
+    tr.appendChild(el('td', 'jb-num', num(+x.running))); tr.appendChild(el('td', 'jb-num', num(+x.queued)));
+    tr.appendChild(el('td', 'jb-num', num(+x.claimed)));
+    const f = el('td', 'jb-num', num(+x.failing)); if (+x.failing) f.style.color = 'var(--color-bad)'; tr.appendChild(f);
+    if (full) {
+      tr.appendChild(el('td', 'jb-num', num(+x.waiting))); tr.appendChild(el('td', 'jb-num', num(+x.ready)));
+      tr.appendChild(el('td', 'jb-num', x.rate_per_h != null && +x.open ? (+x.rate_per_h).toFixed(1) : '—'));
+      tr.appendChild(el('td', 'jb-num', eta(x.eta_h)));
+      tr.appendChild(el('td', 'jb-muted', x.pools || '—'));
+    } else { const s = el('td'); chip(s, x.state); tr.appendChild(s); }
     body.appendChild(tr);
   }
 };
-dash.draw('matrix-short', matrixRows(false));
+dash.draw('matrix-open', matrixRows(false));
 dash.draw('matrix-full', matrixRows(true));
+dash.draw('matrix-done', (e) => {
+  const m = dash.data('matrix');
+  if (m.status !== 'ok') { e.textContent = '—'; return; }
+  const d = m.data.filter((r) => +r.open === 0);
+  e.textContent = d.length ? 'Finished: ' + d.map((r) => `${r.experiment} (${fmt(+r.done)})`).join(' · ') + '.' : '';
+});
 
-// The Data type hands nested arrays (running, failed, next) to the page as JSON text; parse them back.
-const list = (v) => { if (Array.isArray(v)) return v; if (typeof v !== 'string' || !v) return []; try { const a = JSON.parse(v); return Array.isArray(a) ? a : []; } catch (_) { return []; } };
-const personRow = (x) => ({...x, running: list(x.running), failed: list(x.failed), next: list(x.next)});
-const fresh = (hb) => { const t = parseT(hb); if (t == null) return 'var(--color-border-line)'; const m = (Date.now() - t) / 60000; return m < 30 ? 'var(--color-ok)' : m < 120 ? 'var(--color-warn)' : 'var(--color-bad)'; };
-dash.draw('pstrip', (e) => {
+const fresh = (hb) => { const t = parseT(hb); if (t == null) return 'var(--color-border-line)'; const m = (Date.now() - t) / 60000; return m < 30 ? 'var(--color-fg)' : m < 120 ? 'var(--color-warn)' : 'var(--color-bad)'; };
+dash.draw('sites', (e) => {
   const p = dash.data('people');
   e.replaceChildren();
   if (p.status !== 'ok') { e.textContent = '—'; return; }
-  for (const x of p.data.map(personRow)) {
-    if (x.state === 'not visible' || x.state === 'waiting for access') continue;
-    const c = el('div', 'jb-pmini');
-    const h = el('div', 'jb-small'); const dot = el('span', 'jb-dot'); dot.style.background = fresh(x.heartbeat); h.appendChild(dot); h.appendChild(document.createTextNode(`${x.pool} · ${x.person}`));
-    c.appendChild(h); c.appendChild(el('b', '', `${x.tasks_running ?? x.running.length} tasks running`));
-    c.appendChild(el('div', 'jb-muted', `across ${x.jobs_running ?? 0} job${x.jobs_running === 1 ? '' : 's'} · ${x.tasks_queued ?? x.queued} tasks queued (${x.jobs_queued ?? 0} job${x.jobs_queued === 1 ? '' : 's'}) · ${x.done_24h} done in 24 h` + (x.failed.length ? ` · ${x.failed.length} failed` : '')));
+  for (const x of p.data) {
+    const c = el('div', 'jb-site');
+    const h = el('div', 'jb-site-head'); const t = el('h3'); const dot = el('span', 'jb-dot'); dot.style.background = fresh(x.heartbeat);
+    t.appendChild(dot); t.appendChild(document.createTextNode(x.site)); h.appendChild(t); h.appendChild(el('span', 'jb-muted', x.person)); c.appendChild(h);
+    const parts = [];
+    if (+x.running) parts.push(`${x.running} running`);
+    if (+x.queued) parts.push(`${x.queued} queued`);
+    if (+x.claimed) parts.push(`${x.claimed} claimed`);
+    c.appendChild(el('div', 'jb-small', parts.length ? parts.join(' · ') : x.state));
+    const sub = [`${fmt(+x.done_24h)} done in 24 h`];
+    if (+x.problems) sub.push(`${x.problems} failed`);
+    sub.push(x.heartbeat ? `worker seen ${ago(x.heartbeat)}` : 'no board worker');
+    const s = el('div', 'jb-muted', sub.join(' · ')); c.appendChild(s);
     e.appendChild(c);
   }
 });
 
-dash.draw('people', (e) => {
-  const p = dash.data('people');
-  e.replaceChildren();
-  if (p.status !== 'ok') { e.textContent = '—'; return; }
-  for (const x of p.data.map(personRow)) {
-    const c = el('div', 'jb-card');
-    const h = el('div', 'jb-card-head'); const t = el('h3'); const dot = el('span', 'jb-dot'); dot.style.background = fresh(x.heartbeat); t.appendChild(dot); t.appendChild(document.createTextNode(x.pool));
-    h.appendChild(t); chip(h, x.state); c.appendChild(h);
-    c.appendChild(el('div', 'jb-muted', `${x.person} · ${x.hardware}`));
-    c.appendChild(el('div', 'jb-small', `${x.tasks_running ?? x.running.length} tasks running across ${x.jobs_running ?? 0} jobs · ${x.tasks_queued ?? x.queued} tasks queued in ${x.jobs_queued ?? 0} jobs · ${x.done_24h} done in the last 24 h` + (x.rate_per_h ? ` · ${x.rate_per_h}/h` : '') + ` · last seen ${ago(x.heartbeat)}`));
-    c.appendChild(el('div', 'jb-muted', 'A job is one Slurm job (an array counts once) or the arm00 loop; a task is one unit of work, such as one video\'s memory build.'));
-    if (x.running.length) {
-      c.appendChild(el('div', 'jb-muted', 'Running now'));
-      const ul = el('ul', 'jb-list'); for (const r of x.running) ul.appendChild(el('li', '', `${r.what} — ${r.note || r.job}`)); c.appendChild(ul);
-    }
-    if (x.failed.length) { c.appendChild(el('div', 'jb-muted', 'Failed')); const ul = el('ul', 'jb-list'); for (const f of x.failed) ul.appendChild(el('li', '', f)); c.appendChild(ul); }
-    if (x.next.length) { c.appendChild(el('div', 'jb-muted', 'Will claim next')); const ul = el('ul', 'jb-list'); for (const n of x.next) ul.appendChild(el('li', '', n.split(' · ').slice(1).join(' · '))); c.appendChild(ul); }
-    if (x.note) c.appendChild(el('div', 'jb-muted', x.note));
-    e.appendChild(c);
+dash.draw('running', (body) => {
+  const r = dash.data('running');
+  body.replaceChildren();
+  if (r.status !== 'ok') return;
+  if (!r.data.length) { const tr = el('tr'); const td = el('td', 'jb-muted', 'Nothing is running or waiting.'); td.colSpan = 5; tr.appendChild(td); body.appendChild(tr); return; }
+  let last = '';
+  for (const x of r.data) {
+    if (x.site !== last) { const g = el('tr'); const td = el('td', 'jb-group', x.site); td.colSpan = 5; g.appendChild(td); body.appendChild(g); last = x.site; }
+    const tr = el('tr');
+    tr.appendChild(el('td', 'jb-nowrap', x.pool));
+    tr.appendChild(el('td', '', x.what + (x.kind === 'board task' ? '' : ` (${x.kind})`)));
+    const s = el('td'); chip(s, x.state); tr.appendChild(s);
+    tr.appendChild(el('td', 'jb-muted', x.where || '—'));
+    tr.appendChild(el('td', 'jb-num', hhmm(x.since)));
+    body.appendChild(tr);
   }
 });
 
-const VIEWS = [['active', 'Active: running, queued, failed'], ['ready', 'Ready to claim'], ['blocked', 'Blocked'], ['done', 'Done'], ['all', 'All tasks']];
-const inView = (x) => jb.view === 'all' || (jb.view === 'active' ? ['running', 'queued', 'failed'].includes(x.status) : jb.view === 'blocked' ? ['blocked', 'held', 'unverified'].includes(x.status) : x.status === jb.view);
-dash.draw('f-view', (sel) => { sel.replaceChildren(...VIEWS.map(([v, l]) => new Option(l, v))); sel.value = jb.view; sel.onchange = () => { jb.view = sel.value; jb.shown = 50; dash.draw('rows'); dash.draw('count'); }; });
-const opts = (field, all) => (sel) => {
+dash.draw('pools', (body) => {
+  const p = dash.data('pools');
+  body.replaceChildren();
+  if (p.status !== 'ok') return;
+  for (const x of p.data) {
+    const tr = el('tr'); tr.dataset.key = x.pool;
+    tr.appendChild(el('td', 'jb-nowrap', x.pool)); tr.appendChild(el('td', '', x.person)); tr.appendChild(el('td', 'jb-muted', x.hardware));
+    const s = el('td'); chip(s, x.state); tr.appendChild(s);
+    tr.appendChild(el('td', 'jb-nowrap', x.heartbeat ? ago(x.heartbeat) : '—'));
+    for (const f of ['running', 'queued', 'claimed', 'done_24h']) tr.appendChild(el('td', 'jb-num', num(+x[f])));
+    const f = el('td', 'jb-num', num(+x.problems)); if (+x.problems) f.style.color = 'var(--color-bad)'; tr.appendChild(f);
+    body.appendChild(tr);
+  }
+});
+
+const STATES = [['moving', 'Running, queued or claimed'], ['failed', 'Last attempt failed or held'], ['ready', 'Ready to claim'], ['waiting', 'Waiting on a build'], ['all', 'All open tasks']];
+const inState = (x) => jb.state === 'all' || (jb.state === 'moving' ? ['running', 'queued', 'claimed', 'lease lapsed'].includes(x.state)
+  : jb.state === 'failed' ? ['failed', 'held'].includes(x.state) : jb.state === 'ready' ? ['ready', 'cancelled'].includes(x.state) : x.state === jb.state);
+const redraw = () => { jb.shown = 50; dash.draw('rows'); dash.draw('count'); };
+dash.draw('f-state', (sel) => { sel.replaceChildren(...STATES.map(([v, l]) => new Option(l, v))); sel.value = jb.state; sel.onchange = () => { jb.state = sel.value; redraw(); }; });
+const opts = (field, key, all) => (sel) => {
   const t = dash.data('tasks');
-  const vals = t.status === 'ok' ? [...new Set(t.data.map((x) => x[field]).filter(Boolean))].sort() : [];
+  const vals = t.status === 'ok' ? [...new Set(t.data.map((x) => x[field]).filter(Boolean))] : [];
   sel.replaceChildren(new Option(all, ''), ...vals.map((v) => new Option(v)));
-  sel.value = jb[field === 'running_on' ? 'pool' : field] || '';
-  sel.onchange = () => { jb[field === 'running_on' ? 'pool' : field] = sel.value; jb.shown = 50; dash.draw('rows'); dash.draw('count'); };
+  sel.value = jb[key] || '';
+  sel.onchange = () => { jb[key] = sel.value; redraw(); };
 };
-dash.draw('f-method', opts('method', 'All methods'));
-dash.draw('f-pool', opts('running_on', 'Anywhere'));
+dash.draw('f-exp', opts('experiment', 'exp', 'All experiments'));
+dash.draw('f-pool', opts('on', 'pool', 'Any pool'));
 const filtered = () => {
   const t = dash.data('tasks');
   if (t.status !== 'ok') return null;
-  const q = jb.q.toLowerCase(), rank = {running: 0, failed: 1, queued: 2, ready: 3};
-  return t.data.filter((x) => x.kind === 'gpu' && inView(x) && (!jb.method || x.method === jb.method) && (!jb.pool || x.running_on === jb.pool) &&
-    (!q || [x.video, x.stage, x.note, x.method, x.arm, x.running_on].join(' ').toLowerCase().includes(q)))
-    .sort((a, b) => (rank[a.status] ?? 9) - (rank[b.status] ?? 9) || a.level - b.level || String(a.video).localeCompare(String(b.video)));
+  const q = jb.q.toLowerCase(), rank = {running: 0, queued: 1, claimed: 2, 'lease lapsed': 3, held: 4, failed: 5};
+  return t.data.filter((x) => inState(x) && (!jb.exp || x.experiment === jb.exp) && (!jb.pool || x.on === jb.pool) &&
+    (!q || [x.video, x.note, x.experiment, x.on, x.where].join(' ').toLowerCase().includes(q)))
+    .sort((a, b) => (rank[a.state] ?? 9) - (rank[b.state] ?? 9) || (+a.priority) - (+b.priority));
 };
 dash.draw('count', (e) => { const f = filtered(); e.textContent = f ? `${fmt(Math.min(jb.shown, f.length))} of ${fmt(f.length)} tasks` : '—'; });
 dash.draw('rows', (body) => {
@@ -298,12 +382,11 @@ dash.draw('rows', (body) => {
   body.replaceChildren();
   if (!f) return;
   for (const x of f.slice(0, jb.shown)) {
-    const tr = el('tr'); tr.dataset.key = x.id; tr.title = [x.note, x.blocked_by && `blocked by: ${x.blocked_by}`].filter(Boolean).join(' · ');
-    for (const k of ['method', 'arm', 'stage', 'video', 'status', 'running_on', 'can_run_on', 'est_gpu_h']) {
-      const td = el('td', k === 'est_gpu_h' ? 'jb-num' : k === 'can_run_on' ? 'jb-muted' : '');
-      if (k === 'status') chip(td, x.status); else td.textContent = x[k] === '' || x[k] == null ? '—' : x[k];
-      tr.appendChild(td);
-    }
+    const tr = el('tr'); tr.dataset.key = x.id;
+    tr.appendChild(el('td', '', x.experiment)); tr.appendChild(el('td', 'jb-nowrap', x.video));
+    const s = el('td'); chip(s, x.state); tr.appendChild(s);
+    tr.appendChild(el('td', 'jb-nowrap', x.on || '—')); tr.appendChild(el('td', 'jb-muted', x.where || '—'));
+    tr.appendChild(el('td', 'jb-muted', x.note || '—')); tr.appendChild(el('td', 'jb-muted', x.can_run_on));
     body.appendChild(tr);
   }
 });
@@ -312,43 +395,49 @@ dash.draw('events', (body) => {
   const e = dash.data('events');
   body.replaceChildren();
   if (e.status !== 'ok') return;
-  if (!e.data.length) { const tr = el('tr'); const td = el('td', 'jb-muted', 'No events yet: the feed starts with the first changes after it was switched on.'); td.colSpan = 5; tr.appendChild(td); body.appendChild(tr); return; }
+  if (!e.data.length) { const tr = el('tr'); const td = el('td', 'jb-muted', 'No activity yet.'); td.colSpan = 6; tr.appendChild(td); body.appendChild(tr); return; }
   for (const x of e.data) {
-    const tr = el('tr');
-    tr.appendChild(el('td', 'jb-num', String(x.t || '').replace('T', ' ').replace('Z', '')));
-    tr.appendChild(el('td', '', x.pool)); const s = el('td'); chip(s, x.event); tr.appendChild(s);
-    tr.appendChild(el('td', '', x.what)); tr.appendChild(el('td', 'jb-muted', x.note || ''));
+    const resolved = /since resolved/.test(x.note || '') || x.event === 'cancelled' || x.event === 'superseded';
+    const tr = el('tr'); if (resolved) tr.className = 'is-muted';
+    tr.appendChild(el('td', 'jb-num', hhmm(x.t) + (x.t_last && x.t_last !== x.t ? ` – ${hhmm(x.t_last).slice(11)}` : '')));
+    tr.appendChild(el('td', 'jb-nowrap', x.pool));
+    const s = el('td'); if (x.event === 'failed' && !resolved) chip(s, 'failed'); else s.textContent = x.event; tr.appendChild(s);
+    tr.appendChild(el('td', 'jb-num', fmt(+x.count))); tr.appendChild(el('td', '', x.what)); tr.appendChild(el('td', 'jb-muted', x.note || ''));
     body.appendChild(tr);
   }
 });
 
-dash.draw('kitchens', (body) => {
-  const k = dash.data('kitchens');
+dash.draw('tranches', (body) => {
+  const t = dash.data('tranches');
   body.replaceChildren();
-  if (!k.data) return;
-  let last = '';
-  for (const x of k.data) {
-    const tr = el('tr'); tr.dataset.key = `${encodeURIComponent(x.kitchen)},${encodeURIComponent(x.memory)}`;
-    tr.appendChild(el('td', '', x.kitchen === last ? '' : x.kitchen)); last = x.kitchen;
-    tr.appendChild(el('td', '', x.memory)); tr.appendChild(el('td', 'jb-num', fmt(x.videos))); tr.appendChild(el('td', 'jb-num', fmt(x.minutes)));
-    const td = el('td'); const st = el('div', 'jb-stack');
-    for (const [n, col] of [['built', 'var(--color-ok)'], ['queued', 'var(--color-fg-muted)'], ['ready', 'var(--color-border-line)'], ['blocked', 'var(--color-bad)']]) {
-      if (!x[n]) continue; const i = el('i'); i.style.width = (100 * x[n] / x.videos) + '%'; i.style.background = col; st.appendChild(i);
-    }
-    td.appendChild(st); tr.appendChild(td); tr.appendChild(el('td', 'jb-num', fmt(x.built)));
+  if (t.status !== 'ok') return;
+  for (const x of t.data) {
+    const tr = el('tr'); tr.dataset.key = x.tranche;
+    tr.appendChild(el('td', '', x.tranche)); tr.appendChild(el('td', '', x.bank)); tr.appendChild(el('td', 'jb-num', num(+x.videos)));
+    tr.appendChild(el('td', 'jb-num', x.questions != null ? fmt(+x.questions) : '—')); tr.appendChild(el('td', '', x.state)); tr.appendChild(el('td', 'jb-muted', x.source));
     body.appendChild(tr);
   }
 });
-
+dash.draw('progress', (body) => {
+  const p = dash.data('progress');
+  body.replaceChildren();
+  if (p.status !== 'ok') return;
+  for (const x of p.data) {
+    const tr = el('tr'); tr.dataset.key = x.experiment;
+    tr.appendChild(el('td', '', x.experiment)); tr.appendChild(el('td', 'jb-num', fmt(+x.done))); tr.appendChild(el('td', 'jb-num', fmt(+x.total)));
+    tr.appendChild(el('td', 'jb-muted', x.unit)); tr.appendChild(el('td', 'jb-muted', x.note || ''));
+    body.appendChild(tr);
+  }
+});
 dash.draw('decisions', (e) => {
   const d = dash.data('decisions');
   e.replaceChildren();
   if (d.status !== 'ok') { e.textContent = '—'; return; }
-  for (const x of [...d.data].sort((a, b) => (a.status === 'decided') - (b.status === 'decided'))) {
-    const c = el('div', 'jb-card'); c.id = 'decision-' + x.id;
-    const h = el('div', 'jb-card-head'); h.appendChild(el('h3', '', `${x.id}. ${x.question}`)); if (x.status) chip(h, x.status); c.appendChild(h);
-    c.appendChild(el('div', 'jb-small', x.why)); c.appendChild(el('div', 'jb-muted', x.options));
-    e.appendChild(c);
+  for (const x of d.data) {
+    const det = el('details'); det.id = 'decision-' + x.id; if (x.status !== 'decided') det.open = true;
+    det.appendChild(el('summary', '', `${x.id}. ${x.question}` + (x.status !== 'decided' ? ' (open)' : '')));
+    det.appendChild(el('div', 'jb-muted', x.why)); det.appendChild(el('div', 'jb-small', x.options));
+    e.appendChild(det);
   }
 });
 
@@ -361,9 +450,7 @@ dash.draw('decisions', (e) => {
   for (const b of tabs) b.addEventListener('click', () => { show(b.dataset.tab); dash.setLink(b.dataset.tab); });
   const h = (location.hash || '').slice(1);
   if (h && tabs.some((b) => b.dataset.tab === h)) show(h);
-  const q = document.getElementById('f-q');
-  if (q) q.addEventListener('input', () => { jb.q = q.value; jb.shown = 50; dash.draw('rows'); dash.draw('count'); });
-  const more = document.getElementById('more');
-  if (more) more.addEventListener('click', () => { jb.shown += 50; dash.draw('rows'); dash.draw('count'); });
+  for (const q of document.querySelectorAll('#f-q')) q.addEventListener('input', () => { jb.q = q.value; redraw(); });
+  for (const more of document.querySelectorAll('#more')) more.addEventListener('click', () => { jb.shown += 50; dash.draw('rows'); dash.draw('count'); });
 })();
 </script>
