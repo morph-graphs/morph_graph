@@ -1,0 +1,33 @@
+{
+  "media": {
+    "enabled": true,
+    "max_side": 1024,
+    "encode_fps": 2,
+    "crf": 26,
+    "preset": "veryfast",
+    "audio": false,
+    "clip_cut": "source_input_t"
+  },
+  "model": {
+    "backend": "openai",
+    "name": "gpt-5",
+    "api_key_env": "OPENAI_API_KEY",
+    "reasoning_effort": "high",
+    "reasoning_summary": null,
+    "max_output_tokens": 32768,
+    "max_frames": 1024,
+    "max_fps": 1.0,
+    "frame_side": 512,
+    "detail": "high",
+    "jpeg_quality": 3,
+    "frame_timestamps": false,
+    "max_retries": 6,
+    "timeout_s": 1800
+  },
+  "runtime": {
+    "max_concurrent_groups": 2,
+    "max_concurrent_requests": 4,
+    "prep_workers": 4,
+    "retry_truncated": false
+  }
+}

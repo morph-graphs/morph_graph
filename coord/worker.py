@@ -9,7 +9,7 @@ can write morph-graphs/epic-morph-jobs and morph-graphs/epic-morph-results (HF_T
     python coord/worker.py --pool max --launcher slurm --runtime apptainer --slots 1 2 3 4 \
         --sbatch "--partition=gpu --gres=gpu:1 -c 8 --mem=64G --time=8:00:00"        # a cluster: up to 4 jobs at once
 
-A worker takes only the baselines named by --baselines (default merit): name one only once this machine has its
+A worker takes only the baselines named by --baselines (default merit api; api tasks go to the max pool only): name one only once this machine has its
 images (docker pull, or the SIFs, below), or every task of it would fail here. With --runtime apptainer, set
 MERIT_SIF_DIR to a folder of <baseline>_<arm>.sif files (apptainer pull merit_m8.sif docker://ghcr.io/morph-graphs/
 merit:<tag>, the tag from baselines/<b>/docker/image_tag.sh <arm>). Every baseline's docker/run.sh also reads the
@@ -44,7 +44,8 @@ import jobs  # noqa: E402
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # A task's fields go into a shell command, so only these shapes are ever run (anything else is skipped).
-VALID = dict(baseline=re.compile(r"^(merit|worldmm|magic|m3agent)$"), arm=re.compile(r"^m(8|27|3)$"),
+# An arm is m8 / m27 / m3 for the local-model baselines, or a config name of baselines/api/configs/ (gpt-5-f1024).
+VALID = dict(baseline=re.compile(r"^(merit|worldmm|magic|m3agent|api)$"), arm=re.compile(r"^(m(8|27|3)|[a-z0-9]+([.-][a-z0-9]+)*)$"),
              stage=re.compile(r"^(prep|build|qa|blind)$"), video=re.compile(r"^P\d\d-\d{8}-\d{6}$"),
              bank=re.compile(r"^[A-Za-z0-9_]*$"), id=re.compile(r"^[A-Za-z0-9_.-]+$"))
 
@@ -105,7 +106,7 @@ def main():
     ap.add_argument("--runtime", choices=["apptainer", "docker"], default="apptainer", help="slurm: how the job runs the image")
     ap.add_argument("--sbatch", default="", help="slurm: resources and queue for each task's job, e.g. '--partition=gpu --gres=gpu:1 -c 8 --mem=64G --time=8:00:00'")
     ap.add_argument("--slots", nargs="+", required=True, help="GPU ids per task slot: '0 1' = two one-GPU slots, '0,1' = one two-GPU slot")
-    ap.add_argument("--baselines", nargs="+", default=["merit"],
+    ap.add_argument("--baselines", nargs="+", default=["merit", "api"],   # api: only Max's pool gets those tasks
                     help="baselines this worker takes (it needs each one's image or SIF for every arm it may get): "
                          "e.g. merit magic worldmm")
     ap.add_argument("--every", type=int, default=300, help="seconds between cycles")

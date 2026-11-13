@@ -43,8 +43,13 @@ POOLS = {("merit", "m27"): ["wriva", "arm00", "zaratan", "max"], ("merit", "m8")
          ("magic", "m27"): ["wriva", "zaratan", "max"], ("magic", "m8"): M8,
          ("worldmm", "m27"): ["wriva", "zaratan", "max"], ("worldmm", "m8"): M8}
 BANK = "t2_agree2"   # tranche 2 (epic-morph v3/tranche2.txt)
-EXPERIMENTS = [(b, arm, stage, POOLS[b, arm], BANK if stage == "qa" else None)
-               for b in ("merit", "magic", "worldmm") for stage in ("build", "qa") for arm in ("m27", "m8")]
+# Closed-source API models (baselines/api): no GPU and no memory, one qa task per video and config. They need the
+# provider's key (GEMINI_API_KEY / OPENAI_API_KEY in the worker's environment), which only Max's machine has, so no
+# other pool may take them. Listed first: 30 short tasks that should not wait behind the memory builds.
+API_CONFIGS = ["gemini-3.1-flash-lite-high", "gemini-3.6-flash-high", "gpt-5-f1024"]
+EXPERIMENTS = [("api", c, "qa", ["max"], "batch10_agree2") for c in API_CONFIGS] + [
+    (b, arm, stage, POOLS[b, arm], BANK if stage == "qa" else None)
+    for b in ("merit", "magic", "worldmm") for stage in ("build", "qa") for arm in ("m27", "m8")]
 # the file whose presence in <baseline>/<arm>/<video>/ (next to runs.jsonl) means the memory is built: the last
 # one each baseline writes ({v}: the video)
 MEMORY_DONE = {"merit": "{v}_30sec_4_key.json", "magic": "graph.pkl", "worldmm": "{v}_visual.pkl"}
@@ -141,7 +146,8 @@ def main():
     elif a.action == "publish":
         tasks = desired(have, files)
         if a.first:
-            tasks.sort(key=lambda t: (t["video"] not in a.first, t["priority"]))
+            # the API tasks stay on top (they are few, short and only Max's pool can take them), then the first videos
+            tasks.sort(key=lambda t: (t["baseline"] != "api", t["video"] not in a.first, t["priority"]))
             for i, t in enumerate(tasks):
                 t["priority"] = i
         if a.only_pools is not None:

@@ -12,5 +12,12 @@
     "commit": "c905841e9a9605fad53f9a55864fd4424ea2bd0f",
     "glob": "outputs/v2/*/questions_eval/*_questions.json",
     "questions": 82
+  },
+  "v3-batch10-598": {
+    "description": "V3 batch10: 598 questions over 10 videos (kept by B4, 2+ of 3 B6 verifiers right), every one streaming at its t_ask",
+    "repo_url": "git@github.com:morph-graphs/epic-morph.git",
+    "commit": "0f30904df25370991554cf2fdd9c679f09eb05d2",
+    "glob": "outputs/v3/banks/batch10_agree2/*_questions.json",
+    "questions": 598
   }
 }
