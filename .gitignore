@@ -257,3 +257,6 @@ baselines/worldmm/results/
 baselines/api/work/
 !baselines/api/env/
 baselines/api/results/
+
+# job board: results a worker started with --outbox leaves for the relay (coord/worker.py)
+/outbox/

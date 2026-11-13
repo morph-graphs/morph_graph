@@ -3,7 +3,9 @@
     tasks.json          the master's list: [{id, baseline, arm, stage, video, bank, pools, priority, est_gpu_h, deps}]
     pools/<pool>.json   one file per pool, written only by that pool's worker:
                         {pool, host, gpus, updated, claims: {task_id: {status, lease_until, claimed, started,
-                         finished, seconds, gpu, exit, note}}}   status: running | done | failed
+                         finished, seconds, gpu, exit, note}}}   status: running | relay | done | failed
+                        relay: finished, its results wait in the worker's outbox for a relay to upload them
+                        (worker.py --outbox); held like done, but not yet done for the tasks that depend on it
     master.json         the master's last cycle (time, counts)
 
 A worker claims by committing its own pool file with parent_commit = the head it read: if anyone committed
@@ -44,12 +46,12 @@ def read():
 
 
 def taken(pools, t=None):
-    """{task_id: (pool, claim)} for claims that hold a task now: done, or running with a live lease."""
+    """{task_id: (pool, claim)} for claims that hold a task now: done or relay, or running with a live lease."""
     t = t or now()
     out = {}
     for name, p in pools.items():
         for tid, c in p.get("claims", {}).items():
-            if c["status"] == "done" or (c["status"] == "running" and c.get("lease_until", 0) > t):
+            if c["status"] in ("done", "relay") or (c["status"] == "running" and c.get("lease_until", 0) > t):
                 if out.get(tid, (None, {}))[1].get("status") != "done":   # a done claim wins over a running one
                     out[tid] = (name, c)
     return out
