@@ -280,9 +280,9 @@ def main():
         dict(id="D6", question="Qwen-MM-Plugins?", owner="Anubhav", status="decided",
              why="API-only defaults, no paper, ~$150 through OpenRouter; a local Qwen3.8-27B version is possible.",
              options="Decided 2026-11-12: deferred; revisit later."),
-        dict(id="D7", question="M3-Agent: replace its Gemini diarization and OpenAI embeddings with local models?",
-             owner="Anubhav", status="open", why="Keeps everything on our GPUs, but it is then not exactly the published method.",
-             options="Local swaps, noted in the paper / Use the APIs"),
+        dict(id="D7", question="M3-Agent: speech and text embeddings through the published APIs or local models?",
+             owner="Anubhav", status="decided", why="The paper used Gemini (speech) and OpenAI embeddings with its own search cutoff.",
+             options="Decided 2026-11-13: the APIs as published, run by Max (he has access); local Whisper + Qwen3-Embedding only as a fallback. No tuned variant needed."),
     ]
     os.makedirs(a.out, exist_ok=True)
     running = json.load(open(a.running)) if a.running else []

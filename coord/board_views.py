@@ -93,25 +93,45 @@ def update(out, built_src, view):
                 row["eta_h"] = round((p["total"] - p["done"]) / rph, 1)
         matrix.append(row)
 
-    # people: one card per pool, from the workers' records and the loops we can read
+    # people: one card per machine (site). Every Nexus pool (our queues, wriva, vulcan-exempt/sailon, test
+    # pools) is one site; arm00, Zaratan and Max are the others.
     hb = (view or {}).get("pools", {})
+    site_of = lambda n: "Nexus" if (n.startswith("nexus") or n in ("wriva", "exempt-sailon")) else \
+        {"arm00": "arm00", "zaratan": "Zaratan", "max": "Max"}.get(n, n)
+    who = {"Nexus": "Anubhav's agent (wriva: Archana and Aaron, soon)", "arm00": "Anubhav's agent",
+           "Zaratan": "Anubhav's agent", "Max": "Max's agent"}
+    hw = {"Nexus": "A6000 / L40S / A5000 queues, wriva H100s (soon)", "arm00": "1x GH200 96 GB",
+          "Zaratan": "H100 / A100 (AAC)", "Max": "his cluster (Slurm + Apptainer, to confirm)"}
     people = []
-    for p in pools:
-        name = p["pool"]
-        mine = [r for r in running if r["pool"] == name]
-        claims = [c for c in (view or {}).get("claims", []) if c["pool"] == name]
-        heartbeat = hb.get(name, {}).get("updated") or (mine and mine[0].get("since")) or None
+    for site in ("Nexus", "arm00", "Zaratan", "Max"):
+        names = {p["pool"] for p in pools if site_of(p["pool"]) == site} | {n for n in hb if site_of(n) == site} | \
+                {r["pool"] for r in running if site_of(r["pool"]) == site}
+        mine = [r for r in running if r["pool"] in names]
+        claims = [c for c in (view or {}).get("claims", []) if c["pool"] in names]
+        workers = {n: h for n, h in hb.items() if n in names and (h.get("running") or 0) > 0}
+        loop_seen = [r.get("since") for r in mine if r["state"] in ("running", "queued") and r["job"] != "worker"]
+        if workers:
+            heartbeat, hb_note = max(h.get("updated") for h in workers.values()), f"{len(workers)} board worker(s)"
+        elif loop_seen:
+            heartbeat, hb_note = max(loop_seen), "jobs read from the queue"
+        else:
+            heartbeat, hb_note = None, "no worker or job running"
+        states = [p["state"] for p in pools if p["pool"] in names]
+        state = "active" if (mine and any(r["state"] in ("running", "queued") for r in mine)) else \
+            ("waiting for access" if states and all(st in ("waiting for access", "not visible", "needs onboarding") for st in states) else "idle")
+        done24 = sum(v for n, v in pool_24h.items() if n in names) + \
+            sum(1 for c in claims if c["state"] == "done" and c.get("finished", "") >= _iso(t - 86400))
         people.append(dict(
-            pool=name, person=p["person"], hardware=p["hardware"], state=p["state"], note=p.get("note", ""),
+            pool=site, person=who[site], hardware=hw[site], state=state, note=hb_note,
             running=[dict(what=r["what"], job=r["job"], since=r.get("since", ""), note=r.get("note", ""))
                      for r in mine if r["state"] == "running" and r["job"] != "worker"],
             queued=sum(1 for r in mine if r["state"] == "queued"),
-            done_24h=pool_24h.get(name, 0) + sum(1 for c in claims if c["state"] == "done" and c.get("finished", "") >= _iso(t - 86400)),
+            done_24h=done24,
             failed=[c["task"] for c in claims if c["state"] == "failed"],
-            rate_per_h=round(pool_rate.get(name, 0), 2) or None,
+            rate_per_h=round(sum(v for n, v in pool_rate.items() if n in names), 2) or None,
             heartbeat=heartbeat,
             next=[r["id"] + " · " + f"{r['method']} {r['arm']} {r['stage']} {r['video']}"
-                  for r in sorted((r for r in tasks if r.get("pool") == name and r["status"] == "ready"),
+                  for r in sorted((r for r in tasks if r.get("pool") in names and r["status"] == "ready"),
                                   key=lambda r: (r["level"], -(r.get("est_gpu_h") or 0)))[:3]]))
 
     # attention: only what needs a person
@@ -129,10 +149,10 @@ def update(out, built_src, view):
             att.append(dict(kind="stale worker", what=f"{name} on {h.get('host')}", pool=name,
                             note=f"no heartbeat since {u}; its tasks return to the list when their leases lapse"))
     for p in people:
-        ready = sum(1 for r in tasks if r.get("pool") == p["pool"] and r["status"] == "ready")
-        if p["state"] == "active" and not p["running"] and not p["queued"] and ready:
+        ready = len(p["next"])
+        if p["state"] == "idle" and ready and p["pool"] in ("Nexus", "arm00", "Zaratan"):
             att.append(dict(kind="idle capacity", what=f"{p['pool']} has nothing running", pool=p["pool"],
-                            note=f"{ready} tasks fit it"))
+                            note="tasks that fit it are waiting"))
     for d in decisions:
         if d.get("status") != "decided":
             att.append(dict(kind="decision", what=f"{d['id']}. {d['question']}", pool="Anubhav", note=d.get("options", "")))
