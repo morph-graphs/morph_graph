@@ -84,8 +84,15 @@ cd "$REPO"
 prep() {
     log prep; local t=$SECONDS P=${V%%-*}
     [ -s "$VIDEOS/$P/$V.mp4" ] || { echo "missing $VIDEOS/$P/$V.mp4 (v3/DATA.md)"; exit 1; }
-    "$PY" "$M/epic/prepare_epic.py" --video "$VIDEOS/$P/$V.mp4" --subject "$V" --clip_root "$WORK/clips_448" \
-        --frame_root "$WORK/frames_448" --data_dir "$PREP" --clip_size 448 --frame_size 448 --threads "${THREADS:-8}"
+    # one prep per video at a time: two tasks of the same video (8B and 27B, on one machine) share these
+    # folders, and cutting clips into the same folder at once broke one of them ("expected 35 segments, got 1")
+    mkdir -p "$WORK/locks"
+    (
+        flock 9
+        [ -s "$PREP/captions/$V/${V}_30sec_skeleton.json" ] && exit 0   # the other task made it
+        "$PY" "$M/epic/prepare_epic.py" --video "$VIDEOS/$P/$V.mp4" --subject "$V" --clip_root "$WORK/clips_448" \
+            --frame_root "$WORK/frames_448" --data_dir "$PREP" --clip_size 448 --frame_size 448 --threads "${THREADS:-8}"
+    ) 9>"$WORK/locks/prep_$V.lock"
     record prep $((SECONDS - t))
 }
 build() {
