@@ -10,7 +10,7 @@ retrieval, answering) is the arm's backbone, served locally; no paid API.
 
 | path | what |
 |---|---|
-| `MAGIC-video/` | submodule: [morph-graphs/MAGIC-video](https://github.com/morph-graphs/MAGIC-video), branch `epic-morph` = upstream `632d7fc` + our patches (one commit) |
+| `MAGIC-video/` | submodule: [morph-graphs/MAGIC-video](https://github.com/morph-graphs/MAGIC-video), branch `epic-morph` = upstream `632d7fc` + our patches |
 | `epic/hf_server.py` | a small OpenAI-compatible server over the arm's backbone (HF transformers, batched); MAGIC's OpenAI client talks to it |
 | `epic/build_memory.py` | the question-independent memory of one video (captions, summaries, OpenIE, semantic memory, clip embeddings, graph) |
 | `epic/chains.py` | the Narrative Memory Chain at one question cutoff, from the memory before it |
