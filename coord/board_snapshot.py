@@ -209,6 +209,13 @@ def main():
     mark_queued(rows)
     if a.running and os.path.exists(a.running):   # what the loops report as running right now
         for live in json.load(open(a.running)):
+            job = str(live.get("job", ""))
+            if live.get("state") in ("running", "done") and job.count("-") >= 3 and job.split("-")[2] == "build":
+                b_, arm_, _, v_ = job.split("-", 3)   # a board worker's claim: <baseline>-<arm>-build-<video>
+                for r in rows:
+                    if r["stage"] == "build" and r["baseline"] == b_ and r["arm"] == arm_ and r["video"] == v_ and r["status"] != "done":
+                        r["status"], r["pool"] = ("running" if live["state"] == "running" else "done"), live["pool"]
+                continue
             if live.get("state") == "running" and " · " in live.get("what", "") and "build" in live["what"]:
                 v = live["what"].rsplit(" · ", 1)[1].strip()
                 for r in rows:
