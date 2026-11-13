@@ -19,3 +19,6 @@
 [submodule "baselines/vst/VST"]
 	path = baselines/vst/VST
 	url = https://github.com/1ranGuan/VST.git
+[submodule "baselines/vgent/Vgent"]
+	path = baselines/vgent/Vgent
+	url = https://github.com/xiaoqian-shen/Vgent

@@ -262,3 +262,8 @@ baselines/vst/results/
 baselines/api/work/
 !baselines/api/env/
 baselines/api/results/
+
+# Vgent runs: frames, locks; results (baselines/vgent/run_vgent.sh)
+baselines/vgent/work/
+!baselines/vgent/env/
+baselines/vgent/results/
