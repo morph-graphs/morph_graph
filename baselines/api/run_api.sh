@@ -31,13 +31,19 @@ cd "$REPO"   # epic_eval is run as a module from the repo root
 log() { echo "[$(date +%H:%M:%S)] $CFG $V: $*"; }
 
 setup() {
-    [ -s "$EPIC/outputs/v3/banks/$BANK/${V}_questions.json" ] || (cd "$EPIC" && "$PY" v3/export_bank.py "$BANK") >&2
+    mkdir -p "$WORK/locks" "$EPIC/outputs/v3/banks"
+    # one bank export at a time (tasks of other videos and configs read the same files), as run_merit.sh does
+    ( flock 9
+      [ -s "$EPIC/outputs/v3/banks/$BANK/${V}_questions.json" ] || (cd "$EPIC" && "$PY" v3/export_bank.py "$BANK") >&2
+    ) 9>"$EPIC/outputs/v3/banks/.$BANK.lock"
     RUN=$("$PY" "$M/epic/make_run.py" --config "$M/configs/$CFG.json" --bank "$BANK" --epic "$EPIC" --videos "$VIDEOS" \
         --work "$WORK" ${API_MEDIA_DIR:+--media_dir "$API_MEDIA_DIR"})
 }
 prep() {
     setup; log "prep"
-    "$PY" -m epic_eval.prep_media --run_dir "$RUN" --video "$V"
+    # one cut per video at a time: configs with the same media settings share the clips (and their temp names),
+    # and the job board runs two configs of a video side by side; the second one finds every clip done
+    ( flock 9; "$PY" -m epic_eval.prep_media --run_dir "$RUN" --video "$V" ) 9>"$WORK/locks/prep_$V.lock"
 }
 qa() {
     setup; log "qa $BANK"
