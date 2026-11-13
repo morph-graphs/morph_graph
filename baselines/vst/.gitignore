@@ -1,5 +1,0 @@
-# VST runs: logs and scratch (work/), per-video results (results/; uploaded to the Hugging Face dataset)
-work/
-results/
-# the pinned environment files are tracked (the repo-wide .gitignore ignores env/)
-!env/

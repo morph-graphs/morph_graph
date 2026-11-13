@@ -108,10 +108,10 @@ blind() {
     bank_file
     answer "blind $BANK$SUF" "$OUT/blind_$BANK$SUF.json.gz" --blind
 }
-upload() {   # the settings file stands in for the memory: answers mean nothing without the settings that made them
+upload() {   # no memory files (--memory none): the folder is settings, thoughts, answers and runs.jsonl
     log upload
     [ -s "$OUT/${V}_settings.json" ] || { echo "no settings file in $OUT: run build or qa first"; exit 1; }
-    "$PY" "$M/../common/hf_results.py" upload --baseline vst --memory '{video}_settings.json' --arm "$ARM" --video "$V" --dir "$OUT"
+    "$PY" "$M/../common/hf_results.py" upload --baseline vst --memory none --arm "$ARM" --video "$V" --dir "$OUT"
 }
 
 case $STAGE in

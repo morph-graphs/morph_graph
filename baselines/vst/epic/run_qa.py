@@ -40,7 +40,7 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path[:0] = [os.path.join(HERE, "..", "VST", "eval", "lmms-eval"), os.path.join(HERE, "..", "..", "merit", "epic")]
 
-VERSION = "1"   # bump when a change alters answers (prompt, loop, parsing)
+VERSION = "2"   # bump when a change alters answers (prompt, loop, parsing)
 POST_PROMPT = "Answer with the option's letter from the given choices directly."   # VST's OVO-Bench / StreamingBench tasks
 THINK_PROMPT = "[System]\nYou are a Streaming Video Analyst.\n"                     # generate_until's STREAM_THINK_PROMPT
 FAILED = ("", "Error")
@@ -71,10 +71,19 @@ def question_text(row):
 
 
 def pick(response, row):
-    """The option letter in the model's reply (first standalone letter among the question's options)."""
+    """The option letter in the model's reply: the first standalone letter among the question's options. An
+    "A" followed by a lowercase word is the article ("A person picks ..."), not the option, unless that word
+    starts option A's own text or is "is" / "because". A reply with no letter is unparsed (pred None, counted
+    wrong, the raw response kept)."""
     letters = "".join(k for k in "ABCD" if f"choice_{k.lower()}" in row)
-    m = re.search(rf"\b([{letters}])\b", response.strip())
-    return m.group(1) if m else None
+    s = response.strip()
+    for m in re.finditer(rf"\b([{letters}])\b", s):
+        rest = s[m.end():]
+        if m.group(1) == "A" and re.match(r" +[a-z]", rest) and not rest.lstrip().lower().startswith(
+                (str(row["choice_a"]).lower(), "is ", "because ")):
+            continue
+        return m.group(1)
+    return None
 
 
 def generate(m, msgs, videos, max_new_tokens):

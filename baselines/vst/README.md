@@ -17,8 +17,8 @@ upstream's own inference code; no other model, API or extra input is involved.
 | `run_vst.sh` | one video, one arm, one stage (prep, build, qa, blind, upload, all) |
 | `env/` | the environment, pinned: `wheels-vst7b.txt`, `requirements-vst7b.txt`, `install_requirements.sh`, `setup_env.sh` |
 
-No Docker image yet (`docker/` as in `baselines/merit` is still to do, so this cannot be handed to anyone off
-our clusters yet).
+No Docker image and no job-board entry yet (`docker/` as in `baselines/merit`, an `EXPERIMENTS` row in
+`coord/master.py`): until then this runs by hand on our clusters only.
 
 ## How VST runs here
 
@@ -42,8 +42,13 @@ can be cut at each question's time and the thoughts kept:
 Settings are upstream's OVO-Bench run (`VST/eval/scripts/ovobench.sh`: think times `2-3-5-5`, 8192 tokens per
 segment, 384 frames, flash-attention) with its prompt (question, lettered options, "Answer with the option's
 letter from the given choices directly."). `VST_THINK_TIMES`, `VST_VID_TOKENS` and `VST_MAX_FRAMES` change
-them: for example `1-1-4-4`, `32768`, `768` is the setting of our group's earlier VST runs on other
-benchmarks. A results folder holds one setting (`<video>_settings.json`), so give such a run its own `VST_OUT`.
+them. A results folder holds one setting (`<video>_settings.json`), so give such a run its own `VST_OUT`.
+
+**The "768f" option.** Our group's earlier VST runs on other benchmarks (the results-sheet rows "VST,
+Qwen2.5-VL-7B, 1 FPS (max 768 frames)") used `VST_THINK_TIMES=1-1-4-4 VST_VID_TOKENS=32768
+VST_MAX_FRAMES=768`. Despite the label, those runs sampled at 2 fps: they passed no `fps`, so the loader used
+qwen-vl-utils' default of 2 (up to 768 frames, i.e. everything up to 384 s, uniform beyond). The same holds
+here. It has not been run on EPIC-Morph; with 32768 visual tokens per segment expect to need a 48 GB GPU.
 
 One thing upstream does that we keep as it is, since changing it would change the method: the times written
 into the prompt come from the frame count, so when step 3 thins the frames the model is told a shorter clock
@@ -60,7 +65,7 @@ question stays unanswered and is retried.
 | `build` | writes `<video>_settings.json`. There is no question-independent memory to build: where the segments fall depends on where the video is cut, so thoughts belong to a cutoff |
 | `qa` | per distinct `t_ask` of the bank: thoughts (cached in `thoughts/<t_ask>.json`, shared by every question and bank asking at that time), then one short generation per question |
 | `blind` | the class's text-only path: system prompt, empty thoughts, the question |
-| `upload` | the results folder to `vst/<arm>/<video>/` in morph-graphs/epic-morph-results |
+| `upload` | the results folder to `vst/<arm>/<video>/` in morph-graphs/epic-morph-results (`hf_results.py --memory none`: there are no memory files) |
 
 ## Running
 
@@ -90,6 +95,12 @@ Per video, in `results/vst7b/<video>/` (not committed), and after `upload` in th
 RTX A5000 with 4 CPUs: every cutoff from 5 min on read 384 frames, kept 320 at 448x448 in 5 segments.
 Per cutoff: decoding and resizing the frames 62 s at 5 min, 155-165 s at 16-17 min, 200 s at 27 min (CPU: decord
 seeks in the full-resolution source); thinking 31-37 s. Per question 3.1 s (about 8,850 input tokens).
-Peak GPU memory 18.7 GiB; peak RAM 50.6 GiB (the loader holds the 384 source frames as floats while resizing),
+Peak GPU memory 18.7 GiB; peak RAM 50.6-54.4 GiB (the loader holds the 384 source frames as floats while resizing),
 so ask for 64 GB. Decoding is most of the time: a prep stage that stores the 2 fps frames once would remove it,
 at the price of not reading the source exactly as upstream does.
+
+**Blind accuracy can sit below chance, by construction of the bank.** On this video the blind stage got 7 of
+59 right where guessing expects 15.5. The option order and gold letters in the rows match the bank file (0
+of 59 differ). EPIC-Morph's banks are filtered against exactly this: a question that two of three blind
+models answer correctly is rewritten or dropped (epic-morph `v3/blind_panel.py`, `v3/refine.py`), which
+leaves questions whose plausible-sounding option is wrong.
