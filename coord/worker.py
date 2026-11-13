@@ -4,10 +4,17 @@
 Run it from a morph_graph checkout of main, on the machine that has the GPUs, with a Hugging Face token that
 can write morph-graphs/epic-morph-jobs and morph-graphs/epic-morph-results (HF_TOKEN or `hf auth login`):
 
-    python coord/worker.py --pool max --launcher docker --slots 0 1 2 3          # a GPU box: one task per GPU
+    python coord/worker.py --pool max --launcher docker --slots 0 1 2 3 --baselines merit magic   # one task per GPU
     python coord/worker.py --pool nexus-test --launcher local --slots 0 --max-tasks 1
     python coord/worker.py --pool max --launcher slurm --runtime apptainer --slots 1 2 3 4 \
         --sbatch "--partition=gpu --gres=gpu:1 -c 8 --mem=64G --time=8:00:00"        # a cluster: up to 4 jobs at once
+
+A worker takes only the baselines named by --baselines (default merit api; api tasks go to the max pool only): name one only once this machine has its
+images (docker pull, or the SIFs, below), or every task of it would fail here. With --runtime apptainer, set
+MERIT_SIF_DIR to a folder of <baseline>_<arm>.sif files (apptainer pull merit_m8.sif docker://ghcr.io/morph-graphs/
+merit:<tag>, the tag from baselines/<b>/docker/image_tag.sh <arm>). Every baseline's docker/run.sh also reads the
+worker's MERIT_GPU, MERIT_RUNTIME, MERIT_SIF_DIR, MERIT_HF_CACHE and MERIT_WORK (one shared work folder per cluster),
+so one worker and one environment run them all.
 
 Builds need the videos; qa tasks also need EPIC_MORPH_DIR, an epic-morph checkout that has the task's bank (DESIGN.md,
 "Answer (qa) tasks").
@@ -99,6 +106,9 @@ def main():
     ap.add_argument("--runtime", choices=["apptainer", "docker"], default="apptainer", help="slurm: how the job runs the image")
     ap.add_argument("--sbatch", default="", help="slurm: resources and queue for each task's job, e.g. '--partition=gpu --gres=gpu:1 -c 8 --mem=64G --time=8:00:00'")
     ap.add_argument("--slots", nargs="+", required=True, help="GPU ids per task slot: '0 1' = two one-GPU slots, '0,1' = one two-GPU slot")
+    ap.add_argument("--baselines", nargs="+", default=["merit", "api"],   # api: only Max's pool gets those tasks
+                    help="baselines this worker takes (it needs each one's image or SIF for every arm it may get): "
+                         "e.g. merit magic worldmm")
     ap.add_argument("--every", type=int, default=300, help="seconds between cycles")
     ap.add_argument("--max-tasks", type=int, default=0, help="stop claiming after this many (0 = no limit)")
     ap.add_argument("--state", default=None, help="local folder for logs and exit codes (default ~/.cache/coord/<pool>)")
@@ -153,6 +163,8 @@ def main():
             if tid in held or fails.get(tid, 0) >= 2 or (claims.get(tid, {}).get("status") == "failed"):
                 continue
             if a.pool not in task.get("pools", []) and "*" not in task.get("pools", []):
+                continue
+            if task["baseline"] not in a.baselines:   # this worker has no image (or setup) for it
                 continue
             if any(d not in done for d in task.get("deps", [])):
                 continue

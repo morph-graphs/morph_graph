@@ -17,6 +17,7 @@ checkout EPIC_MORPH_DIR, the master's own (not a worker's, which may be reading 
 without EPIC_MORPH_DIR: a tasks.json without the qa tasks would drop them from the board.
 """
 import argparse
+import functools
 import json
 import os
 import subprocess
@@ -32,19 +33,29 @@ RESULTS = os.environ.get("MERIT_HF_REPO", "morph-graphs/epic-morph-results")
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BUILD_ORDER = os.path.join(ROOT, "baselines", "merit", "build_order.txt")
 
-# (baseline, arm, stage, pools that may run it, bank). 27B needs an 80 GB GPU (H100 / H200 / GH200) or 2x 48 GB;
-# 8B one GPU of 40 GB or more. A qa task answers its bank on the build's GPU family, so it takes the build's pools.
-POOLS = {"m27": ["wriva", "arm00", "zaratan", "max"], "m8": ["max", "nexus", "nexus-slurm", "nexus-test", "wriva"]}
+# (baseline, arm, stage, pools that may run it, bank). A qa task answers its bank on the build's GPU family, so it
+# takes the build's pools. Every baseline's m8 needs one GPU of 40 GB or more. m27: MERIT one 80 GB GPU (H100 / H200 /
+# GH200) or 2x 48 GB; MAGIC one 80 GB GPU or 3+ GPUs; WorldMM one 80 GB GPU or 2x 48 GB. arm00 (GH200, aarch64) runs
+# MERIT only: the images are x86, and only MERIT has a native arm environment there. A worker takes only the
+# baselines it was started with (worker.py --baselines), so listing a baseline here runs nothing until a pool opts in.
+M8 = ["max", "nexus", "nexus-slurm", "nexus-test", "wriva"]
+POOLS = {("merit", "m27"): ["wriva", "arm00", "zaratan", "max"], ("merit", "m8"): M8,
+         ("magic", "m27"): ["wriva", "zaratan", "max"], ("magic", "m8"): M8,
+         ("worldmm", "m27"): ["wriva", "zaratan", "max"], ("worldmm", "m8"): M8}
+BANK = "t2_agree2"   # tranche 2 (epic-morph v3/tranche2.txt)
 # Closed-source API models (baselines/api): no GPU and no memory, one qa task per video and config. They need the
 # provider's key (GEMINI_API_KEY / OPENAI_API_KEY in the worker's environment), which only Max's machine has, so no
 # other pool may take them. Listed first: 30 short tasks that should not wait behind the memory builds.
 API_CONFIGS = ["gemini-3.1-flash-lite-high", "gemini-3.6-flash-high", "gpt-5-f1024"]
 EXPERIMENTS = [("api", c, "qa", ["max"], "batch10_agree2") for c in API_CONFIGS] + [
-    ("merit", "m27", "build", POOLS["m27"], None),
-    ("merit", "m8", "build", POOLS["m8"], None),
-    ("merit", "m27", "qa", POOLS["m27"], "t2_agree2"),   # tranche 2 (epic-morph v3/tranche2.txt)
-    ("merit", "m8", "qa", POOLS["m8"], "t2_agree2"),
-]
+    (b, arm, stage, POOLS[b, arm], BANK if stage == "qa" else None)
+    for b in ("merit", "magic", "worldmm") for stage in ("build", "qa") for arm in ("m27", "m8")]
+# the file whose presence in <baseline>/<arm>/<video>/ (next to runs.jsonl) means the memory is built: the last
+# one each baseline writes ({v}: the video)
+MEMORY_DONE = {"merit": "{v}_30sec_4_key.json", "magic": "graph.pkl", "worldmm": "{v}_visual.pkl"}
+# a build that starts from another baseline's memory waits for that build while it is listed: MAGIC's 30 s captions
+# are MERIT's (same backbone), fetched from the dataset; without the wait it would caption the video itself
+BUILD_ON = {"magic": "merit"}
 
 
 def bank_videos(bank):
@@ -52,6 +63,11 @@ def bank_videos(bank):
     epic = os.environ.get("EPIC_MORPH_DIR")
     if not epic:
         raise SystemExit(f"set EPIC_MORPH_DIR to an epic-morph checkout with bank {bank} (qa tasks need it)")
+    return exported(epic, bank)
+
+
+@functools.lru_cache(maxsize=None)   # one export per bank and run, however many experiments answer it
+def exported(epic, bank):
     d = os.path.join(epic, "outputs", "v3", "banks", bank)
     # banks are generated, not committed: regenerate every time, so an interrupted export or an older commit's
     # files never stand in for the checkout's bank (a few seconds)
@@ -65,14 +81,17 @@ def bank_videos(bank):
 
 def built(api):
     """({(baseline, arm, video)} whose build is recorded in the results dataset, the dataset's file set)."""
-    files = set(api.list_repo_files(RESULTS, repo_type="dataset"))
+    return built_from(set(api.list_repo_files(RESULTS, repo_type="dataset")))
+
+
+def built_from(files):
+    """A folder with runs.jsonl and its baseline's last memory file counts as built."""
     out = set()
     for f in files:
         parts = f.split("/")
         if len(parts) == 4 and parts[3] == "runs.jsonl":
             out.add(tuple(parts[:3]))
-    # a folder with runs.jsonl and its memory counts as built (MERIT: the keys file)
-    return {k for k in out if f"{k[0]}/{k[1]}/{k[2]}/{k[2]}_30sec_4_key.json" in files or k[0] != "merit"}, files
+    return {k for k in out if k[0] in MEMORY_DONE and f"{k[0]}/{k[1]}/{k[2]}/{MEMORY_DONE[k[0]].format(v=k[2])}" in files}, files
 
 
 def desired(have, files):
@@ -82,8 +101,9 @@ def desired(have, files):
         if stage == "build":
             for v in order:
                 if (b, arm, v) not in have:
+                    base = f"{BUILD_ON.get(b)}-{arm}-build-{v}"
                     tasks.append(dict(id=f"{b}-{arm}-build-{v}", baseline=b, arm=arm, stage="build", video=v, bank=None,
-                                      pools=pools, deps=[]))
+                                      pools=pools, deps=[base] if any(t["id"] == base for t in tasks) else []))
             continue
         for v in bank_videos(bank):
             if f"{b}/{arm}/{v}/answers_{bank}.json.gz" in files:
