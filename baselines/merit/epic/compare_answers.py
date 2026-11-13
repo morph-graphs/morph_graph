@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Compare two MERIT answer files for the same questions (e.g. a rerun on new hardware against the
 committed batch10 run): accuracy of each, how many questions both answered the same way, and the
-paired disagreement (exact McNemar). Accepts .json or .json.gz.
+paired disagreement (exact McNemar). Accepts .json or .json.gz. Questions are joined by what was asked
+(wording, options, gold letter), so answer files from before keys (positional IDs) compare with keyed ones.
 
     python epic/compare_answers.py <reference answers> <new answers>
 """
@@ -10,15 +11,17 @@ import json
 import math
 import sys
 
+from prepare_epic import row_qhash
+
 
 def load(path):
     rows = json.load(gzip.open(path, "rt") if path.endswith(".gz") else open(path))
-    return {str(r["ID"]): r for r in rows}
+    return {(row_qhash(r), r.get("answer")): r for r in rows}
 
 
 def main():
     ref, new = (load(p) for p in sys.argv[1:3])
-    ids = sorted(set(ref) & set(new), key=int)
+    ids = [i for i in ref if i in new]
     ok = lambda rows, i: str(rows[i].get("evaluate")) == "True"
     same = sum((ref[i].get("parsed_answer") or "") == (new[i].get("parsed_answer") or "") for i in ids)
     a = sum(ok(ref, i) and not ok(new, i) for i in ids)

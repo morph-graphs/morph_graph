@@ -242,3 +242,18 @@ baselines/merit/results/
 baselines/m3agent/work/
 !baselines/m3agent/env/
 baselines/m3agent/results/
+
+# MAGIC-Video runs: clips, MERIT captions, server logs, caches; results (baselines/magic/run_magic.sh)
+baselines/magic/work/
+!baselines/magic/env/
+baselines/magic/results/
+
+# WorldMM runs: videos, skeletons, build intermediates, rows, caches (baselines/worldmm/run_worldmm.sh)
+baselines/worldmm/work/
+!baselines/worldmm/env/
+baselines/worldmm/results/
+
+# API baselines: epic_eval run folders and encoded clips; results (baselines/api/run_api.sh)
+baselines/api/work/
+!baselines/api/env/
+baselines/api/results/

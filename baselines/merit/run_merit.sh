@@ -24,6 +24,8 @@
 #                  them in the dataset morph-graphs/epic-morph-results at merit/<arm>/<video>/)
 #   MERIT_TAG      a variant name for the answers (answers_<bank>_<tag>.json.gz); MERIT_NO_FRAMES=1 (answer from
 #                  captions only, memory probes) defaults it to "noframes", so variants never overwrite each other
+#   MERIT_CONTEXT  blind only: a JSON file {question ID: context text}; the model answers from that text instead of an
+#                  empty context, with no search. Needs MERIT_TAG (one per context file); written to blind_<bank>_<tag>.json
 #   MERIT_FETCH    0 to never take the memory from the dataset (build normally reuses it when it is there)
 # Every step skips finished work, so rerunning the same command resumes. The memory is built once per video
 # and arm and shared by every bank, probe set and variant.
@@ -36,6 +38,7 @@ EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && p
 [ -f "$R/eval/evaluate_egolife.py" ] || { echo "MERIT submodule missing: git submodule update --init baselines/merit/MERIT"; exit 1; }
 case $ARM in m8) MODEL=qwen3vl-8b ;; m27) MODEL=qwen38-27b ;; *) echo "arm must be m8 or m27"; exit 1 ;; esac
 VIDEOS=${HDEPIC_VIDEOS:-$EPIC/data/HD-EPIC/videos}; WORK=${MERIT_WORK:-$M/work}; OUTROOT=${MERIT_OUT:-$M/results}
+[ -n "${MERIT_WORK:-}" ] && umask 002   # a shared work folder: files the other workers' users can reuse and reset
 OUT=$OUTROOT/$ARM/$V; PREP=$WORK/prep; CAP=$OUT/${V}_30sec.json
 TAG=${MERIT_TAG:-}; [ "${MERIT_NO_FRAMES:-0}" = 1 ] && [ -z "$TAG" ] && TAG=noframes; SUF=${TAG:+_$TAG}
 mkdir -p "$OUT" "$WORK/logs"
@@ -82,8 +85,15 @@ cd "$REPO"
 prep() {
     log prep; local t=$SECONDS P=${V%%-*}
     [ -s "$VIDEOS/$P/$V.mp4" ] || { echo "missing $VIDEOS/$P/$V.mp4 (v3/DATA.md)"; exit 1; }
-    "$PY" "$M/epic/prepare_epic.py" --video "$VIDEOS/$P/$V.mp4" --subject "$V" --clip_root "$WORK/clips_448" \
-        --frame_root "$WORK/frames_448" --data_dir "$PREP" --clip_size 448 --frame_size 448 --threads "${THREADS:-8}"
+    # one prep per video at a time: two tasks of the same video (8B and 27B, on one machine) share these
+    # folders, and cutting clips into the same folder at once broke one of them ("expected 35 segments, got 1")
+    mkdir -p "$WORK/locks"
+    (
+        flock 9
+        [ -s "$PREP/captions/$V/${V}_30sec_skeleton.json" ] && exit 0   # the other task made it
+        "$PY" "$M/epic/prepare_epic.py" --video "$VIDEOS/$P/$V.mp4" --subject "$V" --clip_root "$WORK/clips_448" \
+            --frame_root "$WORK/frames_448" --data_dir "$PREP" --clip_size 448 --frame_size 448 --threads "${THREADS:-8}"
+    ) 9>"$WORK/locks/prep_$V.lock"
     record prep $((SECONDS - t))
 }
 build() {
@@ -125,13 +135,15 @@ qa_file() {   # this bank's questions for the video, in MERIT's format (asked at
     [ -s "$PREP/captions/$V/${V}_30sec_skeleton.json" ] || prep
     mkdir -p "$(dirname "$QA")"
     "$PY" - "$EPIC/outputs/v3/banks/$bank/${V}_questions.json" "$V" "$PREP/captions/$V/${V}_30sec_skeleton.json" "$QA" <<'EOF'
-import json, sys
+import json, os, sys
 sys.path.insert(0, "baselines/merit/epic")
 from prepare_epic import convert_questions
 bank, v, skel, out = sys.argv[1:]
 end = json.load(open(skel))[-1]["end_time"]                      # HHMMSS00
 end_s = int(end[:2]) * 3600 + int(end[2:4]) * 60 + int(end[4:6])
-json.dump(convert_questions(bank, v, end_s), open(out, "w"), indent=2)
+tmp = f"{out}.{os.getpid()}"   # then rename: an m8 and an m27 task of the video may write it at once (shared work)
+json.dump(convert_questions(bank, v, end_s), open(tmp, "w"), indent=2)
+os.replace(tmp, out)
 EOF
 }
 qa() {
@@ -139,12 +151,16 @@ qa() {
     [ -s "$OUT/${V}_30sec_4_key.json" ] || build
     qa_file; mkdir -p "$runs"
     local n; n=$("$PY" -c "import json,sys; print(len(json.load(open(sys.argv[1]))))" "$QA")
-    # Pass "full" answers every question (MERIT resumes it from its temp file if interrupted); later passes,
-    # each under a new name so no earlier answers are overwritten, answer only the IDs with no valid answer
-    # yet (MERIT writes "Error" for a failed question). Nothing runs when all are answered.
+    # Question IDs are the bank's keys, and an answer is reused only for an unchanged question (collect_answers.py),
+    # so the answers file of an earlier tranche (or the dataset's) is a source like any run. Pass "full" answers
+    # every question (MERIT resumes it from its temp file if interrupted); later passes, each under a new name so
+    # no earlier answers are overwritten, answer only the IDs with no valid answer yet: new or edited questions,
+    # or ones MERIT failed on (it writes "Error"). Nothing runs when all are answered.
+    local ans=$OUT/answers_$BANK$SUF.json.gz
+    collect() { "$PY" "$M/epic/collect_answers.py" --qa_file "$QA" --runs "$runs/*/*_final.json" --prev "$ans" --out "$ans" | tail -1; }
     for k in 1 2 3; do
-        if ls "$runs"/*/*_final.json >/dev/null 2>&1; then
-            missing=$("$PY" "$M/epic/collect_answers.py" --qa_file "$QA" --runs "$runs/*/*_final.json" --out "$OUT/answers_$BANK$SUF.json.gz" | tail -1)
+        if [ -s "$ans" ] || ls "$runs"/*/*_final.json >/dev/null 2>&1; then
+            missing=$(collect)
             [ -z "$missing" ] && break
             sel=(--question-ids $missing); name=${ARM}_${V}_${BANK}${SUF}_fill$(date +%m%d%H%M%S)
         else
@@ -157,15 +173,19 @@ qa() {
             "${sel[@]}" --output-dir "$runs" --log-dir "$WORK/logs" 2>&1 | tee "$WORK/logs/$name.log" \
             || echo "pass $name exited with an error; the next pass resumes or retries"
     done
-    missing=$("$PY" "$M/epic/collect_answers.py" --qa_file "$QA" --runs "$runs/*/*_final.json" --out "$OUT/answers_$BANK$SUF.json.gz" | tail -1)
+    missing=$(collect)
     [ -z "$missing" ] || { echo "still unanswered after 3 passes: $missing (rerun the same command to retry)"; exit 1; }
     record "qa $BANK$SUF" $((SECONDS - t))
 }
 blind() {
-    log "blind $BANK"; local t=$SECONDS
+    local ctx=${MERIT_CONTEXT:-} suf=
+    # a tag per context file: two files sharing one output would reuse each other's answers on resume
+    [ -z "$ctx" ] || suf=_${MERIT_TAG:?MERIT_CONTEXT needs MERIT_TAG, a name for this context condition}
+    [ -z "$ctx" ] || [ -s "$ctx" ] || { echo "MERIT_CONTEXT file missing: $ctx"; exit 1; }
+    log "blind $BANK$suf"; local t=$SECONDS
     qa_file
-    "$PY" "$M/epic/blind_qa.py" --model "$MODEL" --qa_file "$QA" --output "$OUT/blind_$BANK.json"
-    record "blind $BANK" $((SECONDS - t))
+    "$PY" "$M/epic/blind_qa.py" --model "$MODEL" --qa_file "$QA" --output "$OUT/blind_$BANK$suf.json" ${ctx:+--context_file "$ctx"}
+    record "blind $BANK$suf" $((SECONDS - t))
 }
 
 upload() {   # only a finished memory: a half-built folder would overwrite a good one in the dataset
