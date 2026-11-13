@@ -112,7 +112,7 @@
     <p class="jb-note">Done counts what the results dataset holds (memories with their last file, answer files per bank); the open tasks are the board's list. Per hour is tasks finished over the last 6 hours; the ETA assumes that rate holds and is blank when nothing finished recently.</p>
     <div class="jb-tablewrap">
       <table class="jb-table" data-source="matrix" data-row-key="experiment">
-        <thead><tr><th data-field="experiment">Experiment</th><th>Progress</th><th data-field="done" class="jb-num">Done</th><th data-field="total" class="jb-num">Of</th><th data-field="running" class="jb-num">Running</th><th data-field="queued" class="jb-num">Queued</th><th data-field="claimed" class="jb-num">Claimed</th><th data-field="failing" class="jb-num">Failed</th><th data-field="waiting" class="jb-num">Waiting</th><th data-field="ready" class="jb-num">Ready</th><th data-field="rate_per_h" class="jb-num">Per hour</th><th data-field="eta_h" class="jb-num">ETA</th><th data-field="pools">Pools</th></tr></thead>
+        <thead><tr><th data-field="experiment">Experiment</th><th>Progress</th><th data-field="done" class="jb-num">Done</th><th data-field="total" class="jb-num">Of</th><th data-field="running" class="jb-num">Running</th><th data-field="queued" class="jb-num">Queued</th><th data-field="claimed" class="jb-num">Claimed</th><th data-field="failing" class="jb-num">Failed</th><th data-field="waiting" class="jb-num">Waiting</th><th data-field="ready" class="jb-num">Ready</th><th data-field="rate_per_h" class="jb-num">Per hour</th><th data-field="eta_h" class="jb-num">ETA</th><th data-field="pools">Machines</th></tr></thead>
         <tbody data-draw="matrix-full"></tbody>
       </table>
     </div>
@@ -120,10 +120,10 @@
 
   <section class="jb-sec" id="now" hidden>
     <h2>What is running or waiting right now?</h2>
-    <p class="jb-note">Board tasks held by a worker, and our other jobs. On Nexus a task's state comes from our own Slurm queue; on wriva and Max's cluster the board only knows the task was claimed.</p>
+    <p class="jb-note">Board tasks held by a worker, and our other jobs, by machine; the queue is in Where. On Nexus (wriva included) a task's state comes from the Slurm queue; on Max's cluster the board only knows the task was claimed.</p>
     <div class="jb-tablewrap">
       <table class="jb-table" data-source="running">
-        <thead><tr><th>Pool</th><th>What</th><th>State</th><th>Where</th><th>Since (UTC)</th></tr></thead>
+        <thead><tr><th>What</th><th>State</th><th>Where</th><th>Since (UTC)</th></tr></thead>
         <tbody data-draw="running"></tbody>
       </table>
     </div>
@@ -131,10 +131,10 @@
 
   <section class="jb-sec" id="machines" hidden>
     <h2>Is every machine's worker alive?</h2>
-    <p class="jb-note">One row per board pool. A worker writes a heartbeat about every minute; over 30 minutes without one while it holds tasks is flagged. Done counts tasks finished in the last 24 hours (for arm00 and Zaratan, memories that appeared).</p>
+    <p class="jb-note">One row per machine. A machine can run several board workers, one per queue (on Nexus: tron, scavenger, vulcan-sailon, and Vatsal's); each writes a heartbeat about every minute, and one silent for over 30 minutes while it holds tasks is flagged. Done counts tasks finished in the last 24 hours.</p>
     <div class="jb-tablewrap">
-      <table class="jb-table" data-source="pools" data-row-key="pool">
-        <thead><tr><th data-field="pool">Pool</th><th data-field="person">Run by</th><th data-field="hardware">Hardware</th><th data-field="state">Worker</th><th data-field="heartbeat">Last heartbeat</th><th data-field="running" class="jb-num">Running</th><th data-field="queued" class="jb-num">Queued</th><th data-field="claimed" class="jb-num">Claimed</th><th data-field="done_24h" class="jb-num">Done, 24 h</th><th data-field="problems" class="jb-num">Failed</th></tr></thead>
+      <table class="jb-table" data-source="pools" data-row-key="site">
+        <thead><tr><th data-field="site">Machine</th><th data-field="person">Run by</th><th data-field="hardware">Hardware</th><th data-field="workers">Workers</th><th data-field="heartbeat">Last heartbeat</th><th data-field="running" class="jb-num">Running</th><th data-field="queued" class="jb-num">Queued</th><th data-field="claimed" class="jb-num">Claimed</th><th data-field="done_24h" class="jb-num">Done, 24 h</th><th data-field="problems" class="jb-num">Failed</th></tr></thead>
         <tbody data-draw="pools"></tbody>
       </table>
     </div>
@@ -146,13 +146,13 @@
     <div class="jb-filters">
       <select class="dash-select" aria-label="State" data-draw="f-state" data-source="tasks"></select>
       <select class="dash-select" aria-label="Experiment" data-draw="f-exp" data-source="tasks"></select>
-      <select class="dash-select" aria-label="Pool" data-draw="f-pool" data-source="tasks"></select>
+      <select class="dash-select" aria-label="Machine" data-draw="f-pool" data-source="tasks"></select>
       <input class="jb-search" id="f-q" type="search" placeholder="Search video or note" aria-label="Search tasks">
       <span class="jb-muted" data-draw="count" data-source="tasks">—</span>
     </div>
     <div class="jb-tablewrap">
       <table class="jb-table" data-source="tasks" data-row-key="id">
-        <thead><tr><th data-field="experiment">Experiment</th><th data-field="video">Video</th><th data-field="state">State</th><th data-field="on">On</th><th data-field="where">Where</th><th data-field="note">Why</th><th data-field="can_run_on">Can run on</th></tr></thead>
+        <thead><tr><th data-field="experiment">Experiment</th><th data-field="video">Video</th><th data-field="state">State</th><th data-field="on">Machine</th><th data-field="where">Where</th><th data-field="note">Why</th><th data-field="can_run_on">Can run on</th></tr></thead>
         <tbody data-draw="rows"></tbody>
       </table>
     </div>
@@ -164,7 +164,7 @@
     <p class="jb-note">Newest first. Claims still running, every finished claim (done, failed, cancelled, taken over by another pool) and memories built off the board, grouped when one pool did the same thing within 30 minutes. A failure marked "since resolved" was later done, claimed again or dropped from the list.</p>
     <div class="jb-tablewrap">
       <table class="jb-table" data-source="events">
-        <thead><tr><th>When (UTC)</th><th>Pool</th><th>Event</th><th class="jb-num">Tasks</th><th>What</th><th>Note</th></tr></thead>
+        <thead><tr><th>When (UTC)</th><th>Machine</th><th>Event</th><th class="jb-num">Tasks</th><th>What</th><th>Note</th></tr></thead>
         <tbody data-draw="events"></tbody>
       </table>
     </div>
@@ -326,12 +326,11 @@ dash.draw('running', (body) => {
   const r = dash.data('running');
   body.replaceChildren();
   if (r.status !== 'ok') return;
-  if (!r.data.length) { const tr = el('tr'); const td = el('td', 'jb-muted', 'Nothing is running or waiting.'); td.colSpan = 5; tr.appendChild(td); body.appendChild(tr); return; }
+  if (!r.data.length) { const tr = el('tr'); const td = el('td', 'jb-muted', 'Nothing is running or waiting.'); td.colSpan = 4; tr.appendChild(td); body.appendChild(tr); return; }
   let last = '';
   for (const x of r.data) {
-    if (x.site !== last) { const g = el('tr'); const td = el('td', 'jb-group', x.site); td.colSpan = 5; g.appendChild(td); body.appendChild(g); last = x.site; }
+    if (x.site !== last) { const g = el('tr'); const td = el('td', 'jb-group', x.site); td.colSpan = 4; g.appendChild(td); body.appendChild(g); last = x.site; }
     const tr = el('tr');
-    tr.appendChild(el('td', 'jb-nowrap', x.pool));
     tr.appendChild(el('td', '', x.what + (x.kind === 'board task' ? '' : ` (${x.kind})`)));
     const s = el('td'); chip(s, x.state); tr.appendChild(s);
     tr.appendChild(el('td', 'jb-muted', x.where || '—'));
@@ -345,9 +344,9 @@ dash.draw('pools', (body) => {
   body.replaceChildren();
   if (p.status !== 'ok') return;
   for (const x of p.data) {
-    const tr = el('tr'); tr.dataset.key = x.pool;
-    tr.appendChild(el('td', 'jb-nowrap', x.pool)); tr.appendChild(el('td', '', x.person)); tr.appendChild(el('td', 'jb-muted', x.hardware));
-    const s = el('td'); chip(s, x.state); tr.appendChild(s);
+    const tr = el('tr'); tr.dataset.key = x.site;
+    tr.appendChild(el('td', 'jb-nowrap', x.site)); tr.appendChild(el('td', '', x.person)); tr.appendChild(el('td', 'jb-muted', x.hardware));
+    const s = el('td'); chip(s, x.state); s.appendChild(el('div', 'jb-muted', x.workers)); tr.appendChild(s);
     tr.appendChild(el('td', 'jb-nowrap', x.heartbeat ? ago(x.heartbeat) : '—'));
     for (const f of ['running', 'queued', 'claimed', 'done_24h']) tr.appendChild(el('td', 'jb-num', num(+x[f])));
     const f = el('td', 'jb-num', num(+x.problems)); if (+x.problems) f.style.color = 'var(--color-bad)'; tr.appendChild(f);
@@ -368,7 +367,7 @@ const opts = (field, key, all) => (sel) => {
   sel.onchange = () => { jb[key] = sel.value; redraw(); };
 };
 dash.draw('f-exp', opts('experiment', 'exp', 'All experiments'));
-dash.draw('f-pool', opts('on', 'pool', 'Any pool'));
+dash.draw('f-pool', opts('on', 'pool', 'Any machine'));
 const filtered = () => {
   const t = dash.data('tasks');
   if (t.status !== 'ok') return null;
@@ -401,7 +400,7 @@ dash.draw('events', (body) => {
     const resolved = /since resolved/.test(x.note || '') || x.event === 'cancelled' || x.event === 'superseded';
     const tr = el('tr'); if (resolved) tr.className = 'is-muted';
     tr.appendChild(el('td', 'jb-num', hhmm(x.t) + (x.t_last && x.t_last !== x.t ? ` – ${hhmm(x.t_last).slice(11)}` : '')));
-    tr.appendChild(el('td', 'jb-nowrap', x.pool));
+    tr.appendChild(el('td', 'jb-nowrap', x.site));
     const s = el('td'); if (x.event === 'failed' && !resolved) chip(s, 'failed'); else s.textContent = x.event; tr.appendChild(s);
     tr.appendChild(el('td', 'jb-num', fmt(+x.count))); tr.appendChild(el('td', '', x.what)); tr.appendChild(el('td', 'jb-muted', x.note || ''));
     body.appendChild(tr);

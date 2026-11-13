@@ -6,14 +6,15 @@ tasks, every claim, heartbeats, what the results dataset holds), our own Slurm q
     tasks.json      every open task with its state now and where
     running.json    what is running or waiting right now: board tasks (state from our squeue where we can see it,
                     "claimed" on other people's clusters) and our other jobs
-    pools.json      one row per pool: who, worker heartbeat, counts, problems
-    people.json     one row per site (Nexus, wriva, Max, Zaratan, arm00): the same, summed
-    attention.json  current problems only: failures grouped by (pool, baseline, model, stage, cause), unreachable
+    pools.json      one row per site (Nexus, wriva, Max, Zaratan, arm00): who, its workers' queues, heartbeat, counts
+    people.json     the same rows, with a state for the overview cards
+    attention.json  current problems only: failures grouped by (site, baseline, model, stage, cause), unreachable
                     machines, stale workers, open decisions
     events.json     activity, grouped: claims, finishes, failures (marked resolved or cancelled), memories built
     progress.json, tranches.json, decisions.json   fixed context (tranche 1 results, banks, decisions)
 
-A task state is decided once, here, and every view counts from it. History kept next to the outputs:
+Readers see sites only: a pool's queue is detail text ("Nexus · vulcan-sailon"), never a row or a column value,
+so renamed pools and several workers on one cluster read as one machine. A task state is decided once, here, and every view counts from it. History kept next to the outputs:
 ledger.json (when and where each memory first appeared) and board_raw.json (the last good board read).
 """
 import json
@@ -24,23 +25,39 @@ import time
 RATE_WINDOW_H = 6
 NAMES = {"merit": "MERIT", "magic": "MAGIC-Video", "worldmm": "WorldMM", "m3agent": "M3-Agent", "api": "API"}
 MODELS = {"m8": "8B", "m27": "27B"}
-# pool -> (site, who runs it, hardware). Sites are what the People view shows.
+# pool -> (site, who runs it, hardware, queue). A reader sees only the site; the queue is detail text
+# ("Nexus · vulcan-sailon"), so a renamed pool (nexus -> nexus-tron, #28) reads the same as before.
 POOLS = {   # the old Nexus names (nexus, nexus-test, nexus-slurm) until their last claims end (renamed in #28)
-    "nexus-tron": ("Nexus", "Anubhav's agent", "Nexus Slurm, tron (QoS high)"),
-    "nexus-scavenger": ("Nexus", "Anubhav's agent", "Nexus Slurm, scavenger"),
-    "nexus-sailon": ("Nexus", "Anubhav's agent", "Nexus Slurm, vulcan-ampere (QoS vulcan-sailon)"),
-    "nexus": ("Nexus", "Anubhav's agent", "Nexus Slurm, tron (QoS high); old name of nexus-tron"),
-    "nexus-test": ("Nexus", "Anubhav's agent", "Nexus Slurm, scavenger; old name of nexus-scavenger"),
-    "nexus-slurm": ("Nexus", "Anubhav's agent", "Nexus Slurm, vulcan-sailon; old name of nexus-sailon"),
-    "vatsal-sailon": ("Nexus", "Vatsal's agent", "Nexus Slurm, vulcan-ampere (his QoS vulcan-sailon)"),
-    "vatsal-h200": ("Nexus", "Vatsal's agent", "Nexus Slurm, H200 (his QoS vulcan-high-h200)"),
-    "wriva": ("wriva", "Archana and Aaron", "4x H100 (cml-wriva, their accounts)"),
-    "max": ("Max", "Max's agent", "H100 80 GB on his Slurm cluster"),
-    "zaratan": ("Zaratan", "Anubhav's agent", "H100 / A100 (AAC)"),
-    "arm00": ("arm00", "Anubhav's agent", "1x GH200 96 GB, tmux loop"),
+    "nexus-tron": ("Nexus", "Anubhav's agent", "A6000-class GPUs on tron (QoS high)", "tron"),
+    "nexus-scavenger": ("Nexus", "Anubhav's agent", "scavenger GPUs", "scavenger"),
+    "nexus-sailon": ("Nexus", "Anubhav's agent", "vulcan-ampere (QoS vulcan-sailon)", "vulcan-sailon"),
+    "nexus": ("Nexus", "Anubhav's agent", "A6000-class GPUs on tron (QoS high)", "tron"),
+    "nexus-test": ("Nexus", "Anubhav's agent", "scavenger GPUs", "scavenger"),
+    "nexus-slurm": ("Nexus", "Anubhav's agent", "vulcan-ampere (QoS vulcan-sailon)", "vulcan-sailon"),
+    "vatsal-sailon": ("Nexus", "Vatsal's agent", "vulcan-ampere (his QoS vulcan-sailon)", "vulcan-sailon, Vatsal"),
+    "vatsal-h200": ("Nexus", "Vatsal's agent", "H200 (his QoS vulcan-high-h200)", "H200, Vatsal"),
+    "wriva": ("wriva", "Archana and Aaron", "4x H100 (cml-wriva, their accounts)", "cml-wriva"),
+    "max": ("Max", "Max's agent", "H100 80 GB on his Slurm cluster", ""),
+    "zaratan": ("Zaratan", "Anubhav's agent", "H100 / A100 (AAC)", ""),
+    "arm00": ("arm00", "Anubhav's agent", "1x GH200 96 GB (vulcan-arm00)", ""),
 }
 SITES = ["Nexus", "wriva", "Max", "Zaratan", "arm00"]
 OURS = {p for p, v in POOLS.items() if v[0] in ("Nexus", "wriva")}   # pools on Nexus: the collector's squeue shows their jobs
+
+
+def site(pool):
+    """The machine a reader sees for a pool: Nexus, wriva, Max, Zaratan, arm00 (an unlisted nexus-*/vatsal-* is Nexus)."""
+    if pool in POOLS:
+        return POOLS[pool][0]
+    return "Nexus" if pool.startswith(("nexus", "vatsal")) else pool
+
+
+def place(pool):
+    """Site plus queue as detail text: 'Nexus · vulcan-sailon', or the site alone."""
+    q = POOLS.get(pool, ("", "", "", ""))[3]
+    return f"{site(pool)} · {q}" if q else site(pool)
+
+
 VID = re.compile(r"P\d\d-\d{8}-\d{6}")
 
 TRANCHES = [
@@ -156,7 +173,8 @@ def update(out, raw, live, nxq, built_src):
     for c in raw["claims"]:
         if c["status"] == "done":
             done_by.setdefault(c["task"], c["pool"])
-    src = dict(built_src)
+    # a memory a board worker reported done is that pool's, even when an off-board scan also saw it (arm00 runs both)
+    src = {k: done_by.get(f"{k[0]}-{k[1]}-build-{k[2]}", w) for k, w in built_src.items()}
     for b, arm, v in raw["built"]:
         src.setdefault((b, arm, v), done_by.get(f"{b}-{arm}-build-{v}", "results dataset"))
     for (b, arm, v), where in sorted(src.items()):
@@ -167,6 +185,8 @@ def update(out, raw, live, nxq, built_src):
             ledger[k]["pool"] = where
 
     tasks = raw["tasks"]
+    # a memory seen by an off-board scan (arm00 loop, Zaratan arrays) that no board claim reported done
+    off_board = lambda k, e: e["pool"] in ("arm00", "zaratan") and "{}-{}-build-{}".format(*k.split("|")) not in done_claims
     built = {tuple(k.split("|")) for k in ledger} | {tuple(x) for x in raw["built"]}
     done_claims = {c["task"] for c in raw["claims"] if c["status"] == "done"}
     by_task = {}
@@ -178,18 +198,19 @@ def update(out, raw, live, nxq, built_src):
     def live_state(c):
         """running / queued / claimed for a live claim; where; since."""
         if c["status"] == "running" and (c.get("lease_until") or 0) <= t:
-            return "lease lapsed", c.get("pool_host", ""), c.get("claimed", "")
-        if c.get("gpu") and c["gpu"] != "(scheduler)":
-            return "running", f"{c.get('host', '')} {c['gpu']}".strip(), c.get("started", "")
+            return "lease lapsed", f"{place(c['pool'])}: worker stopped renewing its lease", c.get("claimed", "")
+        if c.get("gpu") and c["gpu"] != "(scheduler)":   # a local launcher: the claim names its GPU
+            gpu = f"GPU {c['gpu']}" if str(c["gpu"]).isdigit() else c["gpu"]
+            return "running", f"{place(c['pool'])} · {gpu}", c.get("started", "")
         if c["pool"] in OURS:
             j = nxq.get(f"board-{c['task'][:60]}")
             if j:
                 if j["state"] == "RUNNING":
-                    return "running", f"{j['partition']} on {j['where']}, {j['elapsed']} elapsed", c.get("started", "")
-                return "queued", f"{j['partition']}, waiting {j['where']}", c.get("claimed", "")
-            return "claimed", "no Slurm job seen yet", c.get("claimed", "")
+                    return "running", f"{place(c['pool'])} · {j['where']}, {j['elapsed']} elapsed", c.get("started", "")
+                return "queued", f"{place(c['pool'])} · waiting ({j['where']})", c.get("claimed", "")
+            return "claimed", f"{place(c['pool'])} · no Slurm job seen yet", c.get("claimed", "")
         # someone else's Slurm: the claim cannot say whether the job has started
-        return "claimed", f"{c['pool']} Slurm (start not visible)", c.get("claimed", "")
+        return "claimed", f"{place(c['pool'])} · start not visible", c.get("claimed", "")
 
     # one state per open task
     answered = {tuple(a) for a in raw["answered"]}
@@ -205,14 +226,14 @@ def update(out, raw, live, nxq, built_src):
         state, on, where, since, note = "ready", "", "", "", ""
         if last and last["status"] == "running":
             state, where, since = live_state(last)
-            on = last["pool"]
+            on = site(last["pool"])
         elif last and last["status"] == "failed":
             cancelled = last.get("exit") == -1
             state = "held" if fails >= 2 else ("cancelled" if cancelled else "failed")
             why = next((c for c in reversed(cs) if c["status"] == "failed" and c.get("exit") != -1), last)
-            on, since, note = why["pool"], last.get("finished", ""), cause(why)
+            on, where, since, note = site(why["pool"]), place(why["pool"]), last.get("finished", ""), cause(why)
             if not cancelled or fails >= 2:
-                key = (why["pool"], x["baseline"], x["arm"], x["stage"], x.get("bank"), note)
+                key = (site(why["pool"]), x["baseline"], x["arm"], x["stage"], x.get("bank"), note)
                 problems.setdefault(key, []).append(x["id"])
         else:
             pending = [d for d in x.get("deps", []) if d not in done_claims
@@ -224,7 +245,7 @@ def update(out, raw, live, nxq, built_src):
                               method=NAMES.get(x["baseline"], x["baseline"]), model=MODELS.get(x["arm"], x["arm"]),
                               stage="memory build" if x["stage"] == "build" else "answers", bank=x.get("bank") or "",
                               video=x["video"], state=state, on=on, where=where, since=since,
-                              can_run_on=", ".join(x.get("pools", [])), failures=fails, note=note,
+                              can_run_on=", ".join(sorted({site(p) for p in x.get("pools", [])}, key=lambda s_: (SITES + [s_]).index(s_))), failures=fails, note=note,
                               priority=x.get("priority", 0)))
 
     # rates: board finishes in the last RATE_WINDOW_H hours, plus memories that appeared off the board
@@ -236,7 +257,7 @@ def update(out, raw, live, nxq, built_src):
             k = experiment(b, arm, stage, bank)
             rate[k] = rate.get(k, 0) + 1 / RATE_WINDOW_H
     for k, e in ledger.items():
-        if e["t"] and e["t"] >= since_t and e["pool"] in ("arm00", "zaratan"):
+        if e["t"] and e["t"] >= since_t and off_board(k, e):   # off-board loops (ledger names them)
             b, arm, _ = k.split("|")
             ek = experiment(b, arm, "build", None)
             rate[ek] = rate.get(ek, 0) + 1 / RATE_WINDOW_H
@@ -279,118 +300,115 @@ def update(out, raw, live, nxq, built_src):
                       "waiting on builds" if e["waiting"] == e["open"] else "partly done" if e["done"] else "not started")
         matrix.append(e)
 
-    # running now: board claims that hold a task, then our other jobs
+    # running now: board claims that hold a task, then our other jobs; one group per site
     running = []
     for c in raw["claims"]:
         if c["status"] != "running":
             continue
         state, where, since = live_state(c)
         b, arm, stage, bank, v = parse_task(c["task"])
-        running.append(dict(site=POOLS.get(c["pool"], (c["pool"],))[0], pool=c["pool"], kind="board task",
-                            what=f"{experiment(b, arm, stage, bank)} · {v}", state=state, where=where, since=since))
+        running.append(dict(site=site(c["pool"]), kind="board task", what=f"{experiment(b, arm, stage, bank)} · {v}",
+                            state=state, where=where, since=since))
     for r in live:
         if r["state"] == "alert":
             continue                      # alerts go to attention
-        running.append(dict(site=POOLS.get(r["pool"], (r["pool"],))[0], pool=r["pool"], kind=r.get("kind", "other job"),
-                            what=r["what"], state=r["state"], where=r.get("where", ""), since=r.get("since", "")))
+        running.append(dict(site=site(r["pool"]), kind=r.get("kind", "other job"), what=r["what"], state=r["state"],
+                            where=r.get("where", ""), since=r.get("since", "")))
     order = {"running": 0, "queued": 1, "claimed": 2, "lease lapsed": 3}
     running.sort(key=lambda r: (SITES.index(r["site"]) if r["site"] in SITES else 9, order.get(r["state"], 5), r["what"]))
 
-    # pools and sites
+    # machines: one row per site, its workers (queues) as detail text
     hb = raw["pools"]
-    done24 = {}
+    done24, prob = {}, {}
     for c in raw["claims"]:
         if c["status"] == "done" and (_t(c.get("finished")) or 0) >= t - 86400:
-            done24[c["pool"]] = done24.get(c["pool"], 0) + 1
+            done24[site(c["pool"])] = done24.get(site(c["pool"]), 0) + 1
     for k, e in ledger.items():
-        if e["t"] and e["t"] >= t - 86400 and e["pool"] in ("arm00", "zaratan"):
-            done24[e["pool"]] = done24.get(e["pool"], 0) + 1
-    prob_pool = {}
+        if e["t"] and e["t"] >= t - 86400 and off_board(k, e):
+            done24[site(e["pool"])] = done24.get(site(e["pool"]), 0) + 1
     for key, ids in problems.items():
-        prob_pool[key[0]] = prob_pool.get(key[0], 0) + len(ids)
+        prob[key[0]] = prob.get(key[0], 0) + len(ids)
+    age = {n: (t - _t(h["updated"])) / 60 if h.get("updated") else None for n, h in hb.items()}
+    up = {n for n, a in age.items() if a is not None and a <= 30}
+    # a silent worker whose queue has a live one (an old pool name after its rename, #28) is not stale
+    stale = {n for n, a in age.items() if a is not None and a > 30 and (hb[n].get("running") or 0) > 0
+             and place(n) not in {place(u) for u in up}}
     pools = []
-    for name in sorted(set(POOLS) | set(hb), key=lambda n: (list(POOLS).index(n) if n in POOLS else 99, n)):
-        site, who, hw = POOLS.get(name, (name, "?", "?"))
-        h = hb.get(name, {})
-        mine = [r for r in running if r["pool"] == name and (r["kind"] == "board task" or name in ("arm00", "zaratan"))]
-        other = sum(1 for r in running if r["pool"] == name and r["kind"] != "board task" and name not in ("arm00", "zaratan"))
-        age = (t - _t(h["updated"])) / 60 if h.get("updated") else None
-        state = ("worker stale" if age is not None and age > 30 and (h.get("running") or 0) > 0 else
-                 "worker up" if age is not None and age <= 30 else
-                 "loop or queue" if name in ("arm00", "zaratan") else "no worker")
-        pools.append(dict(pool=name, site=site, person=who, hardware=hw, state=state, heartbeat=h.get("updated") or "",
-                          slots=len(h.get("slots") or []) or None,
-                          running=sum(r["state"] == "running" for r in mine), queued=sum(r["state"] == "queued" for r in mine),
-                          claimed=sum(r["state"] in ("claimed", "lease lapsed") for r in mine),
-                          other_jobs=other, done_24h=done24.get(name, 0), problems=prob_pool.get(name, 0), snapshot=snap))
-    people = []
-    for site in SITES:
-        ps = [p for p in pools if p["site"] == site]
-        if not ps:
-            continue
-        S = lambda f: sum(p[f] or 0 for p in ps)
-        hbs = [p["heartbeat"] for p in ps if p["heartbeat"]]
-        up = [p for p in ps if p["state"] == "worker up"]
-        people.append(dict(site=site, person=ps[0]["person"], pools=", ".join(p["pool"] for p in ps),
-                           hardware="; ".join(dict.fromkeys(p["hardware"] for p in ps)),
-                           state=("working" if S("running") + S("queued") + S("claimed") else
-                                  "idle, worker up" if up else "nothing running"),
-                           running=S("running"), queued=S("queued"), claimed=S("claimed"), other_jobs=S("other_jobs"), done_24h=S("done_24h"),
-                           problems=S("problems"), heartbeat=max(hbs) if hbs else ""))
+    for s_ in SITES + sorted({site(n) for n in hb} - set(SITES)):
+        names = [n for n in list(POOLS) + sorted(set(hb) - set(POOLS)) if site(n) == s_]
+        mine = [r for r in running if r["site"] == s_]
+        board = [r for r in mine if r["kind"] in ("board task", "loop")]   # the arm00 loop builds board work too
+        hbs = [hb[n]["updated"] for n in names if n in hb and hb[n].get("updated")]
+        def qs(ns, word):   # "3 up (tron, scavenger, vulcan-sailon)": an old and a renamed pool on one queue count once
+            q = list(dict.fromkeys(POOLS.get(n, ("", "", "", n))[3] or n for n in ns))
+            labels = [x for x in q if x not in POOLS and x not in hb]   # never a bare pool name
+            return f"{len(q)} {word}" + (f" ({', '.join(labels)})" if labels else "") if ns else ""
+        workers = "; ".join(x for x in (qs([n for n in names if n in up], "up"), qs([n for n in names if n in stale], "stale")) if x) \
+            or "no board worker running"
+        known = [n for n in names if n in hb] or names   # describe the workers that exist, else what is planned
+        pools.append(dict(site=s_, person=", ".join(dict.fromkeys(POOLS.get(n, ("", "?"))[1] for n in known)),
+                          hardware="; ".join(dict.fromkeys(POOLS.get(n, ("", "", "?"))[2] for n in known)),
+                          workers=workers,
+                          state=("worker stale" if any(n in stale for n in names) else "worker up" if any(n in up for n in names)
+                                 else "no worker"),
+                          heartbeat=max(hbs) if hbs else "",
+                          running=sum(r["state"] == "running" for r in board), queued=sum(r["state"] == "queued" for r in board),
+                          claimed=sum(r["state"] in ("claimed", "lease lapsed") for r in board),
+                          other_jobs=len(mine) - len(board), done_24h=done24.get(s_, 0), problems=prob.get(s_, 0), snapshot=snap))
+    people = [dict(p, state="working" if p["running"] + p["queued"] + p["claimed"] else
+                   "idle, worker up" if p["state"] == "worker up" else "nothing running") for p in pools]
 
     # attention: current problems only
     att = []
     for r in live:
         if r["state"] == "alert":
-            att.append(dict(kind="unreachable", severity="bad", pool=r["pool"], what=r["what"], count=None, cause=r.get("note", ""), fix=""))
-    for (pool, b, arm, stage, bank, why), ids in sorted(problems.items(), key=lambda kv: -len(kv[1])):
+            att.append(dict(kind="unreachable", severity="bad", site=site(r["pool"]), what=r["what"], count=None, cause=r.get("note", ""), fix=""))
+    for (s_, b, arm, stage, bank, why), ids in sorted(problems.items(), key=lambda kv: -len(kv[1])):
         held = sum(1 for i in ids if sum(1 for c in by_task[i] if c["status"] == "failed") >= 2)
-        att.append(dict(kind="failing", severity="bad", pool=pool, what=f"{experiment(b, arm, stage, bank)} on {pool}",
+        att.append(dict(kind="failing", severity="bad", site=s_, what=f"{experiment(b, arm, stage, bank)} on {s_}",
                         count=len(ids), cause=why,
                         fix=(f"{held} held after two failures: fix the cause, then coord/master.py reset --task <id>. " if held else "")
-                        + f"{pool} will not retry these; other pools may."))
-    for name, h in hb.items():
-        age = (t - _t(h["updated"])) / 60 if h.get("updated") else None
-        if age is not None and age > 30 and (h.get("running") or 0) > 0:
-            att.append(dict(kind="stale worker", severity="warn", pool=name, what=f"{name} worker on {h.get('host')}", count=None,
-                            cause=f"no heartbeat for {int(age)} min", fix="its tasks return to the list when their leases lapse"))
+                        + "The worker that failed them will not retry them; other machines may."))
+    for name in sorted(stale):
+        att.append(dict(kind="stale worker", severity="warn", site=site(name), what=f"{place(name)} worker", count=None,
+                        cause=f"no heartbeat for {int(age[name])} min", fix="its tasks return to the list when their leases lapse"))
     for d in DECISIONS:
         if d["status"] != "decided":
-            att.append(dict(kind="decision", severity="warn", pool="Anubhav", what=f"{d['id']}. {d['question']}", count=None,
+            att.append(dict(kind="decision", severity="warn", site="Anubhav", what=f"{d['id']}. {d['question']}", count=None,
                             cause=d["why"], fix=d["options"]))
 
-    # activity: claims still running and every claim's end, grouped by (pool, event, experiment) within 30 minutes
+    # activity: claims still running and every claim's end, grouped by (site, event, experiment) within 30 minutes
     ev = []
     for c in raw["claims"]:
         b, arm, stage, bank, v = parse_task(c["task"])
-        exp = experiment(b, arm, stage, bank)
+        exp, s_ = experiment(b, arm, stage, bank), site(c["pool"])
         if c["status"] == "running" and c.get("claimed"):   # finished claims show as their end only
-            ev.append((c["claimed"], c["pool"], "claimed", exp, "still running"))
+            ev.append((c["claimed"], s_, "claimed", exp, "still running"))
         if c["status"] in ("done", "failed", "superseded") and c.get("finished"):
             if c["status"] == "failed":
                 newer = by_task[c["task"]][-1]
                 now_ = ("since resolved" if c["task"] not in open_ids else
-                        f"retried on {newer['pool']}" if newer["status"] == "running" else "still open")
+                        f"retried on {site(newer['pool'])}" if newer["status"] == "running" else "still open")
                 e = "cancelled" if c.get("exit") == -1 else "failed"
                 note = cause(c) if e == "failed" else ""
                 note = (note + "; " if note else "") + now_
-                ev.append((c["finished"], c["pool"], e, exp, note))
+                ev.append((c["finished"], s_, e, exp, note))
             else:
-                ev.append((c["finished"], c["pool"], c["status"], exp, ""))
+                ev.append((c["finished"], s_, c["status"], exp, ""))
     for k, e in ledger.items():
-        if e["t"] and e["pool"] in ("arm00", "zaratan"):
+        if e["t"] and off_board(k, e):
             b, arm, _ = k.split("|")
-            ev.append((_iso(e["t"]), e["pool"], "built", experiment(b, arm, "build", None), "off the board"))
+            ev.append((_iso(e["t"]), site(e["pool"]), "built", experiment(b, arm, "build", None), "off the board"))
     ev.sort()
     groups = []
-    for ts, pool, e, exp, note in ev:
-        hit = next((g for g in reversed(groups) if (g["pool"], g["event"], g["what"], g["note"]) == (pool, e, exp, note)
+    for ts, s_, e, exp, note in ev:
+        hit = next((g for g in reversed(groups) if (g["site"], g["event"], g["what"], g["note"]) == (s_, e, exp, note)
                     and (_t(ts) or 0) - (_t(g["t_last"]) or 0) <= 1800), None)
         if hit:
             hit["count"] += 1
             hit["t_last"] = ts
         else:
-            groups.append(dict(t=ts, t_last=ts, pool=pool, event=e, what=exp, count=1, note=note))
+            groups.append(dict(t=ts, t_last=ts, site=s_, event=e, what=exp, count=1, note=note))
     events = sorted(groups, key=lambda g: g["t_last"], reverse=True)[:150]
 
     W = lambda n, o: json.dump(o, open(os.path.join(out, n), "w"), indent=0)
