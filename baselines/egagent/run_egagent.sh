@@ -16,10 +16,13 @@
 #   arm    the agent's model, as in the paper; the memory is GPT-4.1 + SigLIP 2 for both
 #          gpt41        GPT-4.1 agent           needs OPENAI_API_KEY
 #          gemini25pro  Gemini 2.5 Pro agent    needs GEMINI_API_KEY (and OPENAI_API_KEY to build the memory)
+#          OPENROUTER_API_KEY without OPENAI_API_KEY sends the GPT-4.1 calls through OpenRouter instead (README
+#          "Through OpenRouter"); Gemini is only ever called through Google's API
 #   bank   a named bank of the epic-morph checkout, e.g. batch10_agree2
 #
 # A paid stage runs when its key is in the environment and stops (exit 3, nothing spent) when it is not. Keys
-# are read from the environment only: never put one in a file, an argument or a log. Both models are being
+# are read from the environment only: never put one in a file, an argument or a log; a paid script is started
+# without the other provider's key. Both models are being
 # retired (README: Read first): the Gemini arm refuses to run from 2026-12-01 and GPT-4.1 calls from
 # 2027-01-14, and a reply from any other model id stops the run (exit 4). epic/estimate_cost.py gives the cost.
 #
@@ -56,6 +59,7 @@ OUT=$OUTROOT/$ARM/$V; FRAMES=$WORK/frames/$V; TAG=${EGAGENT_TAG:-}; SUF=${TAG:+_
 PX=${EGAGENT_FRAME_PX:-0}; CHUNK=${EGAGENT_CHUNK_S:-300}
 MEMORY=("{video}_frames.npy" "{video}_captions.json" "{video}_graph.json")   # as epic/eg_paths.memory_files
 mkdir -p "$OUT" "$WORK/logs"
+[ -z "${OPENAI_API_KEY:-}" ] || unset OPENROUTER_API_KEY   # one gateway per run: OpenAI's key wins
 export TOKENIZERS_PARALLELISM=false EPIC BACKBONE PX CHUNK EGAGENT_USAGE=$OUT/api_usage.jsonl
 log() { echo "=== $V $ARM $1 ($(date '+%F %H:%M'))"; }
 have_memory() { local m; for m in "${MEMORY[@]}"; do [ -s "$OUT/${m//\{video\}/$V}" ] || return 1; done; }
@@ -63,7 +67,7 @@ have_memory() { local m; for m in "${MEMORY[@]}"; do [ -s "$OUT/${m//\{video\}/$
 # upstream at its pinned commit + our patch (epic_morph.patch), applied once to the submodule's files
 [ -f "$R/egagent/langgraph_agent.py" ] || { echo "upstream missing: git submodule update --init baselines/egagent/egagent"; exit 1; }
 patched() { grep -q "def build_app" "$R/egagent/run_egagent_on_videomme.py" && grep -q EGAGENT_BACKBONE "$R/egagent/langgraph_agent.py" \
-            && grep -q EGAGENT_DB_ROOT "$R/paths.py" && grep -q "def get_api_key" "$R/utils.py"; }
+            && grep -q EGAGENT_DB_ROOT "$R/paths.py" && grep -q "def get_api_key" "$R/utils.py" && grep -q OPENROUTER "$R/utils.py"; }
 if ! patched; then
     ( if command -v flock >/dev/null; then flock 9; fi
       # from outside any repository, so it behaves the same in a clone, a container and a synced copy
@@ -76,6 +80,9 @@ fi
 paid() {   # $1: the model, $2: its key's name, $3: its shutdown date, $4: what would be called
     if [ "$(date -u +%F)" \> "$3" ] || [ "$(date -u +%F)" = "$3" ]; then
         echo "STOP: $1 is shut down from $3 (README: Read first); this stage cannot run as published any more."; exit 3
+    fi
+    if [ "$2" = OPENAI_API_KEY ] && [ -z "${OPENAI_API_KEY:-}" ] && [ -n "${OPENROUTER_API_KEY:-}" ]; then
+        echo "$1 through OpenRouter (openai/$1, provider OpenAI only)"; return 0
     fi
     [ -n "${!2:-}" ] || { echo "STOP before a paid API step, nothing spent: $4. It runs when $2 is set in the environment."; exit 3; }
 }
@@ -92,10 +99,10 @@ api = {}   # model id the API returned -> calls and tokens, over every run of th
 if os.path.exists(os.environ["EGAGENT_USAGE"]):
     for u in map(json.loads, open(os.environ["EGAGENT_USAGE"])):
         if u["stage"] == sys.argv[1]:
-            for m, c in u["models"].items():
-                a = api.setdefault(m, dict.fromkeys(c, 0))
-                for k in c:
-                    a[k] += c[k]
+            for m, c in u["models"].items():   # counts, tokens and cost summed; endpoint and provider kept
+                a = api.setdefault(m, {})
+                for k, v in c.items():
+                    a[k] = v if isinstance(v, str) else round(a.get(k, 0) + v, 6)
 print(json.dumps({"stage": sys.argv[1], "seconds": int(float(sys.argv[2])), "commit": commit,
                   "egagent_commit": up, "epic_morph_commit": bank, "agent_model": os.environ.get("BACKBONE"),
                   "memory_models": ["gpt-4.1", "google/siglip2-giant-opt-patch16-384"], "api": api,
@@ -142,11 +149,12 @@ build() {
         echo "no memory in the dataset yet: building it here"
     fi
     embed; need_frames
-    [ -n "${OPENAI_API_KEY:-}" ] || "$PY" "$M/epic/caption_epic.py" --frames_dir "$FRAMES" --out "$OUT/${V}_captions.json" --dry
+    [ -n "${OPENAI_API_KEY:-}${OPENROUTER_API_KEY:-}" ] || "$PY" "$M/epic/caption_epic.py" --frames_dir "$FRAMES" --out "$OUT/${V}_captions.json" --dry
     paid gpt-4.1 OPENAI_API_KEY "$GPT_END" "GPT-4.1 captions (one call per 30 s, 30 frames each) and graph extraction (2 calls per $CHUNK s)"
     export EGAGENT_USAGE_STAGE=build
-    [ -s "$OUT/${V}_captions.json" ] || "$PY" "$M/epic/caption_epic.py" --frames_dir "$FRAMES" --out "$OUT/${V}_captions.json"
-    [ -s "$OUT/${V}_graph.json" ] || "$PY" "$M/epic/build_graph.py" --captions "$OUT/${V}_captions.json" --out "$OUT/${V}_graph.json" --chunk_s "$CHUNK"
+    local gpt_only=(env -u GEMINI_API_KEY -u GOOGLE_API_KEY)   # the memory's calls are GPT-4.1's alone
+    [ -s "$OUT/${V}_captions.json" ] || "${gpt_only[@]}" "$PY" "$M/epic/caption_epic.py" --frames_dir "$FRAMES" --out "$OUT/${V}_captions.json"
+    [ -s "$OUT/${V}_graph.json" ] || "${gpt_only[@]}" "$PY" "$M/epic/build_graph.py" --captions "$OUT/${V}_captions.json" --out "$OUT/${V}_graph.json" --chunk_s "$CHUNK"
     have_memory || { echo "memory for $V is incomplete in $OUT"; exit 1; }
     record build $((SECONDS - t))
 }
@@ -160,7 +168,8 @@ bank_file() {   # this bank's questions for the video (banks are generated in ep
     fi
     [ -s "$BF" ] || { echo "no $bank questions for $V in $EPIC"; exit 1; }
 }
-run_qa() { "$PY" -u "$M/epic/run_qa.py" --video "$V" --bank_file "$BF" --frames_dir "$FRAMES" --backbone "$BACKBONE" \
+agent_only=(env -u OPENAI_API_KEY -u OPENROUTER_API_KEY); [ "$ARM" != gpt41 ] || agent_only=(env -u GEMINI_API_KEY -u GOOGLE_API_KEY)
+run_qa() { "${agent_only[@]}" "$PY" -u "$M/epic/run_qa.py" --video "$V" --bank_file "$BF" --frames_dir "$FRAMES" --backbone "$BACKBONE" \
                --db_root "$WORK/dbs/${ARM}_${V}_$$" "$@"; }
 qa() {
     log "qa $BANK$SUF"; local t=$SECONDS k rc=0 ans=$OUT/answers_$BANK$SUF.json.gz

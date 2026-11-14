@@ -3,7 +3,8 @@
 streaming rule on what they send.
 
     stub_check.py --video V --frames_dir <work>/frames/<V> --embeddings <results>/<V>_frames.npy \
-                  --bank_file <bank>/<V>_questions.json --tmp <scratch dir> --arm gpt41|gemini25pro [--questions 3]
+                  --bank_file <bank>/<V>_questions.json --tmp <scratch dir> --arm gpt41|gemini25pro [--questions 3] \
+                  [--gateway openrouter]
 
 The real caption_epic.py, build_graph.py and run_qa.py (qa and blind) run unchanged in this process, with the
 OpenAI client's HTTP layer (httpx) and the Gemini client's generate_content replaced by fakes that answer
@@ -12,6 +13,11 @@ every request with a reply that fits the schema it asks for. The fakes log each 
 the end of the captions it came from. Afterwards, for every question: no frame after its cutoff was sent, and
 no marker from a caption or graph chunk ending after it reached any prompt. Last, the fake answers as another
 model and the run must stop (exit 4). Everything is written under --tmp; nothing here is a result.
+
+The route of the GPT-4.1 calls is checked on every request: to api.openai.com as gpt-4.1 with OpenAI's key (also
+when an OpenRouter key is set as well), or with --gateway openrouter (only OPENROUTER_API_KEY set; a --tmp of
+its own) to openrouter.ai as openai/gpt-4.1 with the provider pin and OpenRouter's key; and that the usage rows
+record the endpoint, and through OpenRouter the provider and the cost the reply reports.
 """
 import argparse
 import base64
@@ -27,6 +33,11 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 CALLS = []                      # every fake API call: {"phase", "kind", "texts", "seconds"}
 STATE = {"phase": None, "model": {"openai": "gpt-4.1-2025-04-14", "gemini": "gemini-2.5-pro"}}
+# what every GPT request must be: host, model id, provider pin, authorization header; then the usage rows' endpoint
+ROUTES = {"openai": ("api.openai.com", "gpt-4.1", None, "Bearer stub-not-a-key", "https://api.openai.com/v1"),
+          "openrouter": ("openrouter.ai", "openai/gpt-4.1", {"only": ["openai"], "allow_fallbacks": False},
+                         "Bearer stub-openrouter-not-a-key", "https://openrouter.ai/api/v1")}
+WATCHED = []                    # the call counts of every eg_paths.watch_api of this process
 FRAME = {}                      # sha1 of a frame file's bytes -> its second
 
 
@@ -87,6 +98,9 @@ def fake_openai():
     def reply(request):
         assert request.url.path.endswith("/chat/completions"), f"unexpected request to {request.url}"
         body = json.loads(request.content)
+        route = (request.url.host, body["model"], body.get("provider"), request.headers["authorization"])
+        assert route == STATE["route"][:4], f"a GPT request went to {route[:3]}, not {STATE['route'][:3]}"
+        via = {"provider": "OpenAI"} if route[2] else {}      # what OpenRouter adds to a reply, with usage.cost
         texts, images = [], []
         for m in body["messages"]:
             for part in ([{"type": "text", "text": m["content"]}] if isinstance(m["content"], str) else m["content"]):
@@ -108,7 +122,8 @@ def fake_openai():
         return httpx.Response(200, request=request, json={
             "id": "chatcmpl-stub", "object": "chat.completion", "created": 0, "model": STATE["model"]["openai"],
             "choices": [{"index": 0, "message": msg, "finish_reason": "tool_calls" if tool else "stop"}],
-            "usage": {"prompt_tokens": n_in, "completion_tokens": 50, "total_tokens": n_in + 50}})
+            "usage": {"prompt_tokens": n_in, "completion_tokens": 50, "total_tokens": n_in + 50, **({"cost": 0.001} if via else {})},
+            **via})
 
     async def areply(self, request, **kw):
         return reply(request)
@@ -175,13 +190,24 @@ def main():
     ap.add_argument("--tmp", required=True)
     ap.add_argument("--arm", required=True, choices=["gpt41", "gemini25pro"])
     ap.add_argument("--questions", type=int, default=3)
+    ap.add_argument("--gateway", default="openai", choices=list(ROUTES))
     a = ap.parse_args()
     sys.path.insert(0, HERE)
     import eg_paths
+    watch = eg_paths.watch_api
+    eg_paths.watch_api = lambda *args: WATCHED.append(watch(*args)) or WATCHED[-1]
+    STATE["route"] = ROUTES[a.gateway]
+    if a.gateway == "openrouter":
+        STATE["model"]["openai"] = "openai/gpt-4.1"
+        os.environ.pop("OPENAI_API_KEY", None)
+    else:
+        os.environ["OPENAI_API_KEY"] = "stub-not-a-key"   # with both keys set, OpenAI's must win
+    os.environ["OPENROUTER_API_KEY"] = "stub-openrouter-not-a-key"
+    os.environ.pop("OPENROUTER_BASE_URL", None)
     backbone = eg_paths.BACKBONES[a.arm]
     mem = os.path.join(a.tmp, "memory")
     os.makedirs(mem, exist_ok=True)
-    os.environ.update(OPENAI_API_KEY="stub-not-a-key", GEMINI_API_KEY="stub-not-a-key", HF_HUB_OFFLINE="1",
+    os.environ.update(GEMINI_API_KEY="stub-not-a-key", HF_HUB_OFFLINE="1",
                       EGAGENT_USAGE=os.path.join(a.tmp, f"api_usage_{a.arm}.jsonl"),
                       # upstream's modules read these once, at their first import (here: by the caption script)
                       EGAGENT_DATASET="videomme", EGAGENT_BACKBONE=backbone,
@@ -241,6 +267,17 @@ def main():
         print(f"  Q{r['ID']} cutoff {cut} s: {len(calls)} calls {[c['kind'] for c in calls]}; {len(frames)} frames sent, "
               f"latest second {max(frames)}; graph markers in prompts from chunks ending {ents} (visible chunks {chunks_visible}); "
               f"indexed {r['indexed']}; tokens recorded for {len(r['total_tokens'])} calls")
+    # the usage rows: a GPT row names the endpoint called, and through OpenRouter who served it and the cost
+    gpt = [(m, r) for calls in WATCHED for m, r in calls.items() if "gpt" in m]
+    assert gpt or a.arm != "gpt41"
+    for m, r in gpt:
+        assert r["endpoint"].rstrip("/") == STATE["route"][4], (m, r)
+        if a.gateway == "openrouter":
+            assert r["provider"] == "OpenAI" and abs(r["cost"] - 0.001 * r["calls"]) < 1e-9, (m, r)
+        else:
+            assert "provider" not in r and "cost" not in r, (m, r)
+    assert not any("endpoint" in r for calls in WATCHED for m, r in calls.items() if "gpt" not in m)
+    print(f"  GPT-4.1 route {STATE['route'][:3]}: every request matched; usage rows e.g. {json.dumps(dict(gpt[:1]))}")
     blind = [c for c in CALLS if c["phase"] == "blind"]
     assert len(blind) == a.questions and not any(c["seconds"] for c in blind) and not any("ENT_" in c["text"].upper() for c in blind)
     print(f"  blind: {len(blind)} calls, no frame and no memory text in any")

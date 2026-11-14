@@ -25,7 +25,10 @@ are paid APIs; the embedder (SigLIP 2) is local.
   for the memory, then $160 to $260 for the `gpt41` arm's answers and $180 to $300 for `gemini25pro`'s.
 - **Keys** come from the environment only: `OPENAI_API_KEY` (the memory for both arms, and the `gpt41`
   agent) and `GEMINI_API_KEY` (the `gemini25pro` agent). A paid stage runs when its key is set and stops
-  with exit 3, nothing spent, when it is not. Never put a key in a file, an argument or a log.
+  with exit 3, nothing spent, when it is not. Never put a key in a file, an argument or a log. With
+  `OPENROUTER_API_KEY` and no `OPENAI_API_KEY`, the GPT-4.1 calls go through OpenRouter (see Through
+  OpenRouter); Gemini is only ever called through Google's API. Each paid script is started without the
+  other provider's key.
 - **What is not the authors'** (each forced by the benchmark or by what upstream released):
   - *The caption prompt is ours* (`epic/caption_epic.py`): upstream released neither its captioning script
     nor the prompt.
@@ -78,9 +81,9 @@ baselines/egagent/egagent checkout .` takes it off again.
 |---|---|---|---|
 | frames | - | ffmpeg, 1 fps, the video's own resolution (1408 px) | - |
 | frame embeddings | `google/siglip2-giant-opt-patch16-384` | local GPU (about 5 min for a 27 min video on an A5000) | - |
-| captions | GPT-4.1 | OpenAI API | 1 per 30 s of video, 30 frames each |
-| entity graph | GPT-4.1 (LangChain `LLMGraphTransformer`, then the time-stamper) | OpenAI API | 2 per 300 s |
-| agent, arm `gpt41` | GPT-4.1 | OpenAI API | about 12 per question (planner; per step its tools and a grader; answer); a frame search sends up to 50 frames |
+| captions | GPT-4.1 | OpenAI API (or through OpenRouter) | 1 per 30 s of video, 30 frames each |
+| entity graph | GPT-4.1 (LangChain `LLMGraphTransformer`, then the time-stamper) | OpenAI API (or through OpenRouter) | 2 per 300 s |
+| agent, arm `gpt41` | GPT-4.1 | OpenAI API (or through OpenRouter) | about 12 per question (planner; per step its tools and a grader; answer); a frame search sends up to 50 frames |
 | agent, arm `gemini25pro` | Gemini 2.5 Pro (the paper's best, 57.5% on EgoLifeQA) | Google API | the same |
 | text queries for frame search | SigLIP 2 text tower | local GPU or CPU | - |
 
@@ -110,6 +113,44 @@ bash baselines/egagent/docker/run.sh upload P05-20240425-201444 gemini25pro
 hands the keys to the container by name. `EGAGENT_RUNTIME=apptainer` runs the same image with Apptainer; the
 job board's `MERIT_GPU`, `MERIT_RUNTIME`, `MERIT_SIF_DIR` (`egagent_gpu.sif`), `MERIT_HF_CACHE` and `MERIT_WORK`
 are read when the `EGAGENT_` ones are unset.
+
+### Through OpenRouter (our own builds)
+
+With `OPENROUTER_API_KEY` in the environment and `OPENAI_API_KEY` not, every GPT-4.1 call (the captions, the
+graph extraction and its time-stamper, and the `gpt41` arm's agent) goes through OpenRouter, so the memory can
+be built on our cluster without an OpenAI account. Nothing else is set; the switch is in `epic_morph.patch`
+(upstream's `utils.py`, where its two OpenAI clients are made).
+
+```bash
+export OPENROUTER_API_KEY=...      # typed into the shell (or read -s): never an argument, a file, a log or a commit
+unset OPENAI_API_KEY
+bash baselines/egagent/docker/run.sh build P05-20240425-201444 gpt41                       # the memory: GPT-4.1 through OpenRouter
+export GEMINI_API_KEY=...          # Google's own API: the gemini25pro agent never goes through OpenRouter
+bash baselines/egagent/docker/run.sh qa    P05-20240425-201444 gemini25pro batch10_agree2  # takes the gpt41 folder's memory
+```
+For an sbatch job, read the key into the job's environment inside the job and do not write it into the script.
+
+- **What changes in the request.** The endpoint (`https://openrouter.ai/api/v1`; `OPENROUTER_BASE_URL` overrides
+  it), the key, the model id (`openai/gpt-4.1`) and one added field,
+  `provider: {"only": ["openai"], "allow_fallbacks": false}`: with the pin OpenAI itself answers or the call
+  fails. Prompts, frames and their resolution, temperature 0 and the structured-output schemas are what the
+  port sends to OpenAI: the same LangChain `ChatOpenAI` client makes the same Chat Completions request.
+- **What may still differ from the direct API**: the snapshot is OpenRouter's alias to resolve
+  (`openai/gpt-4.1`; a reply names what answered, and any id that is not GPT-4.1 or one of its dated
+  snapshots stops the run, exit 4), and OpenRouter sits between the request and OpenAI.
+- **Which arm calls what.** `build` calls GPT-4.1 only. `qa` and `blind` of `gemini25pro` call Gemini 2.5 Pro
+  only: every agent worker (planner, the three tools' query writers, frame analysis, transcript search,
+  grader, answer) is built on the arm's backbone, and the watch on the calls stops the run if any other model
+  answers. `gpt41`'s `qa` and `blind` call GPT-4.1 only.
+- **What is recorded.** `api_usage.jsonl` and the stage's `runs.jsonl` line (`api`) key each row by the model
+  id the endpoint returned, with calls, input / cached / output / reasoning tokens, and for a GPT row the
+  `endpoint`; through OpenRouter also `provider` (who served the calls) and `cost` (dollars OpenRouter
+  charged, summed). The memory folder stays `egagent/gpt41/<video>/`: the same model through another gateway.
+- **One gateway per run.** With both keys set OpenAI's is used and `OPENROUTER_API_KEY` is dropped.
+- **Check without a key**: `epic/stub_check.py ... --gateway openrouter` runs the paid scripts against the
+  fake APIs with only an OpenRouter key set and checks, on every GPT request, the host, the `openai/gpt-4.1`
+  id, the provider pin and the key used, and that the usage rows hold the endpoint, provider and cost; without
+  `--gateway` it checks that the OpenAI route is what it was, also when an OpenRouter key is set as well.
 
 On our clusters, a virtualenv (Python 3.11, torch 2.6.0 CUDA 12.4, upstream's pip pins):
 
@@ -156,6 +197,7 @@ Per video, at `egagent/<arm>/<video>/`:
   its 1-based position): `pred`, `evaluate`, `justification`, the `plan`, the `working_memory` the tools
   filled, `total_tokens` per call, `cutoff` and what was `indexed` at it;
 - `blind_<bank>.json`, when the blind stage ran;
-- `api_usage.jsonl`: per script run, the model ids the APIs returned with calls and tokens;
+- `api_usage.jsonl`: per script run, the model ids the APIs returned with calls and tokens (input, cached,
+  output with Gemini's thinking, reasoning), a GPT row's endpoint, and through OpenRouter its provider and cost;
 - `runs.jsonl`: one line per finished stage (commits of this repo, upstream and epic-morph; models; the
-  stage's API calls and tokens per returned model id, `api`; versions; GPUs; seconds).
+  stage's API calls, tokens and cost per returned model id, `api`; versions; GPUs; seconds).
