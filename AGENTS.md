@@ -26,7 +26,7 @@ each package has its own README (`epic_eval/`, `event_eval/`).
 | `baselines/egagent/` | EGAgent (entity-graph agent) on EPIC-Morph, as published (paid APIs: GPT-4.1 memory, GPT-4.1 or Gemini 2.5 Pro agent): run script, Docker image, upstream as a submodule + our patch |
 | `baselines/egorag/` | EgoRAG (EgoLife's EgoButler) on EPIC-Morph, as released (EgoGPT captions; GPT-4o and DeepSeek through paid APIs): run script, Docker image, upstream EgoLife as a submodule plus `EgoLife.patch` |
 | `baselines/api/` | closed-source API models (Gemini, GPT) on EPIC-Morph through `epic_eval`: run script, Docker image, converter to the baselines' result layout |
-| `baselines/egor1/` | Ego-R1 agent baseline on EPIC-Morph (local 3B agent; its tools and memory call paid APIs: GPT-4o, GPT-4.1, Gemini 2.5 Pro): run script, Docker image, upstream Ego-R1 as a submodule plus `epic-morph.patch` |
+| `baselines/egor1/` | Ego-R1 agent baseline on EPIC-Morph (local 3B agent; its tools and memory call paid APIs: GPT-4o, GPT-4.1, Gemini 3.6 Flash): run script, Docker image, upstream Ego-R1 as a submodule plus `epic-morph.patch` |
 | `baselines/rekv/` | ReKV (in-context video KV-cache retrieval) on EPIC-Morph with Qwen3-VL-8B: run script, Docker image, Vatsal's Qwen3-VL port vendored in `vendor/MemStream` (no submodule) |
 | `proj_context/` | design docs, notes; `setup/` holds the container definition + pinned versions |
 
