@@ -99,6 +99,12 @@
 .jb-acc u{position:absolute;top:0;bottom:0;width:0;border-left:1px dashed var(--muted)}
 .jb-acc s{position:absolute;top:1px;bottom:1px;width:2px;margin-left:-1px;background:var(--warm)}
 .jb-table td.is-small{color:var(--muted);font-style:italic}
+.jb-seg{display:flex;flex-wrap:wrap;gap:6px}
+.jb-segb{font:inherit;font-size:var(--cds-font-size-caption);padding:5px 12px;border:1px solid var(--rule);border-radius:99px;background:var(--card);color:var(--ink);cursor:pointer}
+.jb-segb:hover{border-color:var(--accent)}
+.jb-segb[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--card);font-weight:500}
+.jb-segb:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.jb-hint{font-size:var(--cds-font-size-caption);color:var(--muted);margin-top:3px;white-space:nowrap}
 </style>
 
 <div class="jb" id="jb">
@@ -199,7 +205,7 @@
 
   <section class="jb-sec" id="accuracy" hidden>
     <h2>How many questions has each method answered correctly?</h2>
-    <p class="jb-note">One row per method, model and question bank; the bank "all" is every bank together. Scored by coord/sheet_update.py, the script that fills the results sheet, from the answer files in the results dataset: an answer counts only while its question's wording, options and gold letter are those of the current bank. Accuracy is right / answered, and its 95% interval is that script's: a percentile bootstrap over videos, Wilson when a run has one video. "Of all" counts every unanswered question as wrong. The floor is the same model answering the bank with no memory (the run's blind file), scored by the same rules.</p>
+    <p class="jb-note">One row per method and model, over all questions by default; the buttons show one question bank at a time. Scored by coord/sheet_update.py, the script that fills the results sheet, from the answer files in the results dataset: an answer counts only while its question's wording, options and gold letter are those of the current bank. Accuracy is right / answered, and its 95% interval is that script's: a percentile bootstrap over videos, Wilson when a run has one video. "Of all" counts every unanswered question as wrong. The floor is the same model answering the bank with no memory (the run's blind file), scored by the same rules.</p>
     <p class="jb-callout" id="acc-missing" hidden>No scores can be shown yet: <span data-draw="acc-why" data-source="accuracy" data-field="state_note" data-row="0">—</span>.</p>
     <p class="jb-callout" id="acc-stale" hidden>These scores may be out of date: <span data-draw="acc-why" data-source="accuracy" data-field="state_note" data-row="0">—</span>.</p>
     <div class="jb-legend">
@@ -209,6 +215,8 @@
       <span><i style="width:2px;background:var(--warm);border-radius:0"></i>floor: same model, no context</span>
     </div>
     <p class="jb-note">Each run is scored three ways: on the questions asked at the video's end, on those asked mid-video (streaming), and on both together. Streaming answers are provisional until streaming memories exist (every method now answers them from its full-video memory with retrieval cut at the question's time); rows that hold them carry a warning chip.</p>
+    <div class="jb-seg" role="group" aria-label="Question bank" data-draw="acc-banks" data-source="accuracy"></div>
+    <p class="jb-note">Each bank is a frozen set of questions over its videos; a question is kept when at least 2 of 3 verifier models answered it right. Banks share no questions, so All adds them up.</p>
     <div class="jb-filters">
       <select class="dash-select" id="acc-asked" aria-label="Questions asked">
         <option value="end">Asked at the video's end</option>
@@ -219,7 +227,7 @@
     </div>
     <div class="jb-tablewrap">
       <table class="jb-table" data-source="accuracy" data-row-key="row_key">
-        <thead><tr><th data-field="method">Method</th><th data-field="memory_model">Memory model</th><th data-field="reasoning_model">Reasoning model</th><th>Answered so far</th><th data-field="q_answered" class="jb-num">Answered</th><th data-field="q_in_bank" class="jb-num">In bank</th><th data-field="n_right" class="jb-num">Right</th><th>Accuracy on answered, 0 to 100%</th><th data-field="acc_answered_pct" class="jb-num">Accuracy</th><th data-field="ci95_lo_pct" class="jb-num">95% interval</th><th data-field="acc_all_pct" class="jb-num jb-detail">Of all</th><th data-field="blind_acc_answered_pct" class="jb-num">Floor</th><th data-field="chance_pct" class="jb-num jb-detail">Chance</th><th data-field="note">Note</th></tr></thead>
+        <thead><tr><th data-field="method">Method</th><th data-field="memory_model">Memory model</th><th data-field="reasoning_model">Reasoning model</th><th>Answered so far</th><th data-field="q_answered" class="jb-num">Answered</th><th data-field="q_in_bank" class="jb-num">Questions</th><th data-field="n_right" class="jb-num">Right</th><th>Accuracy on answered, 0 to 100%</th><th data-field="acc_answered_pct" class="jb-num">Accuracy</th><th data-field="ci95_lo_pct" class="jb-num">95% interval</th><th data-field="acc_all_pct" class="jb-num jb-detail">Of all</th><th data-field="blind_acc_answered_pct" class="jb-num">Floor</th><th data-field="chance_pct" class="jb-num jb-detail">Chance</th><th data-field="note">Note</th></tr></thead>
         <tbody data-draw="acc-runs"></tbody>
       </table>
     </div>
@@ -235,16 +243,15 @@
         <option value="video">Video</option>
         <option value="hops">Hops</option>
       </select>
-      <select class="dash-select" aria-label="Question bank" data-draw="acc-bank" data-source="accuracy"></select>
       <span class="jb-muted" data-draw="acc-count" data-source="accuracy_breakdown">—</span>
     </div>
     <div class="jb-tablewrap">
       <table class="jb-table" data-source="accuracy_breakdown">
-        <thead data-draw="acc-bd-head" data-source="accuracy" data-in-bank="In bank"></thead>
+        <thead data-draw="acc-bd-head" data-source="accuracy" data-in-bank="Questions"></thead>
         <tbody data-draw="acc-bd-rows"></tbody>
       </table>
     </div>
-    <p class="jb-note" id="acc-bd-empty" hidden>No rows for this choice. Videos are listed per bank, not under "all": choose a bank.</p>
+    <p class="jb-note" id="acc-bd-empty" hidden>No rows for this choice. Videos are listed per bank, not under All questions: choose a bank above.</p>
     <button class="jb-more" id="acc-bd-more" type="button">Show more rows</button>
     <p class="jb-note">Source: accuracy.json, written by coord/sheet_update.py --json on Nexus (cron, every 30 minutes) in the pass that fills the results sheet's tab "Auto: EPIC-Morph", and read by the board's collector. Scored <span data-draw="acc-prov-when" data-source="accuracy" data-field="scored_at" data-row="0">—</span>; results dataset revision <span class="jb-mono" data-draw="acc-prov-rev" data-source="accuracy" data-field="dataset_revision" data-row="0">—</span>; banks from epic-morph commit <span class="jb-mono" data-draw="acc-prov-bank" data-source="accuracy" data-field="bank_commit" data-row="0">—</span>.</p>
   </section>
@@ -388,7 +395,7 @@ dash.draw('ans', (e) => {
   const rows = m.data.filter((r) => r.stage === 'answers');
   for (const b of t.data.filter((x) => x.kind === 'bank')) {
     const h = el('div', 'jb-prow is-head');   // the bank itself, counted once
-    h.appendChild(el('span', '', b.bank)); h.appendChild(el('span', 'jb-sub', `${b.tranche} · ${fmt(+b.videos)} videos`));
+    h.appendChild(el('span', '', b.label || b.bank)); h.appendChild(el('span', 'jb-sub', `${fmt(+b.videos)} videos`));
     h.appendChild(el('span', 'jb-mono', `${fmt(+b.questions)} questions`)); e.appendChild(h);
     for (const x of rows.filter((r) => r.bank === b.bank)) {
       const sub = x.state === 'waiting on builds' ? 'waiting for its memories' : +x.failing ? `${x.failing} videos failed` : +x.running ? `${x.running} videos running` : '';
@@ -519,7 +526,7 @@ dash.draw('tranches', (body) => {
   if (t.status !== 'ok') return;
   for (const x of t.data) {
     const tr = el('tr'); tr.dataset.key = x.tranche;
-    tr.appendChild(el('td', '', x.tranche)); tr.appendChild(el('td', 'jb-mono', x.bank)); tr.appendChild(el('td', 'jb-num', num(+x.videos)));
+    tr.appendChild(el('td', '', x.tranche)); const bk = el('td', '', x.label || x.bank); if (x.label && x.label !== x.bank) bk.appendChild(el('div', 'jb-muted jb-mono', x.bank)); tr.appendChild(bk); tr.appendChild(el('td', 'jb-num', num(+x.videos)));
     tr.appendChild(el('td', 'jb-num', x.questions != null ? fmt(+x.questions) : '—')); tr.appendChild(el('td', '', x.state)); tr.appendChild(el('td', 'jb-muted', x.source));
     body.appendChild(tr);
   }
@@ -548,7 +555,7 @@ dash.draw('decisions', (e) => {
 });
 
 // ---- Accuracy tab. Its state is accView: no element has that id (an id is also a window property, see window.jb above)
-const accView = {shown: 30, bdShown: 25, dim: 'leaf', bank: '', asked: 'end'};
+const accView = {shown: 30, bdShown: 25, dim: 'leaf', bank: 'all', asked: 'end'};
 const SMALL_N = 10;   // a breakdown cell with fewer answered questions shows counts only
 const nn = (v) => v == null || v === '' || isNaN(+v) ? null : +v;
 const p1 = (v) => nn(v) == null ? '—' : `${(+v).toFixed(1)}%`;
@@ -558,7 +565,10 @@ const wilson = (k, n) => {   // 95% Wilson interval of k / n, in percent
 };
 const accRuns = () => { const a = dash.data('accuracy'); return a.status === 'ok' ? a.data.filter((r) => r.state !== 'missing' && (!accView.asked || !r.asked || r.asked === accView.asked)) : null; };
 const isTrue = (v) => v === true || v === 'true' || v === 'TRUE';
-const accBank = (runs) => runs.some((r) => r.bank === accView.bank) ? accView.bank : (runs[0] ? runs[0].bank : '');
+// the chosen bank: All questions (the sheet's `all` rows) unless a bank button was pressed; a bank that left the data falls back
+const accBank = (runs) => runs.some((r) => r.bank === accView.bank) ? accView.bank : runs.some((r) => r.bank === 'all') ? 'all' : (runs[0] ? runs[0].bank : '');
+const accBanks = (runs) => [...d3.group(runs, (r) => r.bank)].map(([bank, rs]) => ({bank, label: rs[0].bank_label || bank, order: +rs[0].bank_order}))
+  .sort((a, b) => (a.bank !== 'all') - (b.bank !== 'all') || a.order - b.order || d3.ascending(a.bank, b.bank));
 const accTrack = (x) => {
   const t = el('div', 'jb-acc'), at = (tag, v) => { if (nn(v) == null) return null; const m = el(tag); m.style.left = Math.max(0, Math.min(100, +v)) + '%'; t.appendChild(m); return m; };
   const lo = nn(x.ci95_lo_pct), hi = nn(x.ci95_hi_pct);
@@ -579,9 +589,9 @@ dash.draw('acc-runs', (body) => {
   for (const m of document.querySelectorAll('#acc-missing')) m.hidden = state !== 'missing';
   for (const m of document.querySelectorAll('#acc-stale')) m.hidden = state !== 'stale';
   if (state === 'missing' || state === 'stale') dash.draw('acc-why');   // its callout was hidden until now
-  let n = 0, last = null;
-  for (const x of (runs || []).slice(0, accView.shown)) {
-    if (x.bank !== last) { const g = el('tr'); const td = el('td', 'jb-group', x.bank); td.colSpan = 14; g.appendChild(td); body.appendChild(g); last = x.bank; }
+  const bank = runs ? accBank(runs) : '', shown = (runs || []).filter((r) => r.bank === bank);
+  let n = 0;
+  for (const x of shown.slice(0, accView.shown)) {
     const tr = el('tr'); tr.dataset.key = x.row_key; n++;
     const partial = isTrue(x.partial);
     const m = el('td', '', x.method || x.row_key); if (x.tag) { m.appendChild(document.createTextNode(' ')); m.appendChild(el('span', 'jb-chip', x.tag)); }
@@ -589,7 +599,8 @@ dash.draw('acc-runs', (body) => {
     tr.appendChild(m);
     const blank = (v) => v && v !== '--' ? v : '—';   // the sheet writes -- for no memory model
     tr.appendChild(el('td', 'jb-muted', blank(x.memory_model))); tr.appendChild(el('td', 'jb-muted', blank(x.reasoning_model)));
-    const c = el('td'); c.appendChild(bar(+x.q_answered || 0, +x.q_in_bank || 0, false)); tr.appendChild(c);
+    const c = el('td'); c.appendChild(bar(+x.q_answered || 0, +x.q_in_bank || 0, false));
+    c.appendChild(el('div', 'jb-hint', `${fmt(+x.q_answered || 0)} of ${fmt(+x.q_in_bank || 0)} answered`)); tr.appendChild(c);
     for (const f of ['q_answered', 'q_in_bank', 'n_right']) tr.appendChild(el('td', 'jb-num', fmt(+x[f] || 0)));
     const t = el('td'); if (+x.q_answered) t.appendChild(accTrack(x)); else t.textContent = '—'; tr.appendChild(t);
     tr.appendChild(el('td', 'jb-num', p1(x.acc_answered_pct)));
@@ -604,14 +615,19 @@ dash.draw('acc-runs', (body) => {
     note.appendChild(document.createTextNode(String(x.note || (partial ? '' : '—')).replace(/^partial: /, '')));
     tr.appendChild(note); body.appendChild(tr);
   }
-  for (const m of document.querySelectorAll('#acc-more')) m.hidden = !runs || runs.length <= n;
+  for (const m of document.querySelectorAll('#acc-more')) m.hidden = shown.length <= n;
 });
 const accRedraw = () => { for (const d of ['acc-bd-head', 'acc-bd-rows', 'acc-count']) dash.draw(d); };
-dash.draw('acc-bank', (sel) => {
-  const runs = accRuns() || [];
-  sel.replaceChildren(...[...new Set(runs.map((r) => r.bank))].map((b) => new Option(b)));
-  sel.value = accBank(runs);
-  sel.onchange = () => { accView.bank = sel.value; accView.bdShown = 25; accRedraw(); };
+dash.draw('acc-banks', (e) => {
+  const runs = accRuns();
+  e.replaceChildren();
+  if (!runs || !runs.length) return;
+  const cur = accBank(runs);
+  for (const b of accBanks(runs)) {
+    const btn = el('button', 'jb-segb', b.label); btn.type = 'button'; btn.setAttribute('aria-pressed', b.bank === cur ? 'true' : 'false');
+    btn.onclick = () => { accView.bank = b.bank; accView.shown = 30; accView.bdShown = 25; dash.draw('acc-banks'); dash.draw('acc-runs'); accRedraw(); };
+    e.appendChild(btn);
+  }
 });
 // the breakdown of the chosen bank and dimension: its runs (columns) and categories (rows)
 const accCut = () => {
@@ -660,7 +676,7 @@ dash.draw('acc-count', (e) => { const cut = accCut(); e.textContent = cut ? `${f
 
 (() => {
   for (const s of document.querySelectorAll('#acc-dim')) { s.value = accView.dim; s.addEventListener('change', () => { accView.dim = s.value; accView.bdShown = 25; accRedraw(); }); }
-  for (const s of document.querySelectorAll('#acc-asked')) { s.value = accView.asked; s.addEventListener('change', () => { accView.asked = s.value; accView.shown = 30; accView.bdShown = 25; dash.draw('acc-runs'); accRedraw(); }); }
+  for (const s of document.querySelectorAll('#acc-asked')) { s.value = accView.asked; s.addEventListener('change', () => { accView.asked = s.value; accView.shown = 30; accView.bdShown = 25; dash.draw('acc-banks'); dash.draw('acc-runs'); accRedraw(); }); }
   for (const m of document.querySelectorAll('#acc-more')) m.addEventListener('click', () => { accView.shown += 30; dash.draw('acc-runs'); });
   for (const m of document.querySelectorAll('#acc-bd-more')) m.addEventListener('click', () => { accView.bdShown += 25; dash.draw('acc-bd-rows'); dash.draw('acc-count'); });
 })();

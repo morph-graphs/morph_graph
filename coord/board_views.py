@@ -70,6 +70,18 @@ VID = re.compile(r"P\d\d-\d{8}-\d{6}")
 # what each bank is; its videos and questions are counted from the banks themselves (board_read.py)
 BANKS = {"batch10_agree2": ("t1", "frozen", "epic-morph tag bank/batch10_agree2 (0f30904)"),
          "t2_agree2": ("t2", "answers on the board", "epic-morph v3/tranche2.txt; questions from Max's Stage A + B")}
+# what a reader calls each bank, in the order the page lists them; one place for every view (an unlisted bank shows its id)
+BANK_LABELS = {"all": "All questions", "batch10_agree2": "Pilot (10 videos)", "t2_agree2": "Tranche 2", "t3_agree2": "Tranche 3",
+               "t4_agree2": "Tranche 4", "t5_agree2": "Tranche 5", "rescue_agree2": "Rescue (2nd questions)",
+               "extra_agree2": "Extra (2nd questions)"}
+
+
+def bank_label(bank):
+    return BANK_LABELS.get(bank, bank)
+
+
+def bank_order(bank):
+    return list(BANK_LABELS).index(bank) if bank in BANK_LABELS else len(BANK_LABELS)
 # tranche 1, run before the board existed (2026-11-12); fixed, not read live
 PROGRESS = [
     dict(experiment="MERIT 8B · answers (with frames)", tranche="t1", done=598, total=598, unit="questions", note=""),
@@ -125,8 +137,8 @@ def _iso(t):
 
 
 def experiment(b, arm, stage, bank):
-    """The label a person reads: 'MERIT 27B · memory build', 'API gpt-5-f1024 · answers batch10_agree2'."""
-    what = "memory build" if stage == "build" else f"answers {bank}"
+    """The label a person reads: 'MERIT 27B · memory build', 'API gpt-5-f1024 · answers · Pilot (10 videos)'."""
+    what = "memory build" if stage == "build" else f"answers · {bank_label(bank)}"
     return f"{NAMES.get(b, b)} {MODELS.get(arm, arm)} · {what}"
 
 
@@ -402,9 +414,10 @@ def update(out, raw, live, nxq, built_src):
     tranches = [dict(kind="videos", tranche="all", bank="—", videos=len(videos), questions=None,
                      state="videos with a memory for some method, or a build on the board",
                      source="results dataset and the board's task list")]
-    for bank, per in sorted(bq.items(), key=lambda kv: BANKS.get(kv[0], ("z",))[0]):
+    for bank, per in sorted(bq.items(), key=lambda kv: (bank_order(kv[0]), kv[0])):
         t_, st, src_ = BANKS.get(bank, (bank, "", "epic-morph outputs/v3/banks"))   # an unlisted bank keys its own row
-        tranches.append(dict(kind="bank", tranche=t_, bank=bank, videos=len(per), questions=sum(per.values()), state=st, source=src_))
+        tranches.append(dict(kind="bank", tranche=t_, bank=bank, label=bank_label(bank), videos=len(per),
+                             questions=sum(per.values()), state=st, source=src_))
     W("tranches.json", tranches)
     W("decisions.json", DECISIONS)
     W("ledger.json", ledger)
@@ -435,6 +448,8 @@ def accuracy(out, raw, problem=""):
         mem = r.get("memory_model") if r.get("memory_model") not in (None, "", "--") else ""
         # asked (end / streaming / both, #58): a run has three rows, one per kind of question
         label[r["row_key"]] = " · ".join(str(x) for x in (r.get("method"), mem, r.get("tag"), r.get("asked")) if x)
-    W("accuracy.json", [dict(r, run=label[r["row_key"]], **prov) for r in raw["runs"]])
-    W("accuracy_breakdown.json", [dict(b, run_label=label.get(b["run"], b["run"]), state=state) for b in raw.get("breakdown", [])])
+    W("accuracy.json", [dict(r, run=label[r["row_key"]], bank_label=bank_label(r.get("bank")), bank_order=bank_order(r.get("bank")), **prov)
+                        for r in raw["runs"]])
+    W("accuracy_breakdown.json", [dict(b, run_label=label.get(b["run"], b["run"]), bank_label=bank_label(b.get("bank")), state=state)
+                                  for b in raw.get("breakdown", [])])
     return state
