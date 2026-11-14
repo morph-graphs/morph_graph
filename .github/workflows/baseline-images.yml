@@ -24,6 +24,8 @@ on:
       - baselines/m3agent/docker/**
       - baselines/hippomm/env/**
       - baselines/hippomm/docker/**
+      - baselines/egorag/env/**
+      - baselines/egorag/docker/**
       - baselines/egor1/env/**
       - baselines/egor1/docker/**
       - .github/workflows/baseline-images.yml
@@ -54,6 +56,7 @@ jobs:
           - {baseline: api, arm: cpu}   # API clients and ffmpeg only: no CUDA, a few minutes
           - {baseline: m3agent, arm: m3}   # two venvs (memorization, control) over one shared torch
           - {baseline: hippomm, arm: q25vl7b-gpt4o}   # vLLM in the base Python, HippoMM's torch 2.1.2 venv at /opt/client
+          - {baseline: egorag, arm: egogpt_gpt4o}   # EgoGPT + EgoRAG in one Python (torch 2.1.2, CUDA 12.1)
           - {baseline: egor1, arm: gemini25pro}   # the 3B agent's torch stack + API clients; nothing compiled
     env:
       PUBLISH: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
