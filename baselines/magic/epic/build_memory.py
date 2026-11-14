@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Build MAGIC-Video's memory for one EPIC-Morph video: everything that does not depend on the questions.
 
-Every LLM call goes to the local server at $MAGIC_LLM_BASE_URL (epic/hf_server.py, started by run_magic.sh);
-the text (Qwen3-Embedding-4B) and visual (VLM2Vec-V2.0) embedders run in this process. Steps (each skips
-existing output, in order), all written flat into --out:
+Every LLM call goes to the local server at $MAGIC_LLM_BASE_URL (epic/hf_server.py, started by run_magic.sh),
+or, for the arms with MAGIC-Video's published models (MAGIC_ROLES=1), to each role's endpoint (roles.py); the
+text (Qwen3-Embedding-4B) and visual (VLM2Vec-V2.0) embedders run in this process. Steps (each skips existing
+output, in order), all written flat into --out:
 
-  captions  MERIT's 30 s captions for the arm (same backbone)        -> <video>_30sec.json
+  captions  MERIT's 30 s captions for the arm (same backbone), or, without --merit_captions, a caption per
+            clip from the caption role's VLM (upstream's raw-video recipe)  -> <video>_30sec.json
   multi     3 min / 10 min / 1 h summaries (EgoRAG gen_event prompts) -> <video>_{3min,10min,1h}.json
   openie    NER + triples per 30 s caption (WorldMM OpenIE)           -> openie_results_local.json
   semantic  semantic extraction per 10-caption group, then incremental consolidation (a snapshot per group)
@@ -21,22 +23,28 @@ here: run_qa.py builds them per question cutoff (chains.py).
 Clip paths in the memory are relative to --clip_root (as in MERIT's captions); the process works from there.
 
     python build_memory.py --video <V> --out <memory dir> --merit_captions <V>_30sec.json --clip_root <clips>
+    python build_memory.py --video <V> --out <memory dir> --skeleton <V>_30sec_skeleton.json --clip_root <clips>
     python build_memory.py --memory_files        # the memory's file names, with {video}
 """
 import argparse
 import ast
+import base64
 import copy
 import json
 import logging
 import os
 import pickle
 import shutil
+import subprocess
 import sys
+import tempfile
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("build")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import roles  # noqa: E402
 
 STEPS = ["captions", "multi", "openie", "semantic", "visual", "graph"]
 TAG = "local"   # the model tag in WorldMM's file names (openie_results_<tag>.json, ...)
@@ -71,9 +79,12 @@ def hhmmssff(sec):
     return f"{sec // 3600:02d}{sec % 3600 // 60:02d}{sec % 60:02d}00"
 
 
-def llm():
+def llm(role="memory", **kw):
+    """The LLM for a role: the one local server (m8, m27), or the role's own endpoint (roles.py)."""
+    if roles.ROUTED:
+        return roles.model(role, TAG, **kw)
     from worldmm.llm import LLMModel
-    return LLMModel(model_name=TAG)
+    return LLMModel(model_name=TAG, **kw)
 
 
 def memory_paths(out, video):
@@ -95,15 +106,61 @@ def into(out, name, write):
 
 
 # ----------------------------------------------------------------------------- captions
+# upstream's clip prompt (preprocess/common.py caption_one_segment, the MM-Lifelong recipe), plus one sentence:
+# the rest of the port (entity nodes, chain prompts) reads first-person captions, as EgoLife's and MERIT's are
+CAPTION_PROMPT = ("Describe what happens in this video clip in 2-3 sentences. Focus on actions, objects, people, and "
+                  "locations. Be specific and factual. This is a first-person (egocentric) kitchen video: describe "
+                  "what the camera wearer does as \"I\".")
+
+
+def caption_clips(a):
+    """A caption per 30 s clip from the caption role's VLM, as upstream captions raw video: a 360p copy of the
+    clip (the same ffmpeg settings) sent as video_url. Resumes from <video>_30sec.json.partial (clips with a caption)."""
+    caps, part, model = jload(a.skeleton), cap(a.out, a.video, "30sec") + ".partial", llm("caption")
+    done = {c["video_path"]: c["text"] for c in (jload(part) if os.path.exists(part) else []) if c.get("text")}
+    for c in caps:
+        c["text"] = done.get(c["video_path"], "")
+
+    def one(c):
+        if c["text"]:
+            return c["text"]
+        with tempfile.TemporaryDirectory() as tmp:
+            small = os.path.join(tmp, "clip.mp4")
+            subprocess.run(["ffmpeg", "-i", c["video_path"], "-vf", "scale=-2:360", "-c:v", "libx264", "-crf", "32",
+                            "-preset", "ultrafast", "-an", "-y", small], capture_output=True, timeout=120, check=True)
+            url = "data:video/mp4;base64," + base64.b64encode(open(small, "rb").read()).decode()
+        msg = [{"role": "user", "content": [{"type": "text", "text": CAPTION_PROMPT},
+                                            {"type": "video_url", "video_url": {"url": url}}]}]
+        for _ in range(3):
+            try:
+                text = (model.generate(msg) or "").strip()
+                if text:
+                    return text
+            except Exception as e:
+                log.warning(f"caption {c['video_path']}: {type(e).__name__}: {e}")
+        return ""
+    with ThreadPoolExecutor(8) as ex:   # upstream's --parallel 8
+        for i, (c, text) in enumerate(zip(caps, ex.map(one, caps))):
+            c["text"] = text
+            if i % 20 == 19:
+                jsave(caps, part)
+    jsave(caps, part)
+    missing = [c["video_path"] for c in caps if not c["text"]]
+    if missing:
+        sys.exit(f"{len(missing)} of {len(caps)} clips got no caption (first {missing[0]}); rerun to retry them")
+    return part
+
+
 def step_captions(a):
-    """MERIT's 30 s captions (made with the arm's backbone): MAGIC's EgoLife caption layout."""
-    caps = jload(a.merit_captions)
+    """The 30 s captions in MAGIC's EgoLife caption layout: MERIT's (made with the arm's backbone), or the caption
+    role's."""
+    caps = jload(a.merit_captions or caption_clips(a))
     assert caps and all(c.get("text") for c in caps), f"uncaptioned clips in {a.merit_captions}"
     for c in caps:
         c.pop("frame_dir", None)                  # MERIT's frames; MAGIC reads the clips
         assert os.path.exists(c["video_path"]), f"missing clip {a.clip_root}/{c['video_path']}"
     jsave(caps, cap(a.out, a.video, "30sec"))
-    log.info(f"captions: {len(caps)} clips from {a.merit_captions}")
+    log.info(f"captions: {len(caps)} clips from {a.merit_captions or roles.endpoint('caption')[0]}; first: {caps[0]['text'][:200]}")
 
 
 # ----------------------------------------------------------------------------- multi
@@ -231,6 +288,7 @@ def step_graph(a, emb):
 
 DONE = {"captions": ["{video}_30sec.json"], "multi": ["{video}_1h.json"], "openie": [f"openie_results_{TAG}.json"],
         "semantic": [f"semantic_consolidation_results_{TAG}.json"], "visual": ["visual_embeddings.pkl"], "graph": ["graph.pkl"]}
+WITH = {"multi": ["{video}_3min.json", "{video}_10min.json"], "semantic": [f"semantic_extraction_results_{TAG}.json"]}   # a step's other files
 
 
 def main():
@@ -238,6 +296,7 @@ def main():
     ap.add_argument("--video")
     ap.add_argument("--out", help="the memory folder (<results>/<arm>/<video>)")
     ap.add_argument("--merit_captions", help="MERIT's <video>_30sec.json for the arm")
+    ap.add_argument("--skeleton", help="without --merit_captions: MERIT prep's clip list, captioned by the caption role")
     ap.add_argument("--clip_root", help="the 30 s clips; the captions' video_path is relative to it")
     ap.add_argument("--steps", nargs="+", default=STEPS, choices=STEPS)
     ap.add_argument("--num_frames", type=int, default=16)
@@ -246,7 +305,8 @@ def main():
     if a.memory_files:
         print(" ".join(MEMORY))
         return
-    a.out, a.merit_captions = os.path.abspath(a.out), os.path.abspath(a.merit_captions)
+    a.out = os.path.abspath(a.out)
+    a.merit_captions, a.skeleton = (p and os.path.abspath(p) for p in (a.merit_captions, a.skeleton))
     os.makedirs(a.out, exist_ok=True)
     os.chdir(a.clip_root)
     emb = None
@@ -254,6 +314,7 @@ def main():
         if st not in a.steps or all(os.path.exists(os.path.join(a.out, f.format(video=a.video))) for f in DONE[st]):
             continue
         log.info(f"=== {st} ({a.video})")
+        failed = roles.errors()
         if st in ("semantic", "visual", "graph"):
             if emb is None:
                 from worldmm.embedding import EmbeddingModel
@@ -261,6 +322,12 @@ def main():
             globals()[f"step_{st}"](a, emb)
         else:
             globals()[f"step_{st}"](a)
+        if roles.errors() > failed:   # WorldMM turns a failed call into an empty result: do not keep such a step
+            for f in DONE[st] + WITH.get(st, []):
+                if os.path.exists(os.path.join(a.out, f.format(video=a.video))):
+                    os.remove(os.path.join(a.out, f.format(video=a.video)))
+            sys.exit(f"{roles.errors() - failed} LLM calls failed in step {st}{': ' + roles.FATAL[0] if roles.FATAL else ''}; "
+                     "its output is not kept, rerun to redo the step")
     missing = [p for p in memory_paths(a.out, a.video) if not os.path.exists(p)]
     if set(a.steps) == set(STEPS) and missing:
         sys.exit(f"memory incomplete, missing {missing}")

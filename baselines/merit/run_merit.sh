@@ -228,14 +228,19 @@ qa() {
     case $RESPOND in gpt-*) merit=("$PY" "$M/epic/openai_usage.py" eval --num-threads "${MERIT_API_THREADS:-4}") ;; esac
     local n; n=$("$PY" -c "import json,sys; print(len(json.load(open(sys.argv[1]))))" "$QA")
     # Question IDs are the bank's keys, and an answer is reused only for an unchanged question (collect_answers.py),
-    # so the answers file of an earlier tranche (or the dataset's) is a source like any run. Pass "full" answers
-    # every question (MERIT resumes it from its temp file if interrupted); later passes, each under a new name so
-    # no earlier answers are overwritten, answer only the IDs with no valid answer yet: new or edited questions,
+    # so the answers file of an earlier tranche (or the dataset's) is a source like any run, and so are the video's
+    # answers under its other banks (same arm, memory and variant): a question they answered is not asked again.
+    # Pass "full" answers every question (MERIT resumes it from its temp file if interrupted); later passes, each
+    # under a new name so no earlier answers are overwritten, answer only the IDs with no valid answer yet: new or edited questions,
     # or ones MERIT failed on (it writes "Error"). Nothing runs when all are answered.
-    local ans=$OUT/answers_$BANK$SUF.json.gz
-    collect() { "$PY" "$M/epic/collect_answers.py" --qa_file "$QA" --runs "$runs/*/*_final.json" --prev "$ans" --out "$ans" | tail -1; }
+    # An answer arm's folder holds its memory as {video}_memory_ref.json (memory_ref), the memory arm's the files.
+    local ans=$OUT/answers_$BANK$SUF.json.gz earlier mem=("{video}_30sec.json" "{video}_30sec_4_key.json")
+    [ "$ARM" = "$MEM" ] || mem=("{video}_memory_ref.json")
+    earlier=$("$PY" "$M/../common/hf_results.py" earlier-answers --memory "${mem[@]}" --arm "$ARM" --video "$V" --dir "$OUT" \
+        --epic "$EPIC" --suffix="$SUF" | grep -vxF "$ans" || true)
+    collect() { "$PY" "$M/epic/collect_answers.py" --qa_file "$QA" --runs "$runs/*/*_final.json" --prev "$ans" $earlier --out "$ans" | tail -1; }
     for k in 1 2 3; do
-        if [ -s "$ans" ] || ls "$runs"/*/*_final.json >/dev/null 2>&1; then
+        if [ -s "$ans" ] || [ -n "$earlier" ] || ls "$runs"/*/*_final.json >/dev/null 2>&1; then
             missing=$(collect)
             [ -z "$missing" ] && break
             sel=(--question-ids $missing); name=${ARM}_${V}_${BANK}${SUF}_fill$(date +%m%d%H%M%S)

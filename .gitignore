@@ -253,6 +253,11 @@ baselines/worldmm/work/
 !baselines/worldmm/env/
 baselines/worldmm/results/
 
+# Direct (plain video model) runs: results; frames are MERIT's work folder (baselines/direct/run_direct.sh)
+baselines/direct/work/
+!baselines/direct/env/
+baselines/direct/results/
+
 # VST runs: logs, smoke runs; results (baselines/vst/run_vst.sh)
 baselines/vst/work/
 !baselines/vst/env/

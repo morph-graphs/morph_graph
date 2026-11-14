@@ -19,6 +19,7 @@ each package has its own README (`epic_eval/`, `event_eval/`).
 | `baselines/magic/` | MAGIC-Video memory baseline on EPIC-Morph: run script, Docker images, MAGIC-video fork as a submodule |
 | `baselines/worldmm/` | WorldMM memory baseline on EPIC-Morph: run script, environments, WorldMM fork as a submodule |
 | `baselines/m3agent/` | M3-Agent memory baseline on EPIC-Morph: run script, Docker image, m3-agent fork as a submodule |
+| `baselines/direct/` | plain video model (no memory) on EPIC-Morph: frames before the ask time through MERIT's loader, prompt and scorer |
 | `baselines/vst/` | VST (Video Streaming Thinking, VST-7B) streaming video model on EPIC-Morph: run script, environment, upstream VST as a submodule |
 | `baselines/hippomm/` | HippoMM (hippocampal multimodal memory) on EPIC-Morph, as released (Qwen2.5-VL-7B, ImageBind, Whisper locally; gpt-4o through the OpenAI API, paid): run script, Docker image, upstream HippoMM as a submodule with `HippoMM.patch` applied at run time |
 | `baselines/vgent/` | Vgent graph-RAG baseline on EPIC-Morph, as released (Qwen2.5-VL-7B): run script, environment, upstream Vgent as a submodule |
