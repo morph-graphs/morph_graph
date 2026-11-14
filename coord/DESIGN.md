@@ -176,7 +176,7 @@ What a worker needs for qa, beyond what builds need:
 
 Added 2026-11-13. `EXPERIMENTS` lists build + qa (`t2_agree2`) for MERIT, MAGIC-Video and WorldMM, both arms each,
 in that order (the order is the priority). Pools per (baseline, arm) are in `master.POOLS`: every m8 needs one GPU
-of 40 GB or more (the Nexus A6000 pools, wriva, max); every m27 needs an 80 GB GPU (wriva, max, zaratan), and only
+of 40 GB or more (the Nexus A6000 pools, wriva, max, zaratan); every m27 needs an 80 GB GPU (wriva, max, zaratan), and only
 MERIT's m27 also goes to arm00 (the images are x86; MERIT alone has a native aarch64 environment there). MAGIC's
 build depends on MERIT's build of the same video and arm while that is listed, since it reuses MERIT's captions.
 A memory counts as built when its folder has `runs.jsonl` and the baseline's last memory file (`MEMORY_DONE`).
