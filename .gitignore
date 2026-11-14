@@ -268,6 +268,11 @@ baselines/vgent/work/
 !baselines/vgent/env/
 baselines/vgent/results/
 
+# EgoRAG runs: clips, the Chroma index, upstream's events_diary; results (baselines/egorag/run_egorag.sh)
+baselines/egorag/work/
+!baselines/egorag/env/
+baselines/egorag/results/
+
 # Ego-R1 runs: clips, tool caches, logs; results (baselines/egor1/run_egor1.sh)
 baselines/egor1/work/
 !baselines/egor1/env/

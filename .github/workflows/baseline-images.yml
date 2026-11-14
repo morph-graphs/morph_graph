@@ -22,6 +22,8 @@ on:
       - baselines/api/docker/**
       - baselines/m3agent/env/**
       - baselines/m3agent/docker/**
+      - baselines/egorag/env/**
+      - baselines/egorag/docker/**
       - baselines/egor1/env/**
       - baselines/egor1/docker/**
       - baselines/rekv/env/**
@@ -53,6 +55,7 @@ jobs:
           - {baseline: worldmm, arm: m27}   # the server27 venv (transformers 5.8) at /opt/server
           - {baseline: api, arm: cpu}   # API clients and ffmpeg only: no CUDA, a few minutes
           - {baseline: m3agent, arm: m3}   # two venvs (memorization, control) over one shared torch
+          - {baseline: egorag, arm: egogpt_gpt4o}   # EgoGPT + EgoRAG in one Python (torch 2.1.2, CUDA 12.1)
           - {baseline: egor1, arm: gemini25pro}   # the 3B agent's torch stack + API clients; nothing compiled
           - {baseline: rekv, arm: m8}   # transformers 5.0 over the CUDA 12.6 runtime base; nothing compiled
     env:
