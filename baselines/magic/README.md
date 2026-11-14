@@ -130,7 +130,11 @@ Every stage of these arms calls a paid API (row B too: its search loop), so they
 - **Captions**: HD-EPIC comes with no captions, so the memory uses the paper's raw-video recipe: each 30 s clip, as a
   360p copy, goes to Qwen3.5-Flash with upstream's prompt plus one sentence asking for first person ("I"), which the
   rest of this port reads. No ASR merge (as the other arms). `MAGIC_CAPTIONS=merit-m27` (or `merit-m8`) builds the
-  memory from MERIT's captions of that arm instead (they must be in the dataset).
+  memory from MERIT's captions of that arm instead (they must be in the dataset). A clip with no caption stops the
+  build. The provider (Alibaba) refuses some clips for good: its content filter (`data_inspection_failed`), or a
+  video's last clip being too short for it. `MAGIC_SKIP_REFUSED=1` builds without those clips (a gap of 30 s in the
+  memory) and lists them in `<video>_refused_clips.json` next to the memory; any other missing caption still stops
+  the build. On the 156 videos this was 9 clips in 7 videos (2026-11-14).
 - **Chains**: built in `qa`, per question cutoff, as for the other arms, by the memory role (GPT-OSS-120B). They are
   kept with the memory (`magic/oss120/<video>/chains/`), so the row that runs first pays for a cutoff and the other
   takes it from its folder or from the dataset.
