@@ -44,9 +44,11 @@ as the agent) stands in for the Gemini 2.5 Pro arm, which Google no longer serve
     it is kept. Gemini's client does not always report the id; such calls are counted as `unreported`.
 - **Cost** (estimate, list prices, `batch10_agree2`: 10 videos, 5.66 h, 598 questions; see Cost): about $36
   for the memory, then $160 to $260 for the `gpt41` arm's answers and $180 to $300 for `gemini25pro`'s.
+  Measured: the ten memories cost $40.45; `gemini36flash` answers cost $0.11 a question on the first video,
+  about $67 for the 598.
 - **Keys** come from the environment only: `OPENAI_API_KEY` (the memory for both arms, and the `gpt41`
-  agent) and `GEMINI_API_KEY` (the `gemini25pro` and `gemini36flash` agents). A paid stage runs when its key is set and stops
-  with exit 3, nothing spent, when it is not. Never put a key in a file, an argument or a log. With
+  agent) and `GEMINI_API_KEY` (the `gemini25pro` and `gemini36flash` agents). A paid stage runs when its key
+  is set and stops with exit 3, nothing spent, when it is not. Never put a key in a file, an argument or a log. With
   `OPENROUTER_API_KEY` and no `OPENAI_API_KEY`, the GPT-4.1 calls go through OpenRouter (see Through
   OpenRouter); Gemini is only ever called through Google's API. Each paid script is started without the
   other provider's key.
