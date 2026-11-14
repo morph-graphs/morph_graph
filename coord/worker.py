@@ -168,10 +168,12 @@ def names(task, arms):
     return task["arm"] in arms or f"{task['baseline']}/{task['arm']}" in arms
 
 
-def fitting(task, queues, idle=()):
+def fitting(task, queues, idle=(), full=()):
     """The queues whose GPU can run this task: their `fits` names it, or their `fallback` names it and the queue is
-    idle (no task its `fits` names is waiting: an H200 takes 8B work only when no 27B task needs it)."""
-    return [n for n, q in queues.items() if names(task, q["fits"]) or (n in idle and names(task, q.get("fallback", [])))]
+    idle (no task its `fits` names is waiting: an H200 takes 8B work only when no 27B task needs it). A queue in
+    `full` (as many of this worker's tasks on it as its max_jobs) takes no more."""
+    return [n for n, q in queues.items() if n not in full
+            and (names(task, q["fits"]) or (n in idle and names(task, q.get("fallback", []))))]
 
 
 def submit_copies(task, a, queues, state, sbatch="sbatch"):
@@ -421,6 +423,10 @@ def main():
                 if not any(names(x, queues[n]["fits"]) and claimable(x) for x in tasks)
                 and not any(tid in by_id and names(by_id[tid], queues[n]["fits"]) for tid in active)
                 and fallback_used[n] < queues[n].get("fallback_max", 1)}
+        # a queue's max_jobs (e.g. 2: QoS vulcan-high-h200 runs two jobs per user): once that many of this worker's
+        # tasks have a live copy on it, it takes no more, so tasks only it fits are left for other pools
+        used = {n: sum(on_queue(tid, n) for tid in active) for n, q in (queues or {}).items() if q.get("max_jobs")}
+        full = {n for n in used if used[n] >= queues[n]["max_jobs"]}
         # tasks only the scarce queues fit (27B) first, so cheaper work cannot use up the free slots ahead of them
         scarce = [q["fits"] for q in (queues or {}).values() if q.get("fallback")]
         start = []
@@ -435,7 +441,7 @@ def main():
                 continue
             if a.pool not in task.get("pools", []) and "*" not in task.get("pools", []):
                 continue
-            if queues and not fitting(task, queues, idle):   # none of this worker's GPUs can run it (e.g. 27B, no 80 GB queue)
+            if queues and not fitting(task, queues, idle, full):   # none of this worker's GPUs can run it now (e.g. 27B, no 80 GB queue)
                 continue
             if task["baseline"] not in a.baselines:   # this worker has no image (or setup) for it
                 continue
@@ -447,7 +453,11 @@ def main():
             claims[tid] = dict(status="running", host=host, node=socket.gethostname(), slot=slot,
                                gpu="(scheduler)" if a.launcher == "slurm" else gpu_name(slot), claimed=jobs.iso(),
                                started=jobs.iso(), started_t=t, lease_until=t + jobs.LEASE_S)
-            qs = fitting(task, queues, idle) if queues else []
+            qs = fitting(task, queues, idle, full) if queues else []
+            for n in [n for n in qs if n in used]:
+                used[n] += 1
+                if used[n] >= queues[n]["max_jobs"]:
+                    full.add(n)
             for n in [n for n in qs if n in idle and not names(task, queues[n]["fits"])]:   # a fallback copy used
                 fallback_used[n] += 1
                 if fallback_used[n] >= queues[n].get("fallback_max", 1):
