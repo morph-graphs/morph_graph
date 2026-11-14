@@ -20,6 +20,7 @@ each package has its own README (`epic_eval/`, `event_eval/`).
 | `baselines/worldmm/` | WorldMM memory baseline on EPIC-Morph: run script, environments, WorldMM fork as a submodule |
 | `baselines/m3agent/` | M3-Agent memory baseline on EPIC-Morph: run script, Docker image, m3-agent fork as a submodule |
 | `baselines/vst/` | VST (Video Streaming Thinking, VST-7B) streaming video model on EPIC-Morph: run script, environment, upstream VST as a submodule |
+| `baselines/hippomm/` | HippoMM (hippocampal multimodal memory) on EPIC-Morph, as released (Qwen2.5-VL-7B, ImageBind, Whisper locally; gpt-4o through the OpenAI API, paid): run script, Docker image, upstream HippoMM as a submodule with `HippoMM.patch` applied at run time |
 | `baselines/vgent/` | Vgent graph-RAG baseline on EPIC-Morph, as released (Qwen2.5-VL-7B): run script, environment, upstream Vgent as a submodule |
 | `baselines/egagent/` | EGAgent (entity-graph agent) on EPIC-Morph, as published (paid APIs: GPT-4.1 memory, GPT-4.1 or Gemini 2.5 Pro agent): run script, Docker image, upstream as a submodule + our patch |
 | `baselines/egorag/` | EgoRAG (EgoLife's EgoButler) on EPIC-Morph, as released (EgoGPT captions; GPT-4o and DeepSeek through paid APIs): run script, Docker image, upstream EgoLife as a submodule plus `EgoLife.patch` |
