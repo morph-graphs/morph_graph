@@ -109,8 +109,6 @@ def molmo_inputs(llm, system, query, frames, stamps):
     inputs = llm.processor(text=[text], padding=True, return_tensors="pt", **video)
     n_video = int((inputs["input_ids"] == llm.model.config.image_patch_id).sum())
     assert n_video == len(frames) * 81, (n_video, len(frames))
-    limit = llm.model.config.text_config.max_position_embeddings
-    assert inputs["input_ids"].shape[1] + 2048 <= limit, f"{inputs['input_ids'].shape[1]} prompt tokens: over the model's {limit}-token context with {len(frames)} frames"
     return inputs, n_video
 
 
@@ -194,6 +192,10 @@ def main():
         # frame k is the picture at k + 0.5 s: that is the time the model is told
         inputs, n_video = build(llm, qa_prompt, query, [Image.open(paths[s]).convert("RGB") for s in secs], [s + 0.5 for s in secs])
         n_in = inputs["input_ids"].shape[1]
+        # the model's context (Molmo2: 36,864 tokens, i.e. at most 384 frames): the prompt must fit with room to answer
+        cfg = llm.model.config
+        room = getattr(getattr(cfg, "text_config", cfg), "max_position_embeddings", 10 ** 9) - n_in
+        assert room >= 256, f"{n_in} prompt tokens with {len(secs)} frames: over the model's context ({room + n_in} tokens)"
         if secs and not shown:   # once per run: the start and end of the prompt as the model reads it (time stamps, wording)
             ids = inputs["input_ids"][0]
             seen = llm.processor.tokenizer.decode(ids[(ids != getattr(llm.processor, "video_token_id", -1)) & (ids != getattr(llm.model.config, "image_patch_id", -1))])
@@ -202,7 +204,7 @@ def main():
         try:
             torch.manual_seed(42)
             with torch.no_grad():
-                gen = llm.model.generate(**inputs.to(llm.model.device), do_sample=False, max_new_tokens=2048)
+                gen = llm.model.generate(**inputs.to(llm.model.device), do_sample=False, max_new_tokens=min(2048, room))
             response = llm.processor.tokenizer.decode(gen[0, n_in:], skip_special_tokens=True, clean_up_tokenization_spaces=False).strip()
         except torch.OutOfMemoryError as e:   # "Error" rows are retried on the next run, as MERIT's
             print(f"{row['ID']}: {str(e)[:200]}", flush=True)

@@ -17,7 +17,7 @@
 #                 molmo2-8b    allenai/Molmo2-8B           MERIT's m8 environment (context 36,864 tokens: N <= 384)
 #          N      at most N frames per question, evenly spaced over the video before t_ask, the last one
 #                 just before t_ask; all of them (1 fps) when the video so far has fewer than N seconds
-#          e.g. qwen3vl-8b-f32, qwen3vl-8b-f128, qwen38-27b-f768
+#          e.g. qwen3vl-8b-f32, qwen35-9b-f128, qwen38-27b-f768, molmo2-8b-f384
 #   bank   a named bank of the epic-morph checkout, e.g. batch10_agree2 (generated there with
 #          v3/export_bank.py <bank> when missing)
 #
