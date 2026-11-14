@@ -1,8 +1,9 @@
 """The dashboard's datasets, computed from what collect_live.py gathered: the board (coord/board_read.py: open
 tasks, every claim, heartbeats, what the results dataset holds), our own Slurm queues and the off-board loops.
 
-    matrix.json     one row per experiment (baseline, model, stage, bank): done / open, and what the open tasks
-                    are doing (running, queued, claimed, failing, waiting on a build, ready), rate and ETA
+    matrix.json     one row per experiment (baseline, model, stage, bank): progress in its natural unit (videos
+                    with a memory; questions with a valid answer, of the bank's questions), and as detail the
+                    tasks: done / open and what the open ones are doing, rate and ETA
     tasks.json      every open task with its state now and where
     running.json    what is running or waiting right now: board tasks (state from our squeue where we can see it,
                     "claimed" on other people's clusters) and our other jobs
@@ -292,6 +293,15 @@ def update(out, raw, live, nxq, built_src):
         else:
             e["done"] = sum(1 for a in raw["answered"] if (a[0], a[1], a[3]) == (b, arm, bank))
         e["total"] = e["done"] + e["open"]
+        # the headline in natural units: videos with a memory, questions with a valid answer (task counts stay as detail)
+        bq = (raw.get("bank_questions") or {}).get(bank or "", {})
+        if stage == "build" or not bq:
+            e["unit"], e["n"], e["of"] = "videos", e["done"], e["total"]
+        else:
+            e["unit"], e["of"] = "questions", sum(bq.values())
+            e["n"] = sum(a[4] for a in raw.get("answered_q", []) if (a[0], a[1], a[3]) == (b, arm, bank))
+        e["pct"] = round(100 * e["n"] / e["of"], 1) if e["of"] else None
+        e["system"] = f"{NAMES.get(b, b)} {MODELS.get(arm, arm)}"
         rph = rate.get(e["experiment"])
         e["rate_per_h"] = round(rph, 1) if rph else None
         e["eta_h"] = round(e["open"] / rph, 1) if rph and e["open"] else None
