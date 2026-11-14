@@ -24,6 +24,7 @@ import gzip
 import json
 import math
 import os
+import re
 import sys
 import time
 
@@ -33,6 +34,82 @@ sys.path[:0] = [os.path.join(MERIT, "epic"), os.path.join(MERIT, "MERIT", "src")
 from prepare_epic import convert_questions, match_answers  # noqa: E402
 
 PX = 448   # the side of prepare_epic's frames, shown to the model as they are
+# models MERIT's wrapper does not know, loaded by load_hf: name -> Hugging Face id
+HF = {"qwen35-9b": "Qwen/Qwen3.5-9B", "qwen35-35b-a3b": "Qwen/Qwen3.5-35B-A3B", "molmo2-8b": "allenai/Molmo2-8B"}
+FINAL = "\nPlease provide only the final answer from the choices given (e.g., A, B, C, or D)."
+
+
+def load_hf(hf_id):
+    """Model and processor by Hugging Face id, set up as MERIT's wrapper sets up its Qwen models (local snapshot
+    when cached, bf16, flash-attention when installed, one GPU or spread over those visible, seed 42). Molmo2
+    brings its own code (trust_remote_code); its card loads it as float32 (dtype auto), which needs 46.7 GB at
+    128 frames, so it is loaded in bf16 like the others."""
+    import torch
+    from types import SimpleNamespace
+    from huggingface_hub import snapshot_download
+    from transformers import AutoModelForImageTextToText, AutoProcessor
+    try:
+        path = snapshot_download(hf_id, local_files_only=True)
+    except Exception:
+        path = hf_id
+    kw = {"device_map": "auto" if torch.cuda.device_count() > 1 else "cuda:0", "dtype": torch.bfloat16}
+    if "Molmo" in hf_id:
+        kw["trust_remote_code"] = True
+    else:
+        try:
+            import flash_attn  # noqa: F401
+            kw["attn_implementation"] = "flash_attention_2"
+        except ImportError:
+            kw["attn_implementation"] = "sdpa"
+    torch.manual_seed(42)
+    model = AutoModelForImageTextToText.from_pretrained(path, **kw).eval()
+    processor = AutoProcessor.from_pretrained(path, **({"trust_remote_code": True} if "Molmo" in hf_id else {}))
+    print(f"loaded {hf_id}: {kw}, devices {sorted(set(getattr(model, 'hf_device_map', {'': model.device}).values()), key=str)}", flush=True)
+    return SimpleNamespace(model=model, processor=processor, model_name=hf_id)
+
+
+def qwen_inputs(llm, system, query, frames, stamps):
+    """Qwen3-VL / Qwen3.5 / Qwen3.8: MeritMemory._build_qa_content with the video where the retrieved captions
+    and frames would be. Returns the processor's inputs and the number of video tokens."""
+    from transformers.video_utils import VideoMetadata
+    content = ([{"type": "text", "text": query + "\n\nContext:\n"}] + ([{"type": "video"}] if frames else []) +
+               [{"type": "text", "text": FINAL}])
+    thinking = {"enable_thinking": False} if ("Qwen3.5" in llm.model_name or "Qwen3.8" in llm.model_name) else {}   # instruct mode, as MERIT
+    text = llm.processor.apply_chat_template(copy.deepcopy(system) + [{"role": "user", "content": content}],
+                                             tokenize=False, add_generation_prompt=True, **thinking)
+    video = {}
+    if frames:
+        frames = frames + frames[-1:] * (len(frames) % 2)   # an even count: the model joins frames in pairs (the processor
+        stamps = stamps + stamps[-1:] * (len(stamps) % 2)   # would repeat the last one too, but only after resizing for the odd count)
+        # total pixels pinned (min = max), so the processor keeps every frame at 448 px (as video_models/qwen3_vl.py);
+        # index 2 * time at 2 fps gives each pair the mean of its two times as its stamp
+        budget = PX ** 2 * len(frames)
+        video = dict(videos=[frames], do_sample_frames=False, size={"shortest_edge": budget, "longest_edge": budget},
+                     video_metadata=[VideoMetadata(total_num_frames=int(2 * stamps[-1]) + 1, fps=2.0, frames_indices=[int(2 * t) for t in stamps])])
+    inputs = llm.processor(text=[text], padding=True, return_tensors="pt", **video)
+    n_video = int((inputs["input_ids"] == llm.processor.video_token_id).sum())
+    if frames:   # every frame kept at 448 px: (448 / 32)^2 = 196 tokens per 2 frames
+        assert n_video == len(frames) // 2 * (PX // 32) ** 2, (n_video, len(frames))
+    return inputs, n_video
+
+
+def molmo_inputs(llm, system, query, frames, stamps):
+    """Molmo2, as its model card and processor work: no system role, so MERIT's system text opens the user turn;
+    the chat template puts the video before all text; the processor resizes every frame to 378 px (81 tokens
+    a frame) and writes each frame's time before it."""
+    import numpy as np
+    from transformers.video_utils import VideoMetadata
+    text = system[0]["content"].rstrip() + "\n\n" + query + "\n\nContext:\n" + FINAL
+    content = [{"type": "text", "text": text}] + ([{"type": "video"}] if frames else [])
+    text = llm.processor.apply_chat_template([{"role": "user", "content": content}], tokenize=False, add_generation_prompt=True)
+    video = {}
+    if frames:
+        video = dict(videos=[np.stack([np.asarray(f) for f in frames])], do_sample_frames=False,
+                     video_metadata=[VideoMetadata(total_num_frames=int(2 * stamps[-1]) + 1, fps=2.0, frames_indices=[int(2 * t) for t in stamps])])
+    inputs = llm.processor(text=[text], padding=True, return_tensors="pt", **video)
+    n_video = int((inputs["input_ids"] == llm.model.config.image_patch_id).sum())
+    assert n_video == len(frames) * 81, (n_video, len(frames))
+    return inputs, n_video
 
 
 def pick_frames(t_ask, n_have, n):
@@ -57,7 +134,7 @@ def load(path):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    p.add_argument("--model", default="qwen3vl-8b", help="a name of MERIT's Qwen wrapper: qwen3vl-8b, qwen38-27b")
+    p.add_argument("--model", default="qwen3vl-8b", help="a name of MERIT's Qwen wrapper (qwen3vl-8b, qwen38-27b) or one of: " + ", ".join(HF))
     p.add_argument("--frames", type=int, required=True, help="frame budget N per question")
     p.add_argument("--video", required=True)
     p.add_argument("--bank_file", required=True, help="epic-morph outputs/v3/banks/<bank>/<video>_questions.json")
@@ -95,58 +172,49 @@ def main():
         if llm is None:   # loaded only when something is left to answer
             import torch
             from PIL import Image
-            from transformers.video_utils import VideoMetadata
             from evaluate_egolife import evaluate_prediction, parse_reasoning_answer, query_time_int
-            from merit.llm import LLMModel
             from merit.llm.prompt_template_manager import PromptTemplateManager
             from merit.types import transform_timestamp
-            llm = LLMModel(model_name=args.model).model          # MERIT's loader: .model, .processor, greedy, seed 42
+            if args.model in HF:
+                llm = load_hf(HF[args.model])
+            else:
+                from merit.llm import LLMModel
+                llm = LLMModel(model_name=args.model).model      # MERIT's loader: .model, .processor, greedy, seed 42
             qa_prompt = PromptTemplateManager().render("final_qa_egolife")
-            thinking = {"enable_thinking": False} if "Qwen3.8" in llm.model_name else {}   # as MERIT's generate
-            video_token = llm.processor.video_token_id
+            build = molmo_inputs if "Molmo" in llm.model_name else qwen_inputs
         t0 = time.time()
         choices = {k: row[f"choice_{k.lower()}"] for k in "ABCD" if f"choice_{k.lower()}" in row}
         until = query_time_int(row)
         secs = pick_frames(row["meta"]["t_ask"], len(paths), args.frames)
         assert all(s + 0.5 <= row["meta"]["t_ask"] for s in secs), (row["ID"], row["meta"]["t_ask"], secs[-1])
-        # MeritMemory._build_qa_content with the video where the retrieved captions and frames would be
         query = (f"Query: {row['question']}\nQuery Time: {transform_timestamp(str(until))}"
                  f"\nChoices: " + " ".join(f"({k}) {v}" for k, v in sorted(choices.items())))
-        content = ([{"type": "text", "text": query + "\n\nContext:\n"}] + ([{"type": "video"}] if secs else []) +
-                   [{"type": "text", "text": "\nPlease provide only the final answer from the choices given (e.g., A, B, C, or D)."}])
-        msgs = copy.deepcopy(qa_prompt) + [{"role": "user", "content": content}]
-        text = llm.processor.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True, **thinking)
-        video = {}
-        if secs:
-            frames = [Image.open(paths[s]).convert("RGB") for s in secs]
-            idx = secs + secs[-1:] * (len(secs) % 2)   # an even count: the model joins frames in pairs (the processor
-            frames += frames[-1:] * (len(secs) % 2)     # would repeat the last one too, but only after resizing for the odd count)
-            # total pixels pinned (min = max), so the processor keeps every frame at 448 px (as video_models/qwen3_vl.py);
-            # frame k is the picture at k + 0.5 s: index 2k + 1 at 2 fps gives each pair the mean of its two times as its stamp
-            budget = PX ** 2 * len(frames)
-            video = dict(videos=[frames], do_sample_frames=False, size={"shortest_edge": budget, "longest_edge": budget},
-                         video_metadata=[VideoMetadata(total_num_frames=2 * len(paths), fps=2.0, frames_indices=[2 * k + 1 for k in idx])])
-        inputs = llm.processor(text=[text], padding=True, return_tensors="pt", **video)
-        n_in = inputs.input_ids.shape[1]
-        n_video = int((inputs.input_ids == video_token).sum())
-        if secs and not shown:   # once per run: the time stamps the model reads, to check against the frames' seconds
-            import re
-            stamps = re.findall(r"<([\d.]+) seconds>", llm.processor.tokenizer.decode(inputs.input_ids[0][inputs.input_ids[0] != video_token]))
-            print(f"time stamps of {len(secs)} frames ({secs[:2]} .. {secs[-2:]} s): {stamps[:2]} .. {stamps[-2:]}", flush=True)
+        # frame k is the picture at k + 0.5 s: that is the time the model is told
+        inputs, n_video = build(llm, qa_prompt, query, [Image.open(paths[s]).convert("RGB") for s in secs], [s + 0.5 for s in secs])
+        n_in = inputs["input_ids"].shape[1]
+        # the model's context (Molmo2: 36,864 tokens, i.e. at most 384 frames): the prompt must fit with room to answer
+        cfg = llm.model.config
+        room = getattr(getattr(cfg, "text_config", cfg), "max_position_embeddings", 10 ** 9) - n_in
+        assert room >= 256, f"{n_in} prompt tokens with {len(secs)} frames: over the model's context ({room + n_in} tokens)"
+        if secs and not shown:   # once per run: the start and end of the prompt as the model reads it (time stamps, wording)
+            ids = inputs["input_ids"][0]
+            seen = llm.processor.tokenizer.decode(ids[(ids != getattr(llm.processor, "video_token_id", -1)) & (ids != getattr(llm.model.config, "image_patch_id", -1))])
+            print(f"prompt with {len(secs)} frames ({secs[:2]} .. {secs[-2:]} s): {seen[:400]!r} ... {seen[-500:]!r}", flush=True)
             shown = True
-        if secs:   # every frame kept at 448 px: (448 / 32)^2 = 196 tokens per 2 frames
-            assert n_video == math.ceil(len(secs) / 2) * (PX // 32) ** 2, (n_video, len(secs))
         try:
             torch.manual_seed(42)
             with torch.no_grad():
-                gen = llm.model.generate(**inputs.to(llm.model.device), do_sample=False, max_new_tokens=2048)
-            response = llm.processor.batch_decode(gen[:, n_in:], skip_special_tokens=True, clean_up_tokenization_spaces=False)[0].strip()
+                gen = llm.model.generate(**inputs.to(llm.model.device), do_sample=False, max_new_tokens=min(2048, room))
+            response = llm.processor.tokenizer.decode(gen[0, n_in:], skip_special_tokens=True, clean_up_tokenization_spaces=False).strip()
         except torch.OutOfMemoryError as e:   # "Error" rows are retried on the next run, as MERIT's
             print(f"{row['ID']}: {str(e)[:200]}", flush=True)
             response = "Error"
         del inputs
         torch.cuda.empty_cache()
         parsed, reasoning = parse_reasoning_answer(response)
+        if not parsed:   # Molmo2 writes the letter alone on the first line, without "ANSWER:"
+            m = re.match(r"\(?([A-D])\)?[.:]?\s*(\n|$)", response)
+            parsed = m.group(1) if m and m.group(1) in choices else ""
         res = done[str(row["ID"])] = {
             "ID": row["ID"], "key": row.get("key"), "qhash": row.get("qhash"), "pos": row.get("pos"), "type": row.get("type", ""),
             "question": row["question"], "choices": choices, "answer": row["answer"], "response": response,
