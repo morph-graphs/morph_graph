@@ -45,12 +45,12 @@ BUILD_ORDER = os.path.join(ROOT, "baselines", "merit", "build_order.txt")
 # GH200) or 2x 48 GB; MAGIC one 80 GB GPU or 3+ GPUs; WorldMM one 80 GB GPU or 2x 48 GB. arm00 (GH200, aarch64) runs
 # MERIT only: the images are x86, and only MERIT has a native arm environment there. A worker takes only the
 # baselines it was started with (worker.py --baselines), so listing a baseline here runs nothing until a pool opts in.
-# our three Nexus workers are named after the queue their tasks go to: tron (QoS high), scavenger, and
-# vulcan-ampere with QoS vulcan-sailon
-# A person's one worker over several queues (worker.py --queues, e.g. Vatsal's `vatsal` on Nexus) is listed for both
-# arms: the worker itself claims only the tasks one of its queues fits, so without an 80 GB queue it never takes a 27B.
-M8 = ["max", "nexus-tron", "nexus-sailon", "nexus-scavenger", "wriva", "vatsal", "zaratan"]   # zaratan: H100 jobs
-M27 = ["wriva", "zaratan", "max", "vatsal"]
+# A person's one worker over several queues (worker.py --queues: Anubhav's `nexus`, Vatsal's `vatsal`, both on Nexus)
+# is listed for both arms: the worker itself claims only the tasks one of its queues fits, so it takes a 27B only
+# through an 80 GB queue (the H200). nexus-tron, nexus-sailon and nexus-scavenger are the per-queue workers `nexus`
+# replaces; they stay listed until their last claims are finished.
+M8 = ["max", "nexus", "nexus-tron", "nexus-sailon", "nexus-scavenger", "wriva", "vatsal", "zaratan"]   # zaratan: H100 jobs
+M27 = ["wriva", "zaratan", "max", "nexus", "vatsal"]
 POOLS = {("merit", "m27"): M27 + ["arm00"], ("merit", "m8"): M8,
          ("magic", "m27"): M27, ("magic", "m8"): M8,
          ("worldmm", "m27"): M27, ("worldmm", "m8"): M8}
