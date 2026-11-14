@@ -13,6 +13,9 @@ tasks, every claim, heartbeats, what the results dataset holds), our own Slurm q
                     machines, stale workers, open decisions
     tranches.json   the real units, counted once: videos to build memories for, and each bank's videos and questions
     progress.json, decisions.json   fixed context (tranche 1 results, decisions)
+    accuracy.json   one row per scored run (baseline, arm, bank, tag): the results sheet's row, as
+                    coord/sheet_update.py --json wrote it on Nexus (accuracy(), below; nothing is scored here)
+    accuracy_breakdown.json   per run: answered, right and in-bank counts by taxonomy leaf, video, hops, form
 
 Readers see sites only: a pool's queue is detail text ("Nexus · vulcan-sailon"), never a row or a column value,
 so renamed pools and several workers on one cluster read as one machine. A task state is decided once, here, and every view counts from it. History kept next to the outputs:
@@ -24,6 +27,7 @@ import re
 import time
 
 RATE_WINDOW_H = 6
+ACC_STALE_MIN = 90   # the sheet updater's cron writes the accuracy file every 30 min: three missed runs is stale
 NAMES = {"merit": "MERIT", "magic": "MAGIC-Video", "worldmm": "WorldMM", "m3agent": "M3-Agent", "api": "API"}
 MODELS = {"m8": "8B", "m27": "27B"}
 # pool -> (site, who runs it, hardware, queue). A reader sees only the site; the queue is detail text
@@ -404,3 +408,31 @@ def update(out, raw, live, nxq, built_src):
     W("decisions.json", DECISIONS)
     W("ledger.json", ledger)
     return dict(tasks=len(task_rows), running=len(running), attention=len(att))
+
+
+def accuracy(out, raw, problem=""):
+    """The Accuracy tab's two datasets from the file coord/sheet_update.py --json writes (raw: its object, or the
+    last good read, or None; problem: why this cycle's read failed, if it did). Rows are the file's, plus the run's
+    label, the file's provenance and a state: ok, stale (written over ACC_STALE_MIN ago, or not read this cycle),
+    or one row with state missing when there is nothing to show."""
+    t = time.time()
+    W = lambda n, o: json.dump(o, open(os.path.join(out, n), "w"), indent=0)
+    meta = (raw or {}).get("meta") or {}
+    written = _t(meta.get("written_utc"))
+    if not raw or not raw.get("runs") or written is None:
+        note = problem or "the accuracy file holds no scored run"
+        W("accuracy.json", [dict(row_key="", state="missing", state_note=note)])
+        W("accuracy_breakdown.json", [dict(run="", state="missing", state_note=note)])
+        return "missing"
+    age = (t - written) / 60
+    state = "stale" if problem or age > ACC_STALE_MIN else "ok"
+    note = "; ".join(x for x in (problem, f"scores written {int(age)} min ago (expected every 30)" if age > ACC_STALE_MIN else "") if x)
+    prov = dict(state=state, state_note=note, scored_at=meta["written_utc"], dataset_revision=(meta.get("dataset_revision") or "")[:12],
+                bank_commit=(meta.get("bank_commit") or "")[:12])   # no snapshot time: unchanged scores, unchanged file
+    label = {}
+    for r in raw["runs"]:
+        mem = r.get("memory_model") if r.get("memory_model") not in (None, "", "--") else ""
+        label[r["row_key"]] = " · ".join(str(x) for x in (r.get("method"), mem, r.get("tag")) if x)
+    W("accuracy.json", [dict(r, run=label[r["row_key"]], **prov) for r in raw["runs"]])
+    W("accuracy_breakdown.json", [dict(b, run_label=label.get(b["run"], b["run"]), state=state) for b in raw.get("breakdown", [])])
+    return state
