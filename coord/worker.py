@@ -32,6 +32,19 @@ MAGIC reads MERIT's captions) into MERIT_HF_CACHE before starting it, so a job w
 not its file storage still finds a memory built elsewhere: in the cache, hf_hub_download needs only the API
 (Zaratan compute nodes, measured 2026-11-13: huggingface.co answers over IPv6, the xet/LFS file hosts are IPv4-only).
 
+One worker for all of a person's queues: --queues <file> instead of --sbatch (coord/nexus_queues.json is the example,
+coord/nexus_worker.sbatch the job that runs it on Nexus):
+
+    python coord/worker.py --pool vatsal --launcher slurm --queues coord/nexus_queues.json --slots 1 2 3 4 5 6 7 8
+
+The file names each queue's sbatch arguments and the arms its GPU fits ("m8", "m27", or "magic/m27" for one
+baseline). The worker claims only tasks some queue fits, and submits each task to every fitting queue at once, under
+one job name. The first copy to start runs it (coord/slurm_guard.sh: an atomic marker <task>.ran, then it cancels
+the pending copies); a copy starting later exits without work. Each cycle one squeue shows which copies are still
+queued: the task is done when the copy that ran wrote its exit code (<task>.rc), and failed when every copy left the
+queue without one (seen on two cycles in a row, for a slow NFS). The state folder must be on a filesystem the GPU
+nodes share. Slots count tasks, not copies.
+
 Each cycle (every --every seconds): read the board, mark finished tasks done/failed with their runtime and
 GPU, renew the leases of running ones, claim the highest-priority free tasks for free slots (one commit to
 this pool's own file; if anyone committed meanwhile it re-reads), then start them. A task runs the baseline's
@@ -39,6 +52,7 @@ own script (stage, then upload), so results go to the results dataset as usual. 
 tasks keep going, and a restarted worker picks them up again from its state folder.
 """
 import argparse
+import getpass
 import json
 import re
 import shlex
@@ -63,7 +77,7 @@ def valid(task):
     return all(VALID[k].match(str(task.get(k) or "")) for k in VALID)
 
 
-def command(task, gpus, a, log):
+def inner(task, gpus, a):
     """The shell command that runs one task: the stage, then the upload of its results folder."""
     b, stage, v, arm, bank = task["baseline"], task["stage"], task["video"], task["arm"], task.get("bank") or ""
     if a.launcher == "docker":
@@ -72,12 +86,85 @@ def command(task, gpus, a, log):
         run = f"MERIT_RUNTIME={a.runtime} bash baselines/{b}/docker/run.sh"
     else:
         run = f"CUDA_VISIBLE_DEVICES={gpus} bash baselines/{b}/run_{b}.sh"
-    up = f"MERIT_OUTBOX={task['id']} {run}" if a.outbox else run
-    inner = f"{run} {stage} {v} {arm} {bank} && {up} upload {v} {arm}"
+    up = f"MERIT_OUTBOX={task['id']} {run}" if getattr(a, "outbox", False) else run
+    return f"{run} {stage} {v} {arm} {bank} && {up} upload {v} {arm}"
+
+
+def command(task, gpus, a, log):
     if a.launcher == "slurm":   # one job per task; --wait returns the job's exit code when it ends
         return (f"sbatch --wait --parsable --job-name=board-{task['id'][:60]} --output={log} --open-mode=append "
-                f"{a.sbatch} --wrap {shlex.quote(f'cd {REPO_ROOT} && nvidia-smi -L && {inner}')}")
-    return inner
+                f"{a.sbatch} --wrap {shlex.quote(f'cd {REPO_ROOT} && nvidia-smi -L && {inner(task, gpus, a)}')}")
+    return inner(task, gpus, a)
+
+
+def load_queues(path):
+    """--queues file: {name: {"sbatch": "<sbatch args>", "fits": ["m8", "magic/m27", ...]}}."""
+    queues = json.load(open(path))
+    for n, q in queues.items():
+        if not (VALID["id"].match(n) and q.get("sbatch") and q.get("fits")):
+            raise SystemExit(f"{path}: queue {n!r} needs a plain name, 'sbatch' and 'fits'")
+    return queues
+
+
+def names(task, arms):
+    """Whether a queue's list of arms (m8) or baseline/arms (magic/m27) names this task."""
+    return task["arm"] in arms or f"{task['baseline']}/{task['arm']}" in arms
+
+
+def fitting(task, queues, idle=()):
+    """The queues whose GPU can run this task: their `fits` names it, or their `fallback` names it and the queue is
+    idle (no task its `fits` names is waiting: an H200 takes 8B work only when no 27B task needs it)."""
+    return [n for n, q in queues.items() if names(task, q["fits"]) or (n in idle and names(task, q.get("fallback", [])))]
+
+
+def submit_copies(task, a, queues, state, sbatch="sbatch"):
+    """Submit one copy of the task's job to every queue that fits it, all under one job name. Each copy starts with
+    coord/slurm_guard.sh: the first to start takes the task (marker file <tid>.ran) and cancels the pending copies; a
+    copy that starts later exits 0 without work. The copy that ran writes its exit code to <tid>.rc. Returns the
+    {job id: queue} it wrote to <tid>.jobs ({} and no file when no queue took a copy: sbatch's errors are in
+    <tid>.log.submit)."""
+    tid = task["id"]
+    p = os.path.join(state, tid)
+    if os.path.exists(p + ".jobs"):   # copies of an earlier run of it must not run beside this one
+        subprocess.run(["scancel", *[l.split()[0] for l in open(p + ".jobs") if l.strip()]], capture_output=True)
+    for ext in (".exit", ".exit.tmp", ".rc", ".rc.tmp", ".ran", ".jobs", ".log.submit"):   # from an earlier run of it
+        if os.path.exists(p + ext):
+            os.remove(p + ext)
+    wrap = (f"bash {REPO_ROOT}/coord/slurm_guard.sh {shlex.quote(p + '.ran')} || exit 0; "
+            f"cd {REPO_ROOT} && nvidia-smi -L && ( {inner(task, '', a)} ); echo $? > {p}.rc.tmp && mv {p}.rc.tmp {p}.rc")
+    ids = {}
+    for n in fitting(task, queues, idle=queues):   # the caller passes the queues chosen for it (a fallback one included)
+        r = subprocess.run([sbatch, "--parsable", f"--job-name=board-{tid}", f"--output={p}.log", "--open-mode=append",
+                            *shlex.split(queues[n]["sbatch"]), "--wrap", wrap], capture_output=True, text=True)
+        jid = r.stdout.strip().split(";")[0]
+        if r.returncode == 0 and jid.isdigit():
+            ids[jid] = n
+            open(p + ".jobs", "a").write(f"{jid} {n}\n")   # at once: a worker killed mid-loop still knows this copy
+        else:
+            open(p + ".log.submit", "a").write(f"queue {n}: sbatch exit {r.returncode}: {r.stdout}{r.stderr}\n")
+    return ids
+
+
+def my_jobs(squeue="squeue"):
+    """Ids of this user's jobs still in the queue (pending, running, requeued), or None when squeue fails."""
+    try:
+        r = subprocess.run([squeue, "-h", "-u", getpass.getuser(), "-o", "%i"], capture_output=True, text=True, timeout=120)
+        return set(r.stdout.split()) if r.returncode == 0 else None
+    except Exception:
+        return None
+
+
+def copies_state(p, queued):
+    """Where a task submitted with submit_copies stands (p: its path prefix in the state folder; queued: my_jobs()).
+    Returns (exit code or None while it may still run, the queue that ran it or None, copy ids to cancel)."""
+    jobs = dict(l.split() for l in open(p + ".jobs") if l.strip())
+    ran = open(p + ".ran").read().strip() if os.path.exists(p + ".ran") else None
+    cancel = [j for j in jobs if j != ran and j in queued] if ran else []   # left over: submitted after the winner started
+    if any(j in queued for j in ([ran] if ran else jobs)):   # (a requeued winner is back in the queue: not over)
+        return None, jobs.get(ran), cancel
+    if os.path.exists(p + ".rc"):
+        return int(open(p + ".rc").read().strip() or 1), jobs.get(ran), cancel
+    return -1, jobs.get(ran), cancel   # every copy left the queue without an exit code
 
 
 def slurm_job_alive(submit_log):
@@ -126,6 +213,8 @@ def main():
     ap.add_argument("--launcher", choices=["docker", "local", "slurm"], required=True)
     ap.add_argument("--runtime", choices=["apptainer", "docker"], default="apptainer", help="slurm: how the job runs the image")
     ap.add_argument("--sbatch", default="", help="slurm: resources and queue for each task's job, e.g. '--partition=gpu --gres=gpu:1 -c 8 --mem=64G --time=8:00:00'")
+    ap.add_argument("--queues", help="slurm, instead of --sbatch: a JSON file of queues {name: {sbatch, fits}}; each task goes "
+                                     "to every queue that fits its arm at once and runs on the first to start (coord/nexus_queues.json)")
     ap.add_argument("--slots", nargs="+", required=True, help="GPU ids per task slot: '0 1' = two one-GPU slots, '0,1' = one two-GPU slot")
     ap.add_argument("--baselines", nargs="+", default=["merit", "api"],   # api: only Max's pool gets those tasks
                     help="baselines this worker takes (it needs each one's image or SIF for every arm it may get): "
@@ -140,7 +229,10 @@ def main():
     ap.add_argument("--prefetch", action="store_true", help="download the task's video folders from the results dataset "
                     "into MERIT_HF_CACHE before starting it (job nodes that cannot download dataset files)")
     a = ap.parse_args()
-    state = a.state or os.path.expanduser(f"~/.cache/coord/{a.pool}")
+    if a.queues and (a.launcher != "slurm" or a.sbatch):
+        ap.error("--queues needs --launcher slurm and replaces --sbatch")
+    queues = load_queues(a.queues) if a.queues else None
+    state = os.path.abspath(a.state or os.path.expanduser(f"~/.cache/coord/{a.pool}"))   # the jobs write there too
     os.makedirs(state, exist_ok=True)
     host = a.host
     claimed_total = 0
@@ -149,6 +241,7 @@ def main():
         mine = pools.get(a.pool, {"pool": a.pool, "claims": {}})
         claims = mine.setdefault("claims", {})
         t = jobs.now()
+        queued = my_jobs() if queues else None   # one squeue per cycle for every task's copies
         others = {tid: (n, c) for n, p in pools.items() if n != a.pool for tid, c in p.get("claims", {}).items()}
         # finished, still running, lost, or taken over by another pool?
         for tid, c in claims.items():
@@ -162,6 +255,23 @@ def main():
                 # our lease lapsed and another pool took the task: stop renewing (our copy may still finish; outputs are idempotent)
                 c.update(status="superseded", finished=jobs.iso(), note=f"taken over by pool {o[0]}")
                 continue
+            p = os.path.join(state, tid)
+            if os.path.exists(p + ".jobs"):   # submitted to several queues (--queues)
+                if queued is None:   # squeue failed this cycle: assume nothing, keep the lease
+                    c["lease_until"] = t + jobs.LEASE_S
+                    continue
+                code, q, cancel = copies_state(p, queued)
+                if cancel:
+                    subprocess.run(["scancel", *cancel])
+                if q:
+                    c["queue"] = q
+                if code is None:
+                    c.pop("gone_t", None)
+                if code == -1 and "gone_t" not in c:   # left the queue without an exit code: look again next cycle
+                    c.update(gone_t=t, lease_until=t + jobs.LEASE_S)   # (the .rc it wrote may not be visible here yet)
+                    continue
+                if code is not None:
+                    open(ex, "w").write(str(code))   # recorded below, as for the other launchers
             if os.path.exists(ex):
                 code = int(open(ex).read().strip() or 1)
                 if code == 0 and a.outbox and not os.path.exists(os.path.join(REPO_ROOT, "outbox", tid, ".upload.json")):
@@ -173,6 +283,8 @@ def main():
                         if os.path.exists(f) and os.path.getsize(f):
                             c["note"] = open(f).read()[-400:]
                             break
+            elif os.path.exists(p + ".jobs"):
+                c["lease_until"] = t + jobs.LEASE_S
             elif not alive(os.path.join(state, f"{tid}.pid")) and not (
                     a.launcher == "slurm" and slurm_job_alive(os.path.join(state, f"{tid}.log.submit"))):
                 c.update(status="failed", exit=-1, finished=jobs.iso(), note="the task's process ended without an exit code (killed or host restarted)")
@@ -183,8 +295,30 @@ def main():
         held = jobs.taken(pools, t)
         fails = jobs.failures(pools)
         done = {tid for tid, (_, c) in held.items() if c["status"] == "done"}
+        def claimable(task):   # waiting on the board and this worker may take it (queues aside)
+            tid = task["id"]
+            return (valid(task) and tid not in held and fails.get(tid, 0) < 2 and claims.get(tid, {}).get("status") != "failed"
+                    and (a.pool in task.get("pools", []) or "*" in task.get("pools", [])) and task["baseline"] in a.baselines
+                    and all(d in done for d in task.get("deps", [])))
+        # A queue with a fallback (an H200: fits 27B, fallback 8B) takes fallback work only while it is idle: no task its
+        # `fits` names is waiting, none of this worker's own is still active, and fewer than fallback_max (default 1)
+        # of this worker's tasks have a copy on it.
+        by_id = {x["id"]: x for x in tasks}
+        active = [tid for tid, c in claims.items() if c["status"] == "running"]
+        def on_queue(tid, n):   # a copy of the task on queue n still queued or running, or the one that ran it
+            f, r = os.path.join(state, f"{tid}.jobs"), os.path.join(state, f"{tid}.ran")
+            ran = open(r).read().strip() if os.path.exists(r) else None
+            return os.path.exists(f) and any(l.split()[1:] == [n] and (l.split()[0] == ran or queued is None or l.split()[0] in queued)
+                                             for l in open(f) if l.strip())
+        fallback_used = {n: sum(on_queue(tid, n) for tid in active) for n, q in (queues or {}).items() if q.get("fallback")}
+        idle = {n for n in fallback_used
+                if not any(names(x, queues[n]["fits"]) and claimable(x) for x in tasks)
+                and not any(tid in by_id and names(by_id[tid], queues[n]["fits"]) for tid in active)
+                and fallback_used[n] < queues[n].get("fallback_max", 1)}
+        # tasks only the scarce queues fit (27B) first, so cheaper work cannot use up the free slots ahead of them
+        scarce = [q["fits"] for q in (queues or {}).values() if q.get("fallback")]
         start = []
-        for task in sorted(tasks, key=lambda x: x.get("priority", 0)):
+        for task in sorted(tasks, key=lambda x: (not any(names(x, f) for f in scarce), x.get("priority", 0))):
             if not free or (a.max_tasks and claimed_total + len(start) >= a.max_tasks):
                 break
             tid = task["id"]
@@ -195,6 +329,8 @@ def main():
                 continue
             if a.pool not in task.get("pools", []) and "*" not in task.get("pools", []):
                 continue
+            if queues and not fitting(task, queues, idle):   # none of this worker's GPUs can run it (e.g. 27B, no 80 GB queue)
+                continue
             if task["baseline"] not in a.baselines:   # this worker has no image (or setup) for it
                 continue
             if any(d not in done for d in task.get("deps", [])):
@@ -203,20 +339,35 @@ def main():
             claims[tid] = dict(status="running", host=host, slot=slot,
                                gpu="(scheduler)" if a.launcher == "slurm" else gpu_name(slot), claimed=jobs.iso(),
                                started=jobs.iso(), started_t=t, lease_until=t + jobs.LEASE_S)
-            start.append((task, slot))
-        mine.update(pool=a.pool, host=host, slots=a.slots, launcher=a.launcher, updated=jobs.iso(),
+            qs = fitting(task, queues, idle) if queues else []
+            for n in [n for n in qs if n in idle and not names(task, queues[n]["fits"])]:   # a fallback copy used
+                fallback_used[n] += 1
+                if fallback_used[n] >= queues[n].get("fallback_max", 1):
+                    idle.discard(n)
+            for n in [n for n in list(idle) if names(task, queues[n]["fits"])]:   # its own work just got claimed
+                idle.discard(n)
+            start.append((task, slot, qs))
+        mine.update(pool=a.pool, host=host, slots=a.slots, launcher=a.launcher, updated=jobs.iso(), queues=sorted(queues or []),
                     running=sum(1 for c in claims.values() if c["status"] == "running"))
         if not jobs.commit({f"pools/{a.pool}.json": mine}, head, f"{a.pool}: {len(start)} claimed"):
             print(f"{jobs.iso()} board moved under us; re-reading", flush=True)
             continue
-        for task, slot in start:   # start only after the claim is committed
+        for task, slot, qs in start:   # start only after the claim is committed
             tid = task["id"]
+            if a.prefetch:   # before any copy can start
+                prefetch(task)
+            if queues:
+                ids = submit_copies(task, a, {n: queues[n] for n in qs}, state)
+                if not ids:   # no queue took it: fails next cycle with sbatch's error as its note
+                    open(os.path.join(state, f"{tid}.exit"), "w").write("1")
+                claimed_total += 1
+                print(f"{jobs.iso()} submitted {tid} to {', '.join(f'{n} ({j})' for j, n in ids.items()) or 'no queue'}: "
+                      f"{task['baseline']} {task['arm']} {task['stage']} {task['video']}", flush=True)
+                continue
             log, ex = os.path.join(state, f"{tid}.log"), os.path.join(state, f"{tid}.exit")
             for f in (ex, ex + ".tmp"):   # an exit code from an earlier run of this task must not end this one
                 if os.path.exists(f):
                     os.remove(f)
-            if a.prefetch:
-                prefetch(task)
             run = command(task, slot, a, log)
             out = log + ".submit" if a.launcher == "slurm" else log   # slurm: the job writes the log itself
             cmd = f"cd {REPO_ROOT} && ( {run} ) > {out} 2>&1; echo $? > {ex}.tmp && mv {ex}.tmp {ex}"

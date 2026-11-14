@@ -40,10 +40,10 @@ BUILD_ORDER = os.path.join(ROOT, "baselines", "merit", "build_order.txt")
 # baselines it was started with (worker.py --baselines), so listing a baseline here runs nothing until a pool opts in.
 # our three Nexus workers are named after the queue their tasks go to: tron (QoS high), scavenger, and
 # vulcan-ampere with QoS vulcan-sailon
-# Vatsal's two workers, under his own account (so his own vulcan-sailon GPU quota): vatsal-sailon (A6000 on
-# vulcan-ampere, QoS vulcan-sailon) for 8B, vatsal-h200 (QoS vulcan-high-h200) for 27B and 8B
-M8 = ["max", "nexus-tron", "nexus-sailon", "nexus-scavenger", "wriva", "vatsal-sailon", "vatsal-h200"]
-M27 = ["wriva", "zaratan", "max", "vatsal-h200"]
+# A person's one worker over several queues (worker.py --queues, e.g. Vatsal's `vatsal` on Nexus) is listed for both
+# arms: the worker itself claims only the tasks one of its queues fits, so without an 80 GB queue it never takes a 27B.
+M8 = ["max", "nexus-tron", "nexus-sailon", "nexus-scavenger", "wriva", "vatsal"]
+M27 = ["wriva", "zaratan", "max", "vatsal"]
 POOLS = {("merit", "m27"): M27 + ["arm00"], ("merit", "m8"): M8,
          ("magic", "m27"): M27, ("magic", "m8"): M8,
          ("worldmm", "m27"): M27, ("worldmm", "m8"): M8}
