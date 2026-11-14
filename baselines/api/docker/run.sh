@@ -36,7 +36,7 @@ if [ "$RUNTIME" = apptainer ]; then
     # through APPTAINERENV_* (the environment), not --env: a command line, keys included, is visible in `ps`
     export APPTAINERENV_EPIC_MORPH_DIR=/epic-morph APPTAINERENV_HDEPIC_VIDEOS=/videos APPTAINERENV_HF_HOME=/hf
     export "${COMMITS[@]/#/APPTAINERENV_}"
-    for v in GEMINI_API_KEY OPENAI_API_KEY HF_TOKEN MERIT_HF_REPO API_LIMIT API_OUT API_WORK; do
+    for v in GEMINI_API_KEY OPENAI_API_KEY HF_TOKEN MERIT_HF_REPO MERIT_OUTBOX API_LIMIT API_OUT API_WORK; do
         [ -n "${!v:-}" ] && export "APPTAINERENV_$v=${!v}"
     done
     exec apptainer exec --cleanenv --pwd /repo \
@@ -49,6 +49,6 @@ exec docker run --rm --user "$(id -u):$(id -g)" \
     -e EPIC_MORPH_DIR=/epic-morph -e HDEPIC_VIDEOS=/videos \
     -e "${COMMITS[0]}" -e "${COMMITS[1]}" \
     ${GEMINI_API_KEY:+-e GEMINI_API_KEY} ${OPENAI_API_KEY:+-e OPENAI_API_KEY} ${HF_TOKEN:+-e HF_TOKEN} \
-    ${MERIT_HF_REPO:+-e MERIT_HF_REPO} ${API_LIMIT:+-e API_LIMIT} \
+    ${MERIT_HF_REPO:+-e MERIT_HF_REPO} ${MERIT_OUTBOX:+-e MERIT_OUTBOX} ${API_LIMIT:+-e API_LIMIT} \
     ${API_OUT:+-e API_OUT="$API_OUT"} ${API_WORK:+-e API_WORK="$API_WORK"} \
     "$IMAGE" bash baselines/api/run_api.sh "$@"

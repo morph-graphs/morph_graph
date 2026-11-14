@@ -25,3 +25,6 @@
 [submodule "baselines/egorag/EgoLife"]
 	path = baselines/egorag/EgoLife
 	url = https://github.com/EvolvingLMMs-Lab/EgoLife
+[submodule "baselines/egor1/Ego-R1"]
+	path = baselines/egor1/Ego-R1
+	url = https://github.com/egolife-ai/Ego-R1
