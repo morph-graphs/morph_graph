@@ -18,6 +18,8 @@ Modes:
 
 Writes --answers (.json.gz): one row per question in bank order, keyed by the bank's `key`. Resumes from it: a
 row is done when it has an answer from this VERSION, this memory (memory_hash) and the same question (qhash).
+Every row has the question's gpt-4o calls and token usage (`api`), read from the API's responses; --usage gets
+this run's total, with the model ids the API returned (run_hippomm.sh puts it in runs.jsonl).
 Exit code 2 when some questions are still unanswered.
 
     python run_qa.py --video <V> --bank_file <V>_questions.json --memory <results dir> --video_file <V>.mp4 \
@@ -60,11 +62,12 @@ def letter(resp, choices):
     the letter named as the answer ("the answer is C"), else the only option whose text the answer contains. A
     leading "A" followed by a word is the article, not the option."""
     L = "".join(choices)
-    resp = re.sub(r"^\s*ANSWER\s*:", "", resp or "").strip()
-    m = (re.match(r"\(?([%s])\)?(?:[.):,]|\s*$)" % L, resp)
-         or re.search(r"(?:answer|option|choice)(?:\s+is)?\s*:?\s*\(?([%s])\)?(?![A-Za-z'])" % L, resp, re.I))
+    resp = re.sub(r"^\s*ANSWER\s*:", "", resp or "", flags=re.I).strip()
+    # the letter itself is case-sensitive: "the answer is a spoon" names no option
+    m = (re.match(r"\(?([%s])\)?(?:[.)]|\s*$)" % L, resp)
+         or re.search(r"(?i:(?:answer|option|choice)(?:\s+is)?)\s*:?\s*\(?([%s])\)?(?![A-Za-z'])" % L, resp))
     if m:
-        return m.group(1).upper()
+        return m.group(1)
     hits = [k for k, o in choices.items() if o.lower() in resp.lower()]
     return hits[0] if len(hits) == 1 else None
 
@@ -101,6 +104,34 @@ def count(rows, J, F):
     return tot
 
 
+def meter(client, flush):
+    """Count what goes through an OpenAI client's chat.completions.create: calls, the usage each response
+    reports, the model ids it names. Returns the running total (a dict that keeps updating); `flush(total)`
+    runs after every call, so a run that is killed mid-question still leaves what it spent."""
+    tot = {"requested": hm.REASONING, "models": [], "calls": 0, "input_tokens": 0, "output_tokens": 0, "reasoning_tokens": 0}
+    create = client.chat.completions.create
+
+    def metered(*args, **kw):
+        r = create(*args, **kw)
+        u = getattr(r, "usage", None)
+        det = getattr(u, "completion_tokens_details", None)
+        tot["calls"] += 1
+        tot["input_tokens"] += getattr(u, "prompt_tokens", 0) or 0
+        tot["output_tokens"] += getattr(u, "completion_tokens", 0) or 0
+        tot["reasoning_tokens"] += getattr(det, "reasoning_tokens", 0) or 0
+        if getattr(r, "model", None) and r.model not in tot["models"]:
+            tot["models"].append(r.model)
+        flush(tot)
+        return r
+    client.chat.completions.create = metered
+    return tot
+
+
+def spent(tot, before):
+    """What one question used: the total now minus the total before it."""
+    return {k: tot[k] - before[k] for k in ("calls", "input_tokens", "output_tokens", "reasoning_tokens")}
+
+
 def summary_at(client, model, J, m):
     """Upstream's replay summary for the memory at a cutoff (its messages, its over-length fallback)."""
     caps = m["captions"]
@@ -127,6 +158,7 @@ def main():
     ap.add_argument("--video_file", help="the video (detailed recall re-reads frames and audio from it)")
     ap.add_argument("--store", help="upstream's memory_store folder (work files)")
     ap.add_argument("--answers", help="output .json.gz (with --count: a .json of the per-question counts)")
+    ap.add_argument("--usage", help="write this run's gpt-4o calls, tokens and returned model ids here (.json)")
     ap.add_argument("--count", action="store_true")
     ap.add_argument("--blind", action="store_true")
     ap.add_argument("--limit", type=int, default=0, help="only the first N unanswered questions (smoke tests)")
@@ -175,27 +207,39 @@ def main():
     cfg = hm.config(os.path.abspath(a.store or "."))
     from hippomm.core.hippocampal_memory import HippocampalMemory, QARecallSystem
 
-    if a.blind:   # upstream's final answer prompt over an empty memory
+    asked = []
+
+    def usage(tot):   # this run's spend so far, rewritten after every API call
+        if a.usage:
+            json.dump({**tot, "questions": len(asked)}, open(a.usage, "w"))
+    if a.blind and todo:   # upstream's final answer prompt over an empty memory
         from openai import OpenAI
         client, empty = OpenAI(api_key=cfg["api"]["reasoning"]["api_key"]), SimpleNamespace(memory=SimpleNamespace(long_term_store=[]))
+        tot = meter(client, usage)
         for r in todo:
-            t0 = time.time()
+            t0, before = time.time(), dict(tot)
+            asked.append(r["key"])
             prompt = QARecallSystem._format_final_answer_prompt(empty, r["text"], [], "video")
-            resp = client.chat.completions.create(model=hm.REASONING, messages=[{"role": "user", "content": prompt}],
-                                                  temperature=0).choices[0].message.content
-            done[r["key"]] = row(r, resp, {}, t0)
-        save()
+            try:
+                resp = client.chat.completions.create(model=hm.REASONING, messages=[{"role": "user", "content": prompt}],
+                                                      temperature=0).choices[0].message.content
+            except Exception as e:
+                log.exception(f"{r['key']}: {type(e).__name__}: {e}")
+                continue
+            done[r["key"]] = row(r, resp or "", {"api": spent(tot, before)}, t0)
+            save()
     elif todo:
         store = cfg["storage"]["base_dir"]
         mem = HippocampalMemory(cfg)   # ImageBind, Whisper, the Qwen2.5-VL client
         mem.video_index[V] = {"metadata": {"path": os.path.abspath(a.video_file), "duration": J["duration"]}}
         qa = QARecallSystem(mem, cfg)
+        tot = meter(qa.thinking_client, usage)
         spath = os.path.join(a.memory, "summaries.json")
         summaries = json.load(open(spath)) if os.path.exists(spath) else {}
         if summaries.get("memory_hash") != mh:
             summaries = {"memory_hash": mh}
         for r in sorted(todo, key=lambda r: r["cutoff"]):
-            t0, cut = time.time(), r["cutoff"]
+            t0, cut, before = time.time(), r["cutoff"], dict(tot)
             m = hm.at_cutoff(J, F, cut)
             if m["nk"] == len(J["frames"]) and m["nv"] == len(F["vision_times"]):
                 summary = J["summary"]          # everything was seen: the build's own summary
@@ -207,6 +251,7 @@ def main():
                 summary = summaries[ck]
             mem.long_term_store = [hm.theta_event(J, F, cut, summary, store)]
             mem.max_time = cut                  # detailed recall never reads the video past the question
+            asked.append(r["key"])
             try:
                 res = qa.answer_question(r["text"])
             except Exception as e:
@@ -217,7 +262,8 @@ def main():
                 "question_type": res.question_type, "primary_modality": res.primary_modality,
                 "confidence": res.confidence, "reasoning": res.reasoning, "used_direct_answer": res.used_direct_answer,
                 "used_reflection": res.used_reflection,
-                "retrieved": [[s.start_time, s.end_time] for s in res.retrieved_segments or []]}, t0)
+                "retrieved": [[s.start_time, s.end_time] for s in res.retrieved_segments or []],
+                "api": spent(tot, before)}, t0)
             save()
     right = sum(bool(done[r["key"]]["evaluate"]) for r in rows if r["key"] in done)
     missing = [r["key"] for r in rows if r["key"] not in done]

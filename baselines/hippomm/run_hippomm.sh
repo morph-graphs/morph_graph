@@ -22,8 +22,10 @@
 #   HIPPOMM_VLLM_PY  python of the vllm environment (env/setup_env.sh vllm); it serves Qwen2.5-VL-7B for the
 #                    stage and is stopped at exit. Or HIPPOMM_VLM_URL: an OpenAI-compatible endpoint already
 #                    serving Qwen/Qwen2.5-VL-7B-Instruct
-#   HIPPOMM_IMAGEBIND  folder holding imagebind_huge.pth (else ImageBind downloads it into ./.checkpoints)
-#   OPENAI_API_KEY   for qa and blind only; read from the environment, never written anywhere
+#   HIPPOMM_IMAGEBIND  folder holding imagebind_huge.pth (4.5 GB); default <HF_HOME or ~/.cache/huggingface>/imagebind,
+#                    where build and qa download it once
+#   OPENAI_API_KEY   for qa and blind only; read from the environment, never written anywhere. Each of those
+#                    stages records the model id the API returned and its token usage in runs.jsonl
 #   EPIC_MORPH_DIR   an epic-morph checkout (required): the banks, and by default the videos
 #   HDEPIC_VIDEOS    default $EPIC_MORPH_DIR/data/HD-EPIC/videos (<P>/<video>.mp4)
 #   HIPPOMM_WORK     default baselines/hippomm/work: upstream's memory_store (frames, audio), server logs
@@ -36,16 +38,28 @@
 set -euo pipefail
 STAGE=${1:?usage: run_hippomm.sh <prep|build|count|qa|blind|upload|all> <video> <arm> [bank]}
 V=${2:?video id}; ARM=${3:?arm q25vl7b-gpt4o}; BANK=${4:-}
-M=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); REPO=$(cd "$M/../.." && pwd); R=$M/HippoMM   # R: the upstream checkout
+M=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); REPO=$(cd "$M/../.." && pwd); R=$M/HippoMM   # R: the submodule (upstream)
 PY=${PY:?set PY to the python of the client environment}
 EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && pwd)
-[ -f "$R/hippomm/core/hippocampal_memory.py" ] || { echo "upstream checkout missing: $R"; exit 1; }
+[ -f "$R/hippomm/core/hippocampal_memory.py" ] || { echo "submodule missing: git submodule update --init baselines/hippomm/HippoMM"; exit 1; }
 [ "$ARM" = q25vl7b-gpt4o ] || { echo "arm must be q25vl7b-gpt4o (the paper's configuration)"; exit 1; }
 VLM=Qwen/Qwen2.5-VL-7B-Instruct
 VIDEOS=${HDEPIC_VIDEOS:-$EPIC/data/HD-EPIC/videos}; VIDEO=$VIDEOS/${V%%-*}/$V.mp4
 WORK=${HIPPOMM_WORK:-$M/work}; OUTROOT=${HIPPOMM_OUT:-$M/results}; OUT=$OUTROOT/$ARM/$V; STORE=$WORK/store
 TAG=${HIPPOMM_TAG:-}; SUF=${TAG:+_$TAG}
-mkdir -p "$OUT" "$WORK/logs" "$STORE"
+mkdir -p "$OUT" "$WORK/logs" "$WORK/locks" "$STORE"
+# The submodule is upstream as released; HippoMM.patch (what it needs to run, and the question-time cutoff) is
+# applied to the checkout here, once. Anything else (another upstream commit, local edits) stops the run.
+( flock 9
+  cd "$R"
+  if patch -p1 -R -f -s --dry-run < "$M/HippoMM.patch" >/dev/null 2>&1; then exit 0; fi   # already applied
+  patch -p1 -N -f -s --dry-run < "$M/HippoMM.patch" >/dev/null 2>&1 \
+      || { echo "HippoMM.patch does not apply cleanly to $R (expected upstream d7000b4, unmodified or already patched)"; exit 1; }
+  patch -p1 -N -f -s < "$M/HippoMM.patch" && echo "applied HippoMM.patch to $R"
+) 9>"$M/.patch.lock"   # beside the checkout: every run sharing it takes the same lock, whatever its work folder
+PATCH=$( { sha256sum 2>/dev/null || shasum -a 256; } < "$M/HippoMM.patch" | cut -c1-12)
+HF=${HF_HOME:-$HOME/.cache/huggingface}
+export HIPPOMM_IMAGEBIND=${HIPPOMM_IMAGEBIND:-$HF/imagebind} TIKTOKEN_CACHE_DIR=${TIKTOKEN_CACHE_DIR:-$HF/tiktoken}
 export HIPPOMM_SRC=$R NO_PROXY=127.0.0.1,localhost no_proxy=127.0.0.1,localhost
 # upstream writes fixed-name temporary frames and audio: one folder per run, so jobs on a node do not collide
 export TMPDIR=$(mktemp -d "${TMPDIR:-/tmp}/hippomm_${V}_XXXXXX")
@@ -57,7 +71,7 @@ read -ra MEMORY <<< "$("$PY" "$M/epic/build_memory.py" --memory_files)"
 have_memory() { local f; for f in "${MEMORY[@]}"; do [ -s "$OUT/${f//\{video\}/$V}" ] || return 1; done; }
 log() { echo "=== $V $ARM $1 ($(date '+%F %H:%M'))"; }
 record() {   # one line per finished stage, for the hand-back
-    "$PY" - "$1" "$2" >> "$OUT/runs.jsonl" <<'EOF'
+    "$PY" - "$1" "$2" "${3:-}" >> "$OUT/runs.jsonl" <<'EOF'
 import json, os, platform, subprocess, sys, time
 import torch, faster_whisper
 git = lambda *a, cwd=None: subprocess.run(["git", *a], capture_output=True, text=True, cwd=cwd).stdout.strip()
@@ -66,13 +80,16 @@ commit = os.environ.get("HIPPOMM_REPO_COMMIT") or git("rev-parse", "HEAD")
 sub = os.environ.get("HIPPOMM_UPSTREAM_COMMIT") or git("rev-parse", "HEAD", cwd="baselines/hippomm/HippoMM")
 bank = os.environ.get("HIPPOMM_EPIC_COMMIT") or git("rev-parse", "HEAD", cwd=os.environ["EPIC"])
 gpus = [torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())]
-print(json.dumps({"stage": sys.argv[1], "seconds": int(float(sys.argv[2])), "commit": commit, "hippomm_commit": sub,
-                  "epic_morph_commit": bank, "vlm": os.environ.get("VLM"), "vllm": os.environ.get("VLLM_VERSION"),
-                  "reasoning": "gpt-4o", "torch": torch.__version__, "faster_whisper": faster_whisper.__version__,
-                  "gpus": gpus, "host": platform.node(), "finished": time.strftime("%Y-%m-%dT%H:%M:%S%z")}))
+row = {"stage": sys.argv[1], "seconds": int(float(sys.argv[2])), "commit": commit, "hippomm_commit": sub,
+       "hippomm_patch": os.environ.get("PATCH"), "epic_morph_commit": bank, "vlm": os.environ.get("VLM"),
+       "vllm": os.environ.get("VLLM_VERSION"), "torch": torch.__version__, "faster_whisper": faster_whisper.__version__,
+       "gpus": gpus, "host": platform.node(), "finished": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
+if sys.argv[3] and os.path.exists(sys.argv[3]):   # qa, blind: the model asked for, the model ids the API
+    row["api"] = json.load(open(sys.argv[3]))      # returned, calls and tokens (input, output, reasoning)
+print(json.dumps(row))
 EOF
 }
-export EPIC VLM
+export EPIC VLM PATCH
 cd "$REPO"
 
 start_vlm() {   # Qwen2.5-VL-7B-Instruct behind an OpenAI-compatible endpoint, as upstream serves it (vLLM)
@@ -96,10 +113,19 @@ start_vlm() {   # Qwen2.5-VL-7B-Instruct behind an OpenAI-compatible endpoint, a
     export VLLM_VERSION=$("$vpy" -c "import vllm; print(vllm.__version__)" 2>/dev/null | tail -1)
 }
 
+imagebind() {   # ImageBind-Huge's weights, once per cache
+    [ -s "$HIPPOMM_IMAGEBIND/imagebind_huge.pth" ] && return
+    mkdir -p "$HIPPOMM_IMAGEBIND"
+    ( flock 9
+      [ -s "$HIPPOMM_IMAGEBIND/imagebind_huge.pth" ] && exit 0
+      echo "downloading imagebind_huge.pth into $HIPPOMM_IMAGEBIND"
+      curl -fsSL -o "$HIPPOMM_IMAGEBIND/imagebind_huge.pth.part" https://dl.fbaipublicfiles.com/imagebind/imagebind_huge.pth \
+          && mv "$HIPPOMM_IMAGEBIND/imagebind_huge.pth.part" "$HIPPOMM_IMAGEBIND/imagebind_huge.pth"
+    ) 9>"$HIPPOMM_IMAGEBIND/.lock" || { echo "could not download imagebind_huge.pth"; exit 1; }
+}
 prep() {
     log prep; local t=$SECONDS
     [ -s "$VIDEO" ] || { echo "missing $VIDEO"; exit 1; }
-    mkdir -p "$WORK/locks"
     ( flock 9   # one extraction per video at a time
       "$PY" "$M/epic/build_memory.py" --stage prep --video "$V" --video_file "$VIDEO" --store "$STORE"
     ) 9>"$WORK/locks/prep_$V.lock"
@@ -119,7 +145,7 @@ build() {
     fi
     if ! have_memory; then
         [ -s "$STORE/frames/$V/metadata.yaml" ] || prep
-        start_vlm
+        imagebind; start_vlm
         "$PY" "$M/epic/build_memory.py" --stage build --video "$V" --video_file "$VIDEO" --store "$STORE" --out "$OUT"
         rm -f "$STORE"/checkpoints/checkpoint_"${V}"_*.json   # upstream's segment checkpoint (large); the memory replaces it
     fi
@@ -148,17 +174,21 @@ qa() {
     need_key
     have_memory || build
     [ -s "$VIDEO" ] || { echo "missing $VIDEO"; exit 1; }
-    bank_file; start_vlm
+    bank_file; imagebind; start_vlm
+    rm -f "$TMPDIR/usage.json"
     "$PY" "$M/epic/run_qa.py" --video "$V" --bank_file "$BF" --memory "$OUT" --video_file "$VIDEO" --store "$STORE" \
-        --answers "$OUT/answers_$BANK$SUF.json.gz" --limit "${HIPPOMM_LIMIT:-0}" || rc=$?
+        --answers "$OUT/answers_$BANK$SUF.json.gz" --usage "$TMPDIR/usage.json" --limit "${HIPPOMM_LIMIT:-0}" || rc=$?
+    record "qa $BANK$SUF" $((SECONDS - t)) "$TMPDIR/usage.json"   # also when it stopped early: the calls were made
     [ $rc = 0 ] || { echo "qa did not finish (exit $rc); rerun the same command to retry"; exit 1; }
-    record "qa $BANK$SUF" $((SECONDS - t))
 }
 blind() {
-    log "blind $BANK"; local t=$SECONDS
+    log "blind $BANK"; local t=$SECONDS rc=0
     need_key; bank_file
-    "$PY" "$M/epic/run_qa.py" --blind --video "$V" --bank_file "$BF" --answers "$OUT/blind_$BANK.json.gz"
-    record "blind $BANK" $((SECONDS - t))
+    rm -f "$TMPDIR/usage.json"
+    "$PY" "$M/epic/run_qa.py" --blind --video "$V" --bank_file "$BF" --answers "$OUT/blind_$BANK.json.gz" \
+        --usage "$TMPDIR/usage.json" || rc=$?
+    record "blind $BANK" $((SECONDS - t)) "$TMPDIR/usage.json"
+    [ $rc = 0 ] || { echo "blind did not finish (exit $rc); rerun the same command to retry"; exit 1; }
 }
 upload() {   # only a finished memory: a half-built folder would overwrite a good one in the dataset
     log upload

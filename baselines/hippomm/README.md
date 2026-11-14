@@ -9,7 +9,24 @@ It answers in two passes: a fast one from the summary and the captions, and, whe
 detailed recall (ImageBind retrieval of frames, new captions of the video around them, Whisper on the audio
 around them), then a reflection step that reconciles the two answers.
 
-**This port runs the method with the models of its paper and official code, not with our local Qwen arms:**
+## Read first
+
+- **This is a paid row.** Answering (`qa`, `blind`) calls `gpt-4o` through the OpenAI API, as upstream does; both
+  stages refuse to start without `OPENAI_API_KEY`. The memory build is free (local models). `count` gives the
+  calls, tokens and cost of a bank before anything is spent, and every paid stage records the model id the API
+  returned and its token usage in `runs.jsonl`.
+- **The method runs as released.** Our rule for baselines: run the released code as it is, and change only what
+  it needs to run at all and to respect the question-time cutoff. So the settings are the repository's, not the
+  paper's where the two differ, audio is used as published, and three behaviours that look like upstream bugs are
+  kept (all listed under "What we changed in upstream" below). They lower what the method can do here; that is
+  the released method's result, not ours to repair.
+- **Upstream is a submodule at the released commit; our changes are `HippoMM.patch`.** `run_hippomm.sh` applies
+  the patch to the submodule checkout before every stage (once; it stops if the patch does not apply cleanly), so
+  `git status` shows the submodule as modified after a run. A fork under morph-graphs with the patch as a commit,
+  like the other baselines, would be cleaner.
+- **One arm, `q25vl7b-gpt4o`**, named after the paper's configuration. There is no m8 / m27 variant.
+
+**The models are those of the paper and official code, not our local Qwen arms:**
 
 | role | model | where it runs |
 |---|---|---|
@@ -25,16 +42,15 @@ So `prep`, `build` and `count` need no API. `qa` and `blind` call gpt-4o and ref
 
 | path | what |
 |---|---|
-| `HippoMM/` | upstream at `d7000b4` plus the patches in `HippoMM.patch` (to become a fork submodule, branch `epic-morph`) |
-| `HippoMM.patch` | our changes to upstream, as a diff against `d7000b4` |
+| `HippoMM/` | submodule: upstream [linyueqian/HippoMM](https://github.com/linyueqian/HippoMM) at `d7000b4`, unmodified in git |
+| `HippoMM.patch` | our changes to upstream, as a diff against `d7000b4`; `run_hippomm.sh` applies it to the checkout |
 | `epic/hm_common.py` | upstream's config with our paths, the memory files, the memory as it stood at a question's cutoff |
 | `epic/build_memory.py` | `prep` (upstream's frame and audio extraction) and `build` (upstream's `process_sequence`, then the memory files) |
 | `epic/run_qa.py` | per-cutoff summaries, upstream's `QARecallSystem` per question, `--count`, `--blind`; writes `answers_<bank>.json.gz` |
 | `run_hippomm.sh` | one video, one arm, one stage (prep, build, count, qa, blind, upload, all) |
+| `docker/` | the image (`Dockerfile`), `build.sh`, `run.sh` (one job in a container; the job board's entry point), `image_tag.sh` |
 | `env/` | the two environments, pinned: `requirements-client.txt` (upstream's pins), `requirements-vllm.txt`, `install_requirements.sh`, `setup_env.sh` |
 | `../common/hf_results.py` | (shared by all baselines) upload a video's results to the Hugging Face dataset, or download them |
-
-No Docker image yet.
 
 ## What we changed in upstream (`HippoMM.patch`)
 
@@ -80,7 +96,31 @@ after the last frame are never before a cutoff.
 
 ## Environments
 
-Two virtualenvs on Python 3.11 (`PYTHON` picks the interpreter):
+**Off our clusters, run only in the Docker image** (rule in `AGENTS.md`): `ghcr.io/morph-graphs/hippomm:<arm>-<env
+hash>`, built from `docker/Dockerfile` by `.github/workflows/baseline-images.yml`. It holds both environments
+below (vLLM in the base Python, HippoMM's in a virtualenv at `/opt/client`), no weights and no key. The code is
+the mounted checkout of `main` (`git submodule update --init baselines/hippomm/HippoMM`); `docker/run.sh` picks the
+image whose tag matches the checkout's environment files:
+
+```bash
+ARM=q25vl7b-gpt4o
+docker pull ghcr.io/morph-graphs/hippomm:$(bash baselines/hippomm/docker/image_tag.sh $ARM)
+export EPIC_MORPH_DIR=<epic-morph checkout> HIPPOMM_GPU=0
+bash baselines/hippomm/docker/run.sh build P05-20240425-201444 $ARM                  # free
+bash baselines/hippomm/docker/run.sh count P05-20240425-201444 $ARM batch10_agree2   # free: calls, tokens, cost
+export OPENAI_API_KEY    # set in the shell beforehand; it reaches the container by name only
+bash baselines/hippomm/docker/run.sh qa    P05-20240425-201444 $ARM batch10_agree2   # paid (gpt-4o)
+bash baselines/hippomm/docker/run.sh upload P05-20240425-201444 $ARM
+```
+
+`docker/run.sh` mounts this checkout at `/repo`, the epic-morph checkout at `/epic-morph`, the videos at `/videos`
+and the Hugging Face cache (`HIPPOMM_HF_CACHE`, default `~/.cache/huggingface`) at `/hf`. The first `build`
+downloads into that cache: Qwen2.5-VL-7B-Instruct (16 GB), the Whisper model (1.5 GB) and
+`imagebind/imagebind_huge.pth` (4.5 GB). One GPU with 48 GB, 64 GB of RAM. `HIPPOMM_RUNTIME=apptainer` runs the
+same image with Apptainer; the job board (`coord/worker.py`) calls it with `MERIT_GPU` / `MERIT_RUNTIME` /
+`MERIT_SIF_DIR` / `MERIT_HF_CACHE` / `MERIT_WORK`, which `run.sh` takes when the `HIPPOMM_` ones are unset.
+
+On our own clusters, two virtualenvs on Python 3.11 (`PYTHON` picks the interpreter):
 
 ```bash
 bash baselines/hippomm/env/setup_env.sh client <dir>/hippomm-client   # torch 2.1.2 (CUDA 12.1), ImageBind, faster-whisper 1.0.3
@@ -90,14 +130,14 @@ bash baselines/hippomm/env/setup_env.sh vllm   <dir>/hippomm-vllm     # vLLM 0.8
 `client` is upstream's `requirements.txt` for the packages its code imports, plus the ones it imports without
 listing. Models: `Qwen/Qwen2.5-VL-7B-Instruct` and `Systran/faster-distil-whisper-large-v3` from the Hugging Face
 cache; `imagebind_huge.pth` (4.5 GB, https://dl.fbaipublicfiles.com/imagebind/imagebind_huge.pth) in the folder
-named by `HIPPOMM_IMAGEBIND`. ffmpeg and ffprobe must be on `PATH`. One GPU with 48 GB holds vLLM (0.6 of it),
+named by `HIPPOMM_IMAGEBIND` (default `<HF cache>/imagebind`, downloaded there on first use). ffmpeg, ffprobe and
+`patch` must be on `PATH`. One GPU with 48 GB holds vLLM (0.6 of it),
 ImageBind and Whisper.
 
 ## Running
 
 ```bash
 export PY=<hippomm-client>/bin/python HIPPOMM_VLLM_PY=<hippomm-vllm>/bin/python EPIC_MORPH_DIR=<epic-morph checkout>
-export HIPPOMM_IMAGEBIND=<folder with imagebind_huge.pth>
 ARM=q25vl7b-gpt4o
 bash baselines/hippomm/run_hippomm.sh build P05-20240425-201444 $ARM                  # the memory, no questions needed
 bash baselines/hippomm/run_hippomm.sh count P05-20240425-201444 $ARM batch10_agree2   # gpt-4o calls, tokens, cost: free
@@ -133,7 +173,10 @@ Per video, in `results/q25vl7b-gpt4o/<video>/` (the dataset's `hippomm/q25vl7b-g
   how much memory was visible (`indexed`), upstream's question type, confidence, reasoning, whether the direct
   answer or the reflection was used, the retrieved time spans, `version` and `memory_hash`;
 - `blind_<bank>.json.gz`: the same rows for the no-memory prompt;
-- `runs.jsonl`: one line per finished stage (commits, models, vLLM and torch versions, GPU, seconds).
+- `runs.jsonl`: one line per finished stage (commits, the patch's hash, models, vLLM and torch versions, GPU,
+  seconds); for `qa` and `blind` also `api`: the model asked for, the model ids the API returned, the number of
+  calls and questions, and input, output and reasoning tokens as the API reported them. Each answer row has the
+  same counts for its question (`api`).
 
 ## Open points
 

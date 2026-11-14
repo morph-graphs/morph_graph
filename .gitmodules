@@ -22,3 +22,6 @@
 [submodule "baselines/vgent/Vgent"]
 	path = baselines/vgent/Vgent
 	url = https://github.com/xiaoqian-shen/Vgent
+[submodule "baselines/hippomm/HippoMM"]
+	path = baselines/hippomm/HippoMM
+	url = https://github.com/linyueqian/HippoMM
