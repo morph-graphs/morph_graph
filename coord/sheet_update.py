@@ -46,7 +46,7 @@ TAB = "Auto: EPIC-Morph"                    # the one tab this script writes (--
 PREFIX = "Auto: "                           # a tab name without it is refused before anything is sent
 SENTINEL = "AUTO (coord/sheet_update.py)"   # start of A1 of a tab this script created
 GRID = (2000, 80)                           # rows, columns the tab is created with; a larger table is an error
-BANKS = ["batch10_agree2", "t2_agree2"]     # epic-morph v3/export_bank.py names, in table order
+BANKS = ["batch10_agree2", "t2_agree2", "t3_agree2"]     # epic-morph v3/export_bank.py names, in table order
 # (baseline, arm) -> Method, Memory Model, Reasoning Model, N. Frames: the rows of the hand tab "Epic Morph Results".
 # An arm not listed here is shown as "<baseline>/<arm>".
 METHODS = {
