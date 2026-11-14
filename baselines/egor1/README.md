@@ -169,6 +169,10 @@ bash baselines/egor1/run_egor1.sh qa    P05-20240425-201444 gemini25pro batch10_
   billed as cached) and, through OpenRouter, `provider` (who served the call) and `cost` (dollars charged);
   `runs.jsonl` sums them per step and answering model. A `qa` line also has `q`, the question's key, so the
   calls and cost of one question can be read off. Gemini lines have tokens only (Google returns no price).
+- **Checked with real calls** (2026-11-14, in the image, through OpenRouter only): `apis.gpt41`, upstream's
+  `call_gpt4` and upstream's `vlm` on a frame of P05-20240425-201444 (793 input tokens, $0.0027) each answered,
+  with `provider` `OpenAI` and a `cost` in the line. No full `build` or `qa` has run yet: Gemini 2.5 Pro is closed to our
+  key (Open decisions).
 
 ## What comes back
 
@@ -183,6 +187,11 @@ step, GPU, seconds, and `api_usage`: calls and tokens of that stage per step and
 
 - **Gemini 2.5 Pro ends on 2026-12-01.** The whole run (captions of every video, and every `video_llm` call)
   has to fit before that date, or it mixes models.
+- **Gemini 2.5 Pro is already closed to a key that never used it.** Our Gemini API key (paid tier) lists
+  `models/gemini-2.5-pro`, but every `generate_content` call to it, text-only included, answers `404 NOT_FOUND:
+  This model models/gemini-2.5-pro is no longer available to new users` (2026-11-14; `gemini-2.5-flash` the
+  same). The first `build` on our cluster stopped at its first caption for this reason, before any billed call.
+  The row needs a Google project that still has the model, or a decision on another model.
 - **Caption and summary prompts** are not published; ours could be replaced by the authors' if they share them.
 - **Fork**: `Ego-R1/` is a submodule of upstream itself, patched in place at run time; a morph-graphs fork with
   the patch as its `epic-morph` branch would be cleaner.
