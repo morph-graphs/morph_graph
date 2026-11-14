@@ -5,17 +5,17 @@
 
 The whole video is DAY1 starting at 00:00:00, seen by one wearer; upstream addresses a wearer as "A1" and looks
 in the folder A1_JAKE, so that name is kept (it never reaches a model). Unlike MERIT's prep the audio stays:
-upstream uploads the stitched clips to Gemini with their sound. Skips a finished video (_clips.txt).
+upstream uploads the stitched clips to Gemini with their sound. Skips a finished video (_clips.txt); an interrupted one
+is resumed.
 
     python prepare_clips.py --video <mp4> --subject <video id> --clip_root <dir>
 """
 import argparse
-import glob
 import math
 import os
-import shutil
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "merit", "epic"))
 from prepare_epic import duration, hhmmss   # noqa: E402  (MERIT's helpers: ffprobe duration, HHMMSS)
@@ -42,22 +42,31 @@ def main():
         print(f"{a.subject}: {len(open(done).read().split())} clips already in {d}")
         return
     n = math.ceil(duration(a.video) / a.clip_sec)
-    tmp = os.path.join(d, "_seg")
-    shutil.rmtree(tmp, ignore_errors=True)
-    os.makedirs(tmp)
-    subprocess.run(
-        ["ffmpeg", "-loglevel", "error", "-threads", str(a.threads), "-i", a.video, "-map", "0:v:0", "-map", "0:a:0?",
-         "-vf", f"scale={a.size}:{a.size}", "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-c:a", "aac",
-         "-force_key_frames", f"expr:gte(t,n_forced*{a.clip_sec})",
-         "-f", "segment", "-segment_time", str(a.clip_sec), "-reset_timestamps", "1",
-         os.path.join(tmp, "seg_%04d.mp4")], check=True)
-    segs = sorted(glob.glob(os.path.join(tmp, "seg_*.mp4")))
-    # the container can run a little past the last video frame (see MERIT's prepare_epic.make_clips)
-    assert max(1, n - 1) <= len(segs) <= n + 1, f"expected about {n} segments, got {len(segs)}"
-    names = [f"DAY1_{IDENT}_{hhmmss(i * a.clip_sec)}00.mp4" for i in range(len(segs))]
-    for s, name in zip(segs, names):
-        os.replace(s, os.path.join(d, name))
-    os.rmdir(tmp)
+    os.makedirs(d, exist_ok=True)
+    names = [f"DAY1_{IDENT}_{hhmmss(i * a.clip_sec)}00.mp4" for i in range(n)]
+
+    def cut(i):
+        # one seek per clip, so clip i holds exactly [30 i, 30 i + 30) s. Cutting with the segment muxer and forced
+        # key frames gave clips of 26-36 s that ran up to 8 s late with ffmpeg 7.1 (measured 2026-11-13), and the
+        # streaming check in tools.py relies on a clip starting where its name says.
+        subprocess.run(
+            ["ffmpeg", "-loglevel", "error", "-y", "-threads", "2", "-ss", str(i * a.clip_sec), "-i", a.video, "-t", str(a.clip_sec),
+             "-map", "0:v:0", "-map", "0:a:0?", "-vf", f"scale={a.size}:{a.size}", "-c:v", "libx264", "-preset", "veryfast",
+             "-crf", "23", "-c:a", "aac", "-f", "mp4", os.path.join(d, names[i] + ".part")], check=True)
+        os.replace(os.path.join(d, names[i] + ".part"), os.path.join(d, names[i]))
+    with ThreadPoolExecutor(max(1, a.threads // 2)) as ex:
+        list(ex.map(cut, [i for i in range(n) if not os.path.exists(os.path.join(d, names[i]))]))
+
+    def video_seconds(path):
+        out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=duration", "-of",
+                              "csv=p=0", path], capture_output=True, text=True).stdout.strip()
+        return float(out) if out and out != "N/A" else 0.0
+    lens = [video_seconds(os.path.join(d, x)) for x in names]
+    if lens[-1] < 0.1:      # the container can run a little past the last video frame: no such clip
+        os.remove(os.path.join(d, names.pop())); lens.pop()
+    bad = [(x, l) for x, l in zip(names[:-1], lens[:-1]) if abs(l - a.clip_sec) > 0.2] + \
+        [(names[-1], lens[-1])] * (lens[-1] > a.clip_sec + 0.2)
+    assert not bad, f"clips that are not {a.clip_sec} s long: {bad[:5]}"
     open(done, "w").write("".join(x + "\n" for x in names))
     print(f"{a.subject}: {len(names)} clips of {a.clip_sec} s in {d}")
 
