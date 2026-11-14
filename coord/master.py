@@ -24,10 +24,10 @@ checkout EPIC_MORPH_DIR, the master's own (not a worker's, which may be reading 
 without EPIC_MORPH_DIR: a tasks.json without the qa tasks would drop them from the board.
 
 Arms that call a paid API (NEEDS_ENV) carry `needs_env`, the variables a worker must have set to take them ("A|B":
-either one), and go to pool `max` only, or also to `nexus` when an OpenRouter key is all they need (ROUTER_POOLS).
+either one), and go to pools `max` and `pulkit` only (ROUTER_POOLS once also took `nexus` for OpenRouter-only arms).
 The reported-configuration arms (REPORTED: a gpt-5-mini memory per video, answered by several models) are listed right after the API tasks, and while PILOT is non-empty only the tasks it names are listed.
 The other paid rows (PAID: Ego-R1, EGAgent, EgoRAG, HippoMM and MAGIC-Video with their published models) follow the
-reported-configuration arms, for batch10 only, on pool `max` only, behind the same PILOT gate.
+reported-configuration arms, for batch10 only, on pools `max` and `pulkit` only, behind the same PILOT gate.
 """
 import argparse
 import functools
@@ -64,9 +64,18 @@ FAILED = ("", "Error", "Unable to generate answer")   # no answer: earlier.reuse
 # A person's one worker over several queues (worker.py --queues: Anubhav's `nexus`, Vatsal's `vatsal`, both on Nexus)
 # is listed for both arms: the worker itself claims only the tasks one of its queues fits, so it takes a 27B only
 # through an 80 GB queue (the H200). nexus-tron, nexus-sailon and nexus-scavenger are the per-queue workers `nexus`
-# replaces; they stay listed until their last claims are finished.
-M8 = ["max", "pulkit", "nexus", "nexus-tron", "nexus-sailon", "nexus-scavenger", "wriva", "vatsal", "zaratan"]   # zaratan: H100 jobs
-M27 = ["wriva", "zaratan", "max", "pulkit", "nexus", "vatsal"]
+# replaces.
+# Since 2026-11-14 (Anubhav) the Qwen work leaves Nexus, to free it for other research: Max and Pulkit (NVIDIA,
+# GB200/GB300) take it first, Zaratan, wriva and arm00 help; Molmo2-8B (a public download) goes the same way. Claims
+# already running on Nexus finish: a worker renews its claims whatever the task's pools say.
+# Leftovers (Anubhav, 2026-11-14): Nexus should not sit idle, so a task no pool has held for LEFTOVER_H hours (since it
+# was listed, or since a claim on it ended) is offered to LEFTOVER_POOLS too (our worker and Vatsal's, each over all of
+# its queues); new work goes to the pools below first. Not a keyed task, nor one listed for KEY_POOLS only (Max's and
+# Pulkit's paid rows).
+LEFTOVER_POOLS = ["nexus", "vatsal"]
+LEFTOVER_H = 2
+M8 = ["max", "pulkit", "wriva", "zaratan"]   # zaratan: H100 jobs
+M27 = ["wriva", "zaratan", "max", "pulkit"]
 POOLS = {("merit", "m27"): M27 + ["arm00"], ("merit", "m8"): M8,
          ("magic", "m27"): M27, ("magic", "m8"): M8,
          ("worldmm", "m27"): M27, ("worldmm", "m8"): M8}
@@ -93,11 +102,11 @@ MEMORY_ARM = {("worldmm", "g5m-q8"): "g5m", ("worldmm", "g5m-g5"): "g5m",
 KEY_POOLS = ["max", "pulkit"]   # Max and Pulkit (NVIDIA) run with their own API keys
 # A name of the form "A|B" is met by either variable. MERIT's and WorldMM's gpt-5-mini calls go to OpenAI with
 # OPENAI_API_KEY, or through OpenRouter with OPENROUTER_API_KEY alone (each README, "Through OpenRouter").
-# A task whose every need an OpenRouter key meets is also offered to our own Nexus worker (ROUTER_POOLS), which has
-# that key and no other; the worker still takes it only with the key in its environment. The gpt-5 answer arms
+# ROUTER_POOLS once also offered a task whose every need an OpenRouter key meets to our own Nexus worker, which has
+# that key and no other; since 2026-11-14 it is KEY_POOLS alone (the Qwen work left Nexus). The gpt-5 answer arms
 # (g5m-g5) stay with Max and OpenAI's key (Anubhav, 2026-11-14), although the code could route them too.
 GPT = "OPENAI_API_KEY|OPENROUTER_API_KEY"
-ROUTER_POOLS = KEY_POOLS + ["nexus"]
+ROUTER_POOLS = KEY_POOLS   # was + ["nexus"]: the OpenRouter arm left is WorldMM's g5m-q8, a Qwen model, so off Nexus (2026-11-14)
 NEEDS_ENV = {("api", c): ["GEMINI_API_KEY" if c.startswith("gemini") else "OPENAI_API_KEY"] for c in API_CONFIGS} | {
     ("worldmm", "g5m"): [GPT], ("worldmm", "g5m-q8"): [GPT], ("worldmm", "g5m-g5"): ["OPENAI_API_KEY"],
     ("merit", "g5m"): [GPT], ("merit", "g5m-g5"): ["OPENAI_API_KEY"]}
@@ -155,10 +164,10 @@ GATED = {(b, arm) for b, arm, *_ in REPORTED + PAID}
 # Nothing is built, so a task waits on nothing and is done when its answers_<bank>.json.gz is in the dataset. It runs
 # in MERIT's image of the model's environment, so the pools are those of that arm: the 8B fits a 48 GB GPU at every N
 # (measured peak 39.2 GB at N = 768); the 27B needs what MERIT's m27 does at N = 32 and 128 (2x 48 GB or one 80 GB GPU).
-# Its N = 768 is not sized yet (75k video tokens), so only the pools with an H200 (141 GB) queue get it. Listed after
+# Its N = 768 is not sized yet (75k video tokens), so only Pulkit's GB200/GB300 pool gets it. Listed after
 # the paid rows and before the memory arms: short tasks that should not wait behind the memory builds.
 DIRECT = {"qwen3vl-8b-f32": M8, "qwen3vl-8b-f128": M8, "qwen3vl-8b-f768": M8,
-          "qwen38-27b-f32": M27, "qwen38-27b-f128": M27, "qwen38-27b-f768": ["nexus", "vatsal"],
+          "qwen38-27b-f32": M27, "qwen38-27b-f128": M27, "qwen38-27b-f768": ["pulkit"],   # N = 768 unsized: a GB200/GB300 (186/288 GB) GPU
           # Qwen3.5-9B and Molmo2-8B fit a 48 GB GPU like the 8B (the 9B runs in the m27 image); Qwen3.5-35B-A3B needs
           # the 27B pools' GPUs, and its N = 768 is not sized, so it is not listed
           "qwen35-9b-f32": M8, "qwen35-9b-f128": M8, "qwen35-9b-f768": M8,
@@ -405,6 +414,21 @@ def gate(tasks):
     return keep, len(tasks) - len(keep)
 
 
+def leftovers(tasks, old, now, claimed=()):
+    """Add LEFTOVER_POOLS to a task nobody has held for LEFTOVER_H hours. listed_t, carried over from the previous
+    tasks.json, is when it was last free: reset while a pool holds it (claimed: the ids running or waiting for a
+    relay), so a claim that lapses or fails gives the other pools another LEFTOVER_H hours first."""
+    since = {t.get("id"): t.get("listed_t") for t in old}
+    n = 0
+    for t in tasks:
+        t["listed_t"] = now if t["id"] in claimed else since.get(t["id"]) or now
+        if (t["pools"] and t["pools"] != KEY_POOLS and not t.get("needs_env")
+                and now - t["listed_t"] >= LEFTOVER_H * 3600):
+            t["pools"] = t["pools"] + [p for p in LEFTOVER_POOLS if p not in t["pools"]]
+            n += 1
+    return n
+
+
 def restrict(tasks, only_pools):
     """--only-pools (a test): every task to these pools, except that a task needing a key, or listed for the key
     pool only, never leaves its own."""
@@ -450,6 +474,7 @@ def main():
                                       not reported(t) and t["video"] not in a.first, t["priority"]))
         for i, t in enumerate(tasks):
             t["priority"] = i
+        left = leftovers(tasks, old, int(jobs.now()), {tid for tid, (_, c) in held.items() if c["status"] != "done"})
         if a.only_pools is not None:
             restrict(tasks, a.only_pools)
         if a.dry_run:
@@ -465,7 +490,8 @@ def main():
                   "done already and still stale (the worker's bank is older than the master's, or the questions failed again)")
             print(f"gate: {withheld} tasks withheld (PILOT: the reported-configuration and paid-row arms; HELD: {sorted(HELD)})"
                   + (f"; listed of them: {[t['id'] for t in tasks if reported(t)]}" if PILOT else " (PILOT is empty)"))
-            print(f"need a key (pool {', '.join(KEY_POOLS)} only; nexus too where an OpenRouter key is enough): "
+            print(f"leftovers: {left} tasks listed {LEFTOVER_H} h or more ago, offered to {', '.join(LEFTOVER_POOLS)} too")
+            print(f"need a key (pool {', '.join(KEY_POOLS)} only): "
                   f"{sum(1 for t in tasks if t.get('needs_env'))} tasks")
             print(f"dry run, nothing committed: {len(tasks)} tasks, {len(have)} memories already built; "
                   f"first: {[t['id'] for t in tasks[:5]]}")

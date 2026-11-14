@@ -8,8 +8,12 @@ can write morph-graphs/epic-morph-jobs and morph-graphs/epic-morph-results (HF_T
     python coord/worker.py --pool nexus-scavenger --launcher local --slots 0 --max-tasks 1
     python coord/worker.py --pool max --launcher slurm --runtime apptainer --slots 1 2 3 4 \
         --sbatch "--partition=gpu --gres=gpu:1 -c 8 --mem=64G --time=8:00:00"        # a cluster: up to 4 jobs at once
+    python coord/worker.py --pool pulkit --launcher docker --slots 0 0 1 1 2 2 3 3 --arms m8 \
+        --until $(date -d +8hours +%s) --baselines merit magic worldmm   # inside one 4-GPU allocation: two 8B tasks per
+        # GPU, one model, only tasks whose p90 runtime on the board ends before the allocation does; the worker
+        # exits once it has nothing left to start and its tasks are finished
 
-A worker takes only the baselines named by --baselines (default merit api; api tasks go to the max pool only): name one only once this machine has its
+A worker takes only the baselines named by --baselines (default merit api; api tasks go to the max and pulkit pools only): name one only once this machine has its
 images (docker pull, or the SIFs, below), or every task of it would fail here. With --runtime apptainer, set
 MERIT_SIF_DIR to a folder of <baseline>_<arm>.sif files (apptainer pull merit_m8.sif docker://ghcr.io/morph-graphs/
 merit:<tag>, the tag from baselines/<b>/docker/image_tag.sh <arm>). Every baseline's docker/run.sh also reads the
@@ -64,6 +68,7 @@ leases and the heartbeat commits every 10 minutes at most, and when the Hub refu
 network is down) the worker waits for the time it names, or a few minutes, and goes on. It never stops for that.
 """
 import argparse
+import collections
 import getpass
 import json
 import re
@@ -267,6 +272,22 @@ def slurm_job_state(submit_log, run=subprocess.run):
     return "failed", f"Slurm job {jid} ended {state or '?'} {code}"
 
 
+def kind(tid):
+    """<baseline>-<arm>-<stage> of a task id (master.py: <baseline>-<arm>-<stage>-[<bank>-]<video>[-redo-<hash>])."""
+    m = re.match(r"^(.+?-(?:build|qa|prep|blind))-", tid)
+    return m.group(1) if m else tid
+
+
+def runtimes(pools):
+    """p90 seconds per task kind, over every pool's finished claims (done or waiting for the relay)."""
+    secs = collections.defaultdict(list)
+    for p in pools.values():
+        for tid, c in p.get("claims", {}).items():
+            if c.get("status") in ("done", "relay") and c.get("seconds"):
+                secs[kind(tid)].append(c["seconds"])
+    return {k: sorted(v)[-(-9 * len(v) // 10) - 1] for k, v in secs.items()}   # nearest rank: 3 runs give the longest
+
+
 def alive(pidfile):
     """Is the task's process (pid kept in a local file, since claims are re-read from the board) still there?"""
     try:
@@ -307,7 +328,13 @@ def main():
     ap.add_argument("--sbatch", default="", help="slurm: resources and queue for each task's job, e.g. '--partition=gpu --gres=gpu:1 -c 8 --mem=64G --time=8:00:00'")
     ap.add_argument("--queues", help="slurm, instead of --sbatch: a JSON file of queues {name: {sbatch, fits}}; each task goes "
                                      "to every queue that fits its arm at once and runs on the first to start (coord/nexus_queues.json)")
-    ap.add_argument("--slots", nargs="+", required=True, help="GPU ids per task slot: '0 1' = two one-GPU slots, '0,1' = one two-GPU slot")
+    ap.add_argument("--slots", nargs="+", required=True, help="GPU ids per task slot: '0 1' = two one-GPU slots, '0,1' = one two-GPU slot, "
+                    "'0 0 1 1' = two tasks on each of GPUs 0 and 1 (a GPU with room for several)")
+    ap.add_argument("--arms", nargs="+", default=None, help="take only these arms (m8, magic/m27, as in a queues file), e.g. one "
+                    "model per allocation")
+    ap.add_argument("--until", type=int, default=0, help="unix time this worker's allocation ends: claim only tasks whose p90 "
+                    "runtime on the board (all pools' finished claims of the same baseline, arm and stage) ends before it")
+    ap.add_argument("--unmeasured-h", type=float, default=8, help="--until: hours a task kind with no finished claim yet is assumed to take")
     ap.add_argument("--baselines", nargs="+", default=["merit", "api"],   # api: only Max's pool gets those tasks
                     help="baselines this worker takes (it needs each one's image or SIF for every arm it may get): "
                          "e.g. merit magic worldmm")
@@ -407,8 +434,14 @@ def main():
                         break
                 if how or note:
                     c["note"] = f"{how}: {note}" if how and note and a.launcher == "slurm" else how or note
-        busy = {c["slot"] for c in claims.values() if c["status"] == "running" and here(c)}
-        free = [s for s in a.slots if s not in busy]
+        busy = collections.Counter(c["slot"] for c in claims.values() if c["status"] == "running" and here(c))
+        free = []
+        for s in a.slots:   # a slot id listed n times runs n tasks at once
+            if busy[s]:
+                busy[s] -= 1
+            else:
+                free.append(s)
+        p90 = runtimes(pools) if a.until else {}
         held = jobs.taken(pools, t)
         fails = jobs.failures(pools)
         done = {tid for tid, (_, c) in held.items() if c["status"] == "done"}
@@ -453,6 +486,10 @@ def main():
             if queues and not fitting(task, queues, idle, full):   # none of this worker's GPUs can run it now (e.g. 27B, no 80 GB queue)
                 continue
             if task["baseline"] not in a.baselines:   # this worker has no image (or setup) for it
+                continue
+            if a.arms and not names(task, a.arms):
+                continue
+            if a.until and t + p90.get(kind(tid), a.unmeasured_h * 3600) > a.until:   # would not finish in this allocation
                 continue
             if not has_env(task):   # a paid-API task and no key here: claiming it would only fail it
                 continue
@@ -514,6 +551,9 @@ def main():
         running = sum(1 for c in claims.values() if c["status"] == "running" and here(c))
         if a.max_tasks and claimed_total >= a.max_tasks and running == 0:
             print(f"{jobs.iso()} done: {claimed_total} task(s) claimed and finished", flush=True)
+            return
+        if a.until and running == 0 and not start:   # an allocation with nothing left that fits: give the GPUs back
+            print(f"{jobs.iso()} done: no task fits before --until; {claimed_total} task(s) claimed and finished", flush=True)
             return
         time.sleep(a.every)
 
