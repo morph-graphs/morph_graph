@@ -148,3 +148,67 @@ the page; the master reads those overrides.
 3. Move MAGIC-Video and WorldMM (Vatsal's EPIC ports) and M3-Agent into `baselines/` with the same entry
    point and images; Qwen-MM-Plugins as an API arm.
 4. Onboard wriva (Apptainer images, their worker) and Max (docker launcher).
+
+## Answer (qa) tasks, per tranche
+
+Added 2026-11-13 with the tranche-2 bank. `master.py` EXPERIMENTS holds a `qa` line per (baseline, arm, bank)
+next to the builds; a tranche is one more pair of lines. The master lists a qa task for each video that has
+questions in the bank and no `answers_<bank>.json.gz` at `<baseline>/<arm>/<video>/` in the results dataset;
+while the video's build is still on the board the task depends on it (workers take it only once that build is
+done), and it goes to the same pools as the arm's builds. `publish --dry-run` prints the counts and commits
+nothing.
+
+What the master needs: `EPIC_MORPH_DIR` set to its own epic-morph checkout that has the bank; it regenerates
+`outputs/v3/banks/<bank>/` there each cycle. Without it `publish` stops (a tasks.json without the qa tasks
+would drop them from the board), so set it in the cron's script before this reaches main.
+
+What a worker needs for qa, beyond what builds need:
+- `EPIC_MORPH_DIR`: an epic-morph checkout at a commit whose `v3/export_bank.py` BANKS has the bank, with the
+  bank's B2 files (`outputs/v3/b2/<video>/questions_llm/{bank_checked,verify}.jsonl`). For `t2_agree2`: the 20
+  videos of `v3/tranche2.txt`. `run_merit.sh qa` generates `outputs/v3/banks/<bank>/` there on first use and
+  reuses it after, so after moving the checkout to a newer commit delete that folder to regenerate it.
+- The video itself (as for build): qa cuts the clips and frames if this machine has not, and MERIT reads them.
+- The memory comes from the results dataset (qa runs build, which fetches it; CPU only, seconds): a token that
+  can read it, and HF_HUB_OFFLINE unset.
+- No code change on the worker: `worker.py` already runs `run.sh qa <video> <arm> <bank> && run.sh upload ...`.
+
+## Every ready baseline on the board
+
+Added 2026-11-13. `EXPERIMENTS` lists build + qa (`t2_agree2`) for MERIT, MAGIC-Video and WorldMM, both arms each,
+in that order (the order is the priority). Pools per (baseline, arm) are in `master.POOLS`: every m8 needs one GPU
+of 40 GB or more (the Nexus A6000 pools, wriva, max, zaratan); every m27 needs an 80 GB GPU (wriva, max, zaratan), and only
+MERIT's m27 also goes to arm00 (the images are x86; MERIT alone has a native aarch64 environment there). MAGIC's
+build depends on MERIT's build of the same video and arm while that is listed, since it reuses MERIT's captions.
+A memory counts as built when its folder has `runs.jsonl` and the baseline's last memory file (`MEMORY_DONE`).
+
+A worker takes only the baselines it is started with: `worker.py --baselines merit magic worldmm` (default `merit`).
+Name a baseline only once the machine has its images, or every task of it fails there and is held back after two
+failures. All baselines' `docker/run.sh` read the worker's settings: `MERIT_GPU` and `MERIT_RUNTIME` (from
+worker.py), `MERIT_SIF_DIR` (a folder of `<baseline>_<arm>.sif`), `MERIT_HF_CACHE` (the models) and `MERIT_WORK`
+(the cluster's shared work folder; MAGIC and WorldMM work in its `magic/` and `worldmm/` subfolders). Each
+baseline's own `MAGIC_*` / `WORLDMM_*` variable wins when set.
+
+## One worker per person, many queues
+
+Added 2026-11-13. A person on a Slurm cluster runs one worker, `worker.py --pool <person> --queues <file>`, not one
+per queue. The file lists their queues, each with its sbatch arguments and the arms its GPU fits
+(`coord/nexus_queues.json`: vulcan-sailon A6000, vulcan-high-h200 H200, scavenger A6000 and L40S, cml-scavenger A6000,
+tron QoS high; `m8` everywhere, `m27` on the H200 only). The pool is listed in `master.POOLS` for both arms, and the
+worker claims only the tasks one of its queues fits, so the master needs no per-person GPU knowledge.
+
+Each claimed task is submitted to every queue that fits it at once, all copies under the job name `board-<task id>`.
+The job's first line is `coord/slurm_guard.sh`: the first copy to start creates the marker `<task>.ran` in the
+worker's state folder (noclobber, so two copies starting in the same second cannot both win) and cancels the
+copies still pending; a copy that starts later exits 0 without work, and the winner restarting after a requeue
+keeps the task. The winner writes the task's exit code to `<task>.rc`. The worker keeps the copies' ids in
+`<task>.jobs` and runs one `squeue` per cycle: it cancels copies left over after a winner exists, records the
+queue that ran the task in the claim (`queue`), marks it done or failed from `<task>.rc`, and failed when every copy
+left the queue without an exit code (time limit, OOM, preemption without requeue). This is the house rule "submit
+to two or three queues, the first to start cancels the rest", done per task by the worker.
+
+`--slots` still caps tasks, not copies: 8 slots over 6 fitting queues can hold 48 pending jobs, well inside
+Nexus's 500 per user and partition. A plain `--sbatch` worker (one queue, `sbatch --wait`) works as before.
+
+Starting one on Nexus (`coord/nexus_worker.sbatch` has the details): a morph_graph checkout of main in a worker
+folder on `/fs`, an HF token in a mode-600 file, then
+`sbatch --output=$W/logs/%x-%j.out --export=ALL,POOL=<person>,W=$W,SLOTS=8 $W/mg/coord/nexus_worker.sbatch`.

@@ -18,6 +18,12 @@ on:
       - baselines/magic/docker/**
       - baselines/worldmm/env/**
       - baselines/worldmm/docker/**
+      - baselines/api/env/**
+      - baselines/api/docker/**
+      - baselines/m3agent/env/**
+      - baselines/m3agent/docker/**
+      - baselines/egor1/env/**
+      - baselines/egor1/docker/**
       - .github/workflows/baseline-images.yml
   workflow_dispatch:
 
@@ -43,6 +49,9 @@ jobs:
           - {baseline: magic, arm: m27}   # MERIT's m27 server stack in a venv over the client environment
           - {baseline: worldmm, arm: m8}
           - {baseline: worldmm, arm: m27}   # the server27 venv (transformers 5.8) at /opt/server
+          - {baseline: api, arm: cpu}   # API clients and ffmpeg only: no CUDA, a few minutes
+          - {baseline: m3agent, arm: m3}   # two venvs (memorization, control) over one shared torch
+          - {baseline: egor1, arm: gemini25pro}   # the 3B agent's torch stack + API clients; nothing compiled
     env:
       PUBLISH: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
       TAGS: baselines/${{ matrix.baseline }}/docker/image_tag.sh
