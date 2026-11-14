@@ -231,7 +231,8 @@ answered by several reasoning models: `g5m-q8`, `g5m-q27`, `g5m-g5`; each baseli
 
 - `master.NEEDS_ENV` maps (baseline, arm) to the environment variables a worker must have: the `api` configs
   (`GEMINI_API_KEY` or `OPENAI_API_KEY`), WorldMM's `g5m`, `g5m-q8`, `g5m-g5` and MERIT's `g5m`, `g5m-g5`
-  (`OPENAI_API_KEY`). Every task of such an arm carries `needs_env` and is listed for `KEY_POOLS` (`max`) only,
+  (`OPENAI_API_KEY`; for the gpt-5-mini work either that or `OPENROUTER_API_KEY`, see "Either key" below). Every
+  task of such an arm carries `needs_env` and is listed for `KEY_POOLS` (`max`) only (plus `nexus` in that case),
   whatever its `EXPERIMENTS` line says; `--only-pools` can narrow that, never widen it. MERIT's `g5m-q8` and
   `g5m-q27` call nothing at answer time (the memory model is used at build only), so they carry no `needs_env` and
   go to the GPU pools of `m8` / `m27`. WorldMM's answer arms both need the key: its retriever is gpt-5-mini.
@@ -253,6 +254,28 @@ answered by several reasoning models: `g5m-q8`, `g5m-q27`, `g5m-g5`; each baseli
 - An answer arm's task carries `memory_arm`, so a `--prefetch` worker (#37) downloads the memory arm's folder
   too. With `--outbox`, MERIT's answer arms hand one folder to the relay like any task; WorldMM's answer arms upload
   two folders (the memory's and their own) and need a key anyway, so they run on pool `max`, which uploads itself.
+- **Either key, and our own Nexus worker (2026-11-14).** A `needs_env` name of the form `A|B` is met by either
+  variable. The gpt-5-mini work, MERIT's `g5m` and WorldMM's `g5m` and `g5m-q8` (its retriever), carries
+  `OPENAI_API_KEY|OPENROUTER_API_KEY`: with OpenRouter's key alone the same calls go through OpenRouter (each
+  README, "Through OpenRouter"; the `runs.jsonl` line says which gateway). A task whose every need an OpenRouter
+  key meets (these, and MAGIC's `oss120*`) is listed for `ROUTER_POOLS` = `KEY_POOLS` + `nexus`; every other keyed
+  task stays with `KEY_POOLS`. The gpt-5 answer arms (`g5m-g5` of both) are among those: they stay with Max and
+  `OPENAI_API_KEY` (Anubhav, 2026-11-14), although the baselines' code could send gpt-5 through OpenRouter too. Banks, videos, order and the pilot gate are unchanged. A worker running older code
+  does not know `A|B` and leaves these tasks until it is updated.
+  - The Nexus worker gets the key from a file only its owner reads: `~/.config/openrouter_key` (one bare line,
+    mode 600). `coord/nexus_worker.sbatch` exports it when the file is there (no file: the worker runs as before
+    and leaves the keyed tasks) and unsets the other providers' keys. Started by hand, the same in the shell:
+    `[ -f ~/.config/openrouter_key ] && export OPENROUTER_API_KEY=$(cat ~/.config/openrouter_key)`. Start it with
+    `BASELINES="merit worldmm magic"` in `--export`.
+  - The key travels in the environment only: worker -> `sbatch` (its default exports the submitting environment;
+    the queues' arguments must not set `--export`) -> the task's job -> `docker/run.sh`, which hands it to the
+    container by name for the arms that call the API. It is in no command line, script, state file or board file,
+    and failure notes are scrubbed (`worker.scrub`). Slurm itself keeps a job's environment while the job exists.
+  - Queues (`coord/nexus_queues.json`): MERIT's `g5m` build uses no GPU and goes to the `cpu` queue (4 CPUs,
+    16 GB); WorldMM's `g5m` build and MAGIC's `oss120` / `oss120-flash` need one GPU for the
+    local embedding models (13 to 24 GB) and WorldMM's `g5m-q8` 40 GB, so they go to the A6000 queues that are
+    not preemptible by lower tiers (`sailon-a6000`, `tron-a6000`); MAGIC's `oss120-q27` serves the 27B and goes to
+    `h200`. A queue's `fits` names these arms as `baseline/arm`, so no other pool's worker is affected.
 - Another paid-API baseline adds its arms to `NEEDS_ENV` and `MEMORY_ARM` and its lines to `EXPERIMENTS`; the pool
   restriction, the worker's check and the gate then apply to it as they are (the variable may be any name, e.g.
   `OPENROUTER_API_KEY`).

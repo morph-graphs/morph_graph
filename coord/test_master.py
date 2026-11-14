@@ -125,6 +125,10 @@ def board(monkeypatch, tmp_path, experiments=None):
         monkeypatch.setattr(M, "EXPERIMENTS", experiments)
 
 
+ROUTER = {("merit", "g5m"), ("worldmm", "g5m"), ("worldmm", "g5m-q8"), ("magic", "oss120"), ("magic", "oss120-flash"),
+          ("magic", "oss120-q27")}   # the arms an OpenRouter key alone runs: also for pool nexus
+
+
 def test_needs_env_and_pools(monkeypatch, tmp_path):
     """Every task of a paid-API arm names its key and is for pool max only, and --only-pools never widens that."""
     board(monkeypatch, tmp_path)
@@ -134,9 +138,14 @@ def test_needs_env_and_pools(monkeypatch, tmp_path):
         need = M.needs(t["baseline"], t["arm"], t["stage"])
         assert t.get("needs_env") == need
         if need:
-            assert t["pools"] == ["max"]
+            # our Nexus worker is offered the gpt-5-mini work (MERIT's and WorldMM's g5m builds, WorldMM g5m-q8's
+            # retriever: either key) and MAGIC's oss120 arms; every other keyed task, the gpt-5 answer arms
+            # (g5m-g5) among them, stays Max's with its own key
+            router = (t["baseline"], t["arm"]) in ROUTER
+            assert t["pools"] == (M.KEY_POOLS + ["nexus"] if router else M.KEY_POOLS), t
             if (t["baseline"], t["arm"]) not in {(b, arm) for b, arm, *_ in M.PAID}:
-                assert need == (["GEMINI_API_KEY"] if t["arm"].startswith("gemini") else ["OPENAI_API_KEY"])
+                assert need == (["GEMINI_API_KEY"] if t["arm"].startswith("gemini") else ["OPENAI_API_KEY|OPENROUTER_API_KEY"]
+                                if router else ["OPENAI_API_KEY"])
     by = {(t["baseline"], t["arm"]): t for t in tasks}
     # MERIT's Qwen answer arms call no API: no needs_env, the GPU pools of m8 / m27
     assert by["merit", "g5m-q8"]["pools"] == M.M8 and by["merit", "g5m-q27"]["pools"] == M.POOLS["merit", "m27"]
@@ -147,6 +156,11 @@ def test_needs_env_and_pools(monkeypatch, tmp_path):
     assert all(t["pools"] == ([] if own(t) else ["a-test-pool"]) for t in tasks)
     M.restrict(tasks := M.desired(set(), set()), ["max", "a-test-pool"])
     assert all(t["pools"] == (["max"] if own(t) else ["max", "a-test-pool"]) for t in tasks)
+    M.restrict(tasks := M.desired(set(), set()), ["nexus"])   # a keyed task reaches nexus only where it was listed for it
+    assert {(t["baseline"], t["arm"]) for t in tasks if t.get("needs_env") and t["pools"] == ["nexus"]} == ROUTER
+    assert {t["baseline"] for t in tasks if t["arm"] == "g5m-g5"} == {"merit", "worldmm"}
+    assert all(t["pools"] == [] and t["needs_env"] == ["OPENAI_API_KEY"] for t in tasks if t["arm"] == "g5m-g5")
+    assert all(t["pools"] in ([], ["nexus"]) for t in tasks if t.get("needs_env"))
 
 
 def test_pilot_gate(monkeypatch, tmp_path):
@@ -213,7 +227,7 @@ def test_paid_rows(monkeypatch, tmp_path):
     assert {(t["baseline"], t["arm"]) for t in paid} == rows
     # batch10 only: no other video is built or answered, no other bank; pool max only, with or without a key
     assert {t["video"] for t in paid} == set(B10) and {t["bank"] for t in paid} == {None, "batch10_agree2"}
-    assert all(t["pools"] == ["max"] for t in paid)
+    assert all(t["pools"] == (M.ROUTER_POOLS if t["baseline"] == "magic" else M.KEY_POOLS) for t in paid)
     count = lambda b, arm, stage: sum((t["baseline"], t["arm"], t["stage"]) == (b, arm, stage) for t in paid)
     assert count("egor1", "gemini25pro", "build") == 2 and count("egor1", "gemini25pro", "qa") == 1   # v is answered
     assert count("egagent", "gpt41", "build") == 1 and count("egagent", "gemini25pro", "build") == 0  # w is built
