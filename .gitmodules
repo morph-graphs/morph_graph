@@ -25,6 +25,9 @@
 [submodule "baselines/hippomm/HippoMM"]
 	path = baselines/hippomm/HippoMM
 	url = https://github.com/linyueqian/HippoMM
+[submodule "baselines/egagent/egagent"]
+	path = baselines/egagent/egagent
+	url = https://github.com/facebookresearch/egagent
 [submodule "baselines/egorag/EgoLife"]
 	path = baselines/egorag/EgoLife
 	url = https://github.com/EvolvingLMMs-Lab/EgoLife
