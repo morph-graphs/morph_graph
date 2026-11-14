@@ -23,7 +23,7 @@
 #   passed through when set: HF_TOKEN MERIT_HF_REPO MAGIC_TAG MAGIC_FETCH TOKEN_BUDGET MAX_BATCH MAGIC_PORT
 #   reported arms (oss120, oss120-flash, oss120-q27; README "Reported configuration"): OPENROUTER_API_KEY, the
 #   MAGIC_{CAPTION,MEMORY,REASON}_{MODEL,BASE_URL,KEY_ENV} settings and the key variables those name, MAGIC_CAPTIONS,
-#   MAGIC_CONTROLLER.
+#   MAGIC_CONTROLLER, MAGIC_SKIP_REFUSED.
 #   Keys go in through the environment like HF_TOKEN, never on a command line.
 set -euo pipefail
 ARM=${3:?usage: run.sh <stage> <video> <arm> [bank]}
@@ -57,7 +57,7 @@ COMMITS=(MAGIC_REPO_COMMIT="$C_REPO" MAGIC_EPIC_COMMIT="$C_EPIC"
          MERIT_REPO_COMMIT="$C_REPO" MERIT_EPIC_COMMIT="$C_EPIC"
          MERIT_SUBMODULE_COMMIT="${MERIT_SUBMODULE_COMMIT:-$(rev "$REPO/baselines/merit/MERIT")}")
 PASS=(HF_TOKEN MERIT_HF_REPO MERIT_OUTBOX MAGIC_TAG MAGIC_FETCH MAGIC_OUT MAGIC_WORK TOKEN_BUDGET MAX_BATCH MAGIC_PORT
-      OPENROUTER_API_KEY MAGIC_CAPTIONS MAGIC_CONTROLLER)
+      OPENROUTER_API_KEY MAGIC_CAPTIONS MAGIC_SKIP_REFUSED MAGIC_CONTROLLER)
 for r in CAPTION MEMORY REASON; do   # each role's settings, and the key variable its KEY_ENV names
     PASS+=(MAGIC_${r}_MODEL MAGIC_${r}_BASE_URL MAGIC_${r}_KEY_ENV); k=MAGIC_${r}_KEY_ENV
     [ -z "${!k:-}" ] || PASS+=("${!k}")

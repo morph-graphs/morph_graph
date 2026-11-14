@@ -129,7 +129,16 @@ NEEDS_ENV |= {
 # The arms behind the pilot gate: every arm of the REPORTED and PAID lines. A new paid baseline joins the gate by
 # being listed in one of them, not by its name.
 GATED = {(b, arm) for b, arm, *_ in REPORTED + PAID}
+# The plain video model (baselines/direct, no memory): qa lines only, every bank, an arm per model and frame budget N.
+# Nothing is built, so a task waits on nothing and is done when its answers_<bank>.json.gz is in the dataset. It runs
+# in MERIT's image of the model's environment, so the pools are those of that arm: the 8B fits a 48 GB GPU at every N
+# (measured peak 39.2 GB at N = 768); the 27B needs what MERIT's m27 does at N = 32 and 128 (2x 48 GB or one 80 GB GPU).
+# Its N = 768 is not sized yet (75k video tokens), so only the pools with an H200 (141 GB) queue get it. Listed after
+# the paid rows and before the memory arms: short tasks that should not wait behind the memory builds.
+DIRECT = {"qwen3vl-8b-f32": M8, "qwen3vl-8b-f128": M8, "qwen3vl-8b-f768": M8,
+          "qwen38-27b-f32": M27, "qwen38-27b-f128": M27, "qwen38-27b-f768": ["nexus", "vatsal"]}
 EXPERIMENTS = [("api", c, "qa", KEY_POOLS, "batch10_agree2") for c in API_CONFIGS] + REPORTED + PAID + [
+    ("direct", arm, "qa", pools, bank) for bank in BANKS for arm, pools in DIRECT.items()] + [
     (b, arm, stage, POOLS[b, arm], bank)
     for b in ("merit", "magic", "worldmm") for stage in ("build", "qa") for arm in ("m27", "m8")
     for bank in (BANKS if stage == "qa" else [None])]

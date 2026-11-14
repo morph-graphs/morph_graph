@@ -300,6 +300,26 @@ each with the models it was published with, after the g5m lines and before the l
 - `oss120-q27` serves Qwen3.8-27B and needs an 80 GB GPU: the board cannot say that about one task of a pool, so Max's
   worker must give those tasks such a slot (or leave `magic` out of `--baselines` on a smaller machine).
 
+## The plain video model (`baselines/direct`): qa tasks with no build
+
+Added 2026-11-14. `master.DIRECT` maps each arm of the no-memory baseline (`<model>-f<N>`: Qwen3-VL-8B and
+Qwen3.8-27B at N = 32, 128 and 768 frames) to its pools, and `EXPERIMENTS` gets one `qa` line per arm and bank of
+`master.BANKS`, after the paid rows and before the memory arms (short tasks, as the `api` ones).
+
+- No build line and no `MEMORY_DONE` entry: a task's `deps` are empty, and it is listed until
+  `direct/<arm>/<video>/answers_<bank>.json.gz` is in the results dataset. No key, no gate.
+- No image of its own: `baselines/direct/docker/run.sh` runs the arm in MERIT's image of the model's environment
+  (`merit:m8-...` for the 8B, `merit:m27-...` for the 27B; with Apptainer `merit_m8.sif` / `merit_m27.sif` of
+  `MERIT_SIF_DIR`). A pool that runs MERIT adds `direct` to `--baselines` and pulls nothing.
+- Pools: the 8B arms go to the `m8` pools (measured peak 39.2 GB at N = 768, so one 48 GB GPU at every N); the 27B
+  at N = 32 and 128 to the `m27` pools without arm00 (measured 2x 48 GB at N = 128; one 80 GB GPU). The 27B at
+  N = 768 is not sized, so it is listed only for the pools whose queues have an H200 (`nexus`, `vatsal`) until it is.
+- Queues: a queue's `fits` names arms, and these arms are not `m8` / `m27`, so `coord/nexus_queues.json` names them:
+  the 8B arms on every 48 GB queue (and as the H200's fallback), the 27B arms on the H200. A person's own copy of
+  that file needs the same names, or the worker leaves the tasks unclaimed.
+- Another model or frame budget (`baselines/direct/README.md`) is one entry in `DIRECT`, its name in the queues it
+  fits, and, for a new model, its environment in `baselines/direct/docker/image_tag.sh`.
+
 ## A worker restart (slurm launcher), and the Hub's rate limit
 
 Added 2026-11-13, after a restart recorded three finished and uploaded tasks as failed, and after workers stopped on

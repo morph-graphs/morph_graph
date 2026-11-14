@@ -117,6 +117,8 @@ def caption_clips(a):
     """A caption per 30 s clip from the caption role's VLM, as upstream captions raw video: a 360p copy of the
     clip (the same ffmpeg settings) sent as video_url. Resumes from <video>_30sec.json.partial (clips with a caption)."""
     caps, part, model = jload(a.skeleton), cap(a.out, a.video, "30sec") + ".partial", llm("caption")
+    before = set(roles.UNANSWERED)
+    refused = {}   # clip -> the error; clips the provider refuses for good (its content filter, or a last clip too short for it)
     done = {c["video_path"]: c["text"] for c in (jload(part) if os.path.exists(part) else []) if c.get("text")}
     for c in caps:
         c["text"] = done.get(c["video_path"], "")
@@ -138,6 +140,9 @@ def caption_clips(a):
                     return text
             except Exception as e:
                 log.warning(f"caption {c['video_path']}: {type(e).__name__}: {e}")
+                if "data_inspection_failed" in str(e) or "video file is too short" in str(e):
+                    refused[c["video_path"]] = "data_inspection_failed" if "data_inspection_failed" in str(e) else "video file is too short"
+                    break
         return ""
     with ThreadPoolExecutor(8) as ex:   # upstream's --parallel 8
         for i, (c, text) in enumerate(zip(caps, ex.map(one, caps))):
@@ -146,7 +151,15 @@ def caption_clips(a):
                 jsave(caps, part)
     jsave(caps, part)
     missing = [c["video_path"] for c in caps if not c["text"]]
-    if missing:
+    if missing and os.environ.get("MAGIC_SKIP_REFUSED") == "1" and all(m in refused for m in missing):
+        # asked for explicitly: build without these clips (a gap in the memory) and say which, next to the memory
+        log.warning(f"captions: leaving out {len(missing)} of {len(caps)} clips the provider refused: {missing}")
+        jsave({"caption_model": roles.endpoint("caption")[0], "clips": {m: refused[m] for m in missing}},
+              os.path.join(a.out, f"{a.video}_refused_clips.json"))
+        jsave([c for c in caps if c["text"]], part)
+        with roles.LOCK:   # these refusals are accounted for: not what main's "LLM calls failed" check is for
+            roles.UNANSWERED.intersection_update(before)
+    elif missing:
         sys.exit(f"{len(missing)} of {len(caps)} clips got no caption (first {missing[0]}); rerun to retry them")
     return part
 
