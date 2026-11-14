@@ -1,5 +1,6 @@
 # HippoMM environment image (morph_graph baselines/hippomm) for EPIC-Morph runs off our clusters (e.g. Max's).
-# One image for the one arm (q25vl7b-gpt4o), holding the same pinned environments as env/setup_env.sh builds:
+# One image for both arms (built as q25vl7b-gpt4o; q25vl7b-gpt41 runs in it), holding the same pinned environments as
+# env/setup_env.sh builds:
 #   vllm    the Qwen2.5-VL-7B-Instruct endpoint (vLLM 0.8.5.post1), in the base Python, which has its torch 2.6.0
 #   client  HippoMM itself (ImageBind, Whisper, memory build, answering): upstream's pins on torch 2.1.2, as a
 #           virtualenv at /opt/client (its torch wheel carries CUDA 12.1 and cuDNN 8)
@@ -13,7 +14,7 @@
 #   docker build -f baselines/hippomm/docker/Dockerfile --build-arg ARM=q25vl7b-gpt4o -t hippomm:q25vl7b-gpt4o .
 #   (baselines/hippomm/docker/build.sh does this with the published tag)
 #
-# Base: Python 3.11, torch 2.6.0, CUDA 12.4 (runtime: nothing is compiled).
+# Base: Python 3.11, torch 2.6.0, CUDA 12.4 (the runtime image; gcc is added below).
 FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
 
 ARG ARM
@@ -26,9 +27,11 @@ RUN test "$ARM" = q25vl7b-gpt4o || { echo "build with --build-arg ARM=q25vl7b-gp
     && python -c "import sys; assert sys.version_info[:2] == (3, 11), sys.version"
 
 # ffmpeg/ffprobe for frame and audio extraction, git for pip's git+ requirements and runs.jsonl's commits,
-# patch for HippoMM.patch, curl for the endpoint check and the ImageBind weights, util-linux for flock
+# patch for HippoMM.patch, curl for the endpoint check and the ImageBind weights, util-linux for flock;
+# gcc and libc6-dev because vLLM 0.8.5 compiles at start-up (torch.compile; triton builds a small C module with
+# gcc or clang from PATH and stops with "Failed to find C compiler" without one)
 RUN apt-get update && apt-get install -y --no-install-recommends git ffmpeg patch curl libgl1 libglib2.0-0 \
-        libsndfile1 ca-certificates util-linux \
+        libsndfile1 ca-certificates util-linux gcc libc6-dev \
     && rm -rf /var/lib/apt/lists/* \
     && git config --system --add safe.directory '*'
 

@@ -14,7 +14,8 @@ Modes:
   --count    no GPU, no API: how many gpt-4o calls and input tokens the questions need, as a range (see README)
   --blind    upstream's final answer prompt with no memory at all: one gpt-4o call per question
   (default)  answer every question. Needs the Qwen2.5-VL endpoint, a GPU (ImageBind, Whisper) and
-             OPENAI_API_KEY in the environment for upstream's reasoning model, gpt-4o.
+             OPENAI_API_KEY in the environment for upstream's reasoning model, gpt-4o (or OPENROUTER_API_KEY
+             alone: the same calls through OpenRouter, see meter()).
 
 Writes --answers (.json.gz): one row per question in bank order, keyed by the bank's `key`. Resumes from it: a
 row is done when it has an answer from this VERSION, this memory (memory_hash) and the same question (qhash).
@@ -40,7 +41,8 @@ import hm_common as hm
 
 VERSION = "1"   # bump when a change alters answers (prompts, cutoff rule, question format)
 LETTERS = "ABCD"
-USD_PER_M = {"input": 2.50, "output": 10.00}   # gpt-4o list price per million tokens, as assumed here: check before budgeting
+# list prices per million tokens, as assumed here: check before budgeting
+USD_PER_M = {"gpt-4o": {"input": 2.50, "output": 10.00}, "gpt-4.1": {"input": 2.00, "output": 8.00}}
 log = logging.getLogger("qa")
 
 
@@ -87,10 +89,12 @@ def count(rows, J, F):
     three times: direct answer, frame selection, final answer). Templates are counted as fixed token sizes
     measured from upstream's prompt strings; upstream caps a prompt's context at 120k tokens."""
     import tiktoken
-    enc = tiktoken.encoding_for_model(hm.REASONING)
+    enc = tiktoken.encoding_for_model(hm.TOKENIZER)
     n = lambda s: len(enc.encode(s))
     cap_tok = [n(c) for c in J["frame_captions"]]
-    tot = {"questions": len(rows), "low_calls": 2 * len(rows), "high_calls": 7 * len(rows), "low_in": 0, "high_in": 0}
+    usd = USD_PER_M[hm.REASONING]
+    tot = {"model": hm.REASONING, "usd_per_m": usd, "questions": len(rows), "low_calls": 2 * len(rows),
+           "high_calls": 7 * len(rows), "low_in": 0, "high_in": 0}
     for r in rows:
         m = hm.at_cutoff(J, F, r["cutoff"])
         C = min(sum(cap_tok[:m["nk"]]) + m["nk"], 120000)
@@ -100,27 +104,41 @@ def count(rows, J, F):
         tot["high_in"] += r["count"]["high_in"]
     tot["low_out"], tot["high_out"] = 20 * len(rows), 400 * len(rows)
     for k in ("low", "high"):
-        tot[f"{k}_usd"] = round((tot[f"{k}_in"] * USD_PER_M["input"] + tot[f"{k}_out"] * USD_PER_M["output"]) / 1e6, 2)
+        tot[f"{k}_usd"] = round((tot[f"{k}_in"] * usd["input"] + tot[f"{k}_out"] * usd["output"]) / 1e6, 2)
     return tot
 
 
 def meter(client, flush):
     """Count what goes through an OpenAI client's chat.completions.create: calls, the usage each response
     reports, the model ids it names. Returns the running total (a dict that keeps updating); `flush(total)`
-    runs after every call, so a run that is killed mid-question still leaves what it spent."""
-    tot = {"requested": hm.REASONING, "models": [], "calls": 0, "input_tokens": 0, "output_tokens": 0, "reasoning_tokens": 0}
+    runs after every call, so a run that is killed mid-question still leaves what it spent.
+    Through OpenRouter (hm.OPENROUTER) the same requests go to its endpoint as openai/<model>, pinned to the
+    provider OpenAI; the total then also has who served the calls and the dollars OpenRouter charged."""
+    if hm.OPENROUTER:
+        client.base_url = hm.OPENROUTER_URL
+    tot = {"requested": ("openai/" if hm.OPENROUTER else "") + hm.REASONING, "endpoint": str(client.base_url), "models": [],
+           "calls": 0, "input_tokens": 0, "cached_tokens": 0, "output_tokens": 0, "reasoning_tokens": 0}
     create = client.chat.completions.create
 
     def metered(*args, **kw):
+        if hm.OPENROUTER:
+            kw.update(model="openai/" + kw["model"], extra_body={**(kw.get("extra_body") or {}), "provider": hm.PROVIDER})
         r = create(*args, **kw)
         u = getattr(r, "usage", None)
         det = getattr(u, "completion_tokens_details", None)
         tot["calls"] += 1
         tot["input_tokens"] += getattr(u, "prompt_tokens", 0) or 0
+        tot["cached_tokens"] += getattr(getattr(u, "prompt_tokens_details", None), "cached_tokens", 0) or 0
         tot["output_tokens"] += getattr(u, "completion_tokens", 0) or 0
         tot["reasoning_tokens"] += getattr(det, "reasoning_tokens", 0) or 0
         if getattr(r, "model", None) and r.model not in tot["models"]:
             tot["models"].append(r.model)
+        provider = (getattr(r, "model_extra", None) or {}).get("provider")   # OpenRouter reports this and the cost
+        cost = (getattr(u, "model_extra", None) or {}).get("cost")
+        if provider and provider not in tot.setdefault("providers", []):
+            tot["providers"].append(provider)
+        if cost is not None:
+            tot["cost"] = round(tot.get("cost", 0) + cost, 6)
         flush(tot)
         return r
     client.chat.completions.create = metered
@@ -129,7 +147,10 @@ def meter(client, flush):
 
 def spent(tot, before):
     """What one question used: the total now minus the total before it."""
-    return {k: tot[k] - before[k] for k in ("calls", "input_tokens", "output_tokens", "reasoning_tokens")}
+    out = {k: tot[k] - before[k] for k in ("calls", "input_tokens", "cached_tokens", "output_tokens", "reasoning_tokens")}
+    if "cost" in tot:
+        out["cost"] = round(tot["cost"] - before.get("cost", 0), 6)
+    return out
 
 
 def summary_at(client, model, J, m):
@@ -201,8 +222,8 @@ def main():
         log.info(f"{r['key']} @ {r['cutoff']:.1f}s: {resp[:60]!r} -> {pred} gold {r['answer']} ({out['seconds']}s)")
         return out
 
-    if todo and not os.environ.get("OPENAI_API_KEY"):
-        sys.exit(f"answering needs OPENAI_API_KEY in the environment: upstream's reasoning model is {hm.REASONING} "
+    if todo and not (os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENROUTER_API_KEY")):
+        sys.exit(f"answering needs OPENAI_API_KEY (or OPENROUTER_API_KEY) in the environment: the arm's reasoning model is {hm.REASONING} "
                  "(run with --count for the number of calls and tokens)")
     cfg = hm.config(os.path.abspath(a.store or "."))
     from hippomm.core.hippocampal_memory import HippocampalMemory, QARecallSystem
@@ -233,6 +254,7 @@ def main():
         mem = HippocampalMemory(cfg)   # ImageBind, Whisper, the Qwen2.5-VL client
         mem.video_index[V] = {"metadata": {"path": os.path.abspath(a.video_file), "duration": J["duration"]}}
         qa = QARecallSystem(mem, cfg)
+        qa.reasoning_model = hm.REASONING   # the arm's model; the config named hm.TOKENIZER for upstream's token counter
         tot = meter(qa.thinking_client, usage)
         spath = os.path.join(a.memory, "summaries.json")
         summaries = json.load(open(spath)) if os.path.exists(spath) else {}
