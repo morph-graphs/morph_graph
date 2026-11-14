@@ -34,7 +34,8 @@
 #                    morph-graphs/epic-morph-results at worldmm/<arm>/<video>/)
 #   WORLDMM_TAG      a variant name for the answers (answers_<bank>_<tag>.json.gz), so variants never overwrite
 #   WORLDMM_FETCH    0 to never take the memory from the dataset (build normally reuses it when it is there)
-#   OPENAI_API_KEY   official arms: the key, from the environment only (never an argument or a file)
+#   OPENAI_API_KEY   official arms: the key, from the environment only (never an argument or a file); or
+#                    OPENROUTER_API_KEY alone: the same calls through OpenRouter (README "Through OpenRouter")
 #   WORLDMM_OPENAI_SERVICE_TIER  official arms: e.g. flex (half price, slower); default the API's standard tier
 #   WORLDMM_SERVER_WAIT  minutes to wait for the backbone server to load (default 45: Qwen3.8-27B from a busy
 #                    network filesystem took over 15 min); a server that dies ends the wait at once
@@ -73,6 +74,7 @@ mkdir -p "$OUT" "$MOUT" "$WORK/logs"
 export TOKENIZERS_PARALLELISM=false PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True MODEL RESPOND EPIC
 export WORLDMM_OPENAI_CACHE=$WORK/openai_cache/$V   # WorldMM's reply cache for its OpenAI calls (a rerun pays nothing twice)
 unset WORLDMM_USAGE_FILE
+[ -z "${OPENAI_API_KEY:-}" ] || unset OPENROUTER_API_KEY   # one gateway per run: OpenAI's key wins
 log() { echo "=== $V $ARM $1 ($(date '+%F %H:%M'))"; }
 have_memory() { local m; for m in "${MEMORY[@]}"; do [ -s "$MOUT/${m//\{video\}/$V}" ] || return 1; done; }
 record() {   # one line per finished stage, for the hand-back: record <stage> <seconds> [results folder, default $OUT]
@@ -131,7 +133,8 @@ backends() {   # what a stage's models need: the local server for a Qwen model, 
     local m
     for m in "$@"; do
         case $m in
-            gpt-*) [ -n "${OPENAI_API_KEY:-}" ] || { echo "$ARM calls the OpenAI API ($m): set OPENAI_API_KEY in the environment"; exit 1; } ;;
+            gpt-*) [ -n "${OPENAI_API_KEY:-}${OPENROUTER_API_KEY:-}" ] || { echo "$ARM calls the OpenAI API ($m): set OPENAI_API_KEY (or OPENROUTER_API_KEY, to go through OpenRouter) in the environment"; exit 1; }
+                   [ -n "${OPENAI_API_KEY:-}" ] || echo "$m through OpenRouter (openai/$m, provider OpenAI only)" ;;
             *) start_server ;;
         esac
     done

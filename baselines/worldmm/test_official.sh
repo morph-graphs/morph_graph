@@ -10,6 +10,10 @@
 #   QUESTIONS  how many of the video's earliest batch10_agree2 questions to answer (default 3)
 #   Q8         1 (default) also answers with g5m-q8, the respond model being the real local Qwen3-VL-8B
 #              (needs a GPU with >= 40 GB); 0 skips it
+#   GATEWAY    openai (default): OPENAI_API_KEY, calls on /v1/responses with WorldMM's snapshots and no `provider`
+#              field (an OPENROUTER_API_KEY that is also set is ignored). openrouter: only OPENROUTER_API_KEY is
+#              set and the stand-in answers as OpenRouter under /openrouter/api/v1: openai/gpt-5-mini and
+#              openai/gpt-5, pinned to provider OpenAI without fallbacks, every image with detail auto
 # Prints the calls per pipeline step and their sizes, the runs.jsonl usage, and checks that no caption, triple or
 # frame that ends after a question's t_ask reached a retriever or respond call. Exits non-zero when a check fails.
 set -euo pipefail
@@ -21,7 +25,14 @@ LOG=$T/mock_calls.jsonl; : > "$LOG"
 PORT=$("$PY" -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
 "$PY" "$M/epic/mock_openai.py" --port "$PORT" --log "$LOG" & MOCK=$!
 trap 'kill $MOCK 2>/dev/null' EXIT
-export OPENAI_BASE_URL=http://127.0.0.1:$PORT/v1 OPENAI_API_KEY=sk-mock-not-a-real-key
+# both stand-in URLs are always set; the keys decide the gateway
+export OPENAI_BASE_URL=http://127.0.0.1:$PORT/v1 OPENROUTER_BASE_URL=http://127.0.0.1:$PORT/openrouter/api/v1
+KEY=sk-mock-not-a-real-key; GATEWAY=${GATEWAY:-openai}; unset OPENAI_API_KEY
+case $GATEWAY in
+    openai) export OPENAI_API_KEY=$KEY OPENROUTER_API_KEY=sk-or-mock-must-not-be-used ;;
+    openrouter) export OPENROUTER_API_KEY=$KEY ;;
+    *) echo "GATEWAY must be openai or openrouter"; exit 1 ;;
+esac
 sleep 3
 # a bank of the video's NQ earliest questions, in a stand-in epic-morph folder (run_worldmm.sh reads banks there)
 export EPIC_MORPH_DIR=$T/epic; mkdir -p "$EPIC_MORPH_DIR/outputs/v3/banks/mock"
@@ -42,11 +53,11 @@ step blind-g5m-g5; bash "$M/run_worldmm.sh" blind "$V" g5m-g5 mock
 if [ "${Q8:-1}" = 1 ]; then step qa-g5m-q8; bash "$M/run_worldmm.sh" qa "$V" g5m-q8 mock; fi
 step rerun;        bash "$M/run_worldmm.sh" build "$V" g5m-g5; bash "$M/run_worldmm.sh" qa "$V" g5m-g5 mock
 echo; echo "##### checks"
-if grep -rIl "$OPENAI_API_KEY" "$T" >/dev/null; then echo "FAIL: the key is in a file under $T:"; grep -rIl "$OPENAI_API_KEY" "$T"; exit 1; fi
+if grep -rIl "$KEY" "$T" >/dev/null; then echo "FAIL: the key is in a file under $T:"; grep -rIl "$KEY" "$T"; exit 1; fi
 echo "the key is in no file under $T"
-"$PY" - "$T" "$V" <<'PYEOF'
+"$PY" - "$T" "$V" "$GATEWAY" "$PORT" <<'PYEOF'
 import collections, glob, gzip, json, math, re, sys
-T, V = sys.argv[1:]
+T, V, GATEWAY, PORT = sys.argv[1:]
 MARK = re.compile(r"CAP<(\d+)-(\d+)>|tm(\d+)x(\d+)")
 RANGE = re.compile(r"DAY1 (\d\d):(\d\d):(\d\d) - DAY1 (\d\d):(\d\d):(\d\d)$")   # a visual search by time range
 fail = []
@@ -67,6 +78,17 @@ if any(s == "rerun" for s, _, _ in calls):
     fail.append("the rerun made API calls: finished work was not skipped")
 if any(r.get("auth") != "bearer" for r in log if r["kind"] != "#step"):
     fail.append("a call came without the key header")
+# 1b. the gateway: every call on its path, with its model ids, provider pin and image detail
+gw = {"openai": ("/v1/responses", {"gpt-5-mini-2025-08-07", "gpt-5-2025-08-07"}, None, [None]),
+        "openrouter": ("/openrouter/api/v1/responses", {"openai/gpt-5-mini", "openai/gpt-5"},
+                       {"only": ["openai"], "allow_fallbacks": False}, ["auto"])}[GATEWAY]
+real = [r for r in log if r["kind"] != "#step"]
+bad = [r for r in real if r["path"] != gw[0] or r["model"] not in gw[1] or r["provider"] != gw[2]
+       or (r["images"] and r["detail"] != gw[3])]
+print(f"gateway {GATEWAY}: {len(real)} calls, paths {sorted({r['path'] for r in real})}, models {sorted({r['model'] for r in real})}, "
+      f"provider {sorted({json.dumps(r['provider']) for r in real})}, image detail {sorted({str(r['detail']) for r in real if r['images']})}")
+if bad or not real:
+    fail.append(f"{len(bad)} calls did not go the {GATEWAY} way, e.g. {bad[:1]}")
 # 2. runs.jsonl: usage per step / role and the model ids the API answered with
 for f in sorted(glob.glob(f"{T}/results/*/{V}/runs.jsonl")):
     for line in open(f):
@@ -79,6 +101,14 @@ n_use = sum(m["calls"] for st in used.values() for m in st.values())
 print(f"build: {n_log} calls at the mock, {n_use} in runs.jsonl")
 if n_log != n_use:
     fail.append("runs.jsonl's call count differs from the mock's")
+urows = [m for st in used.values() for m in st.values()]
+gok = all(m["endpoint"].rstrip("/") == f"http://127.0.0.1:{PORT}" + gw[0][:-len("/responses")] for m in urows)
+if GATEWAY == "openrouter":
+    gok = gok and all(m.get("provider") == "OpenAI" and abs(m["cost"] - 0.001 * m["calls"]) < 1e-6 for m in urows)
+else:
+    gok = gok and not any("provider" in m or "cost" in m for m in urows)
+if not gok:
+    fail.append("runs.jsonl's endpoint, provider or cost is not the gateway's")
 # 3. streaming: nothing that ends after t_ask in the rows (both arms) or in any call of the all-OpenAI arm
 caps = json.load(open(f"{T}/results/g5m/{V}/{V}_10sec.json"))
 end = lambda c: int(c["end_time"][:2]) * 3600 + int(c["end_time"][2:4]) * 60 + int(c["end_time"][4:6])

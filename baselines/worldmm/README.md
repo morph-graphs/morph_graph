@@ -138,6 +138,68 @@ On the job board these are the `worldmm g5m*` tasks: they carry `needs_env: [OPE
 - `WORLDMM_OPENAI_SERVICE_TIER=flex` sends every call at the flex tier (half price, slower, same models).
 - `blind` with `g5m-g5` is gpt-5 on the answer prompt alone (one call per question); with `g5m-q8` it equals `m8`'s.
 
+### Through OpenRouter (our own builds)
+
+With `OPENROUTER_API_KEY` in the environment and `OPENAI_API_KEY` not, the same Responses calls go through
+OpenRouter (`POST https://openrouter.ai/api/v1/responses`), so a memory can be built on our cluster without an
+OpenAI account. Nothing else is set; `epic/openai_usage.py` does the switch.
+
+```bash
+export OPENROUTER_API_KEY=...      # typed into the shell (or read -s): never an argument, a file, a log or a commit
+unset OPENAI_API_KEY GOOGLE_API_KEY GEMINI_API_KEY HF_TOKEN       # no other provider's key in the job
+export PY=<client environment>/bin/python EPIC_MORPH_DIR=<epic-morph checkout> WORLDMM_FETCH=0
+bash baselines/worldmm/run_worldmm.sh prep  P05-20240425-201444 g5m   # no GPU: ffmpeg (512 px video, 10 s segments)
+bash baselines/worldmm/run_worldmm.sh build P05-20240425-201444 g5m   # one GPU >= 16 GB (see below)
+# upload (no GPU) needs HF_TOKEN back; it makes no API call:  bash baselines/worldmm/run_worldmm.sh upload <video> g5m
+```
+For an sbatch job, export the key in the submitting shell and let `sbatch` pass the environment (its default,
+`--export=ALL`); do not write it into the script.
+
+| stage | GPU | API calls |
+|---|---|---|
+| `prep` | none | none |
+| `build` | one GPU >= 16 GB: the embedding models (Qwen3-Embedding-4B, VLM2Vec-V2) are local and take about 13 GB. The 10 s captions, its first step, are API calls only | gpt-5-mini: captions (10 frames per 10 s segment), multiscale captions, triples, semantic memory, OpenIE |
+| `qa g5m-q8` | one GPU >= 40 GB (the embedding models and the Qwen3-VL-8B server) | gpt-5-mini, the retriever's filters |
+| `qa g5m-g5` | one GPU >= 16 GB | gpt-5-mini (retriever) and gpt-5 (respond) |
+| `upload` | none | none |
+
+- **What changes in the request.** The endpoint (`https://openrouter.ai/api/v1`; `OPENROUTER_BASE_URL` overrides
+  it, for the stand-in test), the key, the model id (`openai/gpt-5-mini`, `openai/gpt-5`) and one added field,
+  `provider: {"only": ["openai"], "allow_fallbacks": false}`: OpenRouter also lists Azure for these models, and
+  with the pin OpenAI answers or the call fails. Each image part also gets `detail: "auto"`: OpenRouter's schema
+  requires the field, and `auto` is what the OpenAI API assumes without it. Prompts, frames, image size, temperature, seed and
+  reasoning effort (none sent: the model's default, `medium` on both routes) are what the port sends to OpenAI.
+- **What may still differ from the direct API** (OpenRouter's model list and API reference, read 2026-11-14; no
+  call was made, there is no key yet):
+  - the snapshot is not ours to pin: `openai/gpt-5-mini` is OpenRouter's alias, whose `canonical_slug` today is
+    `openai/gpt-5-mini-2025-08-07` (`openai/gpt-5`: `openai/gpt-5-2025-08-07`), the snapshots WorldMM pins. The
+    reply's `model` is recorded per call; whether it shows the snapshot or the alias is not known yet;
+  - OpenRouter lists two OpenAI endpoints, standard and `openai/flex` (half price, slower). We send no service
+    tier unless `WORLDMM_OPENAI_SERVICE_TIER` is set; the tier each reply reports is recorded;
+  - `temperature` is not among the parameters OpenRouter lists for these models and may be dropped before OpenAI
+    sees it. The port sends 1 or nothing, which is the model's only setting, so nothing changes;
+  - image tokens are counted by OpenAI either way (the images are passed on as data URLs), but OpenRouter could
+    re-encode or reject an oversized request before that: compare `input_tokens` of the first clips with the
+    estimate before building many videos;
+  - the price per token is OpenAI's ($0.25 in / $2.00 out per million for gpt-5-mini, $1.25 / $10 for gpt-5);
+    OpenRouter adds its fee when credits are bought, not per call, so `cost` in `runs.jsonl` is before that fee;
+  - both models carry `expiration_date` 2026-12-11 on OpenRouter too: the same shutdown.
+- **What is recorded.** The stage's `runs.jsonl` line says which gateway made the memory: each `openai` row is
+  keyed by the model id the endpoint returned and has `endpoint`, and through OpenRouter also `provider` (who
+  served the call) and `cost` (dollars charged, summed). The memory folder stays `worldmm/g5m/<video>/`: the same model
+  through another gateway. The reply cache keys on the model id, so a memory started on one gateway and resumed
+  on the other reuses what is already written to its files but not the other gateway's cached replies; its
+  `runs.jsonl` lines then show both.
+- **One gateway per run.** With both keys set OpenAI's is used and `OPENROUTER_API_KEY` is removed from the
+  stage's environment; stages that call no API get neither key.
+- **Not known until a keyed call**: whether OpenRouter's Responses endpoint accepts WorldMM's requests as they
+  are (structured output through `text.format`, messages without `"type": "message"`); its published schema
+  allows both. Build one short video first and read its `runs.jsonl` line.
+- **Check without a key**: `GATEWAY=openrouter bash baselines/worldmm/test_official.sh <scratch dir>` runs the same
+  test with only `OPENROUTER_API_KEY` set (a dummy) against the stand-in, and checks the path, the `openai/...`
+  ids, the provider pin, the image detail and the recorded endpoint, provider and cost; without `GATEWAY` it
+  checks that the OpenAI route is what it was, even when an OpenRouter key is also set.
+
 ### Cost estimate
 
 Estimated 2026-11-13 with `epic/cost_official.py` (standard tier; nothing was run against the API):
