@@ -179,9 +179,10 @@ def test_pilot_gate(monkeypatch, tmp_path):
     """While PILOT is non-empty, the only listed tasks of the reported arms are PILOT's; the rest are untouched."""
     board(monkeypatch, tmp_path)
     everything = M.desired(set(), set())
-    # as published: the gate is open, and only HELD (WorldMM's g5m builds, running off the board) is withheld; the qa
-    # tasks that read those memories stay listed and keep waiting on them
-    assert M.PILOT == [] and M.HELD == {("worldmm", "g5m", "build")}
+    # as published: the gate is open and nothing is held. A HELD line (here WorldMM's g5m builds, as while they ran off
+    # the board) is withheld, and the qa tasks that read those memories stay listed and keep waiting on them
+    assert M.PILOT == [] and M.HELD == set() and M.gate(everything) == (everything, 0)
+    monkeypatch.setattr(M, "HELD", {("worldmm", "g5m", "build")})
     listed, withheld = M.gate(everything)
     held = [t for t in everything if (t["baseline"], t["arm"], t["stage"]) in M.HELD]
     assert listed == [t for t in everything if t not in held] and withheld == len(held) > 0
