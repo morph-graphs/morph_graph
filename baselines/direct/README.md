@@ -47,10 +47,10 @@ setting has its own results folder and its own row in the results table ("N. Fra
 | model | Hugging Face id | environment | GPU |
 |---|---|---|---|
 | `qwen3vl-8b` | Qwen/Qwen3-VL-8B-Instruct | MERIT m8 (transformers 4.57.3) | measured peak 17.5 GB (N = 32), 20.2 GB (128), 39.2 GB (768): a 24 GB GPU up to N = 128, a 48 GB GPU for 768 |
-| `qwen38-27b` | Qwen/Qwen3.8-27B | MERIT m27 (transformers 5.8.0) | one 80 GB GPU, or 2x 48 GB (as MERIT m27; not run yet, N = 768 not sized) |
+| `qwen38-27b` | Qwen/Qwen3.8-27B | MERIT m27 (transformers 5.8.0) | measured on 2x 48 GB at N = 128: peak 28.9 + 30.5 GB; one 80 GB GPU should also do. N = 32 and 768 not run yet (768 not sized) |
 
-Time per question on an RTX A6000, Qwen3-VL-8B (P05-20240425-201444, 8 questions each): about 11 s (N = 32),
-14 s (128), 55 s (768).
+Time per question on RTX A6000s (P05-20240425-201444, a few questions each): Qwen3-VL-8B about 11 s (N = 32),
+14 s (128), 55 s (768); Qwen3.8-27B on two of them about 32 s (N = 128).
 
 Not yet (each resolves on Hugging Face; none is downloaded or wired):
 

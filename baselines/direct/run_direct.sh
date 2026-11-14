@@ -93,7 +93,7 @@ qa() {
     prep
     "$PY" "$M/epic/direct_qa.py" --model "$MODEL" --frames "$FRAMES" --video "$V" --bank_file "$bf" \
         --frame_root "$WORK/frames_448" --skeleton "$SKEL" --output "$OUT/answers_$bank.json.gz" ${DIRECT_LIMIT:+--limit "$DIRECT_LIMIT"} \
-        || { echo "some questions failed (out of GPU memory): rerun the same command to retry them"; exit 1; }
+        || { [ $? = 2 ] && echo "some questions ran out of GPU memory: rerun the same command to retry them"; exit 1; }
     record "qa $bank" $((SECONDS - t))
 }
 upload() {   # answers + runs.jsonl: there is no memory (hf_results.py --memory none)
