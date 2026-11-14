@@ -3,7 +3,7 @@
 
 Runs on the Mac (it uses nx and ssh): the job board (coord/board_read.py on Nexus), our Nexus and Zaratan
 queues, the arm00 build loop and the MERIT memories built off the board. board_views.py turns that into the
-dashboard's nine JSON datasets in --out; this prints one line per dataset with its sha256 so the publisher
+dashboard's JSON datasets in --out (the two accuracy ones from the scores the results sheet's updater wrote); this prints one line per dataset with its sha256 so the publisher
 uploads only what changed.
 
     python3 coord/collect_live.py --out <dir>
@@ -23,6 +23,7 @@ ARM_RUNS = "/fs/cfar-projects/mem_open_vocab/anubhav/merit_runs"
 ZR_RUNS = "/scratch/zt1/project/abhinav2-prj/user/anubhav/merit_runs"
 SRC = {}    # (baseline, arm, video) -> where the memory was seen first: zaratan, arm00, a pool, or the results dataset
 SSH = ["/usr/bin/ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15"]
+ACC = "/fs/cfar-projects/mem_open_vocab/anubhav/sheet_updater/accuracy.json"   # coord/sheet_update.py --json, by its cron
 
 
 def sh(cmd, timeout=120):
@@ -152,6 +153,30 @@ def board(alerts, out_dir):
     return v
 
 
+def accuracy(out_dir):
+    """The scores coord/sheet_update.py --json wrote on Nexus (one JSON line), read like the Nexus queue: ssh to the
+    login node, nx as the fallback. Returns (object or the last good read or None, why this read failed or "")."""
+    cache, why = os.path.join(out_dir, "accuracy_raw.json"), "Nexus not readable this cycle"
+    for cmd in (SSH + ["-o", "RemoteCommand=none", "-o", "RequestTTY=no", "nexus", f"cat {ACC} 2>/dev/null || echo MISSING"],
+                ["nx", f"cat {ACC} 2>/dev/null || echo MISSING"]):
+        rc, out = sh(cmd, timeout=120)
+        last = (out.strip().splitlines() or [""])[-1]
+        if rc == 0 and last == "MISSING":
+            why = f"no accuracy file on Nexus yet ({ACC}: the sheet updater's cron must pass --json)"
+            break
+        try:
+            v = json.loads(last)
+            assert isinstance(v.get("runs"), list)
+            json.dump(v, open(cache, "w"))
+            return v, ""
+        except Exception:
+            pass
+    try:
+        return json.load(open(cache)), why
+    except Exception:
+        return None, why
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--durations", help="unused (kept for the refresher's command line)")
@@ -165,7 +190,9 @@ def main():
     raw = board(alerts, a.out)
     import board_views
     n = board_views.update(a.out, raw, alerts + rows, nxq, SRC)
-    for name in ("running", "tasks", "pools", "progress", "decisions", "tranches", "matrix", "people", "attention"):
+    n["accuracy"] = board_views.accuracy(a.out, *accuracy(a.out))
+    for name in ("running", "tasks", "pools", "progress", "decisions", "tranches", "matrix", "people", "attention",
+                 "accuracy", "accuracy_breakdown"):
         p = os.path.join(a.out, f"{name}.json")
         print(name, hashlib.sha256(open(p, "rb").read()).hexdigest(), p)
     print("alerts", len(alerts), "|", " ".join(f"{k} {v}" for k, v in n.items()))
