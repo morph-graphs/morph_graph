@@ -143,10 +143,13 @@ def main():
 
         def one(r):
             choices = {L: r[f"choice_{L.lower()}"] for L in "ABCD" if r.get(f"choice_{L.lower()}")}
-            t0, res = time.time(), None
+            t0, res, failed = time.time(), None, roles.thread_errors()
             try:
                 res = wm.answer(query=r["question"], choices=choices, until_time=until)
                 resp = (res.answer or "").strip() or "Error"
+                if roles.thread_errors() > failed:   # upstream answers on after a failed loop or time-parser call,
+                    log.error(f"{r['key']}: {roles.thread_errors() - failed} LLM calls failed or came back empty")
+                    resp = "Error"                   # from less evidence: redo the question instead
             except Exception as e:
                 log.error(f"{r['key']} (ID {r['ID']}): {type(e).__name__}: {e}")
                 resp = "Error"

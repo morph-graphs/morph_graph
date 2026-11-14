@@ -26,6 +26,7 @@ it, failed calls) in MAGIC_USAGE_FILE under MAGIC_STAGE, summed over reruns; run
     python roles.py check memory reason  # exit 1, with a message, when one of these roles' keys is not set
 """
 import atexit
+import hashlib
 import json
 import os
 import sys
@@ -39,6 +40,8 @@ COUNTS = ("calls", "prompt_tokens", "completion_tokens", "reasoning_tokens", "co
 LOCK = threading.Lock()
 USAGE = {}      # role -> counts of this process
 FATAL = []      # a message once a call failed for a reason no retry fixes (no key, key refused, no credit)
+UNANSWERED = set()            # prompts whose last call failed or came back empty (a retry that succeeds clears it)
+THREAD = threading.local()    # .n: failed or empty calls made by this thread (run_qa.py: one question per thread)
 
 
 def controller():
@@ -53,7 +56,7 @@ def endpoint(role):
     r = (controller() if role == "control" else role).upper()
     url = os.environ.get(f"MAGIC_{r}_BASE_URL") or OPENROUTER
     own = urlparse(url).hostname in ("127.0.0.1", "localhost")
-    return (os.environ.get(f"MAGIC_{r}_MODEL") or DEFAULT[role], url,
+    return (os.environ.get(f"MAGIC_{r}_MODEL") or DEFAULT[r.lower()], url,
             os.environ.get(f"MAGIC_{r}_KEY_ENV", "" if own else "OPENROUTER_API_KEY"))
 
 
@@ -66,9 +69,22 @@ def missing(roles):
 
 
 def errors():
-    """Failed calls of this process so far: a stage checks it before it keeps what it made."""
+    """Prompts left without an answer so far (failed, or an empty reply, and no retry of the same prompt got one):
+    a stage checks it before it keeps what it made."""
     with LOCK:
-        return sum(u["failed"] for u in USAGE.values())
+        return len(UNANSWERED)
+
+
+def thread_errors():
+    """Failed or empty calls this thread has made, retried or not."""
+    return getattr(THREAD, "n", 0)
+
+
+def _failed(u, prompt):
+    THREAD.n = thread_errors() + 1
+    with LOCK:
+        u["failed"] += 1
+        UNANSWERED.add(prompt)
 
 
 def _save():
@@ -108,6 +124,7 @@ class Client:
         from openai import APIStatusError, OpenAI
         with LOCK:
             u = USAGE.setdefault(self.role, {"model": self.model, "returned": [], **{c: 0 for c in COUNTS}})
+        prompt = hashlib.sha1(json.dumps([self.role, messages], sort_keys=True, default=str).encode()).hexdigest()
         try:
             if FATAL:
                 raise RuntimeError(FATAL[0])
@@ -127,9 +144,15 @@ class Client:
             if isinstance(e, APIStatusError) and e.status_code in (401, 402, 403) and not FATAL:
                 FATAL.append(f"role {self.role} ({self.model} at {self.url}) refused the key or has no credit "
                              f"(HTTP {e.status_code}): stopping")
-            with LOCK:
-                u["failed"] += 1
+            _failed(u, prompt)
             raise
+        # an empty reply with HTTP 200 (e.g. every token spent on reasoning) is no answer either; upstream would
+        # store it as an empty result
+        if res.choices and (res.choices[0].message.content or "").strip():
+            with LOCK:
+                UNANSWERED.discard(prompt)
+        else:
+            _failed(u, prompt)
         us = getattr(res, "usage", None)
         with LOCK:
             u["calls"] += 1

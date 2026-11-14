@@ -29,11 +29,12 @@ set -euo pipefail
 ARM=${3:?usage: run.sh <stage> <video> <arm> [bank]}
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && pwd)
-IMAGE=${MAGIC_IMAGE:-ghcr.io/morph-graphs/magic:$(bash "$REPO/baselines/magic/docker/image_tag.sh" "$ARM")}
+IMG=$(bash "$REPO/baselines/magic/docker/image_tag.sh" "$ARM"); IMG_ARM=${IMG%%-*}   # the reported arms use m8's or m27's image
+IMAGE=${MAGIC_IMAGE:-ghcr.io/morph-graphs/magic:$IMG}
 RUNTIME=${MAGIC_RUNTIME:-${MERIT_RUNTIME:-docker}}
 SIFS=${MAGIC_SIF_DIR:-${MERIT_SIF_DIR:-}}
-if [ "$RUNTIME" = apptainer ] && [ -z "${MAGIC_IMAGE:-}" ] && [ -n "$SIFS" ] && [ -s "$SIFS/magic_$ARM.sif" ]; then
-    IMAGE=$SIFS/magic_$ARM.sif
+if [ "$RUNTIME" = apptainer ] && [ -z "${MAGIC_IMAGE:-}" ] && [ -n "$SIFS" ] && [ -s "$SIFS/magic_$IMG_ARM.sif" ]; then
+    IMAGE=$SIFS/magic_$IMG_ARM.sif
 fi
 HF=${MAGIC_HF_CACHE:-${MERIT_HF_CACHE:-$HOME/.cache/huggingface}}
 for s in baselines/magic/MAGIC-video/src/worldmm baselines/merit/MERIT/eval; do   # MAGIC uses MERIT's prep and captions

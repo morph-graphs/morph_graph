@@ -61,7 +61,10 @@ case $ARM in
         ROUTED=1; MEM_ARM=oss120; SERVE=; CAP_ARM=${MAGIC_CAPTIONS:-}; CAP_ARM=${CAP_ARM#merit-}
         case $CAP_ARM in ""|m8|m27) ;; *) echo "MAGIC_CAPTIONS must be merit-m8 or merit-m27 (or unset)"; exit 1 ;; esac
         # oss120-q27 serves its reasoning model here unless the caller points the reason role elsewhere
-        if [ "$ARM" = oss120-q27 ] && [ -z "${MAGIC_REASON_BASE_URL:-}" ]; then SERVE=m27; fi
+        if [ "$ARM" = oss120-q27 ]; then
+            if [ -z "${MAGIC_REASON_BASE_URL:-}" ]; then SERVE=m27; export MAGIC_REASON_MODEL=Qwen/Qwen3.8-27B MAGIC_REASON_KEY_ENV=
+            else export MAGIC_REASON_MODEL=${MAGIC_REASON_MODEL:-qwen/qwen3.8-27b}; fi   # its OpenRouter id
+        fi
         export MAGIC_ROLES=1 MAGIC_MEMORY_REPO_PATH=magic/$MEM_ARM/$V
         unset MAGIC_LLM_BASE_URL MAGIC_LLM_MODEL ;;   # the single-server route of m8 / m27
     *) echo "arm must be m8, m27, oss120, oss120-flash or oss120-q27"; exit 1 ;;
@@ -153,7 +156,7 @@ start_server() {   # the arm's backbone behind an OpenAI-compatible endpoint; MA
     echo "LLM server up after $((i * 5)) s: $(grep -m1 loaded "$slog")"
     export CUDA_VISIBLE_DEVICES=$MAGIC_GPUS MAGIC_SEED=0
     if [ -n "$ROUTED" ]; then   # the server is the reason role only
-        export MAGIC_REASON_BASE_URL=http://127.0.0.1:$PORT/v1 MAGIC_REASON_MODEL=Qwen/Qwen3.8-27B MAGIC_REASON_KEY_ENV=
+        export MAGIC_REASON_BASE_URL=http://127.0.0.1:$PORT/v1
         ROLE_TABLE=$("$PY" "$M/epic/roles.py" table)
     else
         export MAGIC_LLM_BASE_URL=http://127.0.0.1:$PORT/v1 MAGIC_LLM_MODEL=local
@@ -163,7 +166,7 @@ start_server() {   # the arm's backbone behind an OpenAI-compatible endpoint; MA
 
 prep() {
     log prep; local t=$SECONDS
-    PY=$PY merit prep "$V" "$ARM"
+    PY=$PY merit prep "$V" "$( [ -n "$ROUTED" ] && echo m8 || echo "$ARM")"   # the clips do not depend on the arm; MERIT knows m8 and m27
     record prep $((SECONDS - t))
 }
 need_clips() { [ -s "$SKEL" ] || prep; }
@@ -177,7 +180,8 @@ build() {
             --arm "$MEM_ARM" --video "$V" --dir "$MEM" || rc=$?
         case $rc in
             0) # anything made from an earlier local memory is stale: chains, index caches, answers
-               rm -rf "$MEM/chains" "$WORK/cache/${ARM}_$V"; rm -f "$OUT"/answers_*.json.gz ;;
+               # (of every arm that answers from this memory; their answers carry the memory's hash and are redone)
+               rm -rf "$MEM/chains" "$WORK/cache/${ARM}_$V" "$WORK/cache/$MEM_ARM"-*"_$V"; rm -f "$OUT"/answers_*.json.gz ;;
             3) echo "no MAGIC memory in the dataset yet: building it here" ;;
             *) echo "could not reach the dataset; MAGIC_FETCH=0 builds the memory here instead"; exit 1 ;;
         esac

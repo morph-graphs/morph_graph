@@ -16,7 +16,7 @@ models through their API ("Reported configuration" below).
 | `epic/build_memory.py` | the question-independent memory of one video (captions, summaries, OpenIE, semantic memory, clip embeddings, graph) |
 | `epic/chains.py` | the Narrative Memory Chain at one question cutoff, from the memory before it |
 | `epic/run_qa.py` | answers one video's questions of a bank, grouped by cutoff; writes `answers_<bank>.json.gz` |
-| `epic/roles.py` | the reported arms: which endpoint answers which LLM role (caption, memory, reason), keys from the environment, calls and tokens counted |
+| `epic/roles.py` | the reported arms: which endpoint answers which LLM role (caption, memory, control, reason), keys from the environment, calls and tokens counted |
 | `epic/mock_llm.py` | a fake OpenAI-compatible endpoint with canned replies and a request log, and the checks of a run against it (no paid call) |
 | `run_magic.sh` | one video, one arm, one stage (prep, build, qa, upload, all) |
 | `env/` | the environments, pinned: `wheels-client.txt`, `requirements-client.txt`, `install_requirements.sh` (shared by the image and `setup_env.sh`), `setup_env.sh` |
@@ -85,50 +85,63 @@ must point at the local Qwen2-VL-2B-Instruct).
 
 ## Reported configuration: GPT-OSS-120B memory, Qwen3.5-Flash or Qwen3.8-27B reasoning
 
-Three more arms run MAGIC-Video with the models of its paper, for the results-sheet rows "MAGIC-Video (reported)":
+Three more arms run MAGIC-Video with the models of its paper, for the results-sheet rows "MAGIC-Video (reported)".
 
-| arm | what | LLM calls | GPU (MAGIC's embedders; no backbone unless noted) | image |
+**The mapping, as decided (Anubhav, 2026-11-13): the paper's.** GPT-OSS-120B builds the memory and is the online
+retrieval controller: for each question it decides, round by round and at temperature 0, whether to search and for
+what. The reasoning model (Qwen3.5-Flash for row A, Qwen3.8-27B for row B) writes the final answer from what was
+retrieved, frames included. The released code instead runs that loop with the responder (the reasoning model, at
+its sampling settings); `MAGIC_CONTROLLER=reason` gives that behaviour and is off by default.
+
+| arm | what | paid API calls | GPU (MAGIC's embedders; no backbone unless noted) | image |
 |---|---|---|---|---|
-| `oss120` | the memory, built once per video and shared by both rows (stages `prep`, `build`, `upload`) | caption + memory roles, paid API | one GPU (24 GB should do: the two embedders only; not measured) | `m8`'s |
-| `oss120-flash` | row A: answers from `oss120`'s memory, reasoning Qwen3.5-Flash | reason role, paid API; chains: memory role, paid API | one GPU (24 GB should do: the two embedders only; not measured) | `m8`'s |
-| `oss120-q27` | row B: answers from `oss120`'s memory, reasoning Qwen3.8-27B served here (non-thinking, as `m27`) | none paid once the bank's chains are in the dataset | as `m27` | `m27`'s |
+| `oss120` | the memory, built once per video and shared by both rows (stages `prep`, `build`, `upload`) | captions (Qwen3.5-Flash), memory (GPT-OSS-120B) | one GPU (24 GB was enough in the mock run on an RTX A5000) | `m8`'s |
+| `oss120-flash` | row A: answers from `oss120`'s memory | chains and search loop (GPT-OSS-120B), final answer and time parser (Qwen3.5-Flash) | the same | `m8`'s |
+| `oss120-q27` | row B: the same, the final answer and time parser by Qwen3.8-27B served here (non-thinking, as `m27`) | chains and search loop (GPT-OSS-120B) | as `m27` | `m27`'s |
+
+Every stage of these arms calls a paid API (row B too: its search loop), so they run where `OPENROUTER_API_KEY` is.
 
 **What the paper and upstream publish** (arXiv 2605.08271 Sec. 4.1 and App. E; upstream README "Default models"; read
-2026-11-13). Every LLM call goes through OpenRouter (`OPENROUTER_API_KEY`):
+2026-11-13). Every LLM call goes through OpenRouter:
 
 | upstream role | model (OpenRouter id) | where upstream sets it |
 |---|---|---|
 | 30 s captions | EgoLife: the dataset's own dense captions and transcripts, rewritten by `openai/gpt-oss-120b`. Raw video (MM-Lifelong): `qwen/qwen3.5-flash-02-23` on each clip, merged with Whisper ASR by gpt-oss-120b | `generate_fine_caption.py`; `preprocess_video.py --vlm-model` |
 | 3 min / 10 min / 1 h summaries, OpenIE, semantic extraction and consolidation | `openai/gpt-oss-120b` | `TRANSLATION_MODEL` default, `--llm-model` |
 | Narrative Memory Chain (topic and event chains) | `openai/gpt-oss-120b` | `extract_{topic,event}_chains.py --model` |
-| retriever (`--retriever-model`) | `openai/gpt-oss-120b`; with the unified graph (the paper's setting) no code path calls it: retrieval is embeddings, BM25 and PageRank | `eval_egolife.py` |
-| responder (`--respond-model`): the search/answer loop and the final answer; sees the retrieved frames | `qwen/qwen3.5-flash-02-23`, sampling temperature 1.0, top_p 0.95, top_k 20, presence_penalty 1.5 | `eval_egolife.py` |
-| time parser (a time named in a search query) | `qwen/qwen3.5-flash-02-23`, hard-coded | `worldmm/memory/memory.py` |
+| online retrieval controller (the search/answer loop) | paper: gpt-oss-120b, temperature 0. Released code: the respond model below, with its sampling (`--retriever-model openai/gpt-oss-120b` exists, but with the unified graph no code path calls it) | paper Sec. 4.1; `eval_egolife.py`, `worldmm/memory/memory.py` |
+| final answer (sees the retrieved frames) | `qwen/qwen3.5-flash-02-23` (`--respond-model`), temperature 1.0, top_p 0.95, top_k 20, presence_penalty 1.5 in the code; the paper says temperature 0 | `eval_egolife.py` |
+| time parser (a time named in a search query) | `qwen/qwen3.5-flash-02-23`, hard-coded; the paper does not mention it | `worldmm/memory/memory.py` |
 | text embeddings; clip and query embeddings | `Qwen/Qwen3-Embedding-4B`; `VLM2Vec/VLM2Vec-V2.0` (16 frames per clip), both local | as the other arms |
 
-The paper's text calls gpt-oss-120b "the online retrieval controller" and reports temperature 0 for controller and
-backbone; the released code runs the loop with the responder and the sampling above. The arms follow the code.
+**The roles here** (`epic/roles.py`):
 
-**Our mapping of the sheet's two names onto these roles** (`epic/roles.py`; correct it there and here):
-
-| role | upstream roles | `oss120` / `oss120-flash` | `oss120-q27` |
+| role | what it does | `oss120` / `oss120-flash` | `oss120-q27` |
 |---|---|---|---|
-| `memory` = "memory model" | summaries, OpenIE, semantic memory, both chains, the (uncalled) retriever | `openai/gpt-oss-120b` | the same memory |
-| `reason` = "reasoning model" | responder (loop and answer) and time parser | `qwen/qwen3.5-flash-02-23` | `Qwen/Qwen3.8-27B`, local |
+| `memory` = the sheet's "memory model" | summaries, OpenIE, semantic memory, both chains | `openai/gpt-oss-120b` | the same memory |
+| `control` | the search/answer loop, temperature 0: the memory role's model and endpoint (`MAGIC_CONTROLLER=reason`: the reason role's, with the responder's sampling) | `openai/gpt-oss-120b` | `openai/gpt-oss-120b` |
+| `reason` = the sheet's "reasoning model" | the final answer (upstream's responder sampling, as released) and the time parser | `qwen/qwen3.5-flash-02-23` | `Qwen/Qwen3.8-27B`, local |
 | `caption` | the 30 s clip captions (GPT-OSS-120B reads no video) | `qwen/qwen3.5-flash-02-23` | the same memory |
 
+- **How the split is made**: upstream's loop sends its decisions and the final answer to one respond model, and is
+  not patched. `run_qa.py` hands it one object (`roles.responder`) that passes a call beginning with the loop's
+  prompt to the control role and any other call to the reason role. The loop's prompt carries the retrieved text
+  and placeholders for frames, no images, so a text-only controller can run it.
 - **Captions**: HD-EPIC comes with no captions, so the memory uses the paper's raw-video recipe: each 30 s clip, as a
   360p copy, goes to Qwen3.5-Flash with upstream's prompt plus one sentence asking for first person ("I"), which the
   rest of this port reads. No ASR merge (as the other arms). `MAGIC_CAPTIONS=merit-m27` (or `merit-m8`) builds the
-  memory from MERIT's captions of that arm instead (they must be in the dataset); row B then has no Qwen3.5-Flash
-  text in its memory.
+  memory from MERIT's captions of that arm instead (they must be in the dataset).
 - **Chains**: built in `qa`, per question cutoff, as for the other arms, by the memory role (GPT-OSS-120B). They are
   kept with the memory (`magic/oss120/<video>/chains/`), so the row that runs first pays for a cutoff and the other
-  reuses it. `oss120-q27` takes them from the dataset and stops, rather than build them, where the key is missing.
+  takes it from its folder or from the dataset.
 - **Cutoff**: unchanged. The graph filter, the semantic snapshot and the per-cutoff chains are the same code.
 - The memory's file names keep the tag `local` (`openie_results_local.json`, ...); the models are in `runs.jsonl`.
-- Upstream's strict JSON parsing applies to these arms (the truncated-JSON repair is for the local backbones), and a
-  step or a cutoff with a failed call is not kept: WorldMM would store it as an empty result.
+- Upstream's strict JSON parsing applies to these arms (the truncated-JSON repair is for the local backbones).
+  WorldMM stores a failed call as an empty result and answers on after a failed loop call, so here a memory step
+  or a cutoff's chains are not kept when a prompt ended without an answer (an error, or an empty reply, that no
+  retry of the same prompt fixed), and a question during which any call failed is redone on the next pass.
+- `docker/run.sh` passes a role's `MAGIC_<R>_KEY_ENV` only when it is not empty: a keyless endpoint must be on
+  127.0.0.1 / localhost (keyless by default) when run through the image.
 
 **Local or API**, per model (prices: https://openrouter.ai/api/v1/models, read 2026-11-13, dollars per million
 tokens in / out):
@@ -142,7 +155,8 @@ tokens in / out):
 **Settings.** `OPENROUTER_API_KEY` in the environment (never on a command line or in a file; `docker/run.sh`
 passes it like `HF_TOKEN`). Per role `R` in `CAPTION`, `MEMORY`, `REASON`: `MAGIC_<R>_MODEL`, `MAGIC_<R>_BASE_URL`
 (any OpenAI-compatible endpoint), `MAGIC_<R>_KEY_ENV` (the name of the variable holding that endpoint's key; empty
-for a keyless server of ours). A stage stops before any work when a role it needs has no key.
+for a keyless server of ours). `MAGIC_CONTROLLER=reason`: the released code's loop. A stage stops before any work
+when a role it needs has no key; nothing else has to be set to allow the paid calls.
 
 ```bash
 export OPENROUTER_API_KEY=...   # in the shell's environment only
@@ -155,41 +169,51 @@ MAGIC_GPU=0 EPIC_MORPH_DIR=<epic-morph checkout> bash baselines/magic/docker/run
 
 `upload` of an answer arm puts the memory folder (with the chains `qa` added) at `magic/oss120/<video>/` and the
 answers at `magic/<arm>/<video>/` with `memory.json` (the memory's hash: answers made from a rebuilt memory replace
-the old ones). Answer rows also carry `reason_model`. `runs.jsonl` lines of these arms add `roles` (model and
-endpoint per role), `captions` and `usage`: per role the calls, prompt / completion / reasoning tokens, the cost
-when the endpoint reports it (OpenRouter does) and failed calls of that stage, reruns included.
-
-On the job board (`coord/master.py`): the `oss120` builds and the `oss120-flash` answers go to pool `max` only (paid
-API, Max's key); an `oss120-q27` task waits for the same video's `oss120-flash` task of that bank, then runs on the
-27B pools without a key.
+the old ones). Answer rows also carry `reason_model` and `control_model`. `runs.jsonl` lines of these arms add
+`roles` (model and endpoint per role), `captions` and `usage`: per role the model asked for, the model ids the
+endpoint returned, the calls, prompt / completion / reasoning tokens, the cost when the endpoint reports it
+(OpenRouter does) and failed calls of that stage, reruns included.
 
 **Cost estimate** (2026-11-13). No run of these arms exists; no full MAGIC run exists either. Counts and text
 sizes are measured on the one finished run, `m8` on P05-20240425-201444 (27.5 min, 55 clips, 59 questions at 7
 cutoffs): 14 summaries, 110 OpenIE calls, 6 semantic extractions and 696 semantic triples (at most one
 consolidation call each), 33 topic-chain prompts (553k characters of captions) and 78 event-step calls over the 7
-cutoffs, 4.2 search rounds per question. Assumed, not measured: 4 characters per token, ~300-500 reasoning tokens
-per GPT-OSS-120B call, ~7k tokens per 30 s clip and 256 per frame for Qwen3.5-Flash, 41.3 h of video in all.
-Read it as right within a factor of three.
+cutoffs, 4.2 search rounds per question with 15.6k characters of retrieved text by the last one. Assumed, not
+measured: 4 characters per token, ~300-500 reasoning tokens per GPT-OSS-120B call, ~7k tokens per 30 s clip and 256
+per frame (64 frames in the final answer) for Qwen3.5-Flash, 41.3 h of video in all. Read it as right within a
+factor of three.
 
 | per unit | calls | tokens in / out | dollars |
 |---|---|---|---|
 | build, per video hour: captions (Qwen3.5-Flash) | 120 | 0.84M / 0.01M | 0.06 |
 | build, per video hour: memory (GPT-OSS-120B) | ~1,550 | 1.1M / 0.56M | 0.50 |
 | qa, chains per cutoff (GPT-OSS-120B) | ~19 | 39k / 13k | 0.014 (27 min video; grows with length) |
-| qa, answers per question (Qwen3.5-Flash) | ~8.4 | 69k / 5k | 0.006 |
-| qa, answers per question (Qwen3.8-27B) | ~8.4 | 69k / 0.3k | local: ~50 s on an H100 (guess: 17 s measured for 8B on an A6000); API 0.011 |
+| qa, search loop per question (GPT-OSS-120B) | 4.2 | 12k / 1.5k | 0.003 |
+| qa, final answer and time parser per question (Qwen3.5-Flash) | ~4.2 | 22k / 1.3k | 0.002 |
+| qa, final answer and time parser per question (Qwen3.8-27B) | ~4.2 | 22k / 0.1k | local: ~15 s on an H100 (guess); API 0.003 |
 
-| | videos, hours | questions, cutoffs | build | qa: chains | qa: Qwen3.5-Flash (row A) | qa: Qwen3.8-27B (row B) | dollars, both rows |
-|---|---|---|---|---|---|---|---|
-| batch10 | 10, ~6 h | 598, 131 | $3.4 | $2.6 | $3.6 | ~8.5 H100-h (API $6.6) | ~$10 |
-| tranche 2 | 20, ~13 h | 1,499, 403 | $7.3 | $10 | $9 | ~21 H100-h (API $16) | ~$26 |
-| all 156 memories | 156, 41.3 h | (other videos have no questions yet) | $23 | | | | $23 for the builds |
+| | videos, hours | questions, cutoffs | build | qa: chains | qa: search loop, per row | qa: answers, row A (Flash) | qa: answers, row B (27B) | dollars, both rows |
+|---|---|---|---|---|---|---|---|---|
+| batch10 | 10, ~6 h | 598, 131 | $3.4 | $2.6 | $1.7 | $1.1 | ~2.5 H100-h plus model loads (API $2.0) | ~$10.5 |
+| tranche 2 | 20, ~13 h | 1,499, 403 | $7.3 | $10 | $4.2 | $2.6 | ~6 H100-h plus model loads (API $4.9) | ~$28 |
+| all 156 memories | 156, 41.3 h | (other videos have no questions yet) | $23 | | | | | $23 for the builds |
+
+With `MAGIC_CONTROLLER=reason` the loop's 12k tokens per question move to the reasoning model (and row B's qa needs
+the key only for chains that are not built yet).
+
+**As released: a time named in a search query.** When the controller's query names a time, upstream's
+`retrieve_by_time` returns captions by time instead of searching. It compares the parsed seconds with the captions'
+`HHMMSSFF` stamps read as plain numbers (its MM-Lifelong captions are in seconds; the EgoLife layout used here is
+not), so it returns the video's first clips whatever time was asked: in the `m8` run on P05 a query about 00:17:11
+got the clip at 00:00:00. It also applies no cutoff of its own, but a clip after the question would need a query
+about a time a hundred times later than the clip, so nothing after `t_ask` is shown in practice. We run it as
+released, in every arm.
 
 ## Test without API calls
 
 `epic/mock_llm.py serve` is a fake endpoint: replies in the format each prompt expects, derived from the prompt, and
 a log of every request. Point the three roles at it and run the real stages on one video; `check` then asserts that
-each kind of call came from the right role, that no call of the answer loop shows a time stamp after its question's
+each kind of call came from the right role (the loop from the control role at temperature 0), that no call of the answer loop shows a time stamp after its question's
 current time, that no stored chain mentions a time after its cutoff, the answer rows' fields, and that the usage in
 `runs.jsonl` equals the calls logged.
 

@@ -2,8 +2,9 @@
 """Build MAGIC-Video's memory for one EPIC-Morph video: everything that does not depend on the questions.
 
 Every LLM call goes to the local server at $MAGIC_LLM_BASE_URL (epic/hf_server.py, started by run_magic.sh),
-or, for the arms with MAGIC-Video's published models (MAGIC_ROLES=1), to each role's endpoint (roles.py); the text (Qwen3-Embedding-4B) and visual (VLM2Vec-V2.0) embedders run in this process. Steps (each skips
-existing output, in order), all written flat into --out:
+or, for the arms with MAGIC-Video's published models (MAGIC_ROLES=1), to each role's endpoint (roles.py); the
+text (Qwen3-Embedding-4B) and visual (VLM2Vec-V2.0) embedders run in this process. Steps (each skips existing
+output, in order), all written flat into --out:
 
   captions  MERIT's 30 s captions for the arm (same backbone), or, without --merit_captions, a caption per
             clip from the caption role's VLM (upstream's raw-video recipe)  -> <video>_30sec.json
@@ -114,13 +115,15 @@ CAPTION_PROMPT = ("Describe what happens in this video clip in 2-3 sentences. Fo
 
 def caption_clips(a):
     """A caption per 30 s clip from the caption role's VLM, as upstream captions raw video: a 360p copy of the
-    clip (the same ffmpeg settings) sent as video_url. Resumes from <video>_30sec.json.partial."""
+    clip (the same ffmpeg settings) sent as video_url. Resumes from <video>_30sec.json.partial (clips with a caption)."""
     caps, part, model = jload(a.skeleton), cap(a.out, a.video, "30sec") + ".partial", llm("caption")
     done = {c["video_path"]: c["text"] for c in (jload(part) if os.path.exists(part) else []) if c.get("text")}
+    for c in caps:
+        c["text"] = done.get(c["video_path"], "")
 
     def one(c):
-        if c["video_path"] in done:
-            return done[c["video_path"]]
+        if c["text"]:
+            return c["text"]
         with tempfile.TemporaryDirectory() as tmp:
             small = os.path.join(tmp, "clip.mp4")
             subprocess.run(["ffmpeg", "-i", c["video_path"], "-vf", "scale=-2:360", "-c:v", "libx264", "-crf", "32",
@@ -140,7 +143,7 @@ def caption_clips(a):
         for i, (c, text) in enumerate(zip(caps, ex.map(one, caps))):
             c["text"] = text
             if i % 20 == 19:
-                jsave(caps[:i + 1], part)
+                jsave(caps, part)
     jsave(caps, part)
     missing = [c["video_path"] for c in caps if not c["text"]]
     if missing:
