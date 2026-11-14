@@ -69,6 +69,7 @@ import json
 import re
 import shlex
 import os
+import platform
 import socket
 import subprocess
 import sys
@@ -141,7 +142,9 @@ def inner(task, gpus, a):
     """The shell command that runs one task: the stage, then the upload of its results folder."""
     b, stage, v, arm, bank = task["baseline"], task["stage"], task["video"], task["arm"], task.get("bank") or ""
     if a.launcher == "docker":
-        run = f"MERIT_GPU={gpus} bash baselines/{b}/docker/run.sh"
+        # an aarch64 host (GH200, GB200, GB300) runs the arm64 images: image_tag.sh gives their tag
+        arch = "IMAGE_ARCH=arm64 " if platform.machine() == "aarch64" else ""
+        run = f"{arch}MERIT_GPU={gpus} bash baselines/{b}/docker/run.sh"
     elif a.launcher == "slurm":
         run = f"MERIT_RUNTIME={a.runtime} bash baselines/{b}/docker/run.sh"
     else:

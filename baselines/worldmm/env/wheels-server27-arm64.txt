@@ -1,0 +1,3 @@
+# arm64 image (docker/Dockerfile.arm64), read as wheels-server27.txt: the flash-attn wheel
+# baselines/common/docker/arm64_stack.sh compiles, in place of the x86 wheel. The shell expands the glob.
+/wheels/flash_attn-2.7.4.post1-*.whl

@@ -1,0 +1,50 @@
+# MAGIC-Video environment image for aarch64 hosts (Grace CPUs: GH200, GB200, GB300), one per arm like Dockerfile
+# (x86): the client environment (transformers 4.57.6), and for m27 MERIT's m27 server stack (transformers 5.8) in a
+# venv over it at /opt/m27 (its own site-packages, then /opt/py's through a .pth file). The same pinned packages as
+# the x86 image over a different stack, because torch 2.6 has no aarch64 CUDA wheels and CUDA 12.4 does not know
+# Blackwell:
+#   Python 3.11 (deadsnakes, /opt/py), torch 2.8.0 + torchvision 0.23.0 for CUDA 12.9, flash-attn 2.7.4.post1 and
+#   decord 0.6.0 compiled (baselines/common/docker/arm64_stack.sh); m27's causal-conv1d 1.6.1 compiled by MERIT's
+#   env/install_requirements.sh as on x86.
+# Tag ghcr.io/morph-graphs/magic:<arm>-arm64-<hash> (IMAGE_ARCH=arm64 bash docker/image_tag.sh <arm>).
+#
+#   docker build -f baselines/magic/docker/Dockerfile.arm64 --build-arg ARM=m8 -t magic:m8-arm64 .   (morph_graph root)
+#   (IMAGE_ARCH=arm64 bash baselines/magic/docker/build.sh m8 does this with the published tag)
+FROM nvidia/cuda:12.9.1-devel-ubuntu22.04
+
+# the shared stack first, identical in every baseline's arm64 image (one compile of flash-attn per machine)
+ARG MAX_JOBS=3
+ENV DEBIAN_FRONTEND=noninteractive PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 TOKENIZERS_PARALLELISM=false \
+    PATH=/opt/py/bin:$PATH PY=/opt/py/bin/python HOME=/tmp TRITON_CACHE_DIR=/tmp/triton HF_HOME=/hf CUDA_HOME=/usr/local/cuda
+COPY baselines/common/docker/arm64_stack.sh /tmp/arm64_stack.sh
+RUN MAX_JOBS=$MAX_JOBS bash /tmp/arm64_stack.sh
+
+ARG ARM
+ARG COMMIT=unknown
+ENV MAGIC_ARM=${ARM} MAGIC_IMAGE_COMMIT=${COMMIT}
+RUN test "$ARM" = m8 -o "$ARM" = m27 || { echo "build with --build-arg ARM=m8 or ARM=m27" >&2; exit 1; }
+
+# the x86 installs (env/install_requirements.sh, MERIT's for m27), with the arm64 wheel lists in place of the x86 ones
+COPY baselines/magic/env/ /tmp/magic-env/
+COPY baselines/merit/env/ /tmp/merit-env/
+RUN cp /tmp/magic-env/wheels-client-arm64.txt /tmp/magic-env/wheels-client.txt \
+    && cp /tmp/merit-env/wheels-m27-arm64.txt /tmp/merit-env/wheels-m27.txt \
+    && bash /tmp/magic-env/install_requirements.sh client python
+RUN if [ "$ARM" = m27 ]; then python -m venv /opt/m27 \
+        && echo /opt/py/lib/python3.11/site-packages > /opt/m27/lib/python3.11/site-packages/opt_py.pth \
+        && MAX_JOBS=$MAX_JOBS NVCC_THREADS=1 bash /tmp/merit-env/install_requirements.sh m27 /opt/m27/bin/python; fi
+# run_magic.sh uses it for m27 only (m8 serves from PY)
+ENV MAGIC_SERVER_PY=/opt/m27/bin/python
+
+# no GPU at build time: check versions by metadata, and that the pinned stacks import
+RUN python -c "import importlib.metadata as md, torch, transformers, peft, igraph, faiss, openai, sentence_transformers, decord, flash_attn; \
+from transformers import AutoModelForImageTextToText, Qwen2VLForConditionalGeneration; \
+print('client: torch', torch.__version__, 'transformers', transformers.__version__, 'flash-attn', md.version('flash_attn')); \
+assert torch.__version__.startswith('2.8.0') and transformers.__version__ == '4.57.6', transformers.__version__"
+RUN if [ "$ARM" = m27 ]; then /opt/m27/bin/python -c "import torch, transformers, causal_conv1d, fla, flash_attn; \
+from transformers import AutoModelForImageTextToText, AutoProcessor; \
+print('m27 server: torch', torch.__version__, 'transformers', transformers.__version__); \
+assert torch.__version__.startswith('2.8.0') and transformers.__version__ == '5.8.0', transformers.__version__"; fi
+
+WORKDIR /repo
+CMD ["/bin/bash"]

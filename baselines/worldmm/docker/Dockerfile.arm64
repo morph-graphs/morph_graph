@@ -1,0 +1,49 @@
+# WorldMM environment image for aarch64 hosts (Grace CPUs: GH200, GB200, GB300), one per arm like Dockerfile (x86):
+#   m8   the client environment (WorldMM itself + the Qwen3-VL-8B server), transformers 4.57.6
+#   m27  the client environment, plus the server27 environment (the Qwen3.8-27B server, transformers 5.8.0) as a
+#        virtualenv at /opt/server; here over the client's packages (a .pth file to /opt/py, as MAGIC's m27), where x86
+#        gives it its own torch, so torch and the CUDA libraries are not installed twice; its own pins shadow the client's
+# The same pinned packages as the x86 image over a different stack, because torch 2.6 has no aarch64 CUDA wheels and
+# CUDA 12.4 does not know Blackwell:
+#   Python 3.11 (deadsnakes, /opt/py), torch 2.8.0 + torchvision 0.23.0 for CUDA 12.9, flash-attn 2.7.4.post1 and
+#   decord 0.6.0 compiled (baselines/common/docker/arm64_stack.sh); server27's causal-conv1d 1.6.1 compiled by
+#   env/install_requirements.sh as on x86.
+# Tag ghcr.io/morph-graphs/worldmm:<arm>-arm64-<hash> (IMAGE_ARCH=arm64 bash docker/image_tag.sh <arm>).
+#
+#   docker build -f baselines/worldmm/docker/Dockerfile.arm64 --build-arg ARM=m8 -t worldmm:m8-arm64 .   (morph_graph root)
+#   (IMAGE_ARCH=arm64 bash baselines/worldmm/docker/build.sh m8 does this with the published tag)
+FROM nvidia/cuda:12.9.1-devel-ubuntu22.04
+
+# the shared stack first, identical in every baseline's arm64 image (one compile of flash-attn per machine)
+ARG MAX_JOBS=3
+ENV DEBIAN_FRONTEND=noninteractive PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 TOKENIZERS_PARALLELISM=false \
+    PATH=/opt/py/bin:$PATH PY=/opt/py/bin/python HOME=/tmp TRITON_CACHE_DIR=/tmp/triton HF_HOME=/hf CUDA_HOME=/usr/local/cuda
+COPY baselines/common/docker/arm64_stack.sh /tmp/arm64_stack.sh
+RUN MAX_JOBS=$MAX_JOBS bash /tmp/arm64_stack.sh
+
+ARG ARM
+ARG COMMIT=unknown
+ENV SERVER_PY=/opt/server/bin/python WORLDMM_ARM=${ARM} WORLDMM_IMAGE_COMMIT=${COMMIT}
+RUN test "$ARM" = m8 -o "$ARM" = m27 || { echo "build with --build-arg ARM=m8 or ARM=m27" >&2; exit 1; }
+
+# the x86 installs (env/install_requirements.sh), with the arm64 wheel lists in place of the x86 ones
+COPY baselines/worldmm/env/ /tmp/worldmm-env/
+RUN for e in client server27; do cp /tmp/worldmm-env/wheels-$e-arm64.txt /tmp/worldmm-env/wheels-$e.txt; done \
+    && bash /tmp/worldmm-env/install_requirements.sh client python
+RUN if [ "$ARM" = m27 ]; then python -m venv /opt/server \
+        && echo /opt/py/lib/python3.11/site-packages > /opt/server/lib/python3.11/site-packages/opt_py.pth \
+        && MAX_JOBS=$MAX_JOBS NVCC_THREADS=1 bash /tmp/worldmm-env/install_requirements.sh server27 /opt/server/bin/python; \
+    else ln -s /opt/py /opt/server; fi   # the whole venv: a python symlinked alone would not find its pyvenv.cfg
+
+# no GPU at build time: check versions by metadata, and that each pinned stack imports
+RUN "$PY" -c "import importlib.metadata as md, torch, transformers, sentence_transformers, decord, igraph, peft, flash_attn; \
+print('client: torch', torch.__version__, 'transformers', transformers.__version__, 'flash-attn', md.version('flash_attn')); \
+assert torch.__version__.startswith('2.8.0') and transformers.__version__ == '4.57.6', transformers.__version__" \
+    && "$SERVER_PY" -c "import importlib.metadata as md, torch, transformers, qwen_vl_utils, flash_attn; \
+print('server: torch', torch.__version__, 'transformers', transformers.__version__, 'flash-attn', md.version('flash_attn')); \
+assert torch.__version__.startswith('2.8.0'); \
+assert transformers.__version__ == {'m8': '4.57.6', 'm27': '5.8.0'}['$ARM'], transformers.__version__" \
+    && if [ "$ARM" = m27 ]; then "$SERVER_PY" -c "import causal_conv1d, fla"; fi
+
+WORKDIR /repo
+CMD ["/bin/bash"]

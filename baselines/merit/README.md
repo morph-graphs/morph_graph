@@ -67,6 +67,18 @@ the same image locally. On our own clusters, a virtualenv from `env/setup_env.sh
 CUDA_HOME for m27's causal-conv1d) and `PY=<dir>/bin/python bash baselines/merit/run_merit.sh ...` run the same
 stack without a container.
 
+**aarch64 hosts (Grace: GH200, GB200, GB300)** run the arm64 images, `ghcr.io/morph-graphs/merit:<arm>-arm64-<env
+hash>` from `docker/Dockerfile.arm64` (MAGIC-Video and WorldMM have the same): the same pinned packages over Python
+3.11, torch 2.8.0 for CUDA 12.9 (torch 2.6 has no aarch64 CUDA wheels, CUDA 12.4 no Blackwell kernels), flash-attn
+2.7.4.post1 and decord 0.6.0 compiled for sm_80/90/100 (`baselines/common/docker/arm64_stack.sh`). Set
+`IMAGE_ARCH=arm64` for `image_tag.sh`, `build.sh` and `run.sh`; `coord/worker.py --launcher docker` sets it itself on
+an aarch64 machine:
+
+```bash
+docker pull ghcr.io/morph-graphs/merit:$(IMAGE_ARCH=arm64 bash baselines/merit/docker/image_tag.sh m8)
+IMAGE_ARCH=arm64 MERIT_GPU=0 bash baselines/merit/docker/run.sh build P03-20240218-190556 m8
+```
+
 ## Reported-configuration arms (GPT-5-mini memory)
 
 The results sheet has three more MERIT rows, with the models of the paper. What the paper and the released code

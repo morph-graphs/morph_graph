@@ -1,0 +1,5 @@
+# arm64 image (docker/Dockerfile.arm64), read as wheels-m27.txt: the wheels baselines/common/docker/arm64_stack.sh
+# compiles. flash-attn in place of the x86 wheel; decord 0.6.0, which PyPI has only for x86, so that the
+# requirements' decord==0.6.0 is already met. The shell expands the globs.
+/wheels/flash_attn-2.7.4.post1-*.whl
+/wheels/decord-0.6.0-*.whl
