@@ -1,10 +1,12 @@
 """The model of each Ego-R1 step, and the two clients this port adds for the steps upstream has no code for
 (the memory build) or only inside its benchmark script (the final answer).
 
-The models are the paper's, with one replacement decided by Anubhav (2026-11-13): Gemini 1.5 Pro is retired, so
-the two steps that used it (30 s captions, video_llm) use Gemini 2.5 Pro. Google's deprecation page lists
-gemini-2.5-pro for shutdown on 2026-12-01, after which requests are routed to another model: from that day the
-Gemini steps refuse to run (need), and a reply from another model is an error (gemini_video).
+The models are the paper's, with one replacement: Gemini 1.5 Pro is retired, so the two steps that used it (30 s
+captions, video_llm) use the Gemini of the arm (GEMINI, use_arm). Arm gemini25pro (Anubhav, 2026-11-13): Gemini
+2.5 Pro, which Google no longer serves to a key that had not used it (404 on ours, 2026-11-14) and lists for
+shutdown on 2026-12-01, after which requests are routed to another model: from that day its Gemini steps refuse
+to run (need). Arm gemini36flash (2026-11-14): Gemini 3.6 Flash; the decision named 3.5 Flash, whose endpoint
+Google routes to 3.6 Flash. A reply from another model than the one asked is an error on every arm (track).
 
 Keys come from the environment only, never from a command line or a file of the repo:
   GEMINI_API_KEY                                   Gemini
@@ -31,10 +33,16 @@ MODELS = {   # role -> model; in the paper / official repo (commit 69177ee) both
     "vlm": "gpt-4o",                     # egor1_vlm/utils.py GPT
     "answer": "gpt-4.1",                 # Ego-R1-Agent/eval/infer_bench_summ.py summ_client
 }
-GEMINI_SHUTDOWN = datetime.date(2026, 12, 1)   # gemini-2.5-pro, Google's deprecation page, read 2026-11-13
+GEMINI = {"gemini25pro": "gemini-2.5-pro", "gemini36flash": "gemini-3.6-flash"}   # arm -> its captions' and video_llm's model
+SHUTDOWN = {"gemini-2.5-pro": datetime.date(2026, 12, 1)}   # Google's deprecation page, read 2026-11-13 (3.6 Flash: none announced, 2026-11-14)
 USAGE = None   # path of a jsonl: one line per API call of this process (track), for the real cost of a run
 OPENROUTER_URL = os.environ.get("OPENROUTER_BASE_URL") or "https://openrouter.ai/api/v1"
 PROVIDER = {"only": ["openai"], "allow_fallbacks": False}   # OpenAI itself answers, or the call fails
+
+
+def use_arm(arm):
+    """Set the Gemini model of the arm's two Gemini steps (arm llava keeps the default for its captions)."""
+    MODELS["caption"] = MODELS["video_llm"] = GEMINI.get(arm, MODELS["caption"])
 
 
 def openai_keys():
@@ -53,8 +61,8 @@ def need(*roles):
         if m.startswith("gemini"):
             if not os.environ.get("GEMINI_API_KEY"):
                 missing.append(f"{r} = {m}: GEMINI_API_KEY is not set")
-            if datetime.date.today() >= GEMINI_SHUTDOWN:
-                missing.append(f"{r} = {m}: shut down on {GEMINI_SHUTDOWN} (requests go to another model); choose a model first")
+            if m in SHUTDOWN and datetime.date.today() >= SHUTDOWN[m]:
+                missing.append(f"{r} = {m}: shut down on {SHUTDOWN[m]} (requests go to another model); choose a model first")
         elif m.startswith("gpt") and not openai_keys():
             missing.append(f"{r} = {m}: set AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY, or OPENAI_API_KEY, "
                            "or OPENROUTER_API_KEY (through OpenRouter)")
@@ -83,8 +91,8 @@ class WrongModel(SystemExit):
 def track():
     """Log every chat completion and Gemini generation of this process, upstream's included (their clients are
     built inside upstream's functions): the model that answered and the tokens, thinking counted apart. A Gemini
-    reply from a model other than the one asked is an error: after its shutdown date gemini-2.5-pro is routed
-    to another model (WrongModel). Wraps the two SDK methods once. A request is changed only when its client
+    reply from a model other than the one asked is an error: Google routes a retired id to another model
+    (gemini-3.5-flash to 3.6 Flash today, gemini-2.5-pro after its shutdown date) (WrongModel). Wraps the two SDK methods once. A request is changed only when its client
     points at OpenRouter (apis.gpt41, and upstream's clients through our patch): the model becomes openai/<model>
     and the provider pin is added; the line then has the provider that served it and the dollars charged."""
     from google.genai import models as gm

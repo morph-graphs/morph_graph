@@ -6,26 +6,38 @@ Chain-of-Tool-Thought traces, then GRPO). Each turn the agent thinks and calls o
 of a hierarchical text memory of the video), `video_llm` (a question about up to 10 minutes of video) and `vlm`
 (a question about one frame). A summary model writes the final answer from the trace.
 
-**This port keeps the models of the paper, with one replacement: Gemini 2.5 Pro stands in for the paper's Gemini
-1.5 Pro, which is retired** (not offered to our key, 2026-11-13; Anubhav's decision of that day). It affects the
-30 s captions of the memory and the `video_llm` tool; nothing is swapped for a local backbone. Only the agent has
-open weights. Every other step calls a paid API, so those stages stop (exit code 5) until the keys are set:
+**This port keeps the models of the paper, with one replacement: Gemini 3.6 Flash (`gemini-3.6-flash`, arm
+`gemini36flash`) stands in for the paper's Gemini 1.5 Pro, which is retired.** It affects the 30 s captions of the
+memory and the `video_llm` tool; nothing is swapped for a local backbone. How it came to 3.6 Flash:
+
+- Gemini 1.5 Pro is not offered to our key (2026-11-13). Anubhav chose Gemini 2.5 Pro that day (arm `gemini25pro`).
+- **Google refuses Gemini 2.5 Pro on our key**, and it is not available to the collaborators either: every
+  `generate_content` call answers `404 NOT_FOUND: This model models/gemini-2.5-pro is no longer available to new
+  users` (2026-11-14; Google's deprecations page: API access is limited to those who used it before). The arm's
+  code stays, for a key that still has the model.
+- Anubhav then chose Gemini 3.5 Flash (2026-11-14). **Google routes the `gemini-3.5-flash` endpoint to Gemini 3.6
+  Flash** (its deprecations page says so, and a call on our key came back with `model_version` `gemini-3.6-flash`;
+  the pricing page has no 3.5 Flash). So the arm asks for `gemini-3.6-flash` by name and is called `gemini36flash`.
+
+Only the agent has open weights. Every other step calls a paid API, so those stages stop (exit code 5) until the
+keys are set:
 
 | step | model, as published | where upstream calls it | runs here |
 |---|---|---|---|
 | agent | Ego-R1/Ego-R1-Agent-3B | `Ego-R1-Agent/eval/infer_bench_summ.py` (vLLM) | locally, transformers, fp16, ~8 GB GPU |
-| memory: 30 s captions | Gemini 1.5 Pro; **here Gemini 2.5 Pro** | not in the repo (paper, H-RAG construction) | Gemini key |
+| memory: 30 s captions | Gemini 1.5 Pro; **here Gemini 3.6 Flash** (arm `gemini25pro`: 2.5 Pro) | not in the repo (paper, H-RAG construction) | Gemini key |
 | memory: 10 min / hour / day summaries | GPT-4.1 | not in the repo (paper) | OpenAI key |
 | `rag` retrieval | GPT-4o | `api/rag/r1rag/utils.py` `call_gpt4` | OpenAI key |
-| `video_llm` | Gemini 1.5 Pro; **here Gemini 2.5 Pro** (arm `gemini25pro`); LLaVA-Video-7B (arm `llava`, paper Table 4) | `api/visual_tools/egor1_videollm_{gemini,llava}` | Gemini key; or locally |
+| `video_llm` | Gemini 1.5 Pro; **here Gemini 3.6 Flash** (arm `gemini36flash`; arm `gemini25pro`: 2.5 Pro); LLaVA-Video-7B (arm `llava`, paper Table 4) | `api/visual_tools/egor1_videollm_{gemini,llava}` | Gemini key; or locally |
 | `vlm` | GPT-4o | `api/visual_tools/egor1_vlm` | OpenAI key |
 | final answer | GPT-4.1 | `infer_bench_summ.py` `summ_client` | OpenAI key |
 
-**Gemini 2.5 Pro (`gemini-2.5-pro`) is itself listed for shutdown on 2026-12-01** (Google's deprecation page, read
-2026-11-13); from that day requests are routed to another model. Every Gemini call of one comparison must be made
-before then. From that date the Gemini stages refuse to run, and a caption answered by another model is an error
-(`epic/apis.py` checks the model id in every Gemini reply, upstream's `video_llm` calls included, and stops the
-run with exit code 6).
+**A reply from another model than the one asked is an error on every arm**: `epic/apis.py` checks the model id in
+every Gemini reply, upstream's `video_llm` calls included, and stops the run with exit code 6 (asked for
+`gemini-3.5-flash`, it stops on the first reply, which names `gemini-3.6-flash`). Gemini 3.6 Flash has no shutdown
+date announced (deprecations page, 2026-11-14). Gemini 2.5 Pro is listed for shutdown on 2026-12-01, after which
+its requests go to another model: from that day arm `gemini25pro`'s Gemini stages refuse to run. The two arms have
+separate results folders and memories (the captions change with the model).
 
 ## Layout
 
@@ -77,12 +89,12 @@ servers (same functions); `rag` failures of the API are detected so the question
 git submodule update --init baselines/egor1/Ego-R1
 bash baselines/egor1/env/setup_env.sh <venv dir>        # Python 3.11 (PYTHON=...), CUDA 12.4 wheels; ffmpeg and patch on PATH
 export PY=<venv>/bin/python EPIC_MORPH_DIR=<epic-morph checkout>
-bash baselines/egor1/run_egor1.sh prep      P05-20240425-201444 gemini25pro                  # CPU
-bash baselines/egor1/run_egor1.sh firstturn P05-20240425-201444 gemini25pro batch10_agree2   # GPU, no API: the local half
+bash baselines/egor1/run_egor1.sh prep      P05-20240425-201444 gemini36flash                # CPU
+bash baselines/egor1/run_egor1.sh firstturn P05-20240425-201444 gemini36flash batch10_agree2   # GPU, no API: the local half
 # with the keys in the environment (next section):
-bash baselines/egor1/run_egor1.sh build     P05-20240425-201444 gemini25pro                  # paid APIs, no GPU
-bash baselines/egor1/run_egor1.sh qa        P05-20240425-201444 gemini25pro batch10_agree2   # GPU + paid APIs
-bash baselines/egor1/run_egor1.sh upload    P05-20240425-201444 gemini25pro
+bash baselines/egor1/run_egor1.sh build     P05-20240425-201444 gemini36flash                # paid APIs, no GPU
+bash baselines/egor1/run_egor1.sh qa        P05-20240425-201444 gemini36flash batch10_agree2   # GPU + paid APIs
+bash baselines/egor1/run_egor1.sh upload    P05-20240425-201444 gemini36flash
 python baselines/egor1/epic/plan_cost.py --videos <HD-EPIC videos> --bank_dir <epic-morph>/outputs/v3/banks/batch10_agree2
 ```
 
@@ -97,18 +109,19 @@ LLaVA-NeXT, port 8000) in an environment of its own, given as `EGOR1_LLAVA_PY`; 
 here yet, and the arm has not been run.
 
 **Off our clusters, run only in the Docker image** (rule in `AGENTS.md`): `ghcr.io/morph-graphs/egor1:gemini25pro-<env
-hash>`, built from `docker/Dockerfile` by `.github/workflows/baseline-images.yml`. The code is the mounted checkout
+hash>`, built from `docker/Dockerfile` by `.github/workflows/baseline-images.yml`. One image serves both API arms (it
+holds the environment, and keeps the first arm's name); under Apptainer both use `egor1_gemini25pro.sif`. The code is the mounted checkout
 of `main`; `docker/run.sh` picks the image whose tag matches the checkout's environment files:
 
 ```bash
 git submodule update --init baselines/egor1/Ego-R1
-docker pull ghcr.io/morph-graphs/egor1:$(bash baselines/egor1/docker/image_tag.sh gemini25pro)
+docker pull ghcr.io/morph-graphs/egor1:$(bash baselines/egor1/docker/image_tag.sh gemini36flash)
 export GEMINI_API_KEY OPENAI_API_KEY HF_TOKEN        # already set in this shell; never typed into a command
 export EPIC_MORPH_DIR=<epic-morph checkout>
-bash baselines/egor1/docker/run.sh prep  P05-20240425-201444 gemini25pro
-bash baselines/egor1/docker/run.sh build P05-20240425-201444 gemini25pro
-EGOR1_GPU=0 bash baselines/egor1/docker/run.sh qa P05-20240425-201444 gemini25pro batch10_agree2
-bash baselines/egor1/docker/run.sh upload P05-20240425-201444 gemini25pro
+bash baselines/egor1/docker/run.sh prep  P05-20240425-201444 gemini36flash
+bash baselines/egor1/docker/run.sh build P05-20240425-201444 gemini36flash
+EGOR1_GPU=0 bash baselines/egor1/docker/run.sh qa P05-20240425-201444 gemini36flash batch10_agree2
+bash baselines/egor1/docker/run.sh upload P05-20240425-201444 gemini36flash
 ```
 
 `docker/run.sh` mounts this checkout at `/repo`, the epic-morph checkout at `/epic-morph`, the videos at `/videos`
@@ -123,7 +136,7 @@ image with Apptainer. The job board (`coord/worker.py`) calls it with `MERIT_GPU
 
 | variable | for |
 |---|---|
-| `GEMINI_API_KEY` | Gemini 2.5 Pro: captions (`build`), `video_llm` (`qa`, arm `gemini25pro`) |
+| `GEMINI_API_KEY` | the arm's Gemini: captions (`build`), `video_llm` (`qa`) |
 | `OPENAI_API_KEY` | GPT-4o and GPT-4.1 with a plain OpenAI key: summaries (`build`), `rag`, `vlm`, final answer, cutoff views (`qa`) |
 | `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY` | instead of `OPENAI_API_KEY`: an Azure OpenAI resource with deployments named `gpt-4o` and `gpt-4.1` (upstream's way; used when both are set) |
 | `OPENROUTER_API_KEY` | instead of both, when neither is set: the same GPT-4o and GPT-4.1 calls through OpenRouter (next section). Gemini never goes through it |
@@ -146,14 +159,14 @@ image with Apptainer. The job board (`coord/worker.py`) calls it with `MERIT_GPU
 ### Through OpenRouter (our own runs)
 
 With `OPENROUTER_API_KEY` in the environment and neither `OPENAI_API_KEY` nor the Azure pair, the GPT-4o and
-GPT-4.1 calls go through OpenRouter, so the row can be run on our cluster without an OpenAI account. Gemini 2.5
-Pro stays on Google's API with `GEMINI_API_KEY` on every route.
+GPT-4.1 calls go through OpenRouter, so the row can be run on our cluster without an OpenAI account. Gemini
+stays on Google's API with `GEMINI_API_KEY` on every route.
 
 ```bash
 export GEMINI_API_KEY=... OPENROUTER_API_KEY=...   # from the job's secret store: never an argument, a file, a log or a commit
 unset OPENAI_API_KEY AZURE_OPENAI_API_KEY          # one gateway per run: with either set, OpenRouter's key is dropped
-bash baselines/egor1/run_egor1.sh build P05-20240425-201444 gemini25pro
-bash baselines/egor1/run_egor1.sh qa    P05-20240425-201444 gemini25pro batch10_agree2
+bash baselines/egor1/run_egor1.sh build P05-20240425-201444 gemini36flash
+bash baselines/egor1/run_egor1.sh qa    P05-20240425-201444 gemini36flash batch10_agree2
 ```
 
 - **What changes in the request.** The endpoint (`https://openrouter.ai/api/v1`; `OPENROUTER_BASE_URL` overrides
@@ -185,13 +198,11 @@ step, GPU, seconds, and `api_usage`: calls and tokens of that stage per step and
 
 ## Open decisions
 
-- **Gemini 2.5 Pro ends on 2026-12-01.** The whole run (captions of every video, and every `video_llm` call)
-  has to fit before that date, or it mixes models.
-- **Gemini 2.5 Pro is already closed to a key that never used it.** Our Gemini API key (paid tier) lists
-  `models/gemini-2.5-pro`, but every `generate_content` call to it, text-only included, answers `404 NOT_FOUND:
-  This model models/gemini-2.5-pro is no longer available to new users` (2026-11-14; `gemini-2.5-flash` the
-  same). The first `build` on our cluster stopped at its first caption for this reason, before any billed call.
-  The row needs a Google project that still has the model, or a decision on another model.
+- **Arm `gemini25pro` cannot run on our key** (top of this file: 404 on every call, text-only included;
+  `gemini-2.5-flash` the same; the first `build` on our cluster stopped at its first caption, before any billed
+  call). For a key that has the model, it ends on 2026-12-01: the whole run would have to fit before that date.
+- **Gemini 3.6 Flash's price doubles on 2027-01-01** (pricing page, 2026-11-14: $0.75 in / $3.75 out per million
+  tokens through 2026-12-31, then $1.50 / $7.50; output includes thinking; one input rate, no prompt-size tier).
 - **Caption and summary prompts** are not published; ours could be replaced by the authors' if they share them.
 - **Fork**: `Ego-R1/` is a submodule of upstream itself, patched in place at run time; a morph-graphs fork with
   the patch as its `epic-morph` branch would be cleaner.

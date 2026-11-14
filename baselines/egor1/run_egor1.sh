@@ -4,21 +4,22 @@
 #   bash baselines/egor1/run_egor1.sh <stage> <video> <arm> [bank]
 #
 #   stage  prep       30 s clips with audio, in the EgoLife layout upstream's tools read     CPU, ffmpeg
-#          build      the question-independent memory: Gemini 2.5 Pro captions of the clips,
+#          build      the question-independent memory: the arm's Gemini captions of the clips,
 #                     GPT-4.1 summaries (10 min, 1 hour, 1 day)                              PAID APIs, no GPU
 #          qa         the agent answers every question of <bank> for this video              GPU (8 GB) + PAID APIs
 #          upload     this video and arm's results folder to the Hugging Face dataset  (needs a write token)
 #          all        prep + build, then qa when a bank is given (no upload)
 #          firstturn  (a check, not a task) only the agent's first turn per question and the parsed tool
 #                     call: the part of qa that needs no API                                 GPU (8 GB)
-#   arm    gemini25pro  the paper's main configuration, with Gemini 2.5 Pro where the paper has the retired
-#                       Gemini 1.5 Pro (the 30 s captions and video_llm)
+#   arm    gemini36flash  the paper's main configuration, with Gemini 3.6 Flash where the paper has the retired
+#                         Gemini 1.5 Pro (the 30 s captions and video_llm)
+#          gemini25pro  the same with Gemini 2.5 Pro: only for a key Google still serves it to (README)
 #          llava        the paper's tool ablation (Table 4): video_llm = LLaVA-Video-7B, local (EGOR1_LLAVA_PY)
 #          Both: agent Ego-R1-Agent-3B (local), rag and vlm GPT-4o, final answer GPT-4.1, the same memory.
 #   bank   a named bank of the epic-morph checkout, e.g. batch10_agree2
 #
 # A stage that needs a paid API stops with exit code 5, before calling anything, when its key is not set:
-#   GEMINI_API_KEY                                Gemini 2.5 Pro
+#   GEMINI_API_KEY                                the arm's Gemini
 #   AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY   an Azure OpenAI resource with deployments gpt-4o and gpt-4.1, or
 #   OPENAI_API_KEY                                a plain OpenAI key, or
 #   OPENROUTER_API_KEY                            alone: the same GPT calls through OpenRouter (README "Through OpenRouter")
@@ -37,8 +38,8 @@
 #   EGOR1_LIMIT      qa / firstturn: only the first N unanswered questions (a smoke test)
 # Every step skips finished work, so rerunning the same command resumes.
 set -euo pipefail
-STAGE=${1:?usage: run_egor1.sh <prep|build|qa|firstturn|upload|all> <video> <gemini25pro|llava> [bank]}
-V=${2:?video id}; ARM=${3:?arm gemini25pro or llava}; BANK=${4:-}
+STAGE=${1:?usage: run_egor1.sh <prep|build|qa|firstturn|upload|all> <video> <gemini36flash|gemini25pro|llava> [bank]}
+V=${2:?video id}; ARM=${3:?arm gemini36flash, gemini25pro or llava}; BANK=${4:-}
 M=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); REPO=$(cd "$M/../.." && pwd); R=$M/Ego-R1   # R: the upstream checkout
 PY=${PY:?set PY to the python of the environment (env/setup_env.sh)}
 EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && pwd)
@@ -46,7 +47,7 @@ EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && p
 VIDEOS=${HDEPIC_VIDEOS:-$EPIC/data/HD-EPIC/videos}; WORK=${EGOR1_WORK:-$M/work}; OUTROOT=${EGOR1_OUT:-$M/results}
 OUT=$OUTROOT/$ARM/$V; CLIPS=$WORK/clips; VIDEO=$VIDEOS/${V%%-*}/$V.mp4
 TAG=${EGOR1_TAG:-}; SUF=${TAG:+_$TAG}
-case $ARM in gemini25pro|llava) ;; *) echo "arm must be gemini25pro or llava"; exit 1 ;; esac
+case $ARM in gemini36flash|gemini25pro|llava) ;; *) echo "arm must be gemini36flash, gemini25pro or llava"; exit 1 ;; esac
 mkdir -p "$OUT" "$WORK/logs" "$WORK/locks" "$M/work"
 # our three changes to upstream (epic-morph.patch), applied once to the submodule's files. One task at a time, by a
 # lock beside the checkout (every task patching it shares that one); hunks already there are skipped.
@@ -76,6 +77,7 @@ commit = os.environ.get("EGOR1_REPO_COMMIT") or git("rev-parse", "HEAD")
 up = os.environ.get("EGOR1_UPSTREAM_COMMIT") or git("rev-parse", "HEAD", cwd="baselines/egor1/Ego-R1")
 bank = os.environ.get("EGOR1_EPIC_COMMIT") or git("rev-parse", "HEAD", cwd=os.environ["EPIC"])
 gpus = [torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())]
+apis.use_arm(os.environ["ARM"])
 models = dict(apis.MODELS, **({"video_llm": "lmms-lab/LLaVA-Video-7B-Qwen2"} if os.environ["ARM"] == "llava" else {}))
 print(json.dumps({"stage": sys.argv[1], "seconds": int(float(sys.argv[2])), "commit": commit, "egor1_commit": up,
                   "epic_morph_commit": bank, "models": models,
@@ -117,7 +119,7 @@ build() {
     fi
     if ! have_memory; then
         need_clips
-        "$PY" "$M/epic/build_memory.py" --video "$V" --clips "$CLIPS/$V" --out "$OUT"
+        "$PY" "$M/epic/build_memory.py" --video "$V" --arm "$ARM" --clips "$CLIPS/$V" --out "$OUT"
     fi
     have_memory || { echo "memory for $V is incomplete in $OUT"; exit 1; }
     record build $((SECONDS - t))

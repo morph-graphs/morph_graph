@@ -7,7 +7,7 @@
 # Keys: export them in the shell that starts this script. They are handed to the container by name (docker
 # `-e NAME`, apptainer APPTAINERENV_NAME), so a key never appears on a command line, in a file, in the image or
 # in a log. A paid stage without its keys exits with code 5 before calling anything.
-#   GEMINI_API_KEY   Gemini 2.5 Pro: the captions (build) and video_llm (qa)
+#   GEMINI_API_KEY   the arm's Gemini: the captions (build) and video_llm (qa)
 #   OPENAI_API_KEY   GPT-4.1 and GPT-4o (build, qa); or AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_API_KEY; or
 #                    OPENROUTER_API_KEY alone: the same calls through OpenRouter (README "Through OpenRouter")
 #   HF_TOKEN         upload, and build's look in the results dataset; or `hf auth login` on the host (the cache,
@@ -17,10 +17,11 @@
 #                    the GPU is the one the scheduler gave the job, so EGOR1_GPU is not needed)
 #   EGOR1_GPU        docker: the GPU index for qa (one GPU, ~8 GB). prep, build and upload need none
 #   EPIC_MORPH_DIR   the epic-morph checkout (required)
-#   EGOR1_IMAGE      image (default ghcr.io/morph-graphs/egor1:<arm>-<env hash>, from image_tag.sh); for apptainer
-#                    a .sif built once with `apptainer pull egor1_<arm>.sif docker://<that image>`
-#   EGOR1_SIF_DIR    apptainer: a folder of such files (default MERIT_SIF_DIR); <dir>/egor1_<arm>.sif is used when
-#                    it exists and EGOR1_IMAGE is unset
+#   EGOR1_IMAGE      image (default ghcr.io/morph-graphs/egor1:gemini25pro-<env hash>, from image_tag.sh: one image
+#                    for every API arm); for apptainer a .sif built once with
+#                    `apptainer pull egor1_gemini25pro.sif docker://<that image>`
+#   EGOR1_SIF_DIR    apptainer: a folder of such files (default MERIT_SIF_DIR); <dir>/egor1_gemini25pro.sif is used
+#                    when it exists and EGOR1_IMAGE is unset
 #   EGOR1_HF_CACHE   Hugging Face cache on the host (default MERIT_HF_CACHE, else ~/.cache/huggingface), mounted
 #                    at /hf: the agent's weights (Ego-R1/Ego-R1-Agent-3B, 13 GB) are downloaded there on first use
 #   MERIT_WORK       optional, the cluster's shared host work folder, mounted at /work; Ego-R1's work folder is
@@ -39,8 +40,8 @@ EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && p
 IMAGE=${EGOR1_IMAGE:-ghcr.io/morph-graphs/egor1:$(bash "$REPO/baselines/egor1/docker/image_tag.sh" "$ARM")}
 RUNTIME=${EGOR1_RUNTIME:-${MERIT_RUNTIME:-docker}}
 SIFS=${EGOR1_SIF_DIR:-${MERIT_SIF_DIR:-}}
-if [ "$RUNTIME" = apptainer ] && [ -z "${EGOR1_IMAGE:-}" ] && [ -n "$SIFS" ] && [ -s "$SIFS/egor1_$ARM.sif" ]; then
-    IMAGE=$SIFS/egor1_$ARM.sif
+if [ "$RUNTIME" = apptainer ] && [ -z "${EGOR1_IMAGE:-}" ] && [ -n "$SIFS" ] && [ -s "$SIFS/egor1_gemini25pro.sif" ]; then
+    IMAGE=$SIFS/egor1_gemini25pro.sif
 fi
 HF=${EGOR1_HF_CACHE:-${MERIT_HF_CACHE:-$HOME/.cache/huggingface}}
 [ -f "$REPO/baselines/egor1/Ego-R1/api/rag/r1rag/ragagent.py" ] || { echo "run: git submodule update --init baselines/egor1/Ego-R1"; exit 1; }
