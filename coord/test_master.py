@@ -69,9 +69,9 @@ def test_experiments():
     # the plain video model: qa only (no build line), every bank; the 8B on the m8 pools, the 27B on the m27 pools
     # without arm00, its unsized N = 768 only where an H200 is; no key
     direct = {(arm, stage, bank) for b, arm, stage, bank in ex if b == "direct"}
-    assert direct == {(arm, "qa", bank) for arm in M.DIRECT for bank in M.BANKS} and len(direct) == 24
+    assert direct == {(arm, "qa", bank) for arm in M.DIRECT for bank in M.BANKS} and len(direct) == 56
     for arm, pools in M.DIRECT.items():
-        assert pools == (M.M8 if arm.startswith("qwen3vl-8b") else ["nexus", "vatsal"] if arm == "qwen38-27b-f768" else M.M27)
+        assert pools == (M.M8 if arm.startswith(("qwen3vl-8b", "qwen35-9b", "molmo2-8b")) else ["nexus", "vatsal"] if arm == "qwen38-27b-f768" else M.M27)
         assert all(ex["direct", arm, "qa", bank] == pools for bank in M.BANKS) and not M.needs("direct", arm, "qa")
 
 
@@ -297,7 +297,7 @@ def test_existing_tasks_unchanged(monkeypatch, tmp_path):
     files = {f"magic/m8/{T2[1]}/answers_t2_agree2.json.gz", f"api/gpt-5-f1024/{B10[0]}/answers_batch10_agree2.json.gz"}
     full = list(M.EXPERIMENTS)
     board(monkeypatch, tmp_path, [e for e in full if e not in M.REPORTED + M.PAID])
-    assert len(M.EXPERIMENTS) == len(full) - len(M.REPORTED) - len(M.PAID) == 57   # 6 arms x (build + 4 banks) + 3 api + 6 direct x 4 banks
+    assert len(M.EXPERIMENTS) == len(full) - len(M.REPORTED) - len(M.PAID) == 89   # 6 arms x (build + 4 banks) + 3 api + 14 direct x 4 banks
     old = desired_before(have, files)
     strip = lambda ts: [{k: v for k, v in t.items() if k != "needs_env"} for t in ts]
     new = M.desired(have, files)
@@ -306,7 +306,7 @@ def test_existing_tasks_unchanged(monkeypatch, tmp_path):
     assert M.gate(new) == (new, 0)                                          # the gate holds none of them back
     # direct: a task per arm, bank and video unless answered, waiting on nothing, after api and before the memory arms
     direct = [t for t in M.desired(have, files | {f"direct/qwen3vl-8b-f32/{T2[0]}/answers_t2_agree2.json.gz"}) if t["baseline"] == "direct"]
-    assert len(direct) == 6 * len(B10 + T2 + T3 + T4) - 1 and not any(t["deps"] or t.get("needs_env") for t in direct)
+    assert len(direct) == 14 * len(B10 + T2 + T3 + T4) - 1 and not any(t["deps"] or t.get("needs_env") for t in direct)
     assert f"direct-qwen3vl-8b-f32-qa-t2_agree2-{T2[0]}" not in {t["id"] for t in direct}
     kind = [0 if t["baseline"] == "api" else 1 if t["baseline"] == "direct" else 2 for t in new]
     assert kind == sorted(kind)

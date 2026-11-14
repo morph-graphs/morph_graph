@@ -291,8 +291,12 @@ Qwen3.8-27B at N = 32, 128 and 768 frames) to its pools, and `EXPERIMENTS` gets 
 - Pools: the 8B arms go to the `m8` pools (measured peak 39.2 GB at N = 768, so one 48 GB GPU at every N); the 27B
   at N = 32 and 128 to the `m27` pools without arm00 (measured 2x 48 GB at N = 128; one 80 GB GPU). The 27B at
   N = 768 is not sized, so it is listed only for the pools whose queues have an H200 (`nexus`, `vatsal`) until it is.
+  Qwen3.5-9B (N = 32, 128, 768; peak 33.9 GB) and Molmo2-8B (N = 32, 128, 384; peak 42.0 GB) go to the `m8` pools
+  too, the 9B in the m27 image; Qwen3.5-35B-A3B at N = 32 and 128 (about 70 GB over two 48 GB GPUs) to the `m27`
+  pools, and its N = 768 is not listed until it is sized.
 - Queues: a queue's `fits` names arms, and these arms are not `m8` / `m27`, so `coord/nexus_queues.json` names them:
-  the 8B arms on every 48 GB queue (and as the H200's fallback), the 27B arms on the H200. A person's own copy of
+  the 8B, Qwen3.5-9B and Molmo2-8B arms on every 48 GB queue (and as the H200's fallback), the 27B and Qwen3.5-35B-A3B
+  arms on the H200. A person's own copy of
   that file needs the same names, or the worker leaves the tasks unclaimed.
 - Another model or frame budget (`baselines/direct/README.md`) is one entry in `DIRECT`, its name in the queues it
   fits, and, for a new model, its environment in `baselines/direct/docker/image_tag.sh`.

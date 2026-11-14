@@ -129,7 +129,12 @@ GATED = {(b, arm) for b, arm, *_ in REPORTED + PAID}
 # Its N = 768 is not sized yet (75k video tokens), so only the pools with an H200 (141 GB) queue get it. Listed after
 # the paid rows and before the memory arms: short tasks that should not wait behind the memory builds.
 DIRECT = {"qwen3vl-8b-f32": M8, "qwen3vl-8b-f128": M8, "qwen3vl-8b-f768": M8,
-          "qwen38-27b-f32": M27, "qwen38-27b-f128": M27, "qwen38-27b-f768": ["nexus", "vatsal"]}
+          "qwen38-27b-f32": M27, "qwen38-27b-f128": M27, "qwen38-27b-f768": ["nexus", "vatsal"],
+          # Qwen3.5-9B and Molmo2-8B fit a 48 GB GPU like the 8B (the 9B runs in the m27 image); Qwen3.5-35B-A3B needs
+          # the 27B pools' GPUs, and its N = 768 is not sized, so it is not listed
+          "qwen35-9b-f32": M8, "qwen35-9b-f128": M8, "qwen35-9b-f768": M8,
+          "molmo2-8b-f32": M8, "molmo2-8b-f128": M8, "molmo2-8b-f384": M8,
+          "qwen35-35b-a3b-f32": M27, "qwen35-35b-a3b-f128": M27}
 EXPERIMENTS = [("api", c, "qa", KEY_POOLS, "batch10_agree2") for c in API_CONFIGS] + REPORTED + PAID + [
     ("direct", arm, "qa", pools, bank) for bank in BANKS for arm, pools in DIRECT.items()] + [
     (b, arm, stage, POOLS[b, arm], bank)
