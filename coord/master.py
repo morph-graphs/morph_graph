@@ -184,12 +184,16 @@ DIRECT = {"qwen3vl-8b-f32": M8, "qwen3vl-8b-f128": M8, "qwen3vl-8b-f768": M8,
 # file names the stages: m3agent/m3/build, m3agent/m3/qa). Listed last. Its arm m3api calls paid APIs (Gemini speech
 # segments, OpenAI embeddings) and is not listed: it would be a paid row (PAID, NEEDS_ENV).
 M3AGENT = {"build": M8, "qa": M27}
-EXPERIMENTS = [("api", c, "qa", KEY_POOLS, "batch10_agree2") for c in API_CONFIGS] + REPORTED + PAID + [
+# Urgent (Anubhav, 2026-11-14): MAGIC-Video's memories (its graph.pkl) are what the structure matching of the memory
+# evaluation (M3) needs first, so its builds go right after the API tasks, ahead of everything else, 8B then 27B, and
+# to the Nexus pools at once as well (no LEFTOVER_H wait).
+URGENT = [("magic", arm, "build", POOLS["magic", arm] + LEFTOVER_POOLS, None) for arm in ("m8", "m27")]
+EXPERIMENTS = [("api", c, "qa", KEY_POOLS, "batch10_agree2") for c in API_CONFIGS] + URGENT + REPORTED + PAID + [
     ("direct", arm, "qa", pools, bank) for bank in BANKS for arm, pools in DIRECT.items()] + [
     ("rekv", "m8", "qa", M8, bank) for bank in BANKS] + [
     (b, arm, stage, POOLS[b, arm], bank)
     for b in ("merit", "magic", "worldmm") for stage in ("build", "qa") for arm in ("m27", "m8")
-    for bank in (BANKS if stage == "qa" else [None])] + [
+    for bank in (BANKS if stage == "qa" else [None]) if (b, stage) != ("magic", "build")] + [
     ("m3agent", "m3", stage, pools, bank) for stage, pools in M3AGENT.items()
     for bank in (BANKS if stage == "qa" else [None])]
 # the file whose presence in <baseline>/<arm>/<video>/ (next to runs.jsonl) means the memory is built: the last
@@ -399,8 +403,9 @@ def desired(have, files, answers=None, busy=()):
     rank = {id(t): i for i, t in enumerate(tasks)}
     by_group = {(b, arm) for b, arm, *_ in REPORTED}
     first = min([rank[id(t)] for t in tasks if (t["baseline"], t["arm"]) in by_group], default=0)
-    tasks.sort(key=lambda t: (first, group[t["video"]], rank[id(t)]) if (t["baseline"], t["arm"]) in by_group
-               else (rank[id(t)], 0, 0))
+    urgent = {(b, arm, stage) for b, arm, stage, *_ in URGENT}   # right after the API tasks, whatever their rank
+    tasks.sort(key=lambda t: (0 if t["baseline"] == "api" else 1 if (t["baseline"], t["arm"], t["stage"]) in urgent else 2,)
+               + ((first, group[t["video"]], rank[id(t)]) if (t["baseline"], t["arm"]) in by_group else (rank[id(t)], 0, 0)))
     for i, t in enumerate(tasks):
         t["priority"] = i
     return tasks
@@ -468,9 +473,11 @@ def main():
         busy = {tid.split("-redo-")[0] for tid, (_, c) in held.items() if c["status"] != "done"}
         tasks, withheld = gate(desired(have, files, read_answers(commit, files), busy))
         if a.first:
-            # the API tasks stay on top (they are few, short and only Max's pool can take them), then the reported
-            # arms in their own order (batch10 first), then the first videos
-            tasks.sort(key=lambda t: (0 if t["baseline"] == "api" else 1 if reported(t) else 2,
+            # the API tasks stay on top (they are few, short and only Max's pool can take them), then the URGENT lines,
+            # then the reported arms in their own order (batch10 first), then the first videos
+            urgent = {(b, arm, stage) for b, arm, stage, *_ in URGENT}
+            tasks.sort(key=lambda t: (0 if t["baseline"] == "api" else 1 if (t["baseline"], t["arm"], t["stage"]) in urgent
+                                      else 2 if reported(t) else 3,
                                       not reported(t) and t["video"] not in a.first, t["priority"]))
         for i, t in enumerate(tasks):
             t["priority"] = i
