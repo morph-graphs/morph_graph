@@ -11,7 +11,9 @@ several rounds. It is the first memory baseline of the EPIC-Morph benchmark pape
 |---|---|
 | `MERIT/` | submodule: [morph-graphs/MERIT](https://github.com/morph-graphs/MERIT), branch `epic-morph` = upstream `6edea6e` + our patches (one commit) |
 | `epic/prepare_epic.py` | one HD-EPIC video -> 30 s clips (448 px), 1 fps frames, the clip list; a bank -> MERIT's question format |
-| `epic/caption_clips_qwen.py` | MERIT's memory, step 1: one caption per clip with the arm's model |
+| `epic/caption_clips_qwen.py` | MERIT's memory, step 1: one caption per clip with the arm's memory model (a local Qwen, or gpt-5-mini) |
+| `epic/openai_usage.py` | the g5m arms: counts every OpenAI call (role, model id answered, tokens billed) for `runs.jsonl` |
+| `epic/estimate_api_cost.py`, `epic/test_api_arms.py` | the g5m arms: the cost estimate from the Qwen runs; the pipeline run against a local stand-in for the API |
 | `epic/blind_qa.py` | MERIT's answer prompt with no context: what the model gets from question and options alone |
 | `epic/collect_answers.py`, `epic/compare_answers.py` | merge a video's answer files (reusing those of unchanged questions) and list unanswered IDs; compare two runs |
 | `../common/hf_results.py` | (shared by all baselines) upload a video's results to the Hugging Face dataset, or download them |
@@ -64,6 +66,99 @@ in `MERIT_GPU`. After a video's stages finish: `MERIT_GPU=0 bash baselines/merit
 the same image locally. On our own clusters, a virtualenv from `env/setup_env.sh <arm> <dir>` (Python 3.11;
 CUDA_HOME for m27's causal-conv1d) and `PY=<dir>/bin/python bash baselines/merit/run_merit.sh ...` run the same
 stack without a container.
+
+## Reported-configuration arms (GPT-5-mini memory)
+
+The results sheet has three more MERIT rows, with the models of the paper. What the paper and the released code
+do (arXiv 2608.07663v2, Sec. 4.2 and App. A; `MERIT/src/merit/merit_memory.py`, `MERIT/.env.example`):
+
+| role | published model | where in the code |
+|---|---|---|
+| caption of each 30 s clip (1 fps frames) | GPT-5-mini | `benchmarks/*/preprocess/caption_clips.py`; here `epic/caption_clips_qwen.py` |
+| the retrieval keys of each caption | GPT-5-mini ("the same model") | `preprocess/extract_keys.py` |
+| key and query embeddings | Qwen3-Embedding-4B, local | `MultiKeyMemory` |
+| search rounds (search or answer, the query), neighbour filtering, the final answer | one model for all three ("all inference-time roles ... a single identical MLLM backbone"): Qwen3-VL-8B (top-k 5), GPT-5 (top-k 10) or Gemini 2.5 Pro | `MeritMemory.respond_llm_model`, `--respond-model` |
+| frames | only in the final answer request: 6 per clip of round 1, 6 per top-5 clip of round 2, 1 per clip after | `MeritMemory._get_frame_count` |
+
+**The mapping used here (correct it if the sheet means something else):** "memory model" = the model that writes
+the memory, i.e. captions and keys, at build time only; "reasoning model" = MERIT's respond model, i.e. search
+rounds, neighbour filtering and the answer. Nothing at answer time uses the memory model, so a row with a Qwen
+reasoning model makes no API call when answering.
+
+| sheet row | arm | memory (captions, keys) | reasoning (search, filter, answer) | top-k | calls the OpenAI API in | runs in image |
+|---|---|---|---|---|---|---|
+| (the memory of the three rows) | `g5m` | gpt-5-mini | - | - | `build` | m8 |
+| MERIT (reported): GPT-5-mini / Qwen3-VL-8B | `g5m-q8` | from `g5m` | Qwen3-VL-8B, local | 5 | nothing | m8 |
+| MERIT (reported): GPT-5-mini / GPT-5 | `g5m-g5` | from `g5m` | gpt-5 | 10 | `qa` | m8 |
+| MERIT: GPT-5-mini / Qwen3.8-27B | `g5m-q27` | from `g5m` | Qwen3.8-27B, local | 5 | nothing | m27 |
+
+- One memory per video, at `merit/g5m/<video>/`, shared by the three answer arms. An answer arm keeps its answers
+  in its own folder (`merit/g5m-q8/<video>/answers_<bank>.json.gz`, `runs.jsonl`) with `<video>_memory_ref.json`,
+  the hashes of the memory they were made from: when the memory changes, `qa` drops the old answers and `upload`
+  removes them from the dataset. An answer arm never builds: without a `g5m` memory (here or in the dataset) it stops.
+- Everything else is as for `m8` / `m27`: our first-person caption prompt, 448 px clips, 1 fps frames (30 a
+  caption), keys event + object + summary, 5 rounds at most, questions asked at `t_ask` (MERIT only retrieves,
+  expands to and shows clips that end by then). Differences from the paper's own runs: top-k follows the paper per
+  reasoning model (10 for GPT-5; `MERIT_TOP_K` overrides it and names the variant `top<k>`), and the API's model
+  ids are the snapshots MERIT pins (`gpt-5-mini-2025-08-07`, `gpt-5-2025-08-07`; temperature 1, the only one
+  GPT-5 accepts, so answers are not reproducible call by call).
+- **Shutdown: OpenAI retires `gpt-5`, `gpt-5-mini` and both snapshots on 2026-12-11** (deprecations page, read
+  2026-11-13: notice 2026-06-11, replacements `gpt-6.1-sol` / `gpt-6.1-terra`). These arms cannot be run or
+  extended after that date.
+- The key: `OPENAI_API_KEY` in the environment of whoever runs `g5m` build or `g5m-g5` qa, never on a command line
+  or in a file. `docker/run.sh` hands it to the container as an environment variable for those two arms only, and
+  `run_merit.sh` removes it from every other stage's environment. On the job board those tasks go to pool `max`
+  only and carry `needs_env: [OPENAI_API_KEY]`; a worker without the key leaves them.
+- What was spent: each `build` / `qa` line of `runs.jsonl` has `openai`: per role (`captions`, `keys`; `search`,
+  `filter`, `answer`) and per model id the API answered with, the calls, input, cached, output and reasoning
+  tokens and the service tier. MERIT's reply cache (in the work folder) keeps a rerun from paying twice for the
+  same text request; a stage that fails partway keeps its counts for the line written when it finishes.
+
+```bash
+export EPIC_MORPH_DIR=<epic-morph checkout> OPENAI_API_KEY=...        # the key only in the environment
+docker pull ghcr.io/morph-graphs/merit:$(bash baselines/merit/docker/image_tag.sh m8)
+MERIT_GPU=0 bash baselines/merit/docker/run.sh build P05-20240425-201444 g5m                    # API; the GPU is not used
+MERIT_GPU=0 bash baselines/merit/docker/run.sh upload P05-20240425-201444 g5m
+MERIT_GPU=0 bash baselines/merit/docker/run.sh qa P05-20240425-201444 g5m-g5 batch10_agree2     # API; a GPU >= 16 GB (embeddings)
+MERIT_GPU=0 bash baselines/merit/docker/run.sh upload P05-20240425-201444 g5m-g5
+MERIT_GPU=1 bash baselines/merit/docker/run.sh qa P05-20240425-201444 g5m-q8 batch10_agree2     # local, no key needed
+```
+`MERIT_SERVICE_TIER=flex` halves the price (slower, and requests can be refused when capacity is short);
+`MERIT_API_CONCURRENCY` (default 8) and `MERIT_API_THREADS` (default 4) set how many requests run at once.
+With the board, `coord/worker.py --pool max ...` started with `OPENAI_API_KEY` set does all of this.
+
+**Cost** (standard tier, prices of 2026-11-13 from https://developers.openai.com/api/docs/pricing: gpt-5-mini $0.25
+in / $2.00 out, gpt-5 $1.25 in / $10.00 out per 1M tokens; flex and batch half; a 448 px frame is 236 tokens for
+gpt-5-mini and 210 for gpt-5). Output of `epic/estimate_api_cost.py --proxy m27 --bank batch10_agree2 --top-k 10
+--count <banks>/batch10_agree2 <banks>/t2_agree2`, run 2026-11-13 on the Qwen3.8-27B runs in the results dataset
+(156 memories, 5,030 clips; 598 answered questions). No API call was made: the request sizes are rebuilt from those
+runs and counted with tiktoken.
+
+| | requests | input tokens | output tokens (visible) | $ | $ with 0x / 3x the assumed reasoning | $ flex |
+|---|---|---|---|---|---|---|
+| `g5m` build, P05-20240425-201444 (55 clips; the smallest of batch10) | 55 captions + 55 keys | 0.44M | 0.012M | 0.22 | 0.13 / 0.40 | 0.11 |
+| `g5m` build, batch10 (10 videos, 684 clips) | 1,368 | 5.46M | 0.138M | 2.74 | 1.64 / 4.92 | 1.37 |
+| `g5m` build, tranche 2 (20 videos, 1,539 clips) | 3,078 | 12.33M | 0.330M | 6.20 | 3.74 / 11.13 | 3.10 |
+| `g5m` build, all 156 videos (5,030 clips) | 10,060 | 39.93M | 1.062M | 20.16 | 12.11 / 36.25 | 10.08 |
+| `g5m-g5` qa, per question | 4.45 search + 4.09 filter + 1 answer | 87.4k | 1.5k | 0.187 | 0.124 / 0.313 | 0.094 |
+| `g5m-g5` qa, batch10_agree2 (598 questions) | 5,704 | 52.25M | 0.897M | 111.93 | 74.29 / 187.23 | 55.97 |
+| `g5m-g5` qa, t2_agree2 (1,499 questions, at batch10's mean per question) | 14,298 | 130.98M | 2.249M | 280.58 | 186.22 / 469.32 | 140.29 |
+| `g5m-q8`, `g5m-q27` qa | 0 | 0 | 0 | 0 (GPU time as `m8` / `m27` qa) | | |
+
+What is measured and what is assumed:
+- Measured from the proxy runs: clips per video, caption and key lengths, and per question the search rounds, the
+  clips each retrieved, the filter replies and the answer, from which each request is rebuilt with MERIT's prompts.
+- Assumed: gpt-5-mini captions are as long as Qwen3.8-27B's; gpt-5 searches as many rounds as Qwen3.8-27B did
+  (4.45 a question here; the paper reports fewer for GPT-5, which would make qa cheaper); a round's text and frames
+  scale from top-k 5 to top-k 10, up to the clips visible at the ask time; and the hidden reasoning tokens per call,
+  billed as output (`REASONING` in the script: 500 captions, 300 keys, 500 search, 800 filter, 800 answer), which
+  nothing short of a real call can measure. The `$` column includes them; the next column shows 0x and 3x.
+- The first real build settles the reasoning term: its `runs.jsonl` line has `reasoning_tokens` per role.
+
+**Check without the API**: `epic/test_api_arms.py --work <scratch>` runs `build g5m` and `qa g5m-g5` on one real
+video against a local stand-in for the endpoint (a dummy key) and checks the calls per role, that no request
+holds a clip ending after the question's ask time, the frames per answer request, the answer rows and that the
+key is in no file (`--qwen` adds `qa g5m-q8` with the real model).
 
 ## Running
 

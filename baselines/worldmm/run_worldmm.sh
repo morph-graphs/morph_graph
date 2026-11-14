@@ -13,6 +13,10 @@
 #          all    prep + build, then qa + blind when a bank is given (no upload)
 #   arm    m8   Qwen3-VL-8B-Instruct for every role (captions, memory, retrieval, answers)   one GPU with >= 40 GB
 #          m27  Qwen3.8-27B (instruct mode) for every role                                  one 80 GB GPU, or 2x 48 GB
+#          WorldMM's published models (README "Official arms"; OpenAI API, paid: OPENAI_API_KEY in the environment):
+#          g5m     the memory, built with gpt-5-mini (build, upload); shared by the two answer arms   one GPU >= 16 GB
+#          g5m-q8  answers from the g5m memory: retriever gpt-5-mini, respond Qwen3-VL-8B (local)     one GPU >= 40 GB
+#          g5m-g5  answers from the g5m memory: retriever gpt-5-mini, respond gpt-5                   one GPU >= 16 GB
 #   bank   a named bank of the epic-morph checkout, e.g. batch10_agree2 (generated there with
 #          v3/export_bank.py <bank> when missing; byte-identical for anyone at that commit)
 #
@@ -30,13 +34,16 @@
 #                    morph-graphs/epic-morph-results at worldmm/<arm>/<video>/)
 #   WORLDMM_TAG      a variant name for the answers (answers_<bank>_<tag>.json.gz), so variants never overwrite
 #   WORLDMM_FETCH    0 to never take the memory from the dataset (build normally reuses it when it is there)
+#   OPENAI_API_KEY   official arms: the key, from the environment only (never an argument or a file)
+#   WORLDMM_OPENAI_SERVICE_TIER  official arms: e.g. flex (half price, slower); default the API's standard tier
 #   WORLDMM_REPO_COMMIT, WORLDMM_SUBMODULE_COMMIT, WORLDMM_EPIC_COMMIT  commits for runs.jsonl when a checkout
 #                    has no .git (a synced copy); read with git otherwise
 # Every step skips finished work, so rerunning the same command resumes. The memory is built once per video
-# and arm and shared by every bank and variant.
+# and arm and shared by every bank and variant. g5m-q8 and g5m-g5 share the g5m memory (<out>/g5m/<video>/;
+# `build` with either name builds or fetches it) and keep their answers in their own folders.
 set -euo pipefail
-STAGE=${1:?usage: run_worldmm.sh <prep|build|qa|blind|upload|all> <video> <m8|m27> [bank]}
-V=${2:?video id}; ARM=${3:?arm m8 or m27}; BANK=${4:-}
+STAGE=${1:?usage: run_worldmm.sh <prep|build|qa|blind|upload|all> <video> <m8|m27|g5m|g5m-q8|g5m-g5> [bank]}
+V=${2:?video id}; ARM=${3:?arm m8, m27, g5m, g5m-q8 or g5m-g5}; BANK=${4:-}
 M=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); REPO=$(cd "$M/../.." && pwd); R=$M/WorldMM   # R: the submodule
 PY=${PY:?set PY to the python of the WorldMM client environment}
 EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && pwd)
@@ -44,22 +51,30 @@ EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && p
 case $ARM in
     m8)  MODEL=qwen3vl-8b; HF=Qwen/Qwen3-VL-8B-Instruct; SERVER_PY=${SERVER_PY:-$PY} ;;
     m27) MODEL=qwen38-27b; HF=Qwen/Qwen3.8-27B; SERVER_PY=${SERVER_PY:?m27: set SERVER_PY to the python of env/setup_env.sh server27} ;;
-    *) echo "arm must be m8 or m27"; exit 1 ;;
+    g5m|g5m-q8|g5m-g5)   # WorldMM's published setting: memory and retriever gpt-5-mini; the respond model per arm
+        MEM=g5m; MODEL=gpt-5-mini; HF=Qwen/Qwen3-VL-8B-Instruct; SERVER_PY=${SERVER_PY:-$PY}
+        case $ARM in g5m-q8) RESPOND=qwen3vl-8b ;; g5m-g5) RESPOND=gpt-5 ;; esac ;;
+    *) echo "arm must be m8, m27, g5m, g5m-q8 or g5m-g5"; exit 1 ;;
 esac
+# MODEL builds the memory and is the retriever; RESPOND decides the searches and answers (the same model for m8, m27).
+# MEM is the arm whose folder holds the memory (the arm itself, except for the answer arms of g5m).
+MEM=${MEM:-$ARM}; RESPOND=${RESPOND:-$MODEL}
 MP=$HF; [ -n "${WORLDMM_MODEL_DIR:-}" ] && [ -d "$WORLDMM_MODEL_DIR/${HF#*/}" ] && MP=$WORLDMM_MODEL_DIR/${HF#*/}
 VIDEOS=${HDEPIC_VIDEOS:-$EPIC/data/HD-EPIC/videos}; WORK=${WORLDMM_WORK:-$M/work}; OUTROOT=${WORLDMM_OUT:-$M/results}
-OUT=$OUTROOT/$ARM/$V; SKEL=$WORK/skeleton/$V/10sec_skeleton.json; SMALL=$WORK/videos_512/$V.mp4
-BUILD=$WORK/build/$ARM; TAG=${WORLDMM_TAG:-}; SUF=${TAG:+_$TAG}
+OUT=$OUTROOT/$ARM/$V; MOUT=$OUTROOT/$MEM/$V; SKEL=$WORK/skeleton/$V/10sec_skeleton.json; SMALL=$WORK/videos_512/$V.mp4
+BUILD=$WORK/build/$MEM; TAG=${WORLDMM_TAG:-}; SUF=${TAG:+_$TAG}
 # the memory's files (the same list as epic/wmm_paths.memory_files)
 MEMORY=("{video}_10sec.json" "{video}_30sec.json" "{video}_3min.json" "{video}_10min.json" "{video}_semantic.json"
         "{video}_visual.pkl" "{video}_openie_10sec.json" "{video}_openie_30sec.json" "{video}_openie_3min.json"
         "{video}_openie_10min.json")
-mkdir -p "$OUT" "$WORK/logs"
-export TOKENIZERS_PARALLELISM=false PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True MODEL EPIC
+mkdir -p "$OUT" "$MOUT" "$WORK/logs"
+export TOKENIZERS_PARALLELISM=false PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True MODEL RESPOND EPIC
+export WORLDMM_OPENAI_CACHE=$WORK/openai_cache/$V   # WorldMM's reply cache for its OpenAI calls (a rerun pays nothing twice)
+unset WORLDMM_USAGE_FILE
 log() { echo "=== $V $ARM $1 ($(date '+%F %H:%M'))"; }
-have_memory() { local m; for m in "${MEMORY[@]}"; do [ -s "$OUT/${m//\{video\}/$V}" ] || return 1; done; }
-record() {   # one line per finished stage, for the hand-back
-    "$PY" - "$1" "$2" >> "$OUT/runs.jsonl" <<'EOF'
+have_memory() { local m; for m in "${MEMORY[@]}"; do [ -s "$MOUT/${m//\{video\}/$V}" ] || return 1; done; }
+record() {   # one line per finished stage, for the hand-back: record <stage> <seconds> [results folder, default $OUT]
+    "$PY" - "$1" "$2" "${3:-}" >> "${3:-$OUT}/runs.jsonl" <<'EOF'
 import json, os, platform, subprocess, sys, time
 import torch, transformers
 git = lambda *a, cwd=None: subprocess.run(["git", *a], capture_output=True, text=True, cwd=cwd).stdout.strip()
@@ -68,8 +83,12 @@ sub = os.environ.get("WORLDMM_SUBMODULE_COMMIT") or git("rev-parse", "HEAD", cwd
 bank = os.environ.get("WORLDMM_EPIC_COMMIT") or git("rev-parse", "HEAD", cwd=os.environ["EPIC"])
 dirty = bool(git("status", "--porcelain", "baselines/worldmm"))
 gpus = [torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())]
+# official arms: what this stage's OpenAI calls cost, per step or role and per model id the API answered with
+use = os.environ.get("WORLDMM_USAGE_FILE")
+openai = {"openai": json.load(open(use))} if use and os.path.exists(use) else {}
 print(json.dumps({"stage": sys.argv[1], "seconds": int(float(sys.argv[2])), "commit": commit, "dirty": dirty,
                   "worldmm_commit": sub, "epic_morph_commit": bank, "model": os.environ.get("MODEL"),
+                  "respond_model": None if sys.argv[3] else os.environ.get("RESPOND"), **openai,   # none for a memory's lines
                   "torch": torch.__version__, "transformers": transformers.__version__,
                   "server_transformers": os.environ.get("SERVER_TRANSFORMERS"), "gpus": gpus,
                   "host": platform.node(), "finished": time.strftime("%Y-%m-%dT%H:%M:%S%z")}))
@@ -105,41 +124,66 @@ start_server() {   # once per invocation, on a node-local unix socket
     echo "server not ready after 15 min"; exit 1
 }
 client() { CUDA_VISIBLE_DEVICES=${G[$((NGPU - 1))]} "$PY" -u "$@"; }
+backends() {   # what a stage's models need: the local server for a Qwen model, the key for an OpenAI one
+    local m
+    for m in "$@"; do
+        case $m in
+            gpt-*) [ -n "${OPENAI_API_KEY:-}" ] || { echo "$ARM calls the OpenAI API ($m): set OPENAI_API_KEY in the environment"; exit 1; } ;;
+            *) start_server ;;
+        esac
+    done
+}
+memory_ref() {   # an answer arm of a shared memory: its folder names the memory it answers from, by file hashes
+    [ "$MEM" = "$ARM" ] && return 0
+    local ref=$OUT/${V}_memory_ref.json new f files=()
+    for f in "${MEMORY[@]}"; do files+=("$MOUT/${f//\{video\}/$V}"); done
+    new=$("$PY" -c 'import hashlib, json, os, sys
+print(json.dumps({"memory_arm": sys.argv[1], "sha256": {os.path.basename(f): hashlib.sha256(open(f, "rb").read()).hexdigest()
+                                                         for f in sys.argv[2:]}}, sort_keys=True))' \
+        "$MEM" "${files[@]}")
+    if [ -f "$ref" ] && [ "$(cat "$ref")" != "$new" ]; then
+        echo "the $MEM memory changed: removing this arm's answers made from the old one"
+        rm -rf "$WORK/cache/$ARM/$V" "$WORK/rows/$ARM/$V"; rm -f "$OUT"/answers_*.json.gz   # blind answers use no memory
+    fi
+    echo "$new" > "$ref"
+}
 
 prep() {
     log prep; local t=$SECONDS P=${V%%-*}
     [ -s "$VIDEOS/$P/$V.mp4" ] || { echo "missing $VIDEOS/$P/$V.mp4 (v3/DATA.md)"; exit 1; }
     "$PY" "$M/epic/prepare_epic.py" video --video "$VIDEOS/$P/$V.mp4" --subject "$V" --video_root "$WORK/videos_512" \
         --skeleton_root "$WORK/skeleton" --threads "${THREADS:-8}"
-    record prep $((SECONDS - t))
+    record prep $((SECONDS - t)) "$MOUT"
 }
 build() {
-    log build; local t=$SECONDS
-    have_memory && { echo "memory complete in $OUT"; [ -s "$SKEL" ] || prep; return 0; }
+    log "build ($MEM)"; local t=$SECONDS
+    have_memory && { echo "memory complete in $MOUT"; [ -s "$SKEL" ] || prep; return 0; }
     # the memory depends only on the video and the model: take it from the dataset when it is there and no
     # local build is started (a half-built local memory is resumed, never overwritten)
     if [ ! -d "$BUILD/captions/$V" ] && [ "${WORLDMM_FETCH:-1}" != 0 ]; then
         local rc=0; "$PY" "$M/../common/hf_results.py" fetch-memory --baseline worldmm --memory "${MEMORY[@]}" \
-            --arm "$ARM" --video "$V" --dir "$OUT" || rc=$?
+            --arm "$MEM" --video "$V" --dir "$MOUT" || rc=$?
         case $rc in
-            0) # answers and HippoRAG caches made from an earlier local memory are stale
-               rm -rf "$WORK/cache/$ARM/$V" "$WORK/rows/$ARM/$V"; rm -f "$OUT"/answers_*.json.gz "$OUT"/blind_*.json
-               [ -s "$SKEL" ] || prep; record "build (fetched)" $((SECONDS - t)); return 0 ;;
+            0) # answers and HippoRAG caches made from an earlier local memory are stale (the answer arms of a
+               # shared memory compare its hashes instead, in memory_ref: another arm may be answering from it now)
+               [ "$MEM" != "$ARM" ] || { rm -rf "$WORK/cache/$ARM/$V" "$WORK/rows/$ARM/$V"; rm -f "$OUT"/answers_*.json.gz "$OUT"/blind_*.json; }
+               [ -s "$SKEL" ] || prep; record "build (fetched)" $((SECONDS - t)) "$MOUT"; return 0 ;;
             3) echo "no memory in the dataset yet: building it here" ;;
             *) echo "could not reach the dataset; WORLDMM_FETCH=0 builds the memory here instead"; exit 1 ;;
         esac
     fi
     [ -s "$SKEL" ] && [ -s "$SMALL" ] || prep
-    start_server
+    backends "$MODEL"; export WORLDMM_USAGE_FILE=$WORK/usage/$V/build_$MEM.json
     mkdir -p "$BUILD/captions/$V"
     client "$M/epic/caption_epic.py" --skeleton "$SKEL" --output "$BUILD/captions/$V/10sec.json" --model "$MODEL"
     client "$M/epic/build_epic.py" --video "$V" --caption_root "$BUILD/captions" --meta_root "$BUILD/meta" \
-        --model "$MODEL" --out "$OUT"
-    have_memory || { echo "memory for $V is incomplete in $OUT"; exit 1; }
-    record build $((SECONDS - t))
+        --model "$MODEL" --out "$MOUT"
+    have_memory || { echo "memory for $V is incomplete in $MOUT"; exit 1; }
+    record build $((SECONDS - t)) "$MOUT"; unset WORLDMM_USAGE_FILE
 }
 qa_file() {   # this bank's questions for the video, in WorldMM's format (asked at t_ask, or at the end)
     local bank=${BANK:?qa and blind need a bank}; QA=$WORK/qa/$bank/$V.json
+    [ "$ARM" != g5m ] || { echo "g5m is the memory only: answer with g5m-q8 or g5m-g5"; exit 1; }
     if [ ! -s "$EPIC/outputs/v3/banks/$bank/${V}_questions.json" ]; then   # banks are generated, not committed
         mkdir -p "$EPIC/outputs/v3/banks"
         ( command -v flock >/dev/null && flock 9
@@ -153,36 +197,49 @@ qa_file() {   # this bank's questions for the video, in WorldMM's format (asked 
 }
 qa() {
     log "qa $BANK$SUF"; local t=$SECONDS ans=$OUT/answers_$BANK$SUF.json.gz
-    [ -s "$ans" ] && { echo "done: $ans"; return 0; }
+    if have_memory; then memory_ref; fi   # first: answers made from another memory are not "done"
+    # (an answer arm whose memory is not here goes on: it fetches the memory, compares, and reuses its kept rows)
+    [ -s "$ans" ] && { [ "$MEM" = "$ARM" ] || have_memory; } && { echo "done: $ans"; return 0; }
+    qa_file
     have_memory || build
     [ -s "$SMALL" ] || prep
-    qa_file; start_server
-    # a question that fails (WorldMM's "Error" / "Unable to generate answer") is retried by the next pass
+    memory_ref; backends "$MODEL" "$RESPOND"; export WORLDMM_USAGE_FILE=$WORK/usage/$V/qa_${ARM}_$BANK$SUF.json
+    # a question that fails (WorldMM's "Error" / "Unable to generate answer") is retried by the next pass; one that
+    # still stops on an assertion inside WorldMM in the last pass is kept as "Error" (wrong, with the error in its
+    # row), as WorldMM's eval.py records it, so it does not hold back the video's other answers
+    local last=
     for k in 1 2 3; do
-        client "$M/epic/eval_epic.py" --video "$V" --qa_file "$QA" --memory_dir "$OUT" --video_file "$SMALL" \
-            --model "$MODEL" --rows "$WORK/rows/$ARM/$V/$BANK$SUF.jsonl" --out "$ans" \
-            --cache_dir "$WORK/cache/$ARM/$V/$BANK$SUF" && break || echo "pass $k left questions unanswered"
+        [ "$k" = 3 ] && last=--final_pass
+        client "$M/epic/eval_epic.py" --video "$V" --qa_file "$QA" --memory_dir "$MOUT" --video_file "$SMALL" \
+            --model "$MODEL" --respond_model "$RESPOND" --rows "$WORK/rows/$ARM/$V/$BANK$SUF.jsonl" --out "$ans" \
+            --cache_dir "$WORK/cache/$ARM/$V/$BANK$SUF" $last && break || echo "pass $k left questions unanswered"
     done
     [ -s "$ans" ] || { echo "still unanswered after 3 passes (rerun the same command to retry)"; exit 1; }
-    record "qa $BANK$SUF" $((SECONDS - t))
+    record "qa $BANK$SUF" $((SECONDS - t)); unset WORLDMM_USAGE_FILE
 }
 blind() {
     log "blind $BANK"; local t=$SECONDS
     [ -s "$OUT/blind_$BANK.json" ] && { echo "done: $OUT/blind_$BANK.json"; return 0; }
-    qa_file; start_server
-    client "$M/epic/eval_epic.py" --blind --video "$V" --qa_file "$QA" --model "$MODEL" \
+    qa_file; backends "$RESPOND"; export WORLDMM_USAGE_FILE=$WORK/usage/$V/blind_${ARM}_$BANK.json
+    client "$M/epic/eval_epic.py" --blind --video "$V" --qa_file "$QA" --model "$MODEL" --respond_model "$RESPOND" \
         --rows "$WORK/rows/$ARM/$V/blind_$BANK.jsonl" --out "$OUT/blind_$BANK.json"
-    record "blind $BANK" $((SECONDS - t))
+    record "blind $BANK" $((SECONDS - t)); unset WORLDMM_USAGE_FILE
 }
 upload() {   # only a finished memory: a half-built folder would overwrite a good one in the dataset
     log upload
-    have_memory || { echo "no finished memory in $OUT: run build first"; exit 1; }
-    "$PY" "$M/../common/hf_results.py" upload --baseline worldmm --memory "${MEMORY[@]}" --arm "$ARM" --video "$V" --dir "$OUT"
+    have_memory || { echo "no finished memory in $MOUT: run build first"; exit 1; }
+    "$PY" "$M/../common/hf_results.py" upload --baseline worldmm --memory "${MEMORY[@]}" --arm "$MEM" --video "$V" --dir "$MOUT"
+    [ "$MEM" = "$ARM" ] && return 0
+    # an answer arm of a shared memory: its own folder too, held to the memory by {video}_memory_ref.json (when
+    # the dataset's copy names another memory, the uploader removes the answers made from that one)
+    [ -s "$OUT/${V}_memory_ref.json" ] || { echo "no answers of $ARM for $V yet"; return 0; }
+    memory_ref   # answers made from another memory than the one just uploaded are removed, not uploaded
+    "$PY" "$M/../common/hf_results.py" upload --baseline worldmm --memory "{video}_memory_ref.json" --arm "$ARM" --video "$V" --dir "$OUT"
 }
 
 case $STAGE in
     prep) prep ;; build) build ;; qa) qa ;; blind) blind ;; upload) upload ;;
-    all) prep; build; [ -z "$BANK" ] || { qa; blind; } ;;
+    all) prep; build; [ -z "$BANK" ] || [ "$ARM" = g5m ] || { qa; blind; } ;;
     *) echo "stage must be prep, build, qa, blind, upload or all"; exit 1 ;;
 esac
 echo "=== $V $ARM $STAGE done"
