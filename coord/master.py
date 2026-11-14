@@ -49,8 +49,8 @@ BUILD_ORDER = os.path.join(ROOT, "baselines", "merit", "build_order.txt")
 # is listed for both arms: the worker itself claims only the tasks one of its queues fits, so it takes a 27B only
 # through an 80 GB queue (the H200). nexus-tron, nexus-sailon and nexus-scavenger are the per-queue workers `nexus`
 # replaces; they stay listed until their last claims are finished.
-M8 = ["max", "nexus", "nexus-tron", "nexus-sailon", "nexus-scavenger", "wriva", "vatsal", "zaratan"]   # zaratan: H100 jobs
-M27 = ["wriva", "zaratan", "max", "nexus", "vatsal"]
+M8 = ["max", "pulkit", "nexus", "nexus-tron", "nexus-sailon", "nexus-scavenger", "wriva", "vatsal", "zaratan"]   # zaratan: H100 jobs
+M27 = ["wriva", "zaratan", "max", "pulkit", "nexus", "vatsal"]
 POOLS = {("merit", "m27"): M27 + ["arm00"], ("merit", "m8"): M8,
          ("magic", "m27"): M27, ("magic", "m8"): M8,
          ("worldmm", "m27"): M27, ("worldmm", "m8"): M8}
@@ -72,7 +72,7 @@ MEMORY_ARM = {("worldmm", "g5m-q8"): "g5m", ("worldmm", "g5m-g5"): "g5m",
 # is listed for KEY_POOLS only, whatever its EXPERIMENTS line or --only-pools says: nobody but Max has the keys.
 # WorldMM's answer arms both call gpt-5-mini (its retriever); MERIT's Qwen answer arms (g5m-q8, g5m-q27) call nothing
 # at answer time, so they run on the GPU pools of m8 / m27 once the memory is in the dataset.
-KEY_POOLS = ["max"]
+KEY_POOLS = ["max", "pulkit"]   # Max and Pulkit (NVIDIA) run with their own API keys
 NEEDS_ENV = {("api", c): ["GEMINI_API_KEY" if c.startswith("gemini") else "OPENAI_API_KEY"] for c in API_CONFIGS} | {
     ("worldmm", "g5m"): ["OPENAI_API_KEY"], ("worldmm", "g5m-q8"): ["OPENAI_API_KEY"], ("worldmm", "g5m-g5"): ["OPENAI_API_KEY"],
     ("merit", "g5m"): ["OPENAI_API_KEY"], ("merit", "g5m-g5"): ["OPENAI_API_KEY"]}
