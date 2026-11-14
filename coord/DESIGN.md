@@ -273,7 +273,7 @@ answered by several reasoning models: `g5m-q8`, `g5m-q27`, `g5m-g5`; each baseli
     and failure notes are scrubbed (`worker.scrub`). Slurm itself keeps a job's environment while the job exists.
   - Queues (`coord/nexus_queues.json`): MERIT's `g5m` build uses no GPU and goes to the `cpu` queue (4 CPUs,
     16 GB); WorldMM's `g5m` build and MAGIC's `oss120` / `oss120-flash` need one GPU for the
-    local embedding models (13 to 24 GB) and WorldMM's `g5m-q8` 40 GB, so they go to the A6000 queues that are
+    local embedding models (24 GB: WorldMM's ran out of memory on a 16 GB card) and WorldMM's `g5m-q8` 40 GB, so they go to the A6000 queues that are
     not preemptible by lower tiers (`sailon-a6000`, `tron-a6000`); MAGIC's `oss120-q27` serves the 27B and goes to
     `h200`. A queue's `fits` names these arms as `baseline/arm`, so no other pool's worker is affected.
 - Another paid-API baseline adds its arms to `NEEDS_ENV` and `MEMORY_ARM` and its lines to `EXPERIMENTS`; the pool

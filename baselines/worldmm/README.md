@@ -125,6 +125,8 @@ With Docker the arms run in the `m8` image (`docker/image_tag.sh g5m` prints its
 `OPENAI_API_KEY=... WORLDMM_GPU=0 EPIC_MORPH_DIR=<epic-morph checkout> bash baselines/worldmm/docker/run.sh qa <video> g5m-g5 batch10_agree2`.
 On the job board these are the `worldmm g5m*` tasks: they carry `needs_env: [OPENAI_API_KEY]`, are listed for pool
 `max` only, and a worker takes them only when that variable is set in its environment (`coord/DESIGN.md`).
+`g5m` and `g5m-q8` (gpt-5-mini only) accept either key (`OPENAI_API_KEY|OPENROUTER_API_KEY`) and are also listed for
+pool `nexus`; `g5m-g5` stays with `OPENAI_API_KEY` and pool `max`.
 
 - **Shared memory.** `build` with any of the three names builds (or fetches) `g5m`; `qa` with an answer arm reads it
   and writes `<video>_memory_ref.json` (the memory's file hashes) next to its answers. If the memory is ever

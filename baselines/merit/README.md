@@ -108,7 +108,8 @@ reasoning model makes no API call when answering.
 - The key: `OPENAI_API_KEY` in the environment of whoever runs `g5m` build or `g5m-g5` qa, never on a command line
   or in a file. `docker/run.sh` hands it to the container as an environment variable for those two arms only, and
   `run_merit.sh` removes it from every other stage's environment. On the job board those tasks go to pool `max`
-  only and carry `needs_env: [OPENAI_API_KEY]`; a worker without the key leaves them.
+  only and carry `needs_env: [OPENAI_API_KEY]`; a worker without the key leaves them. The `g5m` build accepts
+  either key (`OPENAI_API_KEY|OPENROUTER_API_KEY`) and is also listed for pool `nexus` (`coord/DESIGN.md`).
 - What was spent: each `build` / `qa` line of `runs.jsonl` has `openai`: per role (`captions`, `keys`; `search`,
   `filter`, `answer`) and per model id the API answered with, the calls, input, cached, output and reasoning
   tokens and the service tier. MERIT's reply cache (in the work folder) keeps a rerun from paying twice for the
