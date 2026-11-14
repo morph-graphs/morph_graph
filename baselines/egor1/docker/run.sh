@@ -32,7 +32,8 @@
 #   EGOR1_REPO_COMMIT, EGOR1_UPSTREAM_COMMIT, EGOR1_EPIC_COMMIT  for runs.jsonl when a checkout has no .git (a
 #                    synced copy): the commits of this repo, of the Ego-R1 submodule and of epic-morph
 #   passed through when set: MERIT_HF_REPO EGOR1_TAG EGOR1_FETCH EGOR1_LIMIT EGOR1_AGENT THREADS HF_HUB_OFFLINE
-#                    OPENROUTER_BASE_URL
+#                    OPENROUTER_BASE_URL EGOR1_GEMINI_INLINE, and the endpoints the two SDKs read from the
+#                    environment: OPENAI_BASE_URL (with OPENAI_API_KEY) and GOOGLE_GEMINI_BASE_URL
 set -euo pipefail
 STAGE=${1:?usage: run.sh <stage> <video> <arm> [bank]}; ARM=${3:?usage: run.sh <stage> <video> <arm> [bank]}
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
@@ -60,7 +61,7 @@ if [ -n "${MERIT_WORK:-}" ]; then   # the shared work folder: Ego-R1's own subfo
     umask 002; mkdir -p "$MERIT_WORK"; BINDS+=("$(cd -P "$MERIT_WORK" && pwd):/work"); export EGOR1_WORK=${EGOR1_WORK:-/work/egor1}
 fi
 KEYS=(GEMINI_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY AZURE_OPENAI_ENDPOINT AZURE_OPENAI_API_KEY HF_TOKEN)
-PASS=(MERIT_HF_REPO EGOR1_TAG EGOR1_FETCH EGOR1_LIMIT EGOR1_AGENT EGOR1_OUT EGOR1_WORK THREADS HF_HUB_OFFLINE OPENROUTER_BASE_URL)
+PASS=(MERIT_HF_REPO EGOR1_TAG EGOR1_FETCH EGOR1_LIMIT EGOR1_AGENT EGOR1_OUT EGOR1_WORK THREADS HF_HUB_OFFLINE OPENROUTER_BASE_URL EGOR1_GEMINI_INLINE GOOGLE_GEMINI_BASE_URL OPENAI_BASE_URL)
 if [ "$RUNTIME" = apptainer ]; then
     case $IMAGE in *.sif) ;; *) IMAGE=docker://$IMAGE ;; esac
     # through APPTAINERENV_* (the environment), not --env: a command line, keys included, is visible in `ps`

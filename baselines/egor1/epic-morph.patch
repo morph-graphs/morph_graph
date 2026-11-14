@@ -1,5 +1,5 @@
 diff --git a/api/rag/r1rag/utils.py b/api/rag/r1rag/utils.py
-index cf3a471..6bb7b62 100644
+index cf3a471..31c8106 100644
 --- a/api/rag/r1rag/utils.py
 +++ b/api/rag/r1rag/utils.py
 @@ -27,13 +27,20 @@ def call_gpt4(prompt: str, system_message: str = "You are an effective first per
@@ -30,6 +30,15 @@ index cf3a471..6bb7b62 100644
      chat_prompt = [
          {
              "role": "system",
+@@ -61,7 +68,7 @@ def call_gpt4(prompt: str, system_message: str = "You are an effective first per
+         try:
+     
+             completion = client.chat.completions.create(  
+-                model="gpt-4o",  
++                model=os.environ.get("EGOR1_RAG_MODEL", "gpt-4o"),   # epic-morph: the port names the arm's model
+                 messages=messages,  
+                 max_tokens=max_tokens,  
+                 temperature=temperature,  
 diff --git a/api/visual_tools/egor1_videollm_gemini/video_llm.py b/api/visual_tools/egor1_videollm_gemini/video_llm.py
 index 7b4d5d3..f558191 100644
 --- a/api/visual_tools/egor1_videollm_gemini/video_llm.py
@@ -80,3 +89,16 @@ index 679fefd..826573c 100644
          self.sys_prompt = sys_prompt
  
      def chat(self, message, image_path=None):
+diff --git a/api/visual_tools/egor1_vlm/vlm.py b/api/visual_tools/egor1_vlm/vlm.py
+index c766593..d500d6c 100644
+--- a/api/visual_tools/egor1_vlm/vlm.py
++++ b/api/visual_tools/egor1_vlm/vlm.py
+@@ -19,7 +19,7 @@ def vlm(question: Annotated[str, "The question you want to use the vision langua
+     os.makedirs("./cache", exist_ok=True)
+     frame_path, exact_match = locate_image_url(timestamp, identity=identity,data_dir=data_dir)
+     print(f"Frame path: {frame_path}")
+-    image_client = GPT()
++    image_client = GPT(model=os.environ.get("EGOR1_VLM_MODEL", "gpt-4o"))   # epic-morph: the port names the arm's model
+     answer = image_client.chat(question, frame_path)
+     
+     response = {

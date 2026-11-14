@@ -85,7 +85,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--memory_files", action="store_true")
     ap.add_argument("--video")
-    ap.add_argument("--arm", default="gemini25pro", help="the arm, for the model of the captions (apis.GEMINI)")
+    ap.add_argument("--arm", default="gemini25pro", help="the arm, for the model of the captions (apis.ARMS)")
     ap.add_argument("--clips", help="<clip_root>/<video> (prepare_clips.py)")
     ap.add_argument("--out")
     ap.add_argument("--clip_sec", type=int, default=30)

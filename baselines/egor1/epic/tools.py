@@ -1,10 +1,10 @@
 """Ego-R1's three tools (rag, video_llm, vlm) on one HD-EPIC video, in process.
 
-The tool code is upstream's, imported from the checkout (with ../epic-morph.patch: the Gemini model id from the
+The tool code is upstream's, imported from the checkout (with ../epic-morph.patch: the model ids from the
 environment, plain OpenAI keys): r1rag.ragagent.RagAgent.query (GPT-4o picks the most relevant log entry),
 egor1_videollm_gemini.video_llm_sync (stitches the 30 s clips of a range, 1 fps 448 px, and asks the arm's Gemini,
 in place of the paper's retired 1.5 Pro; arm `llava`: egor1_videollm_llava, LLaVA-Video-7B behind upstream's
-llava_video.py server) and egor1_vlm.vlm (one frame, GPT-4o). Upstream runs each behind a FastAPI server; here
+llava_video.py server) and egor1_vlm.vlm (one frame, GPT-4o; arm gemini36flash-gpt41: GPT-4.1 in both). Upstream runs each behind a FastAPI server; here
 they are called directly, and the dispatch and its error strings follow Ego-R1-Agent/utils/process.py tool_call.
 
 What this port adds is the streaming cutoff: a question asked at t_ask must not see the video after it.
@@ -119,7 +119,7 @@ VIDEO_FAIL = "API error, fail to parse the response from video_llm."   # what pr
 
 class Tools:
     def __init__(self, arm, clips, logs, cutoff, cache_dir):
-        """arm: a Gemini arm (apis.GEMINI) or llava (the video_llm); clips: <clip_root>/<video>; logs: cutoff_logs(); cutoff: seconds."""
+        """arm: an API arm (apis.ARMS) or llava (the video_llm); clips: <clip_root>/<video>; logs: cutoff_logs(); cutoff: seconds."""
         self.arm, self.clips, self.cutoff, self.cache = arm, clips, cutoff, cache_dir
         rag = upstream("api/rag", "r1rag.ragagent")
         if not hasattr(rag, "egor1_gpt4"):     # call_gpt4 returns "error" after 5 failed tries: note it
@@ -132,7 +132,8 @@ class Tools:
                 return r
             rag.call_gpt4 = call_gpt4
         self.rag_agent = rag.RagAgent(day_log=logs["1day"], hour_log=logs["1hour"], min_log=logs["10min"])
-        os.environ["EGOR1_GEMINI_MODEL"] = apis.MODELS["video_llm"]      # read by upstream's video_llm (our patch)
+        os.environ["EGOR1_GEMINI_MODEL"] = apis.MODELS["video_llm"]      # read by upstream's video_llm (our patch),
+        os.environ["EGOR1_RAG_MODEL"], os.environ["EGOR1_VLM_MODEL"] = apis.MODELS["rag"], apis.MODELS["vlm"]   # call_gpt4, vlm
         self.video = upstream("api/visual_tools/egor1_videollm_" + ("llava" if arm == "llava" else "gemini"), "video_llm")
         self.image = upstream("api/visual_tools/egor1_vlm", "vlm")
         os.makedirs(os.path.join(cache_dir, "cache"), exist_ok=True)

@@ -2,11 +2,16 @@
 (the memory build) or only inside its benchmark script (the final answer).
 
 The models are the paper's, with one replacement: Gemini 1.5 Pro is retired, so the two steps that used it (30 s
-captions, video_llm) use the Gemini of the arm (GEMINI, use_arm). Arm gemini25pro (Anubhav, 2026-11-13): Gemini
+captions, video_llm) use the Gemini of the arm (ARMS, use_arm). Arm gemini25pro (Anubhav, 2026-11-13): Gemini
 2.5 Pro, which Google no longer serves to a key that had not used it (404 on ours, 2026-11-14) and lists for
 shutdown on 2026-12-01, after which requests are routed to another model: from that day its Gemini steps refuse
 to run (need). Arm gemini36flash (2026-11-14): Gemini 3.6 Flash; the decision named 3.5 Flash, whose endpoint
 Google routes to 3.6 Flash. A reply from another model than the one asked is an error on every arm (track).
+Arm gemini36flash-gpt41 (Anubhav, 2026-11-14) is gemini36flash with GPT-4.1 in place of GPT-4o in the rag and
+vlm tools: the machines that run the row have no GPT-4o. Its memory is gemini36flash's (the same models make it).
+
+EGOR1_GEMINI_INLINE=1 (opt-in, for an endpoint without Google's Files API) sends each video inside the request
+instead of uploading it first (track). Not tried against any endpoint.
 
 Keys come from the environment only, never from a command line or a file of the repo:
   GEMINI_API_KEY                                   Gemini
@@ -28,12 +33,17 @@ MODELS = {   # role -> model; in the paper / official repo (commit 69177ee) both
     "agent": "Ego-R1/Ego-R1-Agent-3B",   # open weights, run locally (Qwen2.5-3B-Instruct, SFT + GRPO)
     "caption": "gemini-2.5-pro",         # 30 s clip -> dense caption with dialogue (paper, H-RAG construction)
     "summary": "gpt-4.1",                # captions -> 10 min -> 1 hour -> 1 day summaries (paper)
-    "rag": "gpt-4o",                     # keyword retrieval over the logs (r1rag/utils.py call_gpt4)
+    "rag": "gpt-4o",                     # keyword retrieval over the logs (r1rag/utils.py call_gpt4; EGOR1_RAG_MODEL, our patch)
     "video_llm": "gemini-2.5-pro",       # egor1_videollm_gemini/video_llm.py (model from EGOR1_GEMINI_MODEL, our patch)
-    "vlm": "gpt-4o",                     # egor1_vlm/utils.py GPT
+    "vlm": "gpt-4o",                     # egor1_vlm/utils.py GPT (EGOR1_VLM_MODEL, our patch)
     "answer": "gpt-4.1",                 # Ego-R1-Agent/eval/infer_bench_summ.py summ_client
 }
-GEMINI = {"gemini25pro": "gemini-2.5-pro", "gemini36flash": "gemini-3.6-flash"}   # arm -> its captions' and video_llm's model
+DEFAULT = dict(MODELS)
+ARMS = {   # arm -> the roles whose model differs from DEFAULT
+    "gemini25pro": {},
+    "gemini36flash": {"caption": "gemini-3.6-flash", "video_llm": "gemini-3.6-flash"},
+    "gemini36flash-gpt41": {"caption": "gemini-3.6-flash", "video_llm": "gemini-3.6-flash", "rag": "gpt-4.1", "vlm": "gpt-4.1"},
+}
 SHUTDOWN = {"gemini-2.5-pro": datetime.date(2026, 12, 1)}   # Google's deprecation page, read 2026-11-13 (3.6 Flash: none announced, 2026-11-14)
 USAGE = None   # path of a jsonl: one line per API call of this process (track), for the real cost of a run
 OPENROUTER_URL = os.environ.get("OPENROUTER_BASE_URL") or "https://openrouter.ai/api/v1"
@@ -41,8 +51,8 @@ PROVIDER = {"only": ["openai"], "allow_fallbacks": False}   # OpenAI itself answ
 
 
 def use_arm(arm):
-    """Set the Gemini model of the arm's two Gemini steps (arm llava keeps the default for its captions)."""
-    MODELS["caption"] = MODELS["video_llm"] = GEMINI.get(arm, MODELS["caption"])
+    """Set the models of the arm's steps (arm llava keeps the defaults for all but its local video_llm)."""
+    MODELS.update(DEFAULT, **ARMS.get(arm, {}))
 
 
 def openai_keys():
@@ -83,6 +93,15 @@ def _log(asked, got, tin, tout, think=0, **more):
                                 "t": int(time.time()), "run": os.environ.get("EGOR1_RUN"), "q": QUESTION, **more}) + "\n")
 
 
+class Inline:
+    """Stands for an uploaded file when the video goes inside the request instead (EGOR1_GEMINI_INLINE): what
+    upstream's video_llm and gemini_video read of a file (its state, name and uri)."""
+
+    def __init__(self, path):
+        from google.genai import types
+        self.path, self.name, self.uri, self.state = path, "inline:" + path, path, types.FileState.ACTIVE
+
+
 class WrongModel(SystemExit):
     """A Gemini reply came from another model than the one asked: stop the whole run (exit code 6). Not an
     Exception, so neither upstream's handlers nor the tools' retry logic take it for a failed call."""
@@ -94,12 +113,20 @@ def track():
     reply from a model other than the one asked is an error: Google routes a retired id to another model
     (gemini-3.5-flash to 3.6 Flash today, gemini-2.5-pro after its shutdown date) (WrongModel). Wraps the two SDK methods once. A request is changed only when its client
     points at OpenRouter (apis.gpt41, and upstream's clients through our patch): the model becomes openai/<model>
-    and the provider pin is added; the line then has the provider that served it and the dollars charged."""
-    from google.genai import models as gm
+    and the provider pin is added; the line then has the provider that served it and the dollars charged.
+    With EGOR1_GEMINI_INLINE set, a Files upload returns an Inline instead of uploading, and generate_content
+    sends that file's bytes as an inline video part (delete then has nothing to remove)."""
+    from google.genai import files as gf, models as gm, types
     from openai.resources.chat.completions import Completions
     if getattr(Completions.create, "egor1", False):
         return
-    chat, gen = Completions.create, gm.Models.generate_content
+    chat, gen, up, rm = Completions.create, gm.Models.generate_content, gf.Files.upload, gf.Files.delete
+
+    def upload(self, *a, **k):
+        return Inline(str(k["file"])) if os.environ.get("EGOR1_GEMINI_INLINE") else up(self, *a, **k)
+
+    def delete(self, *a, **k):
+        return None if str(k.get("name")).startswith("inline:") else rm(self, *a, **k)
 
     def create(self, *a, **k):
         endpoint = str(self._client.base_url)
@@ -115,6 +142,9 @@ def track():
         return r
 
     def generate_content(self, *a, **k):
+        if isinstance(k.get("contents"), list):
+            k["contents"] = [types.Part.from_bytes(data=open(c.path, "rb").read(), mime_type="video/mp4")
+                             if isinstance(c, Inline) else c for c in k["contents"]]
         r = gen(self, *a, **k)
         u, asked, got = r.usage_metadata, k.get("model") or "", r.model_version or ""
         _log(asked, got, *((u.prompt_token_count or 0, u.candidates_token_count or 0, u.thoughts_token_count or 0) if u else (0, 0, 0)))
@@ -123,7 +153,7 @@ def track():
             raise WrongModel(6)
         return r
     create.egor1 = True
-    Completions.create, gm.Models.generate_content = create, generate_content
+    Completions.create, gm.Models.generate_content, gf.Files.upload, gf.Files.delete = create, generate_content, upload, delete
 
 
 def usage_summary(path, run=None):
