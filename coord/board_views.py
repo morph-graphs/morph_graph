@@ -398,7 +398,7 @@ def update(out, raw, live, nxq, built_src):
                      state="videos with a memory for some method, or a build on the board",
                      source="results dataset and the board's task list")]
     for bank, per in sorted(bq.items(), key=lambda kv: BANKS.get(kv[0], ("z",))[0]):
-        t_, st, src_ = BANKS.get(bank, ("—", "", "epic-morph outputs/v3/banks"))
+        t_, st, src_ = BANKS.get(bank, (bank, "", "epic-morph outputs/v3/banks"))   # an unlisted bank keys its own row
         tranches.append(dict(kind="bank", tranche=t_, bank=bank, videos=len(per), questions=sum(per.values()), state=st, source=src_))
     W("tranches.json", tranches)
     W("decisions.json", DECISIONS)
