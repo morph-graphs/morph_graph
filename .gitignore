@@ -263,10 +263,21 @@ baselines/api/work/
 !baselines/api/env/
 baselines/api/results/
 
+# EGAgent runs: frames, per-question rows, tables, logs; results (baselines/egagent/run_egagent.sh)
+baselines/egagent/work/
+!baselines/egagent/env/
+baselines/egagent/results/
+
 # Vgent runs: frames, locks; results (baselines/vgent/run_vgent.sh)
 baselines/vgent/work/
 !baselines/vgent/env/
 baselines/vgent/results/
+
+# HippoMM runs: frames, audio, vLLM logs, locks; results (baselines/hippomm/run_hippomm.sh)
+baselines/hippomm/work/
+!baselines/hippomm/env/
+baselines/hippomm/results/
+baselines/hippomm/.patch.lock
 
 # EgoRAG runs: clips, the Chroma index, upstream's events_diary; results (baselines/egorag/run_egorag.sh)
 baselines/egorag/work/
