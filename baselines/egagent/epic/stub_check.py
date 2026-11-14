@@ -3,7 +3,7 @@
 streaming rule on what they send.
 
     stub_check.py --video V --frames_dir <work>/frames/<V> --embeddings <results>/<V>_frames.npy \
-                  --bank_file <bank>/<V>_questions.json --tmp <scratch dir> --arm gpt41|gemini25pro [--questions 3] \
+                  --bank_file <bank>/<V>_questions.json --tmp <scratch dir> --arm gpt41|gemini25pro|gemini36flash [--questions 3] \
                   [--gateway openrouter]
 
 The real caption_epic.py, build_graph.py and run_qa.py (qa and blind) run unchanged in this process, with the
@@ -188,7 +188,7 @@ def main():
     ap.add_argument("--embeddings", required=True)
     ap.add_argument("--bank_file", required=True)
     ap.add_argument("--tmp", required=True)
-    ap.add_argument("--arm", required=True, choices=["gpt41", "gemini25pro"])
+    ap.add_argument("--arm", required=True, choices=["gpt41", "gemini25pro", "gemini36flash"])
     ap.add_argument("--questions", type=int, default=3)
     ap.add_argument("--gateway", default="openai", choices=list(ROUTES))
     a = ap.parse_args()
@@ -205,6 +205,8 @@ def main():
     os.environ["OPENROUTER_API_KEY"] = "stub-openrouter-not-a-key"
     os.environ.pop("OPENROUTER_BASE_URL", None)
     backbone = eg_paths.BACKBONES[a.arm]
+    if backbone.startswith("gemini"):
+        STATE["model"]["gemini"] = backbone   # the fake Gemini answers as the arm's model
     mem = os.path.join(a.tmp, "memory")
     os.makedirs(mem, exist_ok=True)
     os.environ.update(GEMINI_API_KEY="stub-not-a-key", HF_HUB_OFFLINE="1",

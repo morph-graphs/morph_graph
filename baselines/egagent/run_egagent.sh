@@ -16,6 +16,8 @@
 #   arm    the agent's model, as in the paper; the memory is GPT-4.1 + SigLIP 2 for both
 #          gpt41        GPT-4.1 agent           needs OPENAI_API_KEY
 #          gemini25pro  Gemini 2.5 Pro agent    needs GEMINI_API_KEY (and OPENAI_API_KEY to build the memory)
+#          gemini36flash  Gemini 3.6 Flash agent, not the paper's: it stands in for gemini25pro, which Google
+#                       no longer serves to our key (README: Read first). Same keys as gemini25pro
 #          OPENROUTER_API_KEY without OPENAI_API_KEY sends the GPT-4.1 calls through OpenRouter instead (README
 #          "Through OpenRouter"); Gemini is only ever called through Google's API
 #   bank   a named bank of the epic-morph checkout, e.g. batch10_agree2
@@ -43,8 +45,8 @@
 #                    has no .git (a synced copy); read with git otherwise
 # Every step skips finished work, so rerunning the same command resumes.
 set -euo pipefail
-STAGE=${1:?usage: run_egagent.sh <prep|build|qa|blind|upload|all|check> <video> <gpt41|gemini25pro> [bank]}
-V=${2:?video id}; ARM=${3:?arm gpt41 or gemini25pro}; BANK=${4:-}
+STAGE=${1:?usage: run_egagent.sh <prep|build|qa|blind|upload|all|check> <video> <gpt41|gemini25pro|gemini36flash> [bank]}
+V=${2:?video id}; ARM=${3:?arm gpt41, gemini25pro or gemini36flash}; BANK=${4:-}
 M=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); REPO=$(cd "$M/../.." && pwd); R=$M/egagent   # R: the submodule
 PY=${PY:?set PY to the python of the EGAgent client environment}
 EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && pwd)
@@ -52,7 +54,8 @@ GPT_END=2027-01-14; GEMINI_END=2026-12-01   # the providers' shutdown dates (REA
 case $ARM in
     gpt41) BACKBONE=gpt-4.1; KEY=OPENAI_API_KEY; END=$GPT_END ;;
     gemini25pro) BACKBONE=gemini-2.5-pro; KEY=GEMINI_API_KEY; END=$GEMINI_END ;;
-    *) echo "arm must be gpt41 or gemini25pro"; exit 1 ;;
+    gemini36flash) BACKBONE=gemini-3.6-flash; KEY=GEMINI_API_KEY; END=9999-12-31 ;;   # no shutdown date announced
+    *) echo "arm must be gpt41, gemini25pro or gemini36flash"; exit 1 ;;
 esac
 VIDEOS=${HDEPIC_VIDEOS:-$EPIC/data/HD-EPIC/videos}; WORK=${EGAGENT_WORK:-$M/work}; OUTROOT=${EGAGENT_OUT:-$M/results}
 OUT=$OUTROOT/$ARM/$V; FRAMES=$WORK/frames/$V; TAG=${EGAGENT_TAG:-}; SUF=${TAG:+_$TAG}
@@ -67,6 +70,7 @@ have_memory() { local m; for m in "${MEMORY[@]}"; do [ -s "$OUT/${m//\{video\}/$
 # upstream at its pinned commit + our patch (epic_morph.patch), applied once to the submodule's files
 [ -f "$R/egagent/langgraph_agent.py" ] || { echo "upstream missing: git submodule update --init baselines/egagent/egagent"; exit 1; }
 patched() { grep -q "def build_app" "$R/egagent/run_egagent_on_videomme.py" && grep -q EGAGENT_BACKBONE "$R/egagent/langgraph_agent.py" \
+            && grep -q "startswith('gemini-')" "$R/egagent/langgraph_agent.py" \
             && grep -q EGAGENT_DB_ROOT "$R/paths.py" && grep -q "def get_api_key" "$R/utils.py" && grep -q OPENROUTER "$R/utils.py"; }
 if ! patched; then
     ( if command -v flock >/dev/null; then flock 9; fi
@@ -137,7 +141,7 @@ build() {
         echo "memory copied from $other"; record "build (copied)" $((SECONDS - t)); return 0
     done
     if [ ! -s "$OUT/${V}_captions.json" ] && [ ! -e "$OUT/${V}_captions.json.partial" ] && [ "${EGAGENT_FETCH:-1}" != 0 ]; then
-        for other in gpt41 gemini25pro; do   # either arm's folder in the dataset holds the same memory
+        for other in gpt41 gemini25pro gemini36flash; do   # any arm's folder in the dataset holds the same memory
             rc=0; "$PY" "$M/../common/hf_results.py" fetch-memory --baseline egagent --memory "${MEMORY[@]}" \
                 --arm "$other" --video "$V" --dir "$OUT" || rc=$?
             case $rc in
@@ -179,10 +183,11 @@ qa() {
     paid "$BACKBONE" "$KEY" "$END" "the EGAgent workflow with $BACKBONE for every question of $BANK (about 12 calls per question, up to 50 frames per frame search)"
     export EGAGENT_USAGE_STAGE="qa $BANK$SUF"
     for k in 1 2 3; do   # a question that failed is retried by the next pass
-        rc=0; run_qa --memory "$OUT" --rows "$WORK/rows/$ARM/$V/$BANK$SUF.jsonl" --out "$ans" || rc=$?
+        rc=0; run_qa --memory "$OUT" --rows "$WORK/rows/$ARM/$V/$BANK$SUF.jsonl" --out "$ans" ${LIMIT:+--limit "$LIMIT"} || rc=$?
         [ $rc = 2 ] || break
     done
     [ $rc = 0 ] || { echo "qa did not finish (exit $rc); rerun the same command to retry"; exit "$rc"; }
+    [ -z "${LIMIT:-}" ] || { echo "LIMIT=$LIMIT: the first questions only, no answers file; the same command without LIMIT finishes"; return 0; }
     record "qa $BANK$SUF" $((SECONDS - t))
 }
 blind() {

@@ -6,7 +6,7 @@
 #   EPIC_MORPH_DIR   the epic-morph checkout (required)
 #   OPENAI_API_KEY   for build (the memory, both arms) and for qa / blind of arm gpt41; or OPENROUTER_API_KEY
 #                    without it: the same GPT-4.1 calls through OpenRouter (README "Through OpenRouter")
-#   GEMINI_API_KEY   for qa / blind of arm gemini25pro
+#   GEMINI_API_KEY   for qa / blind of arms gemini25pro and gemini36flash
 #                    Export a key in the shell: it is handed to the container by name, so it never appears on a
 #                    command line, in a file or in the image. A paid stage without its key stops, nothing spent
 #   HF_TOKEN         for upload and for taking a memory from the dataset; or `hf auth login` on the host (the
