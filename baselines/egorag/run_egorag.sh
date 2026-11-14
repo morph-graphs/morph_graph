@@ -27,6 +27,8 @@
 #   DEEPSEEK_API_KEY DeepSeek, for the hour summaries      } line, in a file or in a log
 #                    (upstream's Azure variables take precedence when set: AZURE_API_KEY + AZURE_API_ENDPOINT,
 #                    AZURE_DEEPSEEK_KEY + AZURE_DEEPSEEK_ENDPOINT [+ DEPLOYMENT_NAME])
+#   OPENROUTER_API_KEY   instead of either key above when it is not set: that provider's calls through OpenRouter,
+#                    served by the provider itself (README.md "Through OpenRouter")
 #   EGORAG_GPT_MODEL       default gpt-4o             } the ids asked for; runs.jsonl records the ids the
 #   EGORAG_DEEPSEEK_MODEL  default deepseek-v4-pro    } API returned (README.md: DeepSeek no longer lists R1)
 #   EGORAG_EGOGPT    default lmms-lab/EgoGPT-7b-EgoIT-EgoLife (Hugging Face cache), or a local copy
@@ -77,14 +79,20 @@ up = os.environ.get("EGORAG_UPSTREAM_COMMIT") or git("rev-parse", "HEAD", cwd="b
 bank = os.environ.get("EGORAG_EPIC_COMMIT") or git("rev-parse", "HEAD", cwd=os.environ["EPIC"])
 # the submodule's files carry EgoLife.patch, so it is left out of "dirty" and the patch is named by its hash
 dirty = bool(git("status", "--porcelain", "--ignore-submodules", "baselines/egorag")) if not os.environ.get("EGORAG_REPO_COMMIT") else None
-api = {}   # the paid calls of this stage: per call and model id the API returned, the calls and tokens
+# the paid calls of this stage: per call and model id the API returned, the calls and tokens, the endpoint asked
+# and, through OpenRouter, who served them and the dollars charged
+api = {}
 log = os.environ["EGORAG_USAGE_LOG"]
 for u in (json.loads(l) for l in open(log)) if os.path.exists(log) else []:
     if u["t"] >= float(sys.argv[3]):
-        a = api.setdefault(f"{u['call']}:{u['model']}", {"calls": 0, "prompt_tokens": 0, "completion_tokens": 0})
+        tokens = ("prompt_tokens", "cached_tokens", "completion_tokens", "reasoning_tokens")
+        a = api.setdefault(f"{u['call']}:{u['model']}", {"calls": 0, **dict.fromkeys(tokens, 0)})
         a["calls"] += 1
-        a["prompt_tokens"] += u["prompt_tokens"] or 0
-        a["completion_tokens"] += u["completion_tokens"] or 0
+        for k in tokens:
+            a[k] += u.get(k) or 0
+        a.update({k: u[k] for k in ("endpoint", "provider") if u.get(k)})
+        if u.get("cost") is not None:
+            a["cost"] = round(a.get("cost", 0) + u["cost"], 6)
 gpus = [torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())]
 print(json.dumps({"stage": sys.argv[1], "seconds": int(float(sys.argv[2])), "commit": commit, "dirty": dirty,
                   "egolife_commit": up, "egolife_patch": hashlib.sha1(open("baselines/egorag/EgoLife.patch", "rb").read()).hexdigest()[:12],

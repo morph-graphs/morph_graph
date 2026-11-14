@@ -32,9 +32,9 @@ except ImportError:
 
 MEMORY = ["{video}_30sec.json", "{video}_l1_10min.json", "{video}_l2_1h.json", "{video}_l3_day.json"]
 # What upstream's call_gpt4 / call_deepseek read (egorag/utils/util.py, with ../EgoLife.patch): Azure when both
-# of its variables are set, else the provider's own API with a plain key.
-GPT_KEYS = [["AZURE_API_KEY", "AZURE_API_ENDPOINT"], ["OPENAI_API_KEY"]]
-DEEPSEEK_KEYS = [["AZURE_DEEPSEEK_KEY", "AZURE_DEEPSEEK_ENDPOINT"], ["DEEPSEEK_API_KEY"]]
+# of its variables are set, else the provider's own API with a plain key, else OpenRouter (README.md).
+GPT_KEYS = [["AZURE_API_KEY", "AZURE_API_ENDPOINT"], ["OPENROUTER_API_KEY"], ["OPENAI_API_KEY"]]
+DEEPSEEK_KEYS = [["AZURE_DEEPSEEK_KEY", "AZURE_DEEPSEEK_ENDPOINT"], ["OPENROUTER_API_KEY"], ["DEEPSEEK_API_KEY"]]
 
 
 def paid_api(deepseek):
@@ -43,7 +43,7 @@ def paid_api(deepseek):
     missing = [" + ".join(ways[-1]) for ways in need if not any(all(os.environ.get(v) for v in w) for w in ways)]
     if missing:
         print(f"this step calls paid APIs and its key is not set: export {' and '.join(missing)} "
-              "(or upstream's Azure variables; README.md). Nothing was called.", file=sys.stderr)
+              "(or OPENROUTER_API_KEY, or upstream's Azure variables; README.md). Nothing was called.", file=sys.stderr)
         sys.exit(4)
 
 
