@@ -32,7 +32,7 @@ run with exit code 6).
 | path | what |
 |---|---|
 | `Ego-R1/` | submodule: upstream [egolife-ai/Ego-R1](https://github.com/egolife-ai/Ego-R1), pinned at `69177ee` (`git submodule update --init baselines/egor1/Ego-R1`) |
-| `epic-morph.patch` | our three changes to upstream, applied to the submodule's files by `run_egor1.sh` on first use (so `git status` shows the submodule as modified; a morph-graphs fork with this as a branch would be cleaner): `video_llm` takes the Gemini model id from `EGOR1_GEMINI_MODEL` (upstream hard-codes `gemini-1.5-pro`) and no longer prints the tail of the key; `call_gpt4` (rag) and `GPT` (vlm) accept a plain `OPENAI_API_KEY` when no Azure endpoint is set |
+| `epic-morph.patch` | our three changes to upstream, applied to the submodule's files by `run_egor1.sh` on first use (so `git status` shows the submodule as modified; a morph-graphs fork with this as a branch would be cleaner): `video_llm` takes the Gemini model id from `EGOR1_GEMINI_MODEL` (upstream hard-codes `gemini-1.5-pro`) and no longer prints the tail of the key; `call_gpt4` (rag) and `GPT` (vlm) accept a plain `OPENAI_API_KEY` when no Azure endpoint is set, or else `OPENROUTER_API_KEY` (a client at OpenRouter's endpoint) |
 | `epic/prepare_clips.py` | 30 s clips with audio in the EgoLife layout upstream's tools read |
 | `epic/build_memory.py` | the question-independent memory: captions, then 10 min / 1 hour / 1 day summaries, in the format of upstream's released database (`Ego-R1/h-rag_database`) |
 | `epic/tools.py` | the three tools, calling upstream's functions in process, plus the streaming cutoff |
@@ -126,20 +126,49 @@ image with Apptainer. The job board (`coord/worker.py`) calls it with `MERIT_GPU
 | `GEMINI_API_KEY` | Gemini 2.5 Pro: captions (`build`), `video_llm` (`qa`, arm `gemini25pro`) |
 | `OPENAI_API_KEY` | GPT-4o and GPT-4.1 with a plain OpenAI key: summaries (`build`), `rag`, `vlm`, final answer, cutoff views (`qa`) |
 | `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY` | instead of `OPENAI_API_KEY`: an Azure OpenAI resource with deployments named `gpt-4o` and `gpt-4.1` (upstream's way; used when both are set) |
+| `OPENROUTER_API_KEY` | instead of both, when neither is set: the same GPT-4o and GPT-4.1 calls through OpenRouter (next section). Gemini never goes through it |
 | `HF_TOKEN` | `upload`, and `build`'s look in the results dataset |
 
 - **No stage may put a key on a command line**, in a file of this repo, in a job script or in a log. Keys are read
   from the environment of the process only; the worker that starts a task exports them from its own secret
   store (for a container: `--env GEMINI_API_KEY` by name, so the value comes from the caller's environment).
   `run_egor1.sh` takes no key argument, upstream's prints are dropped, and `api_usage.jsonl` holds token counts only.
-- Upstream's OpenAI clients are Azure-only; a plain OpenAI key works through `epic-morph.patch` (two small
-  changes, above). Our own client (`apis.gpt41`) takes either.
+- Upstream's OpenAI clients are Azure-only; a plain OpenAI key, or OpenRouter's, works through `epic-morph.patch`
+  (two small changes, above). Our own client (`apis.gpt41`) takes any of the three.
+- A stage that calls no model (`prep`, `firstturn`, `upload`) drops the model keys from its environment.
 - `build` needs no GPU (ffmpeg, network). `qa` needs one small GPU (the agent, about 8 GB) and network.
 - A stage without its keys exits with code 5 before any call, so a task handed to a pool without keys fails at
   once instead of half-running.
 - The job-board entries (`coord/master.py` `EXPERIMENTS`) do not exist yet: a paid row needs the board to know
   which pool holds keys.
 - `docker/run.sh` hands the keys to the container by name (docker `-e NAME`, apptainer `APPTAINERENV_NAME`).
+
+### Through OpenRouter (our own runs)
+
+With `OPENROUTER_API_KEY` in the environment and neither `OPENAI_API_KEY` nor the Azure pair, the GPT-4o and
+GPT-4.1 calls go through OpenRouter, so the row can be run on our cluster without an OpenAI account. Gemini 2.5
+Pro stays on Google's API with `GEMINI_API_KEY` on every route.
+
+```bash
+export GEMINI_API_KEY=... OPENROUTER_API_KEY=...   # from the job's secret store: never an argument, a file, a log or a commit
+unset OPENAI_API_KEY AZURE_OPENAI_API_KEY          # one gateway per run: with either set, OpenRouter's key is dropped
+bash baselines/egor1/run_egor1.sh build P05-20240425-201444 gemini25pro
+bash baselines/egor1/run_egor1.sh qa    P05-20240425-201444 gemini25pro batch10_agree2
+```
+
+- **What changes in the request.** The endpoint (`https://openrouter.ai/api/v1`; `OPENROUTER_BASE_URL` overrides
+  it), the key, the model id (`openai/gpt-4o`, `openai/gpt-4.1`) and one added field,
+  `provider: {"only": ["openai"], "allow_fallbacks": false}`: OpenAI itself answers, or the call fails. Prompts,
+  the `vlm` frame, temperature, top-p and token limits are what upstream sends.
+- **Where.** The client: `epic-morph.patch` for upstream's two (`call_gpt4` of `rag`, `GPT` of `vlm`), `apis.gpt41`
+  for the summaries, the cutoff views and the final answer. The model id and the provider pin: `apis.track()`,
+  the one wrapper every chat completion of the port already passes through, for a client that points at OpenRouter.
+- **What may differ from the direct API.** `openai/gpt-4o` and `openai/gpt-4.1` are OpenRouter's aliases; the
+  snapshot behind them is OpenRouter's choice, and the id each call answered with is recorded.
+- **What is recorded.** Each `api_usage.jsonl` line of a chat completion has `endpoint`, `cached` (input tokens
+  billed as cached) and, through OpenRouter, `provider` (who served the call) and `cost` (dollars charged);
+  `runs.jsonl` sums them per step and answering model. A `qa` line also has `q`, the question's key, so the
+  calls and cost of one question can be read off. Gemini lines have tokens only (Google returns no price).
 
 ## What comes back
 

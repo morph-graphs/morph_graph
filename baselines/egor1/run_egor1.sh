@@ -20,7 +20,8 @@
 # A stage that needs a paid API stops with exit code 5, before calling anything, when its key is not set:
 #   GEMINI_API_KEY                                Gemini 2.5 Pro
 #   AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY   an Azure OpenAI resource with deployments gpt-4o and gpt-4.1, or
-#   OPENAI_API_KEY                                a plain OpenAI key
+#   OPENAI_API_KEY                                a plain OpenAI key, or
+#   OPENROUTER_API_KEY                            alone: the same GPT calls through OpenRouter (README "Through OpenRouter")
 # Set them in the environment only (never on a command line or in a file of this repo).
 # Environment (see README.md):
 #   PY               python of the environment (env/setup_env.sh)
@@ -50,7 +51,11 @@ mkdir -p "$OUT" "$WORK/logs" "$WORK/locks" "$M/work"
 # our three changes to upstream (epic-morph.patch), applied once to the submodule's files. One task at a time, by a
 # lock beside the checkout (every task patching it shares that one); hunks already there are skipped.
 patched() { grep -q EGOR1_GEMINI_MODEL "$R/api/visual_tools/egor1_videollm_gemini/video_llm.py" \
-    && grep -q OPENAI_API_KEY "$R/api/rag/r1rag/utils.py" && grep -q OPENAI_API_KEY "$R/api/visual_tools/egor1_vlm/utils.py"; }
+    && grep -q OPENROUTER_API_KEY "$R/api/rag/r1rag/utils.py" && grep -q OPENROUTER_API_KEY "$R/api/visual_tools/egor1_vlm/utils.py"; }
+# a checkout patched before the OpenRouter route was added: the patch's hunks no longer fit it
+if ! patched && grep -q EGOR1_GEMINI_MODEL "$R/api/visual_tools/egor1_videollm_gemini/video_llm.py"; then
+    echo "$R has an earlier epic-morph.patch: restore it (git -C baselines/egor1/Ego-R1 checkout .) and run again"; exit 1
+fi
 ( flock 9; patched || patch -d "$R" -p1 -s --forward -r - --no-backup-if-mismatch < "$M/epic-morph.patch" ) 9>"$M/work/patch.lock" || true
 patched || { echo "could not apply $M/epic-morph.patch to $R (is the submodule at its pinned commit, and writable?)"; exit 1; }
 export EGOR1_SRC=$R
@@ -82,6 +87,13 @@ PYEOF
 }
 export EPIC ARM
 cd "$REPO"
+# keys: a stage that calls no model gets none; one gateway per run for the GPT calls (Azure, then OpenAI's key, win)
+case $STAGE in prep|firstturn|upload) unset GEMINI_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY AZURE_OPENAI_API_KEY ;; esac
+if [ -n "${OPENAI_API_KEY:-}" ] || { [ -n "${AZURE_OPENAI_ENDPOINT:-}" ] && [ -n "${AZURE_OPENAI_API_KEY:-}" ]; }; then
+    unset OPENROUTER_API_KEY
+elif [ -n "${OPENROUTER_API_KEY:-}" ]; then
+    echo "gpt-4o and gpt-4.1 through OpenRouter (openai/<model>, provider OpenAI only)"
+fi
 
 prep() {
     log prep; local t=$SECONDS

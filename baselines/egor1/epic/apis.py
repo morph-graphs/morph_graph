@@ -10,7 +10,11 @@ Keys come from the environment only, never from a command line or a file of the 
   GEMINI_API_KEY                                   Gemini
   AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_API_KEY     Azure OpenAI with deployments named gpt-4o and gpt-4.1 (upstream's
                                                    way), or
-  OPENAI_API_KEY                                   a plain OpenAI key (needs ../epic-morph.patch on upstream)
+  OPENAI_API_KEY                                   a plain OpenAI key (needs ../epic-morph.patch on upstream), or
+  OPENROUTER_API_KEY                               without the ones above: the same GPT calls through OpenRouter
+                                                   (OPENROUTER_BASE_URL, default https://openrouter.ai/api/v1) as
+                                                   openai/gpt-4o and openai/gpt-4.1, pinned to the provider OpenAI
+                                                   with no fallback (track). Gemini never goes through it.
 A step whose key is missing stops with exit code 5 before doing anything."""
 import datetime
 import json
@@ -29,12 +33,16 @@ MODELS = {   # role -> model; in the paper / official repo (commit 69177ee) both
 }
 GEMINI_SHUTDOWN = datetime.date(2026, 12, 1)   # gemini-2.5-pro, Google's deprecation page, read 2026-11-13
 USAGE = None   # path of a jsonl: one line per API call of this process (track), for the real cost of a run
+OPENROUTER_URL = os.environ.get("OPENROUTER_BASE_URL") or "https://openrouter.ai/api/v1"
+PROVIDER = {"only": ["openai"], "allow_fallbacks": False}   # OpenAI itself answers, or the call fails
 
 
 def openai_keys():
     if os.environ.get("AZURE_OPENAI_ENDPOINT") and os.environ.get("AZURE_OPENAI_API_KEY"):
         return "azure"
-    return "openai" if os.environ.get("OPENAI_API_KEY") else None
+    if os.environ.get("OPENAI_API_KEY"):
+        return "openai"
+    return "openrouter" if os.environ.get("OPENROUTER_API_KEY") else None
 
 
 def need(*roles):
@@ -48,7 +56,8 @@ def need(*roles):
             if datetime.date.today() >= GEMINI_SHUTDOWN:
                 missing.append(f"{r} = {m}: shut down on {GEMINI_SHUTDOWN} (requests go to another model); choose a model first")
         elif m.startswith("gpt") and not openai_keys():
-            missing.append(f"{r} = {m}: set AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY, or OPENAI_API_KEY")
+            missing.append(f"{r} = {m}: set AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY, or OPENAI_API_KEY, "
+                           "or OPENROUTER_API_KEY (through OpenRouter)")
     if missing:
         for x in missing:
             print(f"needs a paid API: {x}", file=sys.stderr)
@@ -56,13 +65,14 @@ def need(*roles):
 
 
 ROLE = None    # the step making the current call (caption, summary, rag, video_llm, vlm, answer)
+QUESTION = None   # qa: the key of the question the current call is made for
 
 
-def _log(asked, got, tin, tout, think=0):
+def _log(asked, got, tin, tout, think=0, **more):
     if USAGE:
         with open(USAGE, "a") as f:
             f.write(json.dumps({"role": ROLE, "asked": asked, "model": got, "in": tin, "out": tout, "thinking": think,
-                                "t": int(time.time()), "run": os.environ.get("EGOR1_RUN")}) + "\n")
+                                "t": int(time.time()), "run": os.environ.get("EGOR1_RUN"), "q": QUESTION, **more}) + "\n")
 
 
 class WrongModel(SystemExit):
@@ -74,7 +84,9 @@ def track():
     """Log every chat completion and Gemini generation of this process, upstream's included (their clients are
     built inside upstream's functions): the model that answered and the tokens, thinking counted apart. A Gemini
     reply from a model other than the one asked is an error: after its shutdown date gemini-2.5-pro is routed
-    to another model (WrongModel). Wraps the two SDK methods once; changes no request."""
+    to another model (WrongModel). Wraps the two SDK methods once. A request is changed only when its client
+    points at OpenRouter (apis.gpt41, and upstream's clients through our patch): the model becomes openai/<model>
+    and the provider pin is added; the line then has the provider that served it and the dollars charged."""
     from google.genai import models as gm
     from openai.resources.chat.completions import Completions
     if getattr(Completions.create, "egor1", False):
@@ -82,9 +94,16 @@ def track():
     chat, gen = Completions.create, gm.Models.generate_content
 
     def create(self, *a, **k):
+        endpoint = str(self._client.base_url)
+        if endpoint.rstrip("/") == OPENROUTER_URL.rstrip("/"):
+            k["model"] = "openai/" + k["model"]
+            k["extra_body"] = {**(k.get("extra_body") or {}), "provider": PROVIDER}
         r = chat(self, *a, **k)
         u = getattr(r, "usage", None)
-        _log(k.get("model"), getattr(r, "model", None), u.prompt_tokens if u else 0, u.completion_tokens if u else 0)
+        _log(k.get("model"), getattr(r, "model", None), u.prompt_tokens if u else 0, u.completion_tokens if u else 0,
+             cached=getattr(getattr(u, "prompt_tokens_details", None), "cached_tokens", 0) or 0, endpoint=endpoint,
+             provider=(getattr(r, "model_extra", None) or {}).get("provider"),      # OpenRouter reports both
+             cost=(getattr(u, "model_extra", None) or {}).get("cost"))
         return r
 
     def generate_content(self, *a, **k):
@@ -101,7 +120,9 @@ def track():
 
 def usage_summary(path, run=None):
     """{"<role> <model that answered>": {"calls", "in", "out", "thinking"}} of the log's lines (of one stage's
-    run id, EGOR1_RUN, when given: jobs of one video can share the log)."""
+    run id, EGOR1_RUN, when given: jobs of one video can share the log). Chat completions also have "cached"
+    (input tokens billed as cached) and "endpoint"; through OpenRouter "provider" (who served the calls) and
+    "cost" (dollars charged, summed)."""
     out = {}
     if os.path.exists(path):
         with open(path) as f:
@@ -113,18 +134,29 @@ def usage_summary(path, run=None):
                 d["calls"] += 1
                 for k in ("in", "out", "thinking"):
                     d[k] += x.get(k) or 0
+                if x.get("endpoint"):
+                    d["cached"] = d.get("cached", 0) + (x.get("cached") or 0)
+                    d["endpoint"] = x["endpoint"]
+                if x.get("provider"):
+                    d["provider"] = x["provider"]
+                if x.get("cost") is not None:
+                    d["cost"] = round(d.get("cost", 0) + x["cost"], 6)
     return out
 
 
 def gpt41(role, messages, max_tokens, temperature=1.0, top_p=1.0):
-    """One GPT-4.1 chat completion (as infer_bench_summ.py's summ_client; Azure, or a plain OpenAI key)."""
-    if openai_keys() == "azure":
+    """One GPT-4.1 chat completion (as infer_bench_summ.py's summ_client; Azure, a plain OpenAI key, or OpenRouter)."""
+    keys = openai_keys()
+    if keys == "azure":
         from openai import AzureOpenAI
         client = AzureOpenAI(azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"], api_key=os.environ["AZURE_OPENAI_API_KEY"],
                              api_version="2025-01-01-preview")
-    else:
+    elif keys == "openai":
         from openai import OpenAI
         client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    else:      # track() names the model openai/gpt-4.1 and pins the provider
+        from openai import OpenAI
+        client = OpenAI(api_key=os.environ["OPENROUTER_API_KEY"], base_url=OPENROUTER_URL)
     global ROLE
     ROLE = role
     track()

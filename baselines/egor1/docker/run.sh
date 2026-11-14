@@ -8,7 +8,8 @@
 # `-e NAME`, apptainer APPTAINERENV_NAME), so a key never appears on a command line, in a file, in the image or
 # in a log. A paid stage without its keys exits with code 5 before calling anything.
 #   GEMINI_API_KEY   Gemini 2.5 Pro: the captions (build) and video_llm (qa)
-#   OPENAI_API_KEY   GPT-4.1 and GPT-4o (build, qa); or AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_API_KEY
+#   OPENAI_API_KEY   GPT-4.1 and GPT-4o (build, qa); or AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_API_KEY; or
+#                    OPENROUTER_API_KEY alone: the same calls through OpenRouter (README "Through OpenRouter")
 #   HF_TOKEN         upload, and build's look in the results dataset; or `hf auth login` on the host (the cache,
 #                    with its token, is mounted)
 #
@@ -27,7 +28,10 @@
 #   The job board (coord/worker.py) sets MERIT_GPU / MERIT_RUNTIME, read here when the EGOR1_ ones are unset.
 #   HDEPIC_VIDEOS    videos on the host (default $EPIC_MORPH_DIR/data/HD-EPIC/videos), mounted read-only at /videos
 #   EGOR1_OUT, EGOR1_WORK  optional, paths inside the container (e.g. /repo/baselines/egor1/work/check)
+#   EGOR1_REPO_COMMIT, EGOR1_UPSTREAM_COMMIT, EGOR1_EPIC_COMMIT  for runs.jsonl when a checkout has no .git (a
+#                    synced copy): the commits of this repo, of the Ego-R1 submodule and of epic-morph
 #   passed through when set: MERIT_HF_REPO EGOR1_TAG EGOR1_FETCH EGOR1_LIMIT EGOR1_AGENT THREADS HF_HUB_OFFLINE
+#                    OPENROUTER_BASE_URL
 set -euo pipefail
 STAGE=${1:?usage: run.sh <stage> <video> <arm> [bank]}; ARM=${3:?usage: run.sh <stage> <video> <arm> [bank]}
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
@@ -45,16 +49,17 @@ mkdir -p "$HF"
 VIDEOS=${HDEPIC_VIDEOS:-$EPIC/data/HD-EPIC/videos}
 [ -d "$VIDEOS" ] || { echo "no videos at $VIDEOS (set HDEPIC_VIDEOS; epic-morph v3/DATA.md)"; exit 1; }
 BINDS=("$REPO:/repo" "$EPIC:/epic-morph" "$HF:/hf" "$(cd -P "$VIDEOS" && pwd):/videos:ro")
-# a folder that is not a git checkout (a synced copy) records an empty commit instead of stopping the run
+# a folder that is not a git checkout (a synced copy) records the commit it is given, or an empty one, instead of
+# stopping the run
 ENVS=(EPIC_MORPH_DIR=/epic-morph HDEPIC_VIDEOS=/videos HF_HOME=/hf
-      EGOR1_REPO_COMMIT="$(git -C "$REPO" rev-parse HEAD 2>/dev/null || true)"
-      EGOR1_EPIC_COMMIT="$(git -C "$EPIC" rev-parse HEAD 2>/dev/null || true)"
-      EGOR1_UPSTREAM_COMMIT="$(git -C "$REPO/baselines/egor1/Ego-R1" rev-parse HEAD 2>/dev/null || true)")
+      EGOR1_REPO_COMMIT="${EGOR1_REPO_COMMIT:-$(git -C "$REPO" rev-parse HEAD 2>/dev/null || true)}"
+      EGOR1_EPIC_COMMIT="${EGOR1_EPIC_COMMIT:-$(git -C "$EPIC" rev-parse HEAD 2>/dev/null || true)}"
+      EGOR1_UPSTREAM_COMMIT="${EGOR1_UPSTREAM_COMMIT:-$(git -C "$REPO/baselines/egor1/Ego-R1" rev-parse HEAD 2>/dev/null || true)}")
 if [ -n "${MERIT_WORK:-}" ]; then   # the shared work folder: Ego-R1's own subfolder in it
     umask 002; mkdir -p "$MERIT_WORK"; BINDS+=("$(cd -P "$MERIT_WORK" && pwd):/work"); export EGOR1_WORK=${EGOR1_WORK:-/work/egor1}
 fi
-KEYS=(GEMINI_API_KEY OPENAI_API_KEY AZURE_OPENAI_ENDPOINT AZURE_OPENAI_API_KEY HF_TOKEN)
-PASS=(MERIT_HF_REPO EGOR1_TAG EGOR1_FETCH EGOR1_LIMIT EGOR1_AGENT EGOR1_OUT EGOR1_WORK THREADS HF_HUB_OFFLINE)
+KEYS=(GEMINI_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY AZURE_OPENAI_ENDPOINT AZURE_OPENAI_API_KEY HF_TOKEN)
+PASS=(MERIT_HF_REPO EGOR1_TAG EGOR1_FETCH EGOR1_LIMIT EGOR1_AGENT EGOR1_OUT EGOR1_WORK THREADS HF_HUB_OFFLINE OPENROUTER_BASE_URL)
 if [ "$RUNTIME" = apptainer ]; then
     case $IMAGE in *.sif) ;; *) IMAGE=docker://$IMAGE ;; esac
     # through APPTAINERENV_* (the environment), not --env: a command line, keys included, is visible in `ps`

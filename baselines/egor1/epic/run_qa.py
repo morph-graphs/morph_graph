@@ -138,6 +138,7 @@ def main():
     first = []
     for r in todo:
         cut = secs(r["query_time"]["time"])
+        apis.QUESTION = r["key"]               # in every api_usage.jsonl line of this question, its cutoff view included
         choices = {L: r[f"choice_{L.lower()}"] for L in "ABCD" if r.get(f"choice_{L.lower()}")}
         question = (f"{r['question']} <timestamp>DAY1_{r['query_time']['time']}</timestamp>\n"
                     + "\n".join(f"{L}. {c}" for L, c in choices.items()))
