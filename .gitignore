@@ -273,3 +273,6 @@ baselines/hippomm/work/
 !baselines/hippomm/env/
 baselines/hippomm/results/
 baselines/hippomm/.patch.lock
+
+# coord/sheet_update.py: its default download cache
+.sheet_cache/
