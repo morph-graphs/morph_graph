@@ -28,8 +28,44 @@ import time
 
 RATE_WINDOW_H = 6
 ACC_STALE_MIN = 90   # the sheet updater's cron writes the accuracy file every 30 min: three missed runs is stale
-NAMES = {"merit": "MERIT", "magic": "MAGIC-Video", "worldmm": "WorldMM", "m3agent": "M3-Agent", "api": "API"}
-MODELS = {"m8": "8B", "m27": "27B"}
+# What a reader calls each method: the baseline's name, and its arm's models (the master's comments and each
+# baselines/<b>/README.md). The one place for these names: experiments, work queue, running now, problems and accuracy
+# all go through system() / method_name(). An unlisted baseline or arm shows its id.
+NAMES = {"merit": "MERIT", "magic": "MAGIC-Video", "worldmm": "WorldMM", "m3agent": "M3-Agent", "api": "API",
+         "direct": "Direct (video model)", "egor1": "Ego-R1", "egagent": "EGAgent", "egorag": "EgoRAG", "hippomm": "HippoMM",
+         "rekv": "ReKV", "vst": "VST", "vgent": "Vgent"}
+ARMS = {"m8": "8B", "m27": "27B",
+        # reported configurations: one gpt-5-mini memory per video (g5m), answered by another model
+        "g5m": "GPT-5-mini memory", "g5m-q8": "GPT-5-mini memory · Qwen3-VL-8B answers",
+        "g5m-q27": "GPT-5-mini memory · Qwen3.8-27B answers", "g5m-g5": "GPT-5-mini memory · GPT-5 answers",
+        "oss120": "GPT-OSS-120B memory", "oss120-flash": "GPT-OSS-120B · Qwen3.5-Flash", "oss120-q27": "GPT-OSS-120B · Qwen3.8-27B",
+        # the paid rows, as published
+        "gemini25pro": "Gemini 2.5 Pro", "gpt41": "GPT-4.1", "egogpt_gpt4o": "EgoGPT + GPT-4o", "q25vl7b-gpt4o": "Qwen2.5-VL-7B + GPT-4o",
+        # closed-source API models (baselines/api configs)
+        "gemini-3.1-flash-lite-high": "Gemini 3.1 Flash-Lite", "gemini-3.6-flash-high": "Gemini 3.6 Flash",
+        "gemini-3.8-flash-high": "Gemini 3.8 Flash", "gpt-5-f1024": "GPT-5 · up to 1,024 frames"}
+# the plain video model's arms are <model>-f<frames> (baselines/direct)
+DIRECT_MODELS = {"qwen3vl-8b": "Qwen3-VL-8B", "qwen38-27b": "Qwen3.8-27B", "qwen35-9b": "Qwen3.5-9B",
+                 "qwen35-35b-a3b": "Qwen3.5-35B-A3B", "molmo2-8b": "Molmo2-8B"}
+
+
+def method_name(b):
+    return NAMES.get(b, b)
+
+
+def arm_label(arm):
+    if arm in ARMS:
+        return ARMS[arm]
+    m = re.fullmatch(r"(.+)-f(\d+)", arm or "")
+    return f"{DIRECT_MODELS[m.group(1)]} · {m.group(2)} frames" if m and m.group(1) in DIRECT_MODELS else arm
+
+
+def system(b, arm):
+    """'MERIT 8B', 'WorldMM · GPT-5-mini memory · Qwen3-VL-8B answers', 'Gemini 3.6 Flash' (an API model is its name)."""
+    label = arm_label(arm)
+    if b == "api":
+        return label
+    return f"{method_name(b)} {label}" if label in ("8B", "27B") else f"{method_name(b)} · {label}"
 # pool -> (site, who runs it, hardware, queue). A reader sees only the site; the queue is detail text
 # ("Nexus · vulcan-sailon"), so a renamed pool (nexus -> nexus-tron, #28) reads the same as before.
 POOLS = {   # the old Nexus names (nexus, nexus-test, nexus-slurm) until their last claims end (renamed in #28)
@@ -142,7 +178,7 @@ def _iso(t):
 def experiment(b, arm, stage, bank):
     """The label a person reads: 'MERIT 27B · memory build', 'API gpt-5-f1024 · answers · Pilot (10 videos)'."""
     what = "memory build" if stage == "build" else f"answers · {bank_label(bank)}"
-    return f"{NAMES.get(b, b)} {MODELS.get(arm, arm)} · {what}"
+    return f"{system(b, arm)} · {what}"
 
 
 def parse_task(tid):
@@ -257,9 +293,9 @@ def update(out, raw, live, nxq, built_src):
                        and (parse_task(d)[0], parse_task(d)[1], parse_task(d)[4]) not in built]
             if pending:
                 state = "waiting"
-                note = "waits for the " + ", ".join(experiment(*parse_task(d)[:4]).split(" · ")[0] + " memory" for d in pending)
+                note = "waits for its memory: " + ", ".join(system(*parse_task(d)[:2]) for d in pending)
         task_rows.append(dict(id=x["id"], experiment=experiment(x["baseline"], x["arm"], x["stage"], x.get("bank")),
-                              method=NAMES.get(x["baseline"], x["baseline"]), model=MODELS.get(x["arm"], x["arm"]),
+                              method=method_name(x["baseline"]), model=arm_label(x["arm"]),
                               stage="memory build" if x["stage"] == "build" else "answers", bank=x.get("bank") or "",
                               video=x["video"], state=state, on=on, where=where, since=since,
                               can_run_on=", ".join(sorted({site(p) for p in x.get("pools", [])}, key=lambda s_: (SITES + [s_]).index(s_))), failures=fails, note=note,
@@ -290,14 +326,17 @@ def update(out, raw, live, nxq, built_src):
         s = r["state"]
         e[{"running": "running", "queued": "queued", "claimed": "claimed", "lease lapsed": "claimed", "failed": "failing",
            "held": "failing", "cancelled": "ready", "waiting": "waiting"}.get(s, "ready")] += 1
-    for b, arm, v in raw["built"]:
+    # every memory the master means to build (also those it holds off the board), and every one built
+    targets = {tuple(k.split("|")): set(v) for k, v in (raw.get("build_targets") or {}).items()}
+    held = {tuple(h) for h in raw.get("held") or []}
+    for b, arm in list(targets) + [(b, arm) for b, arm, _ in raw["built"]]:
         k = experiment(b, arm, "build", None)
-        exps.setdefault(k, dict(experiment=k, method=NAMES.get(b, b), model=MODELS.get(arm, arm), stage="memory build", bank="",
+        exps.setdefault(k, dict(experiment=k, method=method_name(b), model=arm_label(arm), stage="memory build", bank="",
                                 key=(b, arm, "build", None), open=0, running=0, queued=0, claimed=0, failing=0, waiting=0,
                                 ready=0, pools="", first=10 ** 6))
     for b, arm, v, bank in raw["answered"]:
         k = experiment(b, arm, "qa", bank)
-        exps.setdefault(k, dict(experiment=k, method=NAMES.get(b, b), model=MODELS.get(arm, arm), stage="answers", bank=bank,
+        exps.setdefault(k, dict(experiment=k, method=method_name(b), model=arm_label(arm), stage="answers", bank=bank,
                                 key=(b, arm, "qa", bank), open=0, running=0, queued=0, claimed=0, failing=0, waiting=0,
                                 ready=0, pools="", first=10 ** 6))
     matrix = []
@@ -311,17 +350,22 @@ def update(out, raw, live, nxq, built_src):
         e["total"] = e["done"] + e["open"]
         # the headline in natural units: videos with a memory, questions with a valid answer (task counts stay as detail)
         bq = (raw.get("bank_questions") or {}).get(bank or "", {})
-        if stage == "build" or not bq:
+        e["held"] = (b, arm, stage) in held
+        if stage == "build" and (b, arm) in targets:   # out of the videos it is meant to cover, not done + open
+            mine = {k[2] for k in built if k[0] == b and k[1] == arm}
+            e["unit"], e["n"], e["of"] = "videos", len(mine & targets[b, arm]), len(targets[b, arm])
+        elif stage == "build" or not bq:
             e["unit"], e["n"], e["of"] = "videos", e["done"], e["total"]
         else:
             e["unit"], e["of"] = "questions", sum(bq.values())
             e["n"] = sum(a[4] for a in raw.get("answered_q", []) if (a[0], a[1], a[3]) == (b, arm, bank))
         e["pct"] = round(100 * e["n"] / e["of"], 1) if e["of"] else None
-        e["system"] = f"{NAMES.get(b, b)} {MODELS.get(arm, arm)}"
+        e["system"] = system(b, arm)
         rph = rate.get(e["experiment"])
         e["rate_per_h"] = round(rph, 1) if rph else None
         e["eta_h"] = round(e["open"] / rph, 1) if rph and e["open"] else None
-        e["state"] = ("done" if not e["open"] else "failing" if e["failing"] else
+        e["state"] = ("built off the board" if e["held"] and not e["open"] and e["n"] < e["of"] else
+                      "done" if not e["open"] else "failing" if e["failing"] else
                       "running" if e["running"] else "queued" if e["queued"] or e["claimed"] else
                       "waiting on builds" if e["waiting"] == e["open"] else "partly done" if e["done"] else "not started")
         matrix.append(e)
@@ -446,13 +490,14 @@ def accuracy(out, raw, problem=""):
     note = "; ".join(x for x in (problem, f"scores written {int(age)} min ago (expected every 30)" if age > ACC_STALE_MIN else "") if x)
     prov = dict(state=state, state_note=note, scored_at=meta["written_utc"], dataset_revision=(meta.get("dataset_revision") or "")[:12],
                 bank_commit=(meta.get("bank_commit") or "")[:12])   # no snapshot time: unchanged scores, unchanged file
-    label = {}
+    label, name = {}, {}
     for r in raw["runs"]:
-        mem = r.get("memory_model") if r.get("memory_model") not in (None, "", "--") else ""
-        # asked (end / streaming / both, #58): a run has three rows, one per kind of question
-        label[r["row_key"]] = " · ".join(str(x) for x in (r.get("method"), mem, r.get("tag"), r.get("asked")) if x)
-    W("accuracy.json", [dict(r, run=label[r["row_key"]], bank_label=bank_label(r.get("bank")), bank_order=bank_order(r.get("bank")), **prov)
-                        for r in raw["runs"]])
+        # the board's name for the method (system()), as everywhere else on the page; the sheet's own method / model
+        # columns stay as detail. asked (end / streaming / both, #58): a run has three rows, one per kind of question
+        name[r["row_key"]] = system(r.get("baseline"), r.get("arm")) if r.get("baseline") else (r.get("method") or "")
+        label[r["row_key"]] = " · ".join(str(x) for x in (name[r["row_key"]], r.get("tag"), r.get("asked")) if x)
+    W("accuracy.json", [dict(r, run=label[r["row_key"]], system=name[r["row_key"]], bank_label=bank_label(r.get("bank")),
+                             bank_order=bank_order(r.get("bank")), **prov) for r in raw["runs"]])
     W("accuracy_breakdown.json", [dict(b, run_label=label.get(b["run"], b["run"]), bank_label=bank_label(b.get("bank")), state=state)
                                   for b in raw.get("breakdown", [])])
     return state

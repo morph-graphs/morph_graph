@@ -227,7 +227,7 @@
     </div>
     <div class="jb-tablewrap">
       <table class="jb-table" data-source="accuracy" data-row-key="row_key">
-        <thead><tr><th data-field="method">Method</th><th data-field="memory_model">Memory model</th><th data-field="reasoning_model">Reasoning model</th><th>Answered so far</th><th data-field="q_answered" class="jb-num">Answered</th><th data-field="q_in_bank" class="jb-num">Questions</th><th data-field="n_right" class="jb-num">Right</th><th>Accuracy on answered, 0 to 100%</th><th data-field="acc_answered_pct" class="jb-num">Accuracy</th><th data-field="ci95_lo_pct" class="jb-num">95% interval</th><th data-field="acc_all_pct" class="jb-num jb-detail">Of all</th><th data-field="blind_acc_answered_pct" class="jb-num">Floor</th><th data-field="chance_pct" class="jb-num jb-detail">Chance</th><th data-field="note">Note</th></tr></thead>
+        <thead><tr><th data-field="system">Method</th><th data-field="memory_model">Memory model</th><th data-field="reasoning_model">Reasoning model</th><th>Answered so far</th><th data-field="q_answered" class="jb-num">Answered</th><th data-field="q_in_bank" class="jb-num">Questions</th><th data-field="n_right" class="jb-num">Right</th><th>Accuracy on answered, 0 to 100%</th><th data-field="acc_answered_pct" class="jb-num">Accuracy</th><th data-field="ci95_lo_pct" class="jb-num">95% interval</th><th data-field="acc_all_pct" class="jb-num jb-detail">Of all</th><th data-field="blind_acc_answered_pct" class="jb-num">Floor</th><th data-field="chance_pct" class="jb-num jb-detail">Chance</th><th data-field="note">Note</th></tr></thead>
         <tbody data-draw="acc-runs"></tbody>
       </table>
     </div>
@@ -384,7 +384,8 @@ dash.draw('mem', (e) => {
   e.replaceChildren();
   if (m.status !== 'ok') { e.textContent = '—'; return; }
   for (const x of m.data.filter((r) => r.stage === 'memory build')) {
-    const sub = +x.open ? [x.running && `${x.running} running`, (+x.queued + +x.claimed) && `${+x.queued + +x.claimed} waiting`, x.failing && `${x.failing} failed`].filter(Boolean).join(' · ') : 'all built';
+    const sub = x.state === 'built off the board' ? 'built off the board (Slurm arrays on Nexus)'
+      : +x.open ? [x.running && `${x.running} running`, (+x.queued + +x.claimed) && `${+x.queued + +x.claimed} waiting`, x.failing && `${x.failing} failed`].filter(Boolean).join(' · ') : +x.n >= +x.of ? 'all built' : '';
     e.appendChild(progRow(x.system, sub, x.n, x.of, 'videos', +x.failing > 0));
   }
 });
@@ -594,7 +595,7 @@ dash.draw('acc-runs', (body) => {
   for (const x of shown.slice(0, accView.shown)) {
     const tr = el('tr'); tr.dataset.key = x.row_key; n++;
     const partial = isTrue(x.partial);
-    const m = el('td', '', x.method || x.row_key); if (x.tag) { m.appendChild(document.createTextNode(' ')); m.appendChild(el('span', 'jb-chip', x.tag)); }
+    const m = el('td', '', x.system || x.method || x.row_key); if (x.tag) { m.appendChild(document.createTextNode(' ')); m.appendChild(el('span', 'jb-chip', x.tag)); }
     if (x.asked) { m.appendChild(document.createTextNode(' ')); const a = el('span', 'jb-chip' + (isTrue(x.provisional) ? ' is-warn' : ''), x.asked + (isTrue(x.provisional) ? ', provisional' : '')); m.appendChild(a); }
     tr.appendChild(m);
     const blank = (v) => v && v !== '--' ? v : '—';   // the sheet writes -- for no memory model
