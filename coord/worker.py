@@ -64,7 +64,7 @@ exit codes; with --sbatch a task whose `sbatch --wait` died with the old worker 
 its job has ended sacct decides (COMPLETED 0:0: done; anything else: failed).
 
 The Hub allows a repository 128 commits an hour, shared by every pool: a cycle with nothing to report but renewed
-leases and the heartbeat commits every 10 minutes at most, and when the Hub refuses a read or a commit (429, or the
+leases and the heartbeat commits every 20 minutes at most, and when the Hub refuses a read or a commit (429, or the
 network is down) the worker waits for the time it names, or a few minutes, and goes on. It never stops for that.
 """
 import argparse
@@ -113,7 +113,7 @@ def has_env(task):
     return all(isinstance(e, str) and any(os.environ.get(x) for x in e.split("|")) for e in task.get("needs_env") or [])
 
 
-HEARTBEAT_S = 600   # a cycle that changes nothing but leases and the heartbeat commits at most this often
+HEARTBEAT_S = 1200   # a cycle that changes nothing but leases and the heartbeat commits at most this often
 
 
 def board_wait(e, what):
@@ -511,7 +511,8 @@ def main():
         mine.update(pool=a.pool, host=host, slots=a.slots, launcher=a.launcher, updated=jobs.iso(), queues=sorted(queues or []),
                     running=sum(1 for c in claims.values() if c["status"] == "running"))
         # nothing to report but renewed leases and the heartbeat: commit that every HEARTBEAT_S at most (leases last
-        # LEASE_S, three times as long), since the Hub allows a repository 128 commits an hour, shared by every pool
+        # LEASE_S, 1.5 times as long), since the Hub allows a repository 128 commits an hour, shared by every pool (20 min
+        # since 2026-11-14: 10 min left ~20 workers about 20 commits an hour for real changes)
         if start or substance(mine) != before or jobs.now() - last_commit >= HEARTBEAT_S:
             try:
                 ok = jobs.commit({f"pools/{a.pool}.json": mine}, head, f"{a.pool}: {len(start)} claimed")
