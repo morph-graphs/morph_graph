@@ -16,3 +16,12 @@
 [submodule "baselines/worldmm/WorldMM"]
 	path = baselines/worldmm/WorldMM
 	url = https://github.com/morph-graphs/WorldMM.git
+[submodule "baselines/vst/VST"]
+	path = baselines/vst/VST
+	url = https://github.com/1ranGuan/VST.git
+[submodule "baselines/vgent/Vgent"]
+	path = baselines/vgent/Vgent
+	url = https://github.com/xiaoqian-shen/Vgent
+[submodule "baselines/egor1/Ego-R1"]
+	path = baselines/egor1/Ego-R1
+	url = https://github.com/egolife-ai/Ego-R1

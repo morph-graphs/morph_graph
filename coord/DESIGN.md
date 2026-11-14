@@ -176,7 +176,7 @@ What a worker needs for qa, beyond what builds need:
 
 Added 2026-11-13. `EXPERIMENTS` lists build + qa (`t2_agree2`) for MERIT, MAGIC-Video and WorldMM, both arms each,
 in that order (the order is the priority). Pools per (baseline, arm) are in `master.POOLS`: every m8 needs one GPU
-of 40 GB or more (the Nexus A6000 pools, wriva, max); every m27 needs an 80 GB GPU (wriva, max, zaratan), and only
+of 40 GB or more (the Nexus A6000 pools, wriva, max, zaratan); every m27 needs an 80 GB GPU (wriva, max, zaratan), and only
 MERIT's m27 also goes to arm00 (the images are x86; MERIT alone has a native aarch64 environment there). MAGIC's
 build depends on MERIT's build of the same video and arm while that is listed, since it reuses MERIT's captions.
 A memory counts as built when its folder has `runs.jsonl` and the baseline's last memory file (`MEMORY_DONE`).
@@ -187,3 +187,28 @@ failures. All baselines' `docker/run.sh` read the worker's settings: `MERIT_GPU`
 worker.py), `MERIT_SIF_DIR` (a folder of `<baseline>_<arm>.sif`), `MERIT_HF_CACHE` (the models) and `MERIT_WORK`
 (the cluster's shared work folder; MAGIC and WorldMM work in its `magic/` and `worldmm/` subfolders). Each
 baseline's own `MAGIC_*` / `WORLDMM_*` variable wins when set.
+
+## One worker per person, many queues
+
+Added 2026-11-13. A person on a Slurm cluster runs one worker, `worker.py --pool <person> --queues <file>`, not one
+per queue. The file lists their queues, each with its sbatch arguments and the arms its GPU fits
+(`coord/nexus_queues.json`: vulcan-sailon A6000, vulcan-high-h200 H200, scavenger A6000 and L40S, cml-scavenger A6000,
+tron QoS high; `m8` everywhere, `m27` on the H200 only). The pool is listed in `master.POOLS` for both arms, and the
+worker claims only the tasks one of its queues fits, so the master needs no per-person GPU knowledge.
+
+Each claimed task is submitted to every queue that fits it at once, all copies under the job name `board-<task id>`.
+The job's first line is `coord/slurm_guard.sh`: the first copy to start creates the marker `<task>.ran` in the
+worker's state folder (noclobber, so two copies starting in the same second cannot both win) and cancels the
+copies still pending; a copy that starts later exits 0 without work, and the winner restarting after a requeue
+keeps the task. The winner writes the task's exit code to `<task>.rc`. The worker keeps the copies' ids in
+`<task>.jobs` and runs one `squeue` per cycle: it cancels copies left over after a winner exists, records the
+queue that ran the task in the claim (`queue`), marks it done or failed from `<task>.rc`, and failed when every copy
+left the queue without an exit code (time limit, OOM, preemption without requeue). This is the house rule "submit
+to two or three queues, the first to start cancels the rest", done per task by the worker.
+
+`--slots` still caps tasks, not copies: 8 slots over 6 fitting queues can hold 48 pending jobs, well inside
+Nexus's 500 per user and partition. A plain `--sbatch` worker (one queue, `sbatch --wait`) works as before.
+
+Starting one on Nexus (`coord/nexus_worker.sbatch` has the details): a morph_graph checkout of main in a worker
+folder on `/fs`, an HF token in a mode-600 file, then
+`sbatch --output=$W/logs/%x-%j.out --export=ALL,POOL=<person>,W=$W,SLOTS=8 $W/mg/coord/nexus_worker.sbatch`.

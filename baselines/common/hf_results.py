@@ -10,6 +10,9 @@ set and variant answered from it.
   old memory remain. Run it after the video's stages have finished.
 - `fetch-memory` copies the dataset's memory into a local folder (exit 3 when there is none), so `build` does
   not redo it on another machine.
+- With MERIT_OUTBOX=<name> set, `upload` touches nothing remote: it copies the folder to <checkout>/outbox/<name>/
+  with an `.upload.json` (written last: the folder is complete), for machines whose jobs cannot reach the dataset
+  (Zaratan); `relay --dir <that folder>` uploads it later from a machine that can, exactly as `upload` would.
 - `download` fetches a whole folder (e.g. the batch10 reference) to <dest>/merit/<arm>/<video>/, so
   MERIT_OUT=<dest>/merit lets run_merit.sh use it. The token comes from HF_TOKEN or the cached `hf auth login`; it needs write access
 for upload. MERIT_HF_REPO picks another dataset.
@@ -17,10 +20,12 @@ for upload. MERIT_HF_REPO picks another dataset.
     python baselines/common/hf_results.py upload       --baseline merit --arm m8 --video <V> --dir <local folder>
     python baselines/common/hf_results.py fetch-memory --baseline merit --arm m8 --video <V> --dir <local folder>
     python baselines/common/hf_results.py download     --baseline merit --arm m8 --video <V> --dest <local root>
+    python baselines/common/hf_results.py relay        --dir <checkout>/outbox/<name>
     --memory '{video}_graph.pkl' '{video}_captions.json'   (another baseline's memory files)
     --memory none                                         (a baseline without a memory: baselines/api)
 """
 import argparse
+import json
 import os
 import random
 import shutil
@@ -32,6 +37,7 @@ from huggingface_hub import HfApi, hf_hub_download, snapshot_download
 from huggingface_hub.utils import EntryNotFoundError
 
 REPO = os.environ.get("MERIT_HF_REPO", "morph-graphs/epic-morph-results")
+OUTBOX = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "outbox")
 
 
 MEMORY = ["{video}_30sec.json", "{video}_30sec_4_key.json"]   # MERIT's; other baselines pass --memory
@@ -55,14 +61,19 @@ def remote_memory(path, video, dest):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("action", choices=["upload", "fetch-memory", "download"])
+    ap.add_argument("action", choices=["upload", "fetch-memory", "download", "relay"])
     ap.add_argument("--baseline", default="merit", help="top-level folder in the dataset (merit, worldmm, ...)")
     ap.add_argument("--memory", nargs="+", help="the memory's file names, with {video}; default MERIT's; `none` for a baseline without one")
-    ap.add_argument("--arm", required=True)
-    ap.add_argument("--video", required=True)
-    ap.add_argument("--dir", help="upload / fetch-memory: the local results folder of this video and arm")
+    ap.add_argument("--arm")
+    ap.add_argument("--video")
+    ap.add_argument("--dir", help="upload / fetch-memory: the local results folder of this video and arm; relay: an outbox folder")
     ap.add_argument("--dest", help="download: local root; files land in <dest>/merit/<arm>/<video>/")
     a = ap.parse_args()
+    if a.action == "relay":   # an outbox folder: upload it with the arguments its job's upload was given
+        meta = json.load(open(os.path.join(a.dir, ".upload.json")))
+        a.action, a.baseline, a.arm, a.video, a.memory = "upload", meta["baseline"], meta["arm"], meta["video"], meta["memory"]
+    if not (a.arm and a.video):
+        ap.error("--arm and --video are required")
     if a.memory:   # "none": a baseline with no memory (API models); its folder is answers + runs.jsonl
         MEMORY[:] = [] if a.memory == ["none"] else a.memory
     path = f"{a.baseline}/{a.arm}/{a.video}"
@@ -84,6 +95,19 @@ def main():
         files = sorted(f for f in os.listdir(a.dir) if not f.startswith(".") and not f.endswith(".partial"))
         if not all(f in files for f in memory_files(a.video)):   # answers mean nothing without their memory
             raise SystemExit(f"{a.dir} lacks the memory ({', '.join(memory_files(a.video))}): not uploading")
+        name = os.environ.get("MERIT_OUTBOX")
+        if name:   # copy to the outbox; a relay uploads it (it merges runs.jsonl and checks the memory then)
+            dest, tmp = os.path.join(OUTBOX, name), os.path.join(OUTBOX, f".{name}.tmp")
+            shutil.rmtree(tmp, ignore_errors=True)
+            os.makedirs(tmp)
+            for f in files:
+                shutil.copy(os.path.join(a.dir, f), os.path.join(tmp, f))
+            json.dump(dict(baseline=a.baseline, arm=a.arm, video=a.video, memory=MEMORY or ["none"]),
+                      open(os.path.join(tmp, ".upload.json"), "w"))
+            shutil.rmtree(dest, ignore_errors=True)   # an earlier run of the same task: this one replaces it
+            os.rename(tmp, dest)
+            print(f"put {len(files)} files in the outbox {dest} for the relay (not uploaded): {', '.join(files)}")
+            return
         with tempfile.TemporaryDirectory() as tmp:   # rebuilt memory? then mirror, else add
             rebuilt = remote_memory(path, a.video, tmp) and any(
                 open(os.path.join(tmp, f), "rb").read() != open(os.path.join(a.dir, f), "rb").read()
