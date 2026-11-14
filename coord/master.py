@@ -11,8 +11,14 @@ of tasks.json is the priority. Reassignment is automatic: a claim whose lease la
 task that failed twice is held back and shown as a failure.
 
 `qa` experiments answer a named epic-morph bank (one experiment per bank in BANKS): a task per video that has
-questions in the bank and no answers_<bank>.json.gz in the results dataset, depending on the same video's build task
-while that is pending.
+questions in the bank and no answers_<bank>.json.gz in the results dataset, or one that is stale, depending on the same
+video's build task while that is pending. A file is stale when some question of the bank has no answer in it as the
+bank asks it now (unanswered(): the reuse rule's key, wording, options, gold letter and query time), e.g. after the bank
+moved a question's t_ask, or when it holds an "Error" or does not parse. A stale file's task gets the id
+<task>-redo-<hash of the video's questions>, since the plain id may already be done on a pool (held for good): it is
+listed once per state of the bank, so an answer that fails again is not retried every cycle, and not while the task
+or a redo of it still runs or waits for its relay (what it uploads may be current). The master reads the
+answers files to check, through a cache of their summaries by content hash (only files that changed download).
 The bank is generated afresh each cycle (v3/export_bank.py <bank>, deterministic per commit) in the epic-morph
 checkout EPIC_MORPH_DIR, the master's own (not a worker's, which may be reading its bank files). publish stops
 without EPIC_MORPH_DIR: a tasks.json without the qa tasks would drop them from the board.
@@ -25,20 +31,30 @@ reported-configuration arms, for batch10 only, on pool `max` only, behind the sa
 """
 import argparse
 import functools
+import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 
-from huggingface_hub import HfApi
+from huggingface_hub import HfApi, constants, hf_hub_download
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path[:0] = [os.path.dirname(os.path.abspath(__file__)), os.path.join(ROOT, "baselines", "common"),
+                os.path.join(ROOT, "baselines", "merit", "epic")]
 import jobs  # noqa: E402
+from earlier import load  # noqa: E402
+from prepare_epic import LETTERS, qhash, row_qhash  # noqa: E402
 
 RESULTS = os.environ.get("MERIT_HF_REPO", "morph-graphs/epic-morph-results")
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BUILD_ORDER = os.path.join(ROOT, "baselines", "merit", "build_order.txt")
+# summaries of the answers files read (summary()), one per content hash: <hash>.json
+ANSWERS_CACHE = os.path.join(constants.HF_HOME, "coord", "answers")
+FAILED = ("", "Error", "Unable to generate answer")   # no answer: earlier.reuse's failures, and WorldMM's own
 
 # (baseline, arm, stage, pools that may run it, bank). A qa task answers its bank on the build's GPU family, so it
 # takes the build's pools. Every baseline's m8 needs one GPU of 40 GB or more. m27: MERIT one 80 GB GPU (H100 / H200 /
@@ -54,11 +70,13 @@ M27 = ["wriva", "zaratan", "max", "pulkit", "nexus", "vatsal"]
 POOLS = {("merit", "m27"): M27 + ["arm00"], ("merit", "m8"): M8,
          ("magic", "m27"): M27, ("magic", "m8"): M8,
          ("worldmm", "m27"): M27, ("worldmm", "m8"): M8}
-# the banks every baseline and arm answers, in priority order: batch10 and epic-morph tranches 2, 3 and 4
-# (v3/batch10.txt, v3/tranche2.txt, v3/tranche3.txt, v3/tranche4.txt), disjoint by video; a video's answers under one bank are reused by
-# another (hf_results.py earlier-answers), so a question is never answered twice. A bank a baseline has already
-# answered (MERIT's batch10) lists nothing: its answers are in the dataset
-BANKS = ["batch10_agree2", "t2_agree2", "t3_agree2", "t4_agree2"]
+# the banks every baseline and arm answers, in priority order: batch10 and epic-morph tranches 2 to 5
+# (v3/batch10.txt, v3/tranche2.txt ... v3/tranche5.txt), disjoint by video, then two second banks of videos that
+# already have one: the episode rescue (v3/rescue.txt) and the extra templates (v3/extra.txt; export_bank.py leaves
+# out what the video's first bank asks). A video's answers under one bank are reused by another (hf_results.py
+# earlier-answers), so a question is never answered twice. A bank a baseline has already answered (MERIT's batch10)
+# lists nothing while its answers are current: they are in the dataset
+BANKS = ["batch10_agree2", "t2_agree2", "t3_agree2", "t4_agree2", "t5_agree2", "rescue_agree2", "extra_agree2"]
 # Closed-source API models (baselines/api): no GPU and no memory, one qa task per video and config. They need the
 # provider's key (GEMINI_API_KEY / OPENAI_API_KEY in the worker's environment), which only Max's machine has, so no
 # other pool may take them. Listed first: 30 short tasks that should not wait behind the memory builds.
@@ -157,12 +175,17 @@ MEMORY_DONE = {"merit": "{v}_30sec_4_key.json", "magic": "graph.pkl", "worldmm":
 BUILD_ON = {"magic": "merit"}
 
 
-def bank_videos(bank):
-    """Videos with at least one question in the epic-morph bank."""
+def bank_questions(bank):
+    """{video: its questions} of the epic-morph bank, for the videos with at least one."""
     epic = os.environ.get("EPIC_MORPH_DIR")
     if not epic:
         raise SystemExit(f"set EPIC_MORPH_DIR to an epic-morph checkout with bank {bank} (qa tasks need it)")
     return exported(epic, bank)
+
+
+def bank_videos(bank):
+    """Videos with at least one question in the epic-morph bank."""
+    return list(bank_questions(bank))
 
 
 @functools.lru_cache(maxsize=None)   # one export per bank and run, however many experiments answer it
@@ -171,16 +194,110 @@ def exported(epic, bank):
     # banks are generated, not committed: regenerate every time, so an interrupted export or an older commit's
     # files never stand in for the checkout's bank (a few seconds)
     subprocess.run([sys.executable, "v3/export_bank.py", bank], cwd=epic, check=True, stdout=subprocess.DEVNULL)
-    out = []
+    out = {}
     for f in sorted(os.listdir(d)):
-        if f.endswith("_questions.json") and json.load(open(os.path.join(d, f)))["questions"]:
-            out.append(f[:-len("_questions.json")])
+        qs = json.load(open(os.path.join(d, f)))["questions"] if f.endswith("_questions.json") else []
+        if qs:
+            out[f[:-len("_questions.json")]] = qs
     return out
 
 
+def asked(q):
+    """(key, qhash of wording and options, gold letter, t_ask or None at the end) of a bank question."""
+    mcq = q["gemini_mcq"]
+    return (q["key"], qhash(q["q"], mcq["options"]), LETTERS[mcq["answer_index"]],
+            float(q["t_ask"]) if q.get("streaming") and "t_ask" in q else None)
+
+
+def ask_time(r):
+    """The second an answer row says its question was asked at: its t_ask (API, paid rows), else MERIT's query_time
+    {date, time: HHMMSSff} or MAGIC / WorldMM's int DHHMMSSff; None when it records neither."""
+    if isinstance(r.get("t_ask"), (int, float)):
+        return float(r["t_ask"])
+    qt = r.get("query_time")
+    qt = str(qt.get("time") if isinstance(qt, dict) else qt)
+    if not qt.isdigit():
+        return None
+    qt = qt.zfill(8)[-8:]
+    return int(qt[:2]) * 3600 + int(qt[2:4]) * 60 + int(qt[4:6])
+
+
+def summary(rows):
+    """[key, qhash, gold letter, ask time] of each row of an answers file that has an answer (response, or EGAgent's
+    pred, not one of FAILED); a field the row does not record is None."""
+    out = []
+    for r in rows:
+        if not isinstance(r, dict) or str(r.get("response", r.get("pred")) or "").strip() in FAILED:
+            continue
+        h = r.get("qhash")
+        if not h and "question" in r and ("choices" in r or "choice_a" in r):
+            h = row_qhash(r)
+        elif not h and "question" in r and "options" in r:
+            h = qhash(r["question"], r["options"])
+        out.append([r.get("key"), h, r.get("answer"), ask_time(r)])
+    return out
+
+
+def unanswered(questions, rows):
+    """Keys of the bank questions that no answer (summary() rows; None: the file did not parse) answers as the bank asks
+    them now, by the reuse rule (hf_results.py earlier-answers, prepare_epic.match_answers): the same key (a row from
+    before keys: the same wording, options and gold letter), wording and options, gold letter, and query time. A
+    baseline asks at a whole second, floor(t_ask) since #16 and ceil(t_ask) before (MERIT's batch10), or at the video's
+    end, ceil(duration), for a t_ask in its last second: a row within a second of t_ask counts. A field the row does
+    not record is not compared."""
+    out = []
+    for q in questions:
+        k, h, gold, t = asked(q)
+        if not any((rk == k or (rk is None and rh == h)) and rh in (h, None) and rg in (gold, None)
+                   and (rt is None or t is None or abs(rt - t) < 1) for rk, rh, rg, rt in rows or []):
+            out.append(k)
+    return out
+
+
+def redo_id(tid, questions):
+    """The id of a task listed again for stale answers: the plain id may be done on a pool, which holds it for good."""
+    return f"{tid}-redo-{hashlib.sha1(json.dumps(sorted(map(asked, questions))).encode()).hexdigest()[:8]}"
+
+
+def listing(api):
+    """(commit, {path: content hash}) of the results dataset's files at its current commit."""
+    commit = api.dataset_info(RESULTS).sha
+    files = {f.path: f.lfs.sha256 if f.lfs else f.blob_id
+             for f in api.list_repo_tree(RESULTS, repo_type="dataset", recursive=True, revision=commit)
+             if hasattr(f, "blob_id")}   # files, not folders
+    return commit, files
+
+
 def built(api):
-    """({(baseline, arm, video)} whose build is recorded in the results dataset, the dataset's file set)."""
-    return built_from(set(api.list_repo_files(RESULTS, repo_type="dataset")))
+    """({(baseline, arm, video)} whose build is recorded in the results dataset, {path: content hash} of its files)."""
+    return built_from(listing(api)[1])
+
+
+def read_answers(commit, files):
+    """{path: summary()} of every answers_<bank>.json.gz of the qa banks in the dataset (files: listing()), None for a file
+    that does not parse. A summary is cached by the file's content hash, so only new or changed files download (to a
+    temporary folder, not the Hub cache: MERIT's answers are ~2 MB a video)."""
+    names = {f"answers_{bank}.json.gz" for _, _, stage, _, bank in EXPERIMENTS if stage == "qa"}
+    paths = [p for p in files if p.count("/") == 3 and p.rsplit("/", 1)[1] in names]
+    os.makedirs(ANSWERS_CACHE, exist_ok=True)
+    cached = lambda p: os.path.join(ANSWERS_CACHE, f"{files[p]}.json")
+
+    def fetch(p):
+        tmp = tempfile.mkdtemp()
+        try:
+            f = hf_hub_download(RESULTS, p, repo_type="dataset", revision=commit, local_dir=tmp)
+            try:
+                s = summary(load(f))
+            except Exception:   # not gzip, not JSON: unreadable, and it stays so (the hash is its content)
+                s = None
+            json.dump(s, open(cached(p) + ".tmp", "w"))
+            os.replace(cached(p) + ".tmp", cached(p))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    with ThreadPoolExecutor(8) as pool:   # one download per content hash (two identical files share a summary)
+        list(pool.map(fetch, {files[p]: p for p in paths if not os.path.exists(cached(p))}.values()))
+    return {p: json.load(open(cached(p))) for p in paths}
 
 
 def built_from(files):
@@ -208,7 +325,11 @@ def key_pools(need):
     return ROUTER_POOLS if all("OPENROUTER_API_KEY" in n.split("|") for n in need) else KEY_POOLS
 
 
-def desired(have, files):
+def desired(have, files, answers=None, busy=()):
+    """The tasks: builds missing from `have`, and qa where `files` (the dataset's paths) lacks the answers file or its
+    summary in `answers` (read_answers(); a file without one is not checked) leaves a question unanswered, unless the
+    task (its plain id) is `busy`: it or a redo of it running, or waiting for the relay (what it uploads may be current)."""
+    answers = answers or {}
     order = [v.strip() for v in open(BUILD_ORDER) if v.strip()]
     # every memory is built for all videos: each bank's (batch10's first: build_order.txt lacks them, as MERIT built
     # them before the board), then the rest of the build order; the reported arms are also ranked by that group
@@ -233,13 +354,17 @@ def desired(have, files):
                     ids.add(tasks[-1]["id"])
             continue
         for v in bank_videos(bank):
-            if f"{b}/{arm}/{v}/answers_{bank}.json.gz" in files:
-                continue
+            tid, f, stale = f"{b}-{arm}-{stage}-{bank}-{v}", f"{b}/{arm}/{v}/answers_{bank}.json.gz", {}
+            if f in files:
+                todo = unanswered(bank_questions(bank)[v], answers[f]) if f in answers and tid not in busy else []
+                if not todo:
+                    continue
+                tid, stale = redo_id(tid, bank_questions(bank)[v]), {"stale": len(todo)}   # questions to ask again
             # wait for the video's build task (its memory arm's) while it is listed; a memory already built (on the
             # board or off it) needs no wait, and with neither, qa builds the memory itself first
             build = f"{b}-{mem}-build-{v}"
-            tasks.append(dict(id=f"{b}-{arm}-{stage}-{bank}-{v}", baseline=b, arm=arm, stage=stage, video=v, bank=bank,
-                              pools=pools, deps=[build] if build in ids else [], **env))
+            tasks.append(dict(id=tid, baseline=b, arm=arm, stage=stage, video=v, bank=bank,
+                              pools=pools, deps=[build] if build in ids else [], **env, **stale))
             ids.add(tasks[-1]["id"])
     # the reported arms by video (batch10: both memories, then its answers; then tranche 2; then the other memories),
     # so the first rows of the sheet do not wait behind 300 builds; every other task keeps its EXPERIMENTS order
@@ -280,7 +405,8 @@ def main():
     if not a.first and os.path.exists(first):   # videos to put at the top (e.g. a collaborator's test)
         a.first = open(first).read().split()
     api = HfApi()
-    have, files = built(api)
+    commit, files = listing(api)
+    have, _ = built_from(files)
     head, old, pools = jobs.read()
     if a.action == "reset":   # clear failed claims so the task can be claimed again
         files = {}
@@ -293,7 +419,10 @@ def main():
         ok = files and jobs.commit(files, head, f"master: reset {', '.join(a.task)}")
         print(f"reset {a.task} in {sorted(files)}" if ok else "nothing reset (or board moved; rerun)")
     elif a.action == "publish":
-        tasks, withheld = gate(desired(have, files))
+        held = jobs.taken(pools)
+        # running or waiting for the relay, by plain id: a task's first run or a redo of it
+        busy = {tid.split("-redo-")[0] for tid, (_, c) in held.items() if c["status"] != "done"}
+        tasks, withheld = gate(desired(have, files, read_answers(commit, files), busy))
         if a.first:
             # the API tasks stay on top (they are few, short and only Max's pool can take them), then the reported
             # arms in their own order (batch10 first), then the first videos
@@ -304,10 +433,16 @@ def main():
         if a.only_pools is not None:
             restrict(tasks, a.only_pools)
         if a.dry_run:
-            n = Counter((t["baseline"], t["arm"], t["stage"], t["bank"] or "-") for t in tasks)
-            wait = Counter((t["baseline"], t["arm"], t["stage"], t["bank"] or "-") for t in tasks if t["deps"])
+            n, wait, redo, qs = Counter(), Counter(), Counter(), Counter()
+            for t in tasks:
+                k = (t["baseline"], t["arm"], t["stage"], t["bank"] or "-")
+                n[k], wait[k], redo[k], qs[k] = n[k] + 1, wait[k] + bool(t["deps"]), redo[k] + ("stale" in t), qs[k] + t.get("stale", 0)
             for k, c in sorted(n.items()):
-                print(f"{' '.join(k):30} {c:4} tasks ({wait[k]} waiting on a build)")
+                print(f"{' '.join(k):30} {c:4} tasks ({wait[k]} waiting on a build"
+                      + (f"; {redo[k]} listed again for stale answers, {qs[k]} questions to ask again)" if redo[k] else ")"))
+            print(f"stale answers: {sum(redo.values())} tasks listed again, {sum(qs.values())} questions to ask again; "
+                  f"{sum(held.get(t['id'], (0, {}))[1].get('status') == 'done' for t in tasks if 'stale' in t)} of them "
+                  "done already and still stale (the worker's bank is older than the master's, or the questions failed again)")
             print(f"pilot gate: {withheld} tasks of the reported-configuration and paid-row arms withheld"
                   + (f"; listed of them: {[t['id'] for t in tasks if reported(t)]}" if PILOT else " (PILOT is empty)"))
             print(f"need a key (pool {', '.join(KEY_POOLS)} only; nexus too where an OpenRouter key is enough): "

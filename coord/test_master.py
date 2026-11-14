@@ -1,4 +1,5 @@
-"""master.desired: qa tasks only where the bank has questions and the dataset lacks answers; they wait on a listed build.
+"""master.desired: qa tasks only where the bank has questions and the dataset lacks answers, or holds stale ones; they
+wait on a listed build.
 Paid-API arms: needs_env, pool max only, the pilot gate, answer arms waiting on their memory arm's build.
 
     python coord/test_master.py      (or pytest coord/test_master.py)
@@ -59,7 +60,8 @@ def test_experiments():
     """Every baseline on the board has build + qa of every bank per arm, qa on the build's pools; arm00 (aarch64)
     runs MERIT only."""
     ex = {(b, arm, stage, bank): pools for b, arm, stage, pools, bank in M.EXPERIMENTS}
-    assert M.BANKS == M.REPORTED_BANKS == ["batch10_agree2", "t2_agree2", "t3_agree2", "t4_agree2"]
+    assert M.BANKS == M.REPORTED_BANKS == ["batch10_agree2", "t2_agree2", "t3_agree2", "t4_agree2", "t5_agree2",
+                                           "rescue_agree2", "extra_agree2"]
     for b in ("merit", "magic", "worldmm"):
         for arm in ("m8", "m27"):
             assert ex[b, arm, "build", None] == M.POOLS[b, arm]
@@ -69,7 +71,7 @@ def test_experiments():
     # the plain video model: qa only (no build line), every bank; the 8B on the m8 pools, the 27B on the m27 pools
     # without arm00, its unsized N = 768 only where an H200 is; no key
     direct = {(arm, stage, bank) for b, arm, stage, bank in ex if b == "direct"}
-    assert direct == {(arm, "qa", bank) for arm in M.DIRECT for bank in M.BANKS} and len(direct) == 56
+    assert direct == {(arm, "qa", bank) for arm in M.DIRECT for bank in M.BANKS} and len(direct) == len(M.DIRECT) * len(M.BANKS)
     for arm, pools in M.DIRECT.items():
         assert pools == (M.M8 if arm.startswith(("qwen3vl-8b", "qwen35-9b", "molmo2-8b")) else ["nexus", "vatsal"] if arm == "qwen38-27b-f768" else M.M27)
         assert all(ex["direct", arm, "qa", bank] == pools for bank in M.BANKS) and not M.needs("direct", arm, "qa")
@@ -118,16 +120,19 @@ B10 = ["P05-20240425-201444", "P01-20240101-000010"]                      # stan
 T2 = ["P01-20240101-000020", "P01-20240101-000021"]
 T3 = ["P01-20240101-000040"]
 T4 = ["P01-20240101-000050"]
+T5 = ["P01-20240101-000060"]
 REST = ["P01-20240101-000030"]
+BANK_VIDEOS = {"batch10_agree2": B10, "t2_agree2": T2, "t3_agree2": T3, "t4_agree2": T4, "t5_agree2": T5,
+               "rescue_agree2": T2[:1], "extra_agree2": T3}   # the last two: second banks of videos that have one
 
 
 def board(monkeypatch, tmp_path, experiments=None):
-    """The real EXPERIMENTS (or a given list) over a small world: 2 batch10 videos, 2 tranche-2 videos, 1 tranche-3
-    video, 1 other."""
+    """The real EXPERIMENTS (or a given list) over a small world: 2 batch10 videos, 2 tranche-2 videos, 1 video each of
+    tranches 3, 4 and 5, 1 other; the rescue and extra banks ask videos of tranches 2 and 3 again."""
     order = tmp_path / "order.txt"
-    order.write_text("\n".join(REST[:1] + T2 + T3 + T4 + REST[1:]) + "\n")   # as build_order.txt: tranches 2, 3, 4 in it, batch10 not
+    order.write_text("\n".join(REST[:1] + T2 + T3 + T4 + T5 + REST[1:]) + "\n")   # as build_order.txt: the tranches in it, batch10 not
     monkeypatch.setattr(M, "BUILD_ORDER", str(order))
-    monkeypatch.setattr(M, "bank_videos", lambda bank: {"batch10_agree2": B10, "t2_agree2": T2, "t3_agree2": T3, "t4_agree2": T4}[bank])
+    monkeypatch.setattr(M, "bank_videos", lambda bank: BANK_VIDEOS[bank])
     if experiments is not None:
         monkeypatch.setattr(M, "EXPERIMENTS", experiments)
 
@@ -196,7 +201,7 @@ def test_memory_arm(monkeypatch, tmp_path):
     by = {t["id"]: t for t in tasks}
     for b in ("worldmm", "merit"):
         built = [t["video"] for t in tasks if (t["baseline"], t["arm"], t["stage"]) == (b, "g5m", "build")]
-        assert built == [x for x in B10 + T2 + T3 + T4 + REST if (b, "g5m", x) not in have]   # all videos, once, in that order
+        assert built == [x for x in B10 + T2 + T3 + T4 + T5 + REST if (b, "g5m", x) not in have]   # all videos, once, in that order
     g5m = lambda t: t["arm"].startswith("g5m")
     assert not any(t["stage"] == "build" and t["arm"] != "g5m" for t in tasks if g5m(t))   # answer arms never build
     assert by[f"worldmm-g5m-g5-qa-batch10_agree2-{v}"]["deps"] == [f"worldmm-g5m-build-{v}"]
@@ -208,7 +213,8 @@ def test_memory_arm(monkeypatch, tmp_path):
     kind = [0 if t["baseline"] == "api" else 1 if M.reported(t) else 2 for t in tasks]
     assert kind == sorted(kind) and [t["priority"] for t in tasks] == list(range(len(tasks)))
     rep = [t for t in tasks if g5m(t)]
-    group = [0 if t["video"] in B10 else 1 if t["video"] in T2 else 2 if t["video"] in T3 else 3 if t["video"] in T4 else 4 for t in rep]
+    group = [0 if t["video"] in B10 else 1 if t["video"] in T2 else 2 if t["video"] in T3 else 3 if t["video"] in T4
+             else 4 if t["video"] in T5 else 5 for t in rep]
     assert group == sorted(group)
     assert all(by[d]["priority"] < t["priority"] for t in tasks for d in t["deps"])
     # a memory folder counts as built with its baseline's last memory file; an answer arm's folder never does
@@ -311,7 +317,7 @@ def test_existing_tasks_unchanged(monkeypatch, tmp_path):
     files = {f"magic/m8/{T2[1]}/answers_t2_agree2.json.gz", f"api/gpt-5-f1024/{B10[0]}/answers_batch10_agree2.json.gz"}
     full = list(M.EXPERIMENTS)
     board(monkeypatch, tmp_path, [e for e in full if e not in M.REPORTED + M.PAID])
-    assert len(M.EXPERIMENTS) == len(full) - len(M.REPORTED) - len(M.PAID) == 89   # 6 arms x (build + 4 banks) + 3 api + 14 direct x 4 banks
+    assert len(M.EXPERIMENTS) == len(full) - len(M.REPORTED) - len(M.PAID) == 6 * (1 + len(M.BANKS)) + 3 + len(M.DIRECT) * len(M.BANKS)   # 6 arms x (build + banks) + 3 api + the direct arms x banks
     old = desired_before(have, files)
     strip = lambda ts: [{k: v for k, v in t.items() if k != "needs_env"} for t in ts]
     new = M.desired(have, files)
@@ -320,7 +326,7 @@ def test_existing_tasks_unchanged(monkeypatch, tmp_path):
     assert M.gate(new) == (new, 0)                                          # the gate holds none of them back
     # direct: a task per arm, bank and video unless answered, waiting on nothing, after api and before the memory arms
     direct = [t for t in M.desired(have, files | {f"direct/qwen3vl-8b-f32/{T2[0]}/answers_t2_agree2.json.gz"}) if t["baseline"] == "direct"]
-    assert len(direct) == 14 * len(B10 + T2 + T3 + T4) - 1 and not any(t["deps"] or t.get("needs_env") for t in direct)
+    assert len(direct) == len(M.DIRECT) * sum(len(v) for v in BANK_VIDEOS.values()) - 1 and not any(t["deps"] or t.get("needs_env") for t in direct)
     assert f"direct-qwen3vl-8b-f32-qa-t2_agree2-{T2[0]}" not in {t["id"] for t in direct}
     kind = [0 if t["baseline"] == "api" else 1 if t["baseline"] == "direct" else 2 for t in new]
     assert kind == sorted(kind)
@@ -329,6 +335,109 @@ def test_existing_tasks_unchanged(monkeypatch, tmp_path):
     assert noprio(strip(t for t in M.desired(have, files) if not M.reported(t))) == noprio(old)
     listed, _ = M.gate(M.desired(have, files))                             # as published now: main's tasks + the pilot
     assert noprio(strip(t for t in listed if t["id"] not in M.PILOT)) == noprio(old)
+
+
+def bank_q(key, t, gold=1):
+    return {"key": key, "q": f"Where is the {key}?", "form": "f", "streaming": True, "t_ask": t,
+            "gemini_mcq": {"options": ["sink", "table"], "answer_index": gold}}
+
+
+def merit_rows(tmp_path, v, qs, end):
+    """MERIT's answer rows for these bank questions (prepare_epic.convert_questions: asked at floor(t_ask), or at the
+    video's end for a t_ask in its last second), as collect_answers keeps them."""
+    from prepare_epic import convert_questions
+    f = tmp_path / "q.json"
+    f.write_text(json.dumps({"questions": qs}))
+    return [{k: x for k, x in r.items() if not k.startswith("choice_")} | {
+        "choices": {"A": r["choice_a"], "B": r["choice_b"]}, "response": "ANSWER: B\nREASONING: ..."}
+        for r in convert_questions(str(f), v, end)]
+
+
+def test_stale_answers(tmp_path, monkeypatch):
+    """A qa task is listed when the answers file is missing or stale (a question moved, an Error, a file that does not
+    parse), under a -redo- id when the file exists; current answers list nothing, also batch10's from before keys,
+    asked at ceil(t_ask)."""
+    V = [f"P01-20240101-00010{i}" for i in range(6)]
+    qs = [bank_q("k1", 100.4), bank_q("k2", 1734.9)]   # k2: the end-of-video t_ask of a moved question
+    d = tmp_path / "outputs/v3/banks/tb"
+    d.mkdir(parents=True)
+    for v in V:
+        (d / f"{v}_questions.json").write_text(json.dumps({"questions": qs}))
+    (tmp_path / "v3").mkdir()
+    (tmp_path / "v3/export_bank.py").write_text("")
+    (tmp_path / "order.txt").write_text("")
+    monkeypatch.setenv("EPIC_MORPH_DIR", str(tmp_path))
+    monkeypatch.setattr(M, "BUILD_ORDER", str(tmp_path / "order.txt"))
+    monkeypatch.setattr(M, "EXPERIMENTS", [("merit", "m8", "qa", ["p"], "tb")])
+    monkeypatch.setattr(M, "REPORTED_BANKS", [])
+    M.exported.cache_clear()
+    rows = {V[0]: merit_rows(tmp_path, V[0], qs, 1735),                          # current: k2 asked at the end (1735 s)
+            V[1]: merit_rows(tmp_path, V[1], [qs[0], bank_q("k2", 900.0)], 1800),  # k2 answered at its old t_ask
+            V[3]: merit_rows(tmp_path, V[3], qs, 1800)}
+    rows[V[3]][0]["response"] = "Error"                                           # k1 failed
+    old = merit_rows(tmp_path, V[5], qs, 1800)                                    # batch10 before keys: positional ID,
+    for i, r in enumerate(old, 1):                                                # no key or qhash, asked at ceil(t_ask)
+        r.update(ID=str(i), query_time={"date": "DAY1", "time": ["00014100", "00285500"][i - 1]})
+        del r["key"], r["qhash"]
+    rows[V[5]] = old
+    path = lambda v: f"merit/m8/{v}/answers_tb.json.gz"
+    answers = {path(v): M.summary(r) for v, r in rows.items()} | {path(V[4]): None}   # V[4]: does not parse
+    files = set(answers)                                                           # V[2]: no answers file
+    have = {("merit", "m8", v) for v in V}
+    tasks = {t["video"]: t for t in M.desired(have, files, answers)}
+    assert sorted(tasks) == [V[1], V[2], V[3], V[4]]
+    assert tasks[V[2]]["id"] == f"merit-m8-qa-tb-{V[2]}" and "stale" not in tasks[V[2]]
+    assert [tasks[v]["stale"] for v in (V[1], V[3], V[4])] == [1, 1, 2]
+    redo = tasks[V[1]]["id"]
+    assert redo.startswith(f"merit-m8-qa-tb-{V[1]}-redo-") and redo == M.desired(have, files, answers)[0]["id"]
+    # the hash follows the bank: the same questions keep the id (a done redo stays done), a changed bank gets a new one
+    assert M.redo_id("x", qs) == M.redo_id("x", list(reversed(qs))) != M.redo_id("x", [qs[0], bank_q("k2", 1730.0)])
+    assert M.unanswered([bank_q("k1", 100.4, gold=0)], answers[path(V[0])]) == ["k1"]   # another gold letter
+    import worker
+    assert all(worker.valid(t) for t in tasks.values())                            # the worker runs the -redo- id
+    # not while the first run is still going (or its results wait for the relay): its upload may be current
+    assert V[1] not in {t["video"] for t in M.desired(have, files, answers, busy={f"merit-m8-qa-tb-{V[1]}"})}
+    # without summaries the files are not read: the board as before
+    assert sorted(t["video"] for t in M.desired(have, files)) == [V[2]]
+
+
+def test_ask_time_formats():
+    """Each baseline's record of when a question was asked, in seconds: MERIT's query_time, MAGIC / WorldMM's int,
+    the API's and the paid rows' t_ask; none for a row that records none."""
+    assert M.ask_time({"query_time": {"date": "DAY1", "time": "00285400"}}) == 1734
+    assert M.ask_time({"query_time": 100285400}) == 1734
+    assert M.ask_time({"t_ask": 1734.9, "cutoff": 1734.9}) == 1734.9
+    assert M.ask_time({"t_ask": 1734.9, "query_time": {"date": "DAY1", "time": "10285400"}}) == 1734.9   # EgoRAG's clock
+    assert M.ask_time({"response": "A"}) is None
+
+
+def test_read_answers_downloads_changed_only(tmp_path, monkeypatch):
+    """Summaries are cached by content hash: a second cycle downloads nothing, a changed file downloads again, two
+    identical files download once, and a file that does not parse summarises as None."""
+    import gzip
+    p1, p2, p3 = "merit/m8/V1/answers_tb.json.gz", "merit/m8/V2/answers_tb.json.gz", "merit/m27/V1/answers_tb.json.gz"
+    body = {p1: gzip.compress(json.dumps([{"key": "k1", "qhash": "h", "answer": "B", "response": "B", "t_ask": 1.5}]).encode()),
+            p2: b"not gzip"}
+    body[p3] = body[p1]
+    got = []
+
+    def download(repo, path, repo_type, revision, local_dir):
+        got.append(path)
+        f = os.path.join(local_dir, path)
+        os.makedirs(os.path.dirname(f), exist_ok=True)
+        open(f, "wb").write(body[path])
+        return f
+    monkeypatch.setattr(M, "hf_hub_download", download)
+    monkeypatch.setattr(M, "ANSWERS_CACHE", str(tmp_path / "cache"))
+    monkeypatch.setattr(M, "EXPERIMENTS", [("merit", "m8", "qa", ["p"], "tb")])
+    files = {p1: "sha1", p2: "sha2", p3: "sha1", "merit/m8/V1/runs.jsonl": "sha3", "merit/m8/V1/answers_tb_ctx.json.gz": "sha4"}
+    first = M.read_answers("c0", files)
+    assert len(got) == 2 and p2 in got and first == {p1: [["k1", "h", "B", 1.5]], p2: None, p3: [["k1", "h", "B", 1.5]]}
+    got.clear()
+    assert M.read_answers("c1", files) == first and got == []
+    files[p1] = "sha5"
+    M.read_answers("c2", files)
+    assert got == [p1]
 
 
 if __name__ == "__main__":

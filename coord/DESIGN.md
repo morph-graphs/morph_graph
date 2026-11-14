@@ -158,6 +158,20 @@ while the video's build is still on the board the task depends on it (workers ta
 done), and it goes to the same pools as the arm's builds. `publish --dry-run` prints the counts and commits
 nothing.
 
+Stale answers (added 2026-11-14, after epic-morph #19 moved 1,286 tranche-2/3 questions to the video's end): the
+master also lists a video whose answers file exists but leaves some question of the bank unanswered as the bank asks
+it now (`master.unanswered`: the reuse rule's key, wording, options, gold letter and query time, a row's query time
+counting within a second of `t_ask`, since baselines ask at floor(t_ask), MERIT's batch10 at ceil(t_ask)), or holds
+`Error`, or does not parse. Such a task's id is `<task>-redo-<hash of the video's questions>` and it carries
+`stale` (how many questions): the plain id may already be done on a pool, and a done claim holds a task for good.
+The hash changes only with the bank, so a question that fails again is listed again only after the bank changes
+(`publish --dry-run` counts the redo tasks already done and still stale). No redo is listed while the task or a redo
+of it still runs or waits for its relay: a pool could otherwise take it beside that run, in the same work folder. The
+worker's qa reuses the rest of the file and asks only those questions, from its own epic-morph checkout: that checkout has to be at the bank's commit with `outputs/v3/banks/<bank>/`
+regenerated (run_merit.sh reuses an exported bank folder), or it answers the old questions again. The master reads
+every answers file of the board's banks, keeping a summary of each by its content hash (`$HF_HOME/coord/answers/`),
+so a cycle downloads only new or changed files.
+
 What the master needs: `EPIC_MORPH_DIR` set to its own epic-morph checkout that has the bank; it regenerates
 `outputs/v3/banks/<bank>/` there each cycle. Without it `publish` stops (a tasks.json without the qa tasks
 would drop them from the board), so set it in the cron's script before this reaches main.
@@ -174,14 +188,15 @@ What a worker needs for qa, beyond what builds need:
 
 ## Every ready baseline on the board
 
-Added 2026-11-13. `EXPERIMENTS` lists build + qa (one per bank of `master.BANKS`: `batch10_agree2`, `t2_agree2`,
-`t3_agree2`) for MERIT, MAGIC-Video and WorldMM, both arms each, in that order (the order is the priority). Every
-baseline's memories are built for all 156 videos: each bank's (batch10's first: `build_order.txt` lacks them, MERIT
-having built them before the board), then the rest of `build_order.txt`. A bank already answered lists nothing (MERIT's
+Added 2026-11-13. `EXPERIMENTS` lists build + qa (one per bank of `master.BANKS`: `batch10_agree2`, tranches
+`t2_agree2` to `t5_agree2`, `rescue_agree2`, `extra_agree2`) for MERIT, MAGIC-Video and WorldMM, both arms each, in
+that order (the order is the priority). Every baseline's memories are built for all 156 videos: each bank's
+(batch10's first: `build_order.txt` lacks them, MERIT having built them before the board), then the rest of `build_order.txt`. A bank already answered lists nothing (MERIT's
 batch10). `first_videos.txt` (batch10, tranche 2, tranche 3) puts those videos' builds and qa ahead of builds of
 videos with no bank yet.
 
-No question is answered twice. The tranches are disjoint by video; beyond that, a qa run first reuses the video's
+No question is answered twice. The tranches are disjoint by video (`rescue_agree2` and `extra_agree2` are second
+banks of videos that have one, without its questions); beyond that, a qa run first reuses the video's
 answers under every other bank (`hf_results.py earlier-answers`: the local folder's `answers_<bank><suffix>.json.gz`,
 then the dataset's when its memory is the local one), for each question whose key, wording, options, gold letter
 and query time are unchanged (MERIT `prepare_epic.match_answers`, MAGIC and WorldMM `baselines/common/earlier.py`),
