@@ -13,7 +13,7 @@ import argparse
 import contextvars
 import json
 import os
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import eg_paths
 
@@ -48,13 +48,22 @@ def main():
         return {"start": s, "end": e, "caption": out.content, "tokens": (out.usage_metadata or {}).get("total_tokens")}
 
     todo = [w for w in wins if w[0] not in done]
-    with ThreadPoolExecutor(a.workers) as ex, open(part, "a") as f:
-        # each call in a copy of this context: a new thread starts without the API watch
-        for r in (fut.result() for fut in [ex.submit(contextvars.copy_context().run, cap, w) for w in todo]):
-            done[r["start"]] = r
-            f.write(json.dumps(r) + "\n")
-            f.flush()
-            print(f"[{r['start']:>5}-{r['end']:>5}] {r['caption'][:100]!r}", flush=True)
+    # each call in a copy of this context (a new thread starts without the API watch); a finished caption is
+    # saved at once, and on any failure the windows not yet sent are dropped, so nothing is paid for and lost
+    ex = ThreadPoolExecutor(a.workers)
+    futs = [ex.submit(contextvars.copy_context().run, cap, w) for w in todo]
+    try:
+        with open(part, "a") as f:
+            for fut in as_completed(futs):
+                r = fut.result()
+                done[r["start"]] = r
+                f.write(json.dumps(r) + "\n")
+                f.flush()
+                print(f"[{r['start']:>5}-{r['end']:>5}] {r['caption'][:100]!r}", flush=True)
+    except BaseException:
+        ex.shutdown(wait=True, cancel_futures=True)
+        raise
+    ex.shutdown()
     rows = [done[w[0]] for w in wins]
     assert all(r["caption"].strip() for r in rows), "empty caption"
     json.dump(rows, open(a.out + ".tmp", "w"), indent=1)
