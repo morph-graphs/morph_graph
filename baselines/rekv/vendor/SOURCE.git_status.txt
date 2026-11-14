@@ -1,0 +1,20 @@
+ M analysis/run_similarity_analysis.py
+ M analysis/similarity_logger.py
+ M docs/qwen3_vl_lvbench_runbook.md
+ M model/attention/compression_methods.py
+ M model/attention/diagnostics.py
+ M model/attention/dot_production_attention/torch_impl.py
+ M model/attention/kv_cache_manager.py
+ M model/attention/qwenvl/rekv_attention.py
+ M model/attention/rekv_attention.py
+ M model/qwen3_utils.py
+ M model/qwen3_vl_rekv.py
+ M playground/cgbench_interm_results.ipynb
+ M slurm/run_gtalloc_oracle.sh
+ M slurm/run_single_gpu_array_h200_qwen3.sh
+?? analysis/run_alignment.sh
+?? docs/PLAN_tome_qwen3_port.md
+?? proj_context/QFRAME_PROBE_REPORT.md
+?? recall_by_subcategory.py
+?? slurm/run_selfsim_tpf_pair.sh
+?? tests/test_qframe.py
