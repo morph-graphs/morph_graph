@@ -1,7 +1,7 @@
 # baselines/rekv: ReKV on EPIC-Morph, with Qwen3-VL-8B
 
-> **The vendored snapshot may be re-synced.** `vendor/MemStream` is a copy of Vatsal Agarwal's working tree
-> (his commit `0efaa6e` plus uncommitted changes, `vendor/SOURCE.md`). Which state is canonical is being
+> **The vendored snapshot may be re-synced.** `vendor/MemStream` is a subset (the 21 files a run imports) of
+> Vatsal Agarwal's working tree (his commit `0efaa6e` plus uncommitted changes, `vendor/SOURCE.md`). Which state is canonical is being
 > confirmed; once it is, the snapshot is copied again. Every answer row records a hash of the snapshot
 > (`memory_hash`, over `vendor/SOURCE.sha256` and the settings), so answers made with another snapshot count as
 > not done and are redone.
@@ -13,7 +13,7 @@ caches of the most relevant frames, which the model then attends to as if it had
 second model and no API: the memory model is the answering model. Our sheet lists ReKV with Qwen3-VL-8B.
 
 Upstream supports LLaVA-OneVision, LongVA and Video-LLaVA only. **The Qwen3-VL port used here is Vatsal
-Agarwal's**, from his ReKV fork MemStream, copied unmodified into `vendor/MemStream`. It is run in its plain
+Agarwal's**, from his ReKV fork MemStream; the files a run needs are copied unmodified into `vendor/MemStream`. It is run in its plain
 ReKV configuration: `prefill_method swa`, `retrieval_method rekv`, none of the fork's research knobs
 (`MEMSTREAM_*`, compression, ToMe, top-p attention, external retrievers); `epic/run_memstream.py` refuses to
 run when one is set. Nothing imports upstream ReKV, so it is not a submodule.
@@ -30,7 +30,7 @@ run when one is set. Nothing imports upstream ReKV, so it is not a submodule.
 
 | path | what |
 |---|---|
-| `vendor/MemStream/` | the vendored port (`model/qwen3_vl_rekv.py` and what it imports); never edited here. `vendor/SOURCE.md`: source path, commit, date; `vendor/SOURCE.sha256`: every file's hash |
+| `vendor/MemStream/` | the vendored port: `model/qwen3_vl_rekv.py` and the files it imports in a run (measured, 21 files); never edited here. `vendor/SOURCE.md`: source path, commit, date, the kept files and why; `vendor/SOURCE.sha256`: their hashes |
 | `epic/run_memstream.py` | one video: encode once with the port, answer a bank's questions with the streaming cutoff; `--blind` |
 | `run_rekv.sh` | one video, one arm, one stage (prep, build, qa, blind, upload, all) |
 | `env/` | the environment, pinned to the versions the port was developed with (torch 2.6.0, transformers 5.0.0): `requirements.txt`, `setup_env.sh` |
@@ -83,6 +83,13 @@ asserts the result). Attention is causal, so those features' cache is what a str
 hold.
 
 `blind` answers the same prompt with the unpatched model and no video.
+
+**Known properties of the port** (from Vatsal's notes in his repository, not re-measured here). Its sliding-window
+RoPE table was once reused stale after the window moved; the snapshot rebuilds it whenever the window's position
+ids change. The number of frames per forward pass changes answers through numerics alone (he measured about 17%
+of answers flipping between 8 and 64 on one benchmark chunk, with no net accuracy change), so `encode_chunk_size`
+is part of the recorded settings and of the snapshot hash. His equality check against the unmodified model was
+run with every feature inside the window and retrieved.
 
 ## What comes back (in the Hugging Face dataset)
 
