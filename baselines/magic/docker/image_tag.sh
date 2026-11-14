@@ -6,7 +6,11 @@
 #   bash baselines/magic/docker/image_tag.sh <m8|m27>
 set -euo pipefail
 ARM=${1:?m8 or m27}; B=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)   # baselines/
-case $ARM in m8|m27) ;; *) echo "arm must be m8 or m27" >&2; exit 1 ;; esac
+case $ARM in   # the reported arms need no image of their own: an API is called with the client environment's openai
+    oss120|oss120-flash) ARM=m8 ;;   # no backbone served
+    oss120-q27) ARM=m27 ;;           # serves Qwen3.8-27B for the reason role
+esac
+case $ARM in m8|m27) ;; *) echo "arm must be m8, m27, oss120, oss120-flash or oss120-q27" >&2; exit 1 ;; esac
 F=(magic/docker/Dockerfile magic/env/install_requirements.sh magic/env/wheels-client.txt magic/env/requirements-client.txt)
 [ "$ARM" = m27 ] && F+=(merit/env/install_requirements.sh merit/env/wheels-m27.txt merit/env/requirements-m27.txt
                         merit/env/requirements-m27-nodeps.txt)
