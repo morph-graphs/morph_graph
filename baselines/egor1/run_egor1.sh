@@ -46,19 +46,21 @@ VIDEOS=${HDEPIC_VIDEOS:-$EPIC/data/HD-EPIC/videos}; WORK=${EGOR1_WORK:-$M/work};
 OUT=$OUTROOT/$ARM/$V; CLIPS=$WORK/clips; VIDEO=$VIDEOS/${V%%-*}/$V.mp4
 TAG=${EGOR1_TAG:-}; SUF=${TAG:+_$TAG}
 case $ARM in gemini25pro|llava) ;; *) echo "arm must be gemini25pro or llava"; exit 1 ;; esac
-mkdir -p "$OUT" "$WORK/logs" "$WORK/locks"
-# our three changes to upstream (epic-morph.patch), applied once to the submodule's files; one task at a time
-patched() { grep -q EGOR1_GEMINI_MODEL "$R/api/visual_tools/egor1_videollm_gemini/video_llm.py"; }
-( flock 9; patched || patch -d "$R" -p1 -s --forward --no-backup-if-mismatch < "$M/epic-morph.patch" ) 9>"$WORK/locks/patch.lock"
-patched || { echo "could not apply $M/epic-morph.patch to $R (is the submodule at its pinned commit?)"; exit 1; }
+mkdir -p "$OUT" "$WORK/logs" "$WORK/locks" "$M/work"
+# our three changes to upstream (epic-morph.patch), applied once to the submodule's files. One task at a time, by a
+# lock beside the checkout (every task patching it shares that one); hunks already there are skipped.
+patched() { grep -q EGOR1_GEMINI_MODEL "$R/api/visual_tools/egor1_videollm_gemini/video_llm.py" \
+    && grep -q OPENAI_API_KEY "$R/api/rag/r1rag/utils.py" && grep -q OPENAI_API_KEY "$R/api/visual_tools/egor1_vlm/utils.py"; }
+( flock 9; patched || patch -d "$R" -p1 -s --forward -r - --no-backup-if-mismatch < "$M/epic-morph.patch" ) 9>"$M/work/patch.lock" || true
+patched || { echo "could not apply $M/epic-morph.patch to $R (is the submodule at its pinned commit, and writable?)"; exit 1; }
 export EGOR1_SRC=$R
 read -ra MEMORY <<< "$("$PY" "$M/epic/build_memory.py" --memory_files)"
 have_memory() { local f; for f in "${MEMORY[@]}"; do [ -s "$OUT/${f//\{video\}/$V}" ] || return 1; done; }
 log() { echo "=== $V $ARM $1 ($(date '+%F %H:%M'))"; }
 USAGE=$OUT/api_usage.jsonl
-mark() { U0=$( [ -f "$USAGE" ] && wc -c < "$USAGE" || echo 0); }   # where this stage's API calls start in the log
+mark() { export EGOR1_RUN="$(hostname).$$.$(date +%s)"; }   # tags this stage's API calls in the log
 record() {   # one line per finished stage, for the hand-back: commits, models, and what the APIs were asked
-    "$PY" - "$1" "$2" "$USAGE" "${U0:-0}" >> "$OUT/runs.jsonl" <<'PYEOF'
+    "$PY" - "$1" "$2" "$USAGE" "${EGOR1_RUN:-none}" >> "$OUT/runs.jsonl" <<'PYEOF'
 import json, os, platform, subprocess, sys, time
 import torch, transformers
 sys.path.insert(0, "baselines/egor1/epic")
@@ -73,7 +75,7 @@ models = dict(apis.MODELS, **({"video_llm": "lmms-lab/LLaVA-Video-7B-Qwen2"} if 
 print(json.dumps({"stage": sys.argv[1], "seconds": int(float(sys.argv[2])), "commit": commit, "egor1_commit": up,
                   "epic_morph_commit": bank, "models": models,
                   # per "<step> <model id the API answered with>": calls and tokens (thinking apart) of this stage
-                  "api_usage": apis.usage_summary(sys.argv[3], int(sys.argv[4])), "torch": torch.__version__,
+                  "api_usage": apis.usage_summary(sys.argv[3], sys.argv[4]), "torch": torch.__version__,
                   "transformers": transformers.__version__, "gpus": gpus, "host": platform.node(),
                   "finished": time.strftime("%Y-%m-%dT%H:%M:%S%z")}))
 PYEOF
@@ -144,7 +146,7 @@ qa() {
             --answers "$OUT/answers_$BANK$SUF.json.gz" --cache_dir "$WORK/cache/${ARM}_$V" --attempt $((k - 1)) ${EGOR1_LIMIT:+--limit "$EGOR1_LIMIT"} || rc=$?
         [ $rc = 2 ] || break
     done
-    [ $rc = 0 ] || { echo "qa did not finish (exit $rc); rerun the same command to retry"; exit $rc; }
+    [ $rc = 0 ] || { echo "qa did not finish (exit $rc; 2: questions left, rerun to retry; 5: keys; 6: Gemini answered as another model)"; exit $rc; }
     record "qa $BANK$SUF" $((SECONDS - t))
 }
 firstturn() {

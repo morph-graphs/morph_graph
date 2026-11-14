@@ -62,14 +62,19 @@ def _log(asked, got, tin, tout, think=0):
     if USAGE:
         with open(USAGE, "a") as f:
             f.write(json.dumps({"role": ROLE, "asked": asked, "model": got, "in": tin, "out": tout, "thinking": think,
-                                "t": int(time.time())}) + "\n")
+                                "t": int(time.time()), "run": os.environ.get("EGOR1_RUN")}) + "\n")
+
+
+class WrongModel(SystemExit):
+    """A Gemini reply came from another model than the one asked: stop the whole run (exit code 6). Not an
+    Exception, so neither upstream's handlers nor the tools' retry logic take it for a failed call."""
 
 
 def track():
     """Log every chat completion and Gemini generation of this process, upstream's included (their clients are
     built inside upstream's functions): the model that answered and the tokens, thinking counted apart. A Gemini
     reply from a model other than the one asked is an error: after its shutdown date gemini-2.5-pro is routed
-    to another model. Wraps the two SDK methods once; changes no request."""
+    to another model (WrongModel). Wraps the two SDK methods once; changes no request."""
     from google.genai import models as gm
     from openai.resources.chat.completions import Completions
     if getattr(Completions.create, "egor1", False):
@@ -78,28 +83,32 @@ def track():
 
     def create(self, *a, **k):
         r = chat(self, *a, **k)
-        _log(k.get("model"), getattr(r, "model", None), r.usage.prompt_tokens, r.usage.completion_tokens)
+        u = getattr(r, "usage", None)
+        _log(k.get("model"), getattr(r, "model", None), u.prompt_tokens if u else 0, u.completion_tokens if u else 0)
         return r
 
     def generate_content(self, *a, **k):
         r = gen(self, *a, **k)
-        u = r.usage_metadata
-        _log(k.get("model"), r.model_version, u.prompt_token_count or 0, u.candidates_token_count or 0, u.thoughts_token_count or 0)
-        if not (r.model_version or "").startswith(k.get("model") or ""):
-            raise RuntimeError(f"asked {k.get('model')}, answered by {r.model_version}")
+        u, asked, got = r.usage_metadata, k.get("model") or "", r.model_version or ""
+        _log(asked, got, *((u.prompt_token_count or 0, u.candidates_token_count or 0, u.thoughts_token_count or 0) if u else (0, 0, 0)))
+        if not got.removeprefix("models/").startswith(asked.removeprefix("models/")):
+            print(f"asked {asked}, answered by {got!r}: stopping (is {asked} shut down?)", file=sys.stderr)
+            raise WrongModel(6)
         return r
     create.egor1 = True
     Completions.create, gm.Models.generate_content = create, generate_content
 
 
-def usage_summary(path, offset=0):
-    """{"<role> <model that answered>": {"calls", "in", "out", "thinking"}} of the log lines after byte `offset`."""
+def usage_summary(path, run=None):
+    """{"<role> <model that answered>": {"calls", "in", "out", "thinking"}} of the log's lines (of one stage's
+    run id, EGOR1_RUN, when given: jobs of one video can share the log)."""
     out = {}
     if os.path.exists(path):
         with open(path) as f:
-            f.seek(offset)
             for line in f:
                 x = json.loads(line)
+                if run and x.get("run") != run:
+                    continue
                 d = out.setdefault(f"{x['role']} {x['model']}", {"calls": 0, "in": 0, "out": 0, "thinking": 0})
                 d["calls"] += 1
                 for k in ("in", "out", "thinking"):

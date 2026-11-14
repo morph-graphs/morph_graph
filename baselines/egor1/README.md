@@ -24,7 +24,8 @@ open weights. Every other step calls a paid API, so those stages stop (exit code
 **Gemini 2.5 Pro (`gemini-2.5-pro`) is itself listed for shutdown on 2026-12-01** (Google's deprecation page, read
 2026-11-13); from that day requests are routed to another model. Every Gemini call of one comparison must be made
 before then. From that date the Gemini stages refuse to run, and a caption answered by another model is an error
-(`epic/apis.py`, which checks the model id in every Gemini reply, upstream's `video_llm` calls included).
+(`epic/apis.py` checks the model id in every Gemini reply, upstream's `video_llm` calls included, and stops the
+run with exit code 6).
 
 ## Layout
 
