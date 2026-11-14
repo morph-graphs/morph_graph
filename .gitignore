@@ -273,6 +273,11 @@ baselines/egor1/work/
 !baselines/egor1/env/
 baselines/egor1/results/
 
+# ReKV runs: smoke job scripts; results (baselines/rekv/run_rekv.sh)
+baselines/rekv/work/
+!baselines/rekv/env/
+baselines/rekv/results/
+
 # coord/sheet_update.py: its default download cache
 .sheet_cache/
 
