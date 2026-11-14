@@ -259,7 +259,7 @@ answered by several reasoning models: `g5m-q8`, `g5m-q27`, `g5m-g5`; each baseli
 
 ## The other paid rows: batch10 only, pool `max`, behind the gate
 
-Added 2026-11-14. `master.PAID` lists Ego-R1 (`gemini25pro`), EGAgent (`gpt41`, `gemini25pro`), EgoRAG
+Added 2026-11-13. `master.PAID` lists Ego-R1 (`gemini25pro`), EGAgent (`gpt41`, `gemini25pro`), EgoRAG
 (`egogpt_gpt4o`), HippoMM (`q25vl7b-gpt4o`) and MAGIC-Video's reported arms (`oss120`, `oss120-flash`, `oss120-q27`),
 each with the models it was published with, after the g5m lines and before the local-model lines.
 
