@@ -3,7 +3,7 @@
 
 Runs on the Mac (it uses nx and ssh): the job board (coord/board_read.py on Nexus), our Nexus and Zaratan
 queues, the arm00 build loop and the MERIT memories built off the board. board_views.py turns that into the
-dashboard's ten JSON datasets in --out; this prints one line per dataset with its sha256 so the publisher
+dashboard's nine JSON datasets in --out; this prints one line per dataset with its sha256 so the publisher
 uploads only what changed.
 
     python3 coord/collect_live.py --out <dir>
@@ -159,7 +159,7 @@ def main():
     raw = board(alerts, a.out)
     import board_views
     n = board_views.update(a.out, raw, alerts + rows, nxq, SRC)
-    for name in ("running", "tasks", "pools", "progress", "decisions", "tranches", "matrix", "people", "attention", "events"):
+    for name in ("running", "tasks", "pools", "progress", "decisions", "tranches", "matrix", "people", "attention"):
         p = os.path.join(a.out, f"{name}.json")
         print(name, hashlib.sha256(open(p, "rb").read()).hexdigest(), p)
     print("alerts", len(alerts), "|", " ".join(f"{k} {v}" for k, v in n.items()))

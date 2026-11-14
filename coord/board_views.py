@@ -10,7 +10,6 @@ tasks, every claim, heartbeats, what the results dataset holds), our own Slurm q
     people.json     the same rows, with a state for the overview cards
     attention.json  current problems only: failures grouped by (site, baseline, model, stage, cause), unreachable
                     machines, stale workers, open decisions
-    events.json     activity, grouped: claims, finishes, failures (marked resolved or cancelled), memories built
     progress.json, tranches.json, decisions.json   fixed context (tranche 1 results, banks, decisions)
 
 Readers see sites only: a pool's queue is detail text ("Nexus · vulcan-sailon"), never a row or a column value,
@@ -36,6 +35,7 @@ POOLS = {   # the old Nexus names (nexus, nexus-test, nexus-slurm) until their l
     "nexus-slurm": ("Nexus", "Anubhav's agent", "vulcan-ampere (QoS vulcan-sailon)", "vulcan-sailon"),
     "vatsal-sailon": ("Nexus", "Vatsal's agent", "vulcan-ampere (his QoS vulcan-sailon)", "vulcan-sailon, Vatsal"),
     "vatsal-h200": ("Nexus", "Vatsal's agent", "H200 (his QoS vulcan-high-h200)", "H200, Vatsal"),
+    "vatsal": ("Nexus", "Vatsal's agent", "his vulcan-sailon and H200 queues (one worker, #36)", "Vatsal"),
     "wriva": ("wriva", "Archana and Aaron", "4x H100 (cml-wriva, their accounts)", "cml-wriva"),
     "max": ("Max", "Max's agent", "H100 80 GB on his Slurm cluster", ""),
     "zaratan": ("Zaratan", "Anubhav's agent", "H100 / A100 (AAC)", ""),
@@ -218,7 +218,6 @@ def update(out, raw, live, nxq, built_src):
     finished = {x["id"] for x in tasks if x["id"] in done_claims or (x["baseline"], x["arm"], x["video"]) in built and x["stage"] == "build"
                 or (x["baseline"], x["arm"], x["video"], x.get("bank")) in answered}
     tasks = [x for x in tasks if x["id"] not in finished]   # done, but the master has not dropped them yet
-    open_ids = {x["id"] for x in tasks}
     task_rows, problems = [], {}
     for x in tasks:
         cs = by_task.get(x["id"], [])
@@ -378,40 +377,6 @@ def update(out, raw, live, nxq, built_src):
             att.append(dict(kind="decision", severity="warn", site="Anubhav", what=f"{d['id']}. {d['question']}", count=None,
                             cause=d["why"], fix=d["options"]))
 
-    # activity: claims still running and every claim's end, grouped by (site, event, experiment) within 30 minutes
-    ev = []
-    for c in raw["claims"]:
-        b, arm, stage, bank, v = parse_task(c["task"])
-        exp, s_ = experiment(b, arm, stage, bank), site(c["pool"])
-        if c["status"] == "running" and c.get("claimed"):   # finished claims show as their end only
-            ev.append((c["claimed"], s_, "claimed", exp, "still running"))
-        if c["status"] in ("done", "failed", "superseded") and c.get("finished"):
-            if c["status"] == "failed":
-                newer = by_task[c["task"]][-1]
-                now_ = ("since resolved" if c["task"] not in open_ids else
-                        f"retried on {site(newer['pool'])}" if newer["status"] == "running" else "still open")
-                e = "cancelled" if c.get("exit") == -1 else "failed"
-                note = cause(c) if e == "failed" else ""
-                note = (note + "; " if note else "") + now_
-                ev.append((c["finished"], s_, e, exp, note))
-            else:
-                ev.append((c["finished"], s_, c["status"], exp, ""))
-    for k, e in ledger.items():
-        if e["t"] and off_board(k, e):
-            b, arm, _ = k.split("|")
-            ev.append((_iso(e["t"]), site(e["pool"]), "built", experiment(b, arm, "build", None), "off the board"))
-    ev.sort()
-    groups = []
-    for ts, s_, e, exp, note in ev:
-        hit = next((g for g in reversed(groups) if (g["site"], g["event"], g["what"], g["note"]) == (s_, e, exp, note)
-                    and (_t(ts) or 0) - (_t(g["t_last"]) or 0) <= 1800), None)
-        if hit:
-            hit["count"] += 1
-            hit["t_last"] = ts
-        else:
-            groups.append(dict(t=ts, t_last=ts, site=s_, event=e, what=exp, count=1, note=note))
-    events = sorted(groups, key=lambda g: g["t_last"], reverse=True)[:150]
-
     W = lambda n, o: json.dump(o, open(os.path.join(out, n), "w"), indent=0)
     W("matrix.json", matrix)
     W("tasks.json", task_rows)
@@ -419,9 +384,8 @@ def update(out, raw, live, nxq, built_src):
     W("pools.json", pools)
     W("people.json", people)
     W("attention.json", att)
-    W("events.json", events)
     W("progress.json", PROGRESS)
     W("tranches.json", TRANCHES)
     W("decisions.json", DECISIONS)
     W("ledger.json", ledger)
-    return dict(tasks=len(task_rows), running=len(running), attention=len(att), events=len(events))
+    return dict(tasks=len(task_rows), running=len(running), attention=len(att))

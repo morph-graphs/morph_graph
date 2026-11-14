@@ -82,13 +82,12 @@
     <button class="jb-tab" role="tab" data-tab="now" aria-selected="false">Running now</button>
     <button class="jb-tab" role="tab" data-tab="machines" aria-selected="false">Machines</button>
     <button class="jb-tab" role="tab" data-tab="queue" aria-selected="false">Work queue</button>
-    <button class="jb-tab" role="tab" data-tab="activity" aria-selected="false">Activity</button>
     <button class="jb-tab" role="tab" data-tab="context" aria-selected="false">Context</button>
   </nav>
 
   <section class="jb-sec" id="overview">
     <h2 id="h-need">What needs you?</h2>
-    <p class="jb-note">Current problems only: failures of tasks that are still open and that nobody has claimed since, grouped by machine, experiment and cause. Failures that were later fixed, and jobs we cancelled, are in Activity.</p>
+    <p class="jb-note">Current problems only: failures of tasks that are still open and that nobody has claimed since, grouped by machine, experiment and cause. Failures that were later fixed, and jobs we cancelled, are not shown.</p>
     <div class="jb-att jb-ph" data-draw="attention" data-source="attention"></div>
 
     <h2 id="h-progress">What is moving?</h2>
@@ -157,17 +156,6 @@
       </table>
     </div>
     <button class="jb-more" id="more" type="button">Show 50 more</button>
-  </section>
-
-  <section class="jb-sec" id="activity" hidden>
-    <h2>What happened recently?</h2>
-    <p class="jb-note">Newest first. Claims still running, every finished claim (done, failed, cancelled, taken over by another pool) and memories built off the board, grouped when one pool did the same thing within 30 minutes. A failure marked "since resolved" was later done, claimed again or dropped from the list.</p>
-    <div class="jb-tablewrap">
-      <table class="jb-table" data-source="events">
-        <thead><tr><th>When (UTC)</th><th>Machine</th><th>Event</th><th class="jb-num">Tasks</th><th>What</th><th>Note</th></tr></thead>
-        <tbody data-draw="events"></tbody>
-      </table>
-    </div>
   </section>
 
   <section class="jb-sec" id="context" hidden>
@@ -387,22 +375,6 @@ dash.draw('rows', (body) => {
     const s = el('td'); chip(s, x.state); tr.appendChild(s);
     tr.appendChild(el('td', 'jb-nowrap', x.on || '—')); tr.appendChild(el('td', 'jb-muted', x.where || '—'));
     tr.appendChild(el('td', 'jb-muted', x.note || '—')); tr.appendChild(el('td', 'jb-muted', x.can_run_on));
-    body.appendChild(tr);
-  }
-});
-
-dash.draw('events', (body) => {
-  const e = dash.data('events');
-  body.replaceChildren();
-  if (e.status !== 'ok') return;
-  if (!e.data.length) { const tr = el('tr'); const td = el('td', 'jb-muted', 'No activity yet.'); td.colSpan = 6; tr.appendChild(td); body.appendChild(tr); return; }
-  for (const x of e.data) {
-    const resolved = /since resolved/.test(x.note || '') || x.event === 'cancelled' || x.event === 'superseded';
-    const tr = el('tr'); if (resolved) tr.className = 'is-muted';
-    tr.appendChild(el('td', 'jb-num', hhmm(x.t) + (x.t_last && x.t_last !== x.t ? ` – ${hhmm(x.t_last).slice(11)}` : '')));
-    tr.appendChild(el('td', 'jb-nowrap', x.site));
-    const s = el('td'); if (x.event === 'failed' && !resolved) chip(s, 'failed'); else s.textContent = x.event; tr.appendChild(s);
-    tr.appendChild(el('td', 'jb-num', fmt(+x.count))); tr.appendChild(el('td', '', x.what)); tr.appendChild(el('td', 'jb-muted', x.note || ''));
     body.appendChild(tr);
   }
 });
