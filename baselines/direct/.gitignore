@@ -1,4 +1,0 @@
-work/
-results/
-# the root ENV/ rule matches env/ on case-insensitive filesystems; these are code
-!env/

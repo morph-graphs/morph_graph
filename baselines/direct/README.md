@@ -11,6 +11,7 @@ where MERIT puts its retrieved context, so MERIT, blind and direct differ only i
 |---|---|
 | `epic/direct_qa.py` | one video, one bank: sample the frames per question, ask, score, write the answers |
 | `run_direct.sh` | one video, one arm, one stage (prep, build, qa, upload, all); `build` does nothing |
+| `../common/hf_results.py` | (shared by all baselines) upload a video's results to the Hugging Face dataset |
 | `env/setup_env.sh` | builds the model's MERIT environment (`baselines/merit/env/`): nothing extra is needed |
 
 It uses, from `baselines/merit/` (the MERIT submodule must be checked out): the prep (`epic/prepare_epic.py`:
@@ -30,17 +31,17 @@ at 136 s or later (median about 1,900 s), so 1 fps without a cap would be 1,600 
 **What the model sees.** The frames go in as one video through the model's own video input, with their true
 time stamps (`<17.5 seconds>` before each pair of frames: the mean of the pair). Qwen3-VL joins 2 frames into one group of
 (448 / 32)^2 = 196 tokens, so N frames cost 98 N tokens: 3.1k for N = 32, 12.5k for 128, 75k for 768. The
-processor is given the exact pixel count, so it never rescales a frame (asserted per question). `-p<px>` in
-the arm shrinks the frames first (224 px: 49 tokens per 2 frames), for large N.
+processor is given the exact pixel count, so it never rescales a frame (asserted per question).
 
 **Prompt and decoding.** MERIT's final-answer step, word for word: its system prompt, `Query: ... Query Time:
 ... Choices: (A) ...`, `Context:`, then the video where MERIT has its retrieved captions and frames, then
 "Please provide only the final answer from the choices given". Greedy decoding, up to 2,048 new tokens,
-Qwen3.8 in instruct mode, MERIT's `ANSWER: X` parser and scorer. Differences from MERIT's step: the frames
-are one video (time-stamped, 2 frames per token group) rather than separate images, and the system prompt
-still speaks of "retrieved memory context", which here is the video.
+Qwen3.8 in instruct mode, MERIT's `ANSWER: X` parser and scorer. Three differences from MERIT's step remain:
+1. the frames are one video (time-stamped, 2 frames per token group), not separate images;
+2. the system prompt still speaks of "retrieved memory context", which here is the video;
+3. `Query Time` is written as MERIT writes it (`DAY1 00:27:04`), while the frames' stamps are in seconds.
 
-**Arms.** `<model>-f<N>[-p<px>]`, e.g. `qwen3vl-8b-f128`. The model and frame setting are the arm, so each
+**Arms.** `<model>-f<N>`, e.g. `qwen3vl-8b-f128`; the settings we run are N = 32, 128 and 768. The model and frame setting are the arm, so each
 setting has its own results folder and its own row in the results table ("N. Frames" = N).
 
 | model | Hugging Face id | environment | GPU |
@@ -51,8 +52,13 @@ setting has its own results folder and its own row in the results table ("N. Fra
 Time per question on an RTX A6000, Qwen3-VL-8B (P05-20240425-201444, 8 questions each): about 11 s (N = 32),
 14 s (128), 55 s (768).
 
-Other models need a name in MERIT's wrapper first (it picks the model class by name), then a line in
-`run_direct.sh`.
+Not yet (each resolves on Hugging Face; none is downloaded or wired):
+
+| model | what it needs |
+|---|---|
+| Qwen/Qwen3.5-9B (9.7B, `qwen3_5`) | a name in MERIT's wrapper, which picks the model class and instruct mode by name; the m27 environment should do |
+| Qwen/Qwen3.5-35B-A3B (36B, `qwen3_5_moe`) | the same, with its own model class; about 72 GB of weights |
+| allenai/Molmo2-8B (`molmo2`) | its own loader and input format (not a Qwen processor), probably its own environment |
 
 ## Running
 
@@ -77,6 +83,9 @@ memory is written as "Error" and retried on the next run.
   `video_tokens`, `prompt_tokens`, `seconds`, `setting`.
 - `runs.jsonl`: one line per finished `qa` (commits, model, frame setting, torch and transformers versions, GPU, seconds).
 
-In the results dataset these belong at `direct/<arm>/<video>/`. The `upload` stage is not wired yet:
-`baselines/common/hf_results.py upload` refuses a folder without memory files and needs a no-memory mode
-first. There is no Docker image yet either; the MERIT images hold the same environments.
+`upload` puts the folder in the private dataset
+[morph-graphs/epic-morph-results](https://huggingface.co/datasets/morph-graphs/epic-morph-results) at
+`direct/<arm>/<video>/` (a member's token with write access: `HF_TOKEN`, or `hf auth login`).
+
+There is no Docker image of its own: the MERIT images (`baselines/merit/docker/`) hold the same two
+environments. Job board entries (`coord/`) come next.

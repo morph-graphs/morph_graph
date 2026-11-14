@@ -11,7 +11,7 @@ k + 0.5 s (checked against exact pictures: t00100.jpg is closest to 100.5 s), so
 may use frames 0..floor(t_ask - 0.5) and nothing after t_ask is shown. --frames N takes N of them, evenly spaced from the first to the
 last (which is always included); when fewer than N exist it takes all, i.e. 1 fps. So N is both "uniform N
 frames" and "1 fps up to a cap of N". They go in as one video with their true time stamps (the model's own
-video input: 2 frames per token group, --frame_px 448 -> 196 tokens per 2 frames).
+video input: 2 frames per token group, 196 tokens per 2 frames at 448 px).
 
     python epic/direct_qa.py --model qwen3vl-8b --frames 128 --bank_file <V>_questions.json --video <V> \
         --frame_root <work>/frames_448 --skeleton <work>/prep/captions/<V>/<V>_30sec_skeleton.json \
@@ -31,6 +31,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 MERIT = os.path.join(HERE, "..", "..", "merit")
 sys.path[:0] = [os.path.join(MERIT, "epic"), os.path.join(MERIT, "MERIT", "src"), os.path.join(MERIT, "MERIT", "eval")]
 from prepare_epic import convert_questions, match_answers  # noqa: E402
+
+PX = 448   # the side of prepare_epic's frames, shown to the model as they are
 
 
 def pick_frames(t_ask, n_have, n):
@@ -57,7 +59,6 @@ def main():
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     p.add_argument("--model", default="qwen3vl-8b", help="a name of MERIT's Qwen wrapper: qwen3vl-8b, qwen38-27b")
     p.add_argument("--frames", type=int, required=True, help="frame budget N per question")
-    p.add_argument("--frame_px", type=int, default=448, help="side of a frame as the model sees it (multiple of 32)")
     p.add_argument("--video", required=True)
     p.add_argument("--bank_file", required=True, help="epic-morph outputs/v3/banks/<bank>/<video>_questions.json")
     p.add_argument("--frame_root", required=True)
@@ -65,13 +66,12 @@ def main():
     p.add_argument("--output", required=True)
     p.add_argument("--limit", type=int, default=0, help="answer only this many of the unanswered questions, spread over the bank (smoke test)")
     args = p.parse_args()
-    assert args.frame_px % 32 == 0, "--frame_px must be a multiple of 32 (one token covers 32 x 32 px)"
 
     end = json.load(open(args.skeleton))[-1]["end_time"]            # HHMMSS00, as run_merit.sh's qa_file
     rows = convert_questions(args.bank_file, args.video, int(end[:2]) * 3600 + int(end[2:4]) * 60 + int(end[4:6]))
     paths = frame_paths(args.frame_root, args.video)
     assert paths and sorted(paths) == list(range(len(paths))), f"frames of {args.video} missing or not 0..n-1 in {args.frame_root}"
-    setting = {"model": args.model, "frames": args.frames, "frame_px": args.frame_px}
+    setting = {"model": args.model, "frames": args.frames, "frame_px": PX}
     # an earlier answer is reused only for the same question (key, wording, options, gold letter) and setting
     done = {}
     if os.path.exists(args.output):
@@ -118,13 +118,12 @@ def main():
         text = llm.processor.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True, **thinking)
         video = {}
         if secs:
-            frames = [Image.open(paths[s]).convert("RGB").resize((args.frame_px, args.frame_px), Image.BICUBIC)
-                      if args.frame_px != 448 else Image.open(paths[s]).convert("RGB") for s in secs]
+            frames = [Image.open(paths[s]).convert("RGB") for s in secs]
             idx = secs + secs[-1:] * (len(secs) % 2)   # an even count: the model joins frames in pairs (the processor
             frames += frames[-1:] * (len(secs) % 2)     # would repeat the last one too, but only after resizing for the odd count)
-            # total pixels pinned (min = max), so the processor keeps every frame at frame_px (as video_models/qwen3_vl.py);
+            # total pixels pinned (min = max), so the processor keeps every frame at 448 px (as video_models/qwen3_vl.py);
             # frame k is the picture at k + 0.5 s: index 2k + 1 at 2 fps gives each pair the mean of its two times as its stamp
-            budget = args.frame_px ** 2 * len(frames)
+            budget = PX ** 2 * len(frames)
             video = dict(videos=[frames], do_sample_frames=False, size={"shortest_edge": budget, "longest_edge": budget},
                          video_metadata=[VideoMetadata(total_num_frames=2 * len(paths), fps=2.0, frames_indices=[2 * k + 1 for k in idx])])
         inputs = llm.processor(text=[text], padding=True, return_tensors="pt", **video)
@@ -135,8 +134,8 @@ def main():
             stamps = re.findall(r"<([\d.]+) seconds>", llm.processor.tokenizer.decode(inputs.input_ids[0][inputs.input_ids[0] != video_token]))
             print(f"time stamps of {len(secs)} frames ({secs[:2]} .. {secs[-2:]} s): {stamps[:2]} .. {stamps[-2:]}", flush=True)
             shown = True
-        if secs:   # every frame kept at frame_px: (frame_px / 32)^2 tokens per 2 frames
-            assert n_video == math.ceil(len(secs) / 2) * (args.frame_px // 32) ** 2, (n_video, len(secs))
+        if secs:   # every frame kept at 448 px: (448 / 32)^2 = 196 tokens per 2 frames
+            assert n_video == math.ceil(len(secs) / 2) * (PX // 32) ** 2, (n_video, len(secs))
         try:
             torch.manual_seed(42)
             with torch.no_grad():
@@ -165,7 +164,7 @@ def main():
     out = save()
     bad = [r["ID"] for r in out if r["response"] == "Error"]
     if llm is not None:
-        print(f"peak GPU memory {torch.cuda.max_memory_allocated() / 2 ** 30:.1f} GB")
+        print("peak GPU memory (GB per GPU):", [round(torch.cuda.max_memory_allocated(i) / 2 ** 30, 1) for i in range(torch.cuda.device_count())])
     k = sum(r["evaluate"] for r in out)
     print(f"direct {args.model} f{args.frames}: accuracy {k}/{len(out)} = {k / max(1, len(out)):.4f}; "
           f"{len(bad)} failed, {len(rows) - len(out)} of the bank's {len(rows)} not asked")
