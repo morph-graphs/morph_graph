@@ -108,11 +108,17 @@ def arm00(rows, built, alerts):
 def nexus(rows, alerts, nxq):
     """Nexus jobs: every user's board-task jobs (named board-<task id>; wriva's run under Aaron's or Archana's
     account) go to nxq for the views; our other jobs are rows."""
-    rc, out = sh(["nx", "squeue -h -o '%i|%j|%P|%T|%M|%R|%u' | awk -F'|' '$7 == \"anubhav\" || $2 ~ /^board-/' "
-                        "| grep -v keepalive"], timeout=120)
-    if rc not in (0, 1):
+    q = "squeue -h -o '%i|%j|%P|%T|%M|%R|%u' | awk -F'|' '$7 == \"anubhav\" || $2 ~ /^board-/' | grep -v keepalive"
+    # squeue on the login node over its own ssh connection: the shared nx connection refuses new sessions when the
+    # agents use it at the same time ("Session open refused by peer"); nx only as the fallback
+    for cmd in (SSH + ["-o", "RemoteCommand=none", "-o", "RequestTTY=no", "nexus", q], SSH + ["-o", "RemoteCommand=none",
+                "-o", "RequestTTY=no", "nexus", q], ["nx", q]):
+        rc, out = sh(cmd, timeout=120)
+        if rc in (0, 1) and "|" in out:
+            break
+    else:
         alerts.append(dict(pool="nexus", what="Nexus not readable", state="alert", since=now(),
-                           note="nx returned nothing: its login lapsed. Run `! nx login` (Duo); until then Nexus jobs show as claimed"))
+                           note="neither ssh nexus nor nx answered (login lapsed? run `! nx login`); Nexus and wriva jobs show as claimed"))
         return
     for line in out.splitlines():
         if line.count("|") < 5:
