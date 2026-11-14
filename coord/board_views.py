@@ -40,10 +40,11 @@ POOLS = {   # the old Nexus names (nexus, nexus-test, nexus-slurm) until their l
     "vatsal": ("Nexus", "Vatsal's agent", "his vulcan-sailon and H200 queues (one worker, #36)", "Vatsal"),
     "wriva": ("wriva", "Archana and Aaron", "4x H100 (cml-wriva, their accounts)", "cml-wriva"),
     "max": ("Max", "Max's agent", "H100 80 GB on his Slurm cluster", ""),
+    "pulkit": ("Pulkit", "Pulkit's agent", "his NVIDIA GPUs (Docker images)", ""),
     "zaratan": ("Zaratan", "Anubhav's agent", "H100 / A100 (AAC)", ""),
     "arm00": ("arm00", "Anubhav's agent", "1x GH200 96 GB (vulcan-arm00)", ""),
 }
-SITES = ["Nexus", "wriva", "Max", "Zaratan", "arm00"]
+SITES = ["Nexus", "wriva", "Max", "Pulkit", "Zaratan", "arm00"]
 OURS = {p for p, v in POOLS.items() if v[0] in ("Nexus", "wriva")}   # pools on Nexus: the collector's squeue shows their jobs
 
 

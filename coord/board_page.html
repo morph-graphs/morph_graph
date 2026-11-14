@@ -235,7 +235,8 @@ dash.calc('scope', {
     return [{videos: all ? +all.videos : null, questions: d3.sum(banks, (b) => +b.questions || 0), banks: banks.length}];
   },
 });
-window.jb = window.jb || {shown: 50, q: '', state: 'moving', exp: '', pool: ''};
+// the page's root element has id="jb", which the browser also exposes as window.jb: keep the state only when it is ours
+window.jb = (window.jb && !window.jb.nodeType ? window.jb : null) || {shown: 50, q: '', state: 'moving', exp: '', pool: ''};
 const fmt = d3.format(',');
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const BAD = new Set(['failed', 'failing', 'held', 'unreachable', 'worker stale']);
