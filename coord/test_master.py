@@ -73,7 +73,7 @@ def test_experiments():
     direct = {(arm, stage, bank) for b, arm, stage, bank in ex if b == "direct"}
     assert direct == {(arm, "qa", bank) for arm in M.DIRECT for bank in M.BANKS} and len(direct) == len(M.DIRECT) * len(M.BANKS)
     for arm, pools in M.DIRECT.items():
-        assert pools == (M.M8 if arm.startswith(("qwen3vl-8b", "qwen35-9b", "molmo2-8b")) else ["nexus", "vatsal"] if arm == "qwen38-27b-f768" else M.M27)
+        assert pools == (M.M8 + M.NEXUS if arm.startswith("molmo2-8b") else M.M8 if arm.startswith(("qwen3vl-8b", "qwen35-9b")) else ["pulkit"] if arm == "qwen38-27b-f768" else M.M27)
         assert all(ex["direct", arm, "qa", bank] == pools for bank in M.BANKS) and not M.needs("direct", arm, "qa")
 
 
@@ -150,11 +150,10 @@ def test_needs_env_and_pools(monkeypatch, tmp_path):
         need = M.needs(t["baseline"], t["arm"], t["stage"])
         assert t.get("needs_env") == need
         if need:
-            # our Nexus worker is offered the gpt-5-mini work (MERIT's and WorldMM's g5m builds, WorldMM g5m-q8's
-            # retriever: either key) and MAGIC's oss120 arms; every other keyed task, the gpt-5 answer arms
-            # (g5m-g5) among them, stays Max's with its own key
+            # every keyed task is Max's and Pulkit's (since 2026-11-14 no longer also our Nexus worker's for the
+            # OpenRouter-only arms)
             router = (t["baseline"], t["arm"]) in ROUTER
-            assert t["pools"] == (M.KEY_POOLS + ["nexus"] if router else M.KEY_POOLS), t
+            assert t["pools"] == M.KEY_POOLS == ["max", "pulkit"], t
             if (t["baseline"], t["arm"]) not in {(b, arm) for b, arm, *_ in M.PAID}:
                 assert need == (["GEMINI_API_KEY"] if t["arm"].startswith("gemini") else ["OPENAI_API_KEY|OPENROUTER_API_KEY"]
                                 if router else ["OPENAI_API_KEY"])
@@ -168,8 +167,8 @@ def test_needs_env_and_pools(monkeypatch, tmp_path):
     assert all(t["pools"] == ([] if own(t) else ["a-test-pool"]) for t in tasks)
     M.restrict(tasks := M.desired(set(), set()), ["max", "a-test-pool"])
     assert all(t["pools"] == (["max"] if own(t) else ["max", "a-test-pool"]) for t in tasks)
-    M.restrict(tasks := M.desired(set(), set()), ["nexus"])   # a keyed task reaches nexus only where it was listed for it
-    assert {(t["baseline"], t["arm"]) for t in tasks if t.get("needs_env") and t["pools"] == ["nexus"]} == ROUTER
+    M.restrict(tasks := M.desired(set(), set()), ["nexus"])   # no keyed task reaches nexus any more
+    assert not [t for t in tasks if t.get("needs_env") and t["pools"] == ["nexus"]]
     assert {t["baseline"] for t in tasks if t["arm"] == "g5m-g5"} == {"merit", "worldmm"}
     assert all(t["pools"] == [] and t["needs_env"] == ["OPENAI_API_KEY"] for t in tasks if t["arm"] == "g5m-g5")
     assert all(t["pools"] in ([], ["nexus"]) for t in tasks if t.get("needs_env"))
