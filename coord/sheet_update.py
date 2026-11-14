@@ -19,6 +19,10 @@ stays) and exits 1.
 
     EPIC_MORPH_DIR=<epic-morph checkout> HF_TOKEN=... python coord/sheet_update.py --dry-run
     EPIC_MORPH_DIR=<epic-morph checkout> HF_TOKEN=... python coord/sheet_update.py --cache <dir>
+
+--json <file> also writes that scoring pass as JSON for the job board's Accuracy tab (coord/collect_live.py reads
+it): the table's rows under their column names, and per row the counts behind its leaf columns, by leaf, video,
+hops and question form. With --dry-run it is written too (the sheet is still not contacted).
 """
 import argparse
 import datetime
@@ -179,8 +183,28 @@ def pct(k, n):
     return round(100 * k / n, 2) if n else ""
 
 
+DIMS = ("leaf", "video", "hops", "form")   # what --json breaks a row down by; a question can carry several leaves
+
+
+def cells(qa, per):
+    """{(dimension, category): [answered, right, in bank]} of one row: every question of the bank counted under its
+    taxonomy leaves, its video, its hops and its form (qa: {video: bank rows}, per: score()'s {video: {ID: right?}})."""
+    out = {}
+    for v, rows in qa.items():
+        for q in rows:
+            ok = per.get(v, {}).get(str(q["ID"]))   # None: no counted answer
+            for dim, cats in zip(DIMS, (q["leaves"] or ["(none)"], [v], [q["meta"].get("hops")], [q["meta"].get("form")])):
+                for c in cats:
+                    x = out.setdefault((dim, "(none)" if c is None else str(c)), [0, 0, 0])
+                    x[0] += ok is not None
+                    x[1] += bool(ok)
+                    x[2] += 1
+    return out
+
+
 def build(a, now):
-    """Everything read-only: returns the tab's rows (header block, column names, table)."""
+    """Everything read-only: returns the tab's rows (header block, column names, table) and the same pass as the
+    --json object {meta, runs, breakdown}."""
     from huggingface_hub import HfApi
     epic = a.epic_morph or os.environ.get("EPIC_MORPH_DIR")
     if not epic:
@@ -208,7 +232,8 @@ def build(a, now):
         skipped += len(p) == 4 and p[3].startswith(("answers_", "blind_")) and not parse(p[3])
 
     leaves = sorted({x for qa in banks.values() for rows in qa.values() for r in rows for x in r["leaves"]})
-    table = []
+    tax = json.load(open(os.path.join(epic, "v3", "taxonomy.json")))["leaves"]
+    table, breakdown = [], []
     for (b, arm, bank, kind, tag), by_video in sets.items():
         if kind == "blind" and not tag:
             continue   # the arm's no-memory floor: a column of its rows, not a row
@@ -244,11 +269,17 @@ def build(a, now):
                 times.append(datetime.datetime.fromisoformat(x["finished"]).astimezone(datetime.timezone.utc))
             except (KeyError, TypeError, ValueError):
                 pass
-        leaf = []
-        for code in leaves:   # over answered questions carrying the leaf (a question can carry several)
-            ok = [per[v][str(q["ID"])] for v in per for q in qa[v] if code in q["leaves"] and str(q["ID"]) in per[v]]
-            leaf.append(pct(sum(ok), len(ok)))
-        table.append([f"{b}/{arm}/{bank}" + (f"/{tag}" if tag else ""), *METHODS.get((b, arm), (f"{b}/{arm}", "", "", "")),
+        key = f"{b}/{arm}/{bank}" + (f"/{tag}" if tag else "")
+        by = cells(qa, per)
+        # over answered questions carrying the leaf (a question can carry several)
+        leaf = [pct(by[x][1], by[x][0]) if x in by else "" for x in (("leaf", code) for code in leaves)]
+        # the counts behind them, for --json; an "all" row's videos are its banks' rows', so not repeated
+        breakdown += [dict(run=key, bank=bank, dimension=dim, category=cat,
+                           label=tax[cat]["name"] if dim == "leaf" and cat in tax else cat,
+                           n_answered=n, n_right=k, n_in_bank=m)
+                      for (dim, cat), (n, k, m) in sorted(by.items(), key=lambda kv: (DIMS.index(kv[0][0]), kv[0][1]))
+                      if not (bank == ALL and dim == "video")]
+        table.append([key, *METHODS.get((b, arm), (f"{b}/{arm}", "", "", "")),
                       b, arm, bank, tag, done, len(per), len(qa), answered, n_bank, right,
                       pct(right, n_bank), pct(right, answered), *(round(100 * x, 2) if x != "" else "" for x in (lo, hi)), how,
                       f_done if floor else "", f_ans if floor else "", f_right if floor else "",
@@ -257,8 +288,6 @@ def build(a, now):
                       dropped, "; ".join(notes), ", ".join(gpus),
                       max(times).strftime("%Y-%m-%d %H:%M") if times else "", *leaf])
     table.sort(key=lambda r: ((BANKS + [ALL]).index(r[7]), r[5], r[6], r[8]))
-
-    tax = json.load(open(os.path.join(epic, "v3", "taxonomy.json")))["leaves"]
     head = [
         [f"{SENTINEL}: written by coord/sheet_update.py, do not edit. Rewritten on every run; look rows up by row_key."],
         ["status", "OK"],
@@ -276,7 +305,17 @@ def build(a, now):
         ["taxonomy leaves", "; ".join(f"{c} = {tax[c]['name']}" if c in tax else c for c in leaves)],
         COLS + [f"leaf_{c}_pct" for c in leaves],
     ]
-    return head + table
+    # --json: the table's own rows under their column names (an empty cell is null; the leaf columns are in
+    # breakdown as counts), so the board shows the sheet's numbers and nothing is scored twice
+    runs = [{k: (None if v == "" else v) for k, v in zip(COLS, r)} for r in table]
+    for r in runs:
+        r["partial"] = r["videos_done"] < r["videos_in_bank"]
+    meta = dict(written_utc=now.strftime("%Y-%m-%dT%H:%M:%SZ"), dataset=RESULTS, dataset_revision=info.sha,
+                dataset_last_modified_utc=f"{info.last_modified:%Y-%m-%dT%H:%M:%SZ}",
+                bank_commit=git("log", "-1", "--format=%H"), banks=BANKS + [ALL], dimensions=list(DIMS),
+                intervals="runs: ci95_lo_pct / ci95_hi_pct as in the sheet (ci_method); breakdown: counts only, "
+                          "the reader computes its interval (the board page: Wilson)")
+    return head + table, dict(meta=meta, runs=runs, breakdown=breakdown)
 
 
 # ------------------------------------------------------------------------------------------------------ the sheet
@@ -343,7 +382,8 @@ def col(n):
 def main():
     global TAB
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--dry-run", action="store_true", help="print the tab's rows, write nothing (the sheet is not contacted)")
+    ap.add_argument("--dry-run", action="store_true", help="print the tab's rows, write nothing to the sheet (it is not contacted)")
+    ap.add_argument("--json", help="also write the scores to this file as JSON (runs and their breakdown), for the job board; with --dry-run too")
     ap.add_argument("--tab", default=TAB, help="tests only: another tab of this script's (name starting with 'Auto: ')")
     ap.add_argument("--epic-morph", help="epic-morph checkout the banks are generated in (default $EPIC_MORPH_DIR)")
     ap.add_argument("--cache", default=os.path.join(ROOT, "coord", ".sheet_cache"), help="slim copies of the result files, by blob hash")
@@ -354,10 +394,18 @@ def main():
     TAB = a.tab
     now = datetime.datetime.now(datetime.timezone.utc)
     try:
-        rows, err = build(a, now), None
+        (rows, acc), err = build(a, now), None
     except Exception as e:   # anything: the tab must say that it is stale
         traceback.print_exc()
         rows, err = [], f"ERROR {now:%Y-%m-%d %H:%M} UTC: {type(e).__name__}: {' '.join(str(e).split())[:300]}"
+    if a.json and not err:   # one line, replaced whole; after a failed run the last good file stays (its written_utc ages)
+        try:
+            with open(a.json + ".tmp", "w") as f:
+                json.dump(acc, f)
+            os.replace(a.json + ".tmp", a.json)
+            print(f"wrote {a.json}: {len(acc['runs'])} runs, {len(acc['breakdown'])} breakdown rows", file=sys.stderr, flush=True)
+        except OSError:   # the sheet is still written: the board shows its file as stale
+            traceback.print_exc()
     if a.dry_run:
         print(err or "\n".join("\t".join(str(x) for x in r) for r in rows))
         sys.exit(1 if err else 0)

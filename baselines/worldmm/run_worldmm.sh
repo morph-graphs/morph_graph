@@ -36,6 +36,8 @@
 #   WORLDMM_FETCH    0 to never take the memory from the dataset (build normally reuses it when it is there)
 #   OPENAI_API_KEY   official arms: the key, from the environment only (never an argument or a file)
 #   WORLDMM_OPENAI_SERVICE_TIER  official arms: e.g. flex (half price, slower); default the API's standard tier
+#   WORLDMM_SERVER_WAIT  minutes to wait for the backbone server to load (default 45: Qwen3.8-27B from a busy
+#                    network filesystem took over 15 min); a server that dies ends the wait at once
 #   WORLDMM_REPO_COMMIT, WORLDMM_SUBMODULE_COMMIT, WORLDMM_EPIC_COMMIT  commits for runs.jsonl when a checkout
 #                    has no .git (a synced copy); read with git otherwise
 # Every step skips finished work, so rerunning the same command resumes. The memory is built once per video
@@ -116,12 +118,13 @@ start_server() {   # once per invocation, on a node-local unix socket
     SERVER_PID=$!
     trap 'kill $SERVER_PID 2>/dev/null; rm -f $WORLDMM_SERVER /tmp/worldmm_$$.ready' EXIT
     echo "backbone server $MP on GPU(s) $scvd, log $slog"
-    for _ in $(seq 1 180); do
+    local mins=${WORLDMM_SERVER_WAIT:-45}
+    for _ in $(seq 1 $((mins * 12))); do
         [ -f "$ready" ] && return 0
         kill -0 $SERVER_PID 2>/dev/null || { echo "server died:"; tail -20 "$slog"; exit 1; }
         sleep 5
     done
-    echo "server not ready after 15 min"; exit 1
+    echo "server not ready after $mins min (WORLDMM_SERVER_WAIT)"; exit 1
 }
 client() { CUDA_VISIBLE_DEVICES=${G[$((NGPU - 1))]} "$PY" -u "$@"; }
 backends() {   # what a stage's models need: the local server for a Qwen model, the key for an OpenAI one
