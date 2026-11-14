@@ -13,6 +13,8 @@ where MERIT puts its retrieved context, so MERIT, blind and direct differ only i
 | `run_direct.sh` | one video, one arm, one stage (prep, build, qa, upload, all); `build` does nothing |
 | `../common/hf_results.py` | (shared by all baselines) upload a video's results to the Hugging Face dataset |
 | `env/setup_env.sh` | builds the model's MERIT environment (`baselines/merit/env/`): nothing extra is needed |
+| `docker/run.sh` | the same stages inside MERIT's image of the model's environment (Docker or Apptainer): what the job board runs |
+| `docker/image_tag.sh` | that image's tag for an arm: `merit:m8-<hash>` or `merit:m27-<hash>` |
 
 It uses, from `baselines/merit/` (the MERIT submodule must be checked out): the prep (`epic/prepare_epic.py`:
 1 fps frames, question conversion, `match_answers`), MERIT's Qwen wrapper as the loader of the two models it
@@ -104,5 +106,21 @@ memory is written as "Error" and retried on the next run.
 [morph-graphs/epic-morph-results](https://huggingface.co/datasets/morph-graphs/epic-morph-results) at
 `direct/<arm>/<video>/` (a member's token with write access: `HF_TOKEN`, or `hf auth login`).
 
-There is no Docker image of its own: the MERIT images (`baselines/merit/docker/`) hold the same two
-environments. Job board entries (`coord/`) come next.
+## From an image, and on the job board
+
+There is no Docker image of its own: the MERIT images (`baselines/merit/docker/`) hold the same two environments,
+and `docker/run.sh` runs `run_direct.sh` in the one of the arm's model, with MERIT's `docker/run.sh` interface:
+
+```bash
+DIRECT_GPU=0 EPIC_MORPH_DIR=<epic-morph checkout> bash baselines/direct/docker/run.sh qa P05-20240425-201444 qwen3vl-8b-f128 batch10_agree2
+DIRECT_GPU=0 EPIC_MORPH_DIR=<epic-morph checkout> bash baselines/direct/docker/run.sh upload P05-20240425-201444 qwen3vl-8b-f128
+```
+
+The image is `ghcr.io/morph-graphs/merit:$(bash baselines/direct/docker/image_tag.sh <arm>)`; with
+`DIRECT_RUNTIME=apptainer` it is MERIT's `merit_m8.sif` / `merit_m27.sif` in `DIRECT_SIF_DIR` (default
+`MERIT_SIF_DIR`). The checkout needs the MERIT submodule (`git submodule update --init baselines/merit/MERIT`).
+The other settings are in the script's header; the `MERIT_*` ones the job board's worker sets are read too.
+
+On the job board (`coord/master.py`, `DIRECT`) every arm above at N = 32, 128 and 768 has one `qa` task per bank and
+video, with no build to wait for; a task is done when `direct/<arm>/<video>/answers_<bank>.json.gz` is in the
+dataset. A worker takes them when started with `direct` in `--baselines`; it needs MERIT's images and nothing else.
