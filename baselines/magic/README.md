@@ -174,6 +174,10 @@ the old ones). Answer rows also carry `reason_model` and `control_model`. `runs.
 endpoint returned, the calls, prompt / completion / reasoning tokens, the cost when the endpoint reports it
 (OpenRouter does) and failed calls of that stage, reruns included.
 
+On the job board these arms are not listed yet. In `coord/master.py`'s terms: all three need
+`OPENROUTER_API_KEY` (`NEEDS_ENV`, so pool `max` only: `oss120-q27` too, for its search loop), and the two answer
+arms wait for `oss120`'s build (`MEMORY_ARM`).
+
 **Cost estimate** (2026-11-13). No run of these arms exists; no full MAGIC run exists either. Counts and text
 sizes are measured on the one finished run, `m8` on P05-20240425-201444 (27.5 min, 55 clips, 59 questions at 7
 cutoffs): 14 summaries, 110 OpenIE calls, 6 semantic extractions and 696 semantic triples (at most one

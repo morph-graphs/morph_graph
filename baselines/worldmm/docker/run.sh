@@ -10,7 +10,7 @@
 #   EPIC_MORPH_DIR   the epic-morph checkout (required)
 #   WORLDMM_IMAGE    image (default ghcr.io/morph-graphs/worldmm:<arm>-<env hash>, from image_tag.sh); for
 #                    apptainer, a .sif built once with `apptainer pull worldmm_<arm>.sif docker://<that image>`
-#   WORLDMM_SIF_DIR  apptainer: a folder of such files (default MERIT_SIF_DIR); uses <dir>/worldmm_<arm>.sif when
+#   WORLDMM_SIF_DIR  apptainer: a folder of such files (default MERIT_SIF_DIR); uses <dir>/worldmm_<arm>.sif (the official arms: worldmm_m8.sif) when
 #                    it exists and WORLDMM_IMAGE is unset, so one board worker runs every baseline and arm
 #   WORLDMM_HF_CACHE Hugging Face cache on the host (default MERIT_HF_CACHE, else ~/.cache/huggingface), mounted at /hf
 #   MERIT_WORK       optional, the cluster's shared host work folder (MERIT's), mounted at /work; WorldMM's work
@@ -20,16 +20,21 @@
 #   HDEPIC_VIDEOS    videos on the host (default $EPIC_MORPH_DIR/data/HD-EPIC/videos), mounted read-only at /videos
 #   WORLDMM_OUT, WORLDMM_WORK  optional, paths inside the container (e.g. /repo/baselines/worldmm/work/check)
 #   passed through when set: HF_TOKEN MERIT_HF_REPO WORLDMM_TAG WORLDMM_FETCH WORLDMM_EMB_BATCH
-#                    WORLDMM_MAX_MEMORY MAX_BATCH THREADS
+#                    WORLDMM_MAX_MEMORY MAX_BATCH THREADS WORLDMM_OPENAI_SERVICE_TIER, and for the official arms
+#                    only OPENAI_API_KEY (by name through the environment, never on a command line) and
+#                    OPENAI_BASE_URL (another endpoint: test_official.sh's stand-in)
+# The job board (coord/worker.py) sets MERIT_GPU / MERIT_RUNTIME for every baseline: read here as fallbacks.
 set -euo pipefail
 ARM=${3:?usage: run.sh <stage> <video> <arm> [bank]}
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && pwd)
 IMAGE=${WORLDMM_IMAGE:-ghcr.io/morph-graphs/worldmm:$(bash "$REPO/baselines/worldmm/docker/image_tag.sh" "$ARM")}
 RUNTIME=${WORLDMM_RUNTIME:-${MERIT_RUNTIME:-docker}}
+case $ARM in g5m*) ;; *) unset OPENAI_API_KEY ;; esac   # only the official arms' containers get the key
 SIFS=${WORLDMM_SIF_DIR:-${MERIT_SIF_DIR:-}}
-if [ "$RUNTIME" = apptainer ] && [ -z "${WORLDMM_IMAGE:-}" ] && [ -n "$SIFS" ] && [ -s "$SIFS/worldmm_$ARM.sif" ]; then
-    IMAGE=$SIFS/worldmm_$ARM.sif
+case $ARM in g5m*) ENV=m8 ;; *) ENV=$ARM ;; esac        # the image (environment) the arm runs in, as image_tag.sh
+if [ "$RUNTIME" = apptainer ] && [ -z "${WORLDMM_IMAGE:-}" ] && [ -n "$SIFS" ] && [ -s "$SIFS/worldmm_$ENV.sif" ]; then
+    IMAGE=$SIFS/worldmm_$ENV.sif
 fi
 HF=${WORLDMM_HF_CACHE:-${MERIT_HF_CACHE:-$HOME/.cache/huggingface}}
 [ -f "$REPO/baselines/worldmm/WorldMM/src/worldmm/memory/memory.py" ] || { echo "run: git submodule update --init baselines/worldmm/WorldMM"; exit 1; }
@@ -45,8 +50,8 @@ if [ -n "${MERIT_WORK:-}" ]; then   # the shared work folder: WorldMM's own subf
     umask 002; mkdir -p "$MERIT_WORK"; BINDS+=("$(cd -P "$MERIT_WORK" && pwd):/work"); export WORLDMM_WORK=${WORLDMM_WORK:-/work/worldmm}
 fi
 if [ -n "${WORLDMM_MODEL_DIR:-}" ]; then BINDS+=("$(cd -P "$WORLDMM_MODEL_DIR" && pwd):/models:ro"); ENVS+=(WORLDMM_MODEL_DIR=/models); fi
-PASS=(HF_TOKEN MERIT_HF_REPO WORLDMM_TAG WORLDMM_FETCH WORLDMM_EMB_BATCH WORLDMM_MAX_MEMORY MAX_BATCH THREADS
-      WORLDMM_OUT WORLDMM_WORK)
+PASS=(HF_TOKEN MERIT_HF_REPO MERIT_OUTBOX WORLDMM_TAG WORLDMM_FETCH WORLDMM_EMB_BATCH WORLDMM_MAX_MEMORY MAX_BATCH THREADS
+      WORLDMM_OUT WORLDMM_WORK OPENAI_API_KEY OPENAI_BASE_URL WORLDMM_OPENAI_SERVICE_TIER)
 if [ "$RUNTIME" = apptainer ]; then
     case $IMAGE in *.sif) ;; *) IMAGE=docker://$IMAGE ;; esac
     # through APPTAINERENV_* (the environment), not --env: a command line, token included, is visible in `ps`
