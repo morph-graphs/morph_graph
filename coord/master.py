@@ -68,6 +68,12 @@ FAILED = ("", "Error", "Unable to generate answer")   # no answer: earlier.reuse
 # Since 2026-11-14 (Anubhav) the Qwen work leaves Nexus, to free it for other research: Max and Pulkit (NVIDIA,
 # GB200/GB300) take it first, Zaratan, wriva and arm00 help; Molmo2-8B (a public download) goes the same way. Claims
 # already running on Nexus finish: a worker renews its claims whatever the task's pools say.
+# Leftovers (Anubhav, 2026-11-14): Nexus should not sit idle, so a task no pool has held for LEFTOVER_H hours (since it
+# was listed, or since a claim on it ended) is offered to LEFTOVER_POOLS too (our worker and Vatsal's, each over all of
+# its queues); new work goes to the pools below first. Not a keyed task, nor one listed for KEY_POOLS only (Max's and
+# Pulkit's paid rows).
+LEFTOVER_POOLS = ["nexus", "vatsal"]
+LEFTOVER_H = 2
 M8 = ["max", "pulkit", "wriva", "zaratan"]   # zaratan: H100 jobs
 M27 = ["wriva", "zaratan", "max", "pulkit"]
 POOLS = {("merit", "m27"): M27 + ["arm00"], ("merit", "m8"): M8,
@@ -408,6 +414,21 @@ def gate(tasks):
     return keep, len(tasks) - len(keep)
 
 
+def leftovers(tasks, old, now, claimed=()):
+    """Add LEFTOVER_POOLS to a task nobody has held for LEFTOVER_H hours. listed_t, carried over from the previous
+    tasks.json, is when it was last free: reset while a pool holds it (claimed: the ids running or waiting for a
+    relay), so a claim that lapses or fails gives the other pools another LEFTOVER_H hours first."""
+    since = {t.get("id"): t.get("listed_t") for t in old}
+    n = 0
+    for t in tasks:
+        t["listed_t"] = now if t["id"] in claimed else since.get(t["id"]) or now
+        if (t["pools"] and t["pools"] != KEY_POOLS and not t.get("needs_env")
+                and now - t["listed_t"] >= LEFTOVER_H * 3600):
+            t["pools"] = t["pools"] + [p for p in LEFTOVER_POOLS if p not in t["pools"]]
+            n += 1
+    return n
+
+
 def restrict(tasks, only_pools):
     """--only-pools (a test): every task to these pools, except that a task needing a key, or listed for the key
     pool only, never leaves its own."""
@@ -453,6 +474,7 @@ def main():
                                       not reported(t) and t["video"] not in a.first, t["priority"]))
         for i, t in enumerate(tasks):
             t["priority"] = i
+        left = leftovers(tasks, old, int(jobs.now()), {tid for tid, (_, c) in held.items() if c["status"] != "done"})
         if a.only_pools is not None:
             restrict(tasks, a.only_pools)
         if a.dry_run:
@@ -468,6 +490,7 @@ def main():
                   "done already and still stale (the worker's bank is older than the master's, or the questions failed again)")
             print(f"gate: {withheld} tasks withheld (PILOT: the reported-configuration and paid-row arms; HELD: {sorted(HELD)})"
                   + (f"; listed of them: {[t['id'] for t in tasks if reported(t)]}" if PILOT else " (PILOT is empty)"))
+            print(f"leftovers: {left} tasks listed {LEFTOVER_H} h or more ago, offered to {', '.join(LEFTOVER_POOLS)} too")
             print(f"need a key (pool {', '.join(KEY_POOLS)} only): "
                   f"{sum(1 for t in tasks if t.get('needs_env'))} tasks")
             print(f"dry run, nothing committed: {len(tasks)} tasks, {len(have)} memories already built; "
