@@ -113,7 +113,11 @@ REPORTED = [("worldmm", "g5m", "build", KEY_POOLS, None), ("merit", "g5m", "buil
 # reported-configuration arms and the paid rows) that are listed; all their other tasks are withheld from tasks.json
 # (the API tasks and the local-model tasks are not affected). Empty it (a one-line PR) once the pilot's token usage has
 # been read, and the rest is listed.
-PILOT = ["worldmm-g5m-build-P05-20240425-201444"]
+PILOT = []   # emptied 2026-11-14 (Anubhav): the pilot, worldmm-g5m-build-P05-20240425-201444, cost $2.71 through OpenRouter
+# Withheld whatever PILOT says: work that is running off the board, which a board copy would pay for twice. WorldMM's
+# gpt-5-mini memories are being built by Slurm arrays on Nexus (2026-11-14: 70 of 156 in the dataset). A qa task
+# keeps its wait on such a build until the memory is uploaded. Empty this when the arrays are done.
+HELD = {("worldmm", "g5m", "build")}
 # The other paid rows of the sheet, each baseline with the models it was published with (baselines/<b>/README.md).
 # Decided by Anubhav: batch10 only (a build line with a bank builds only that bank's videos: 10 memories, no tranche,
 # no 156-video builds), and run by Max: every line is for KEY_POOLS, also a stage that calls no API (HippoMM's build,
@@ -380,8 +384,10 @@ def desired(have, files, answers=None, busy=()):
 
 
 def gate(tasks):
-    """(tasks to list, how many PILOT withholds): of the gated arms (GATED) only PILOT's tasks, while it is non-empty."""
-    keep = [t for t in tasks if not PILOT or not reported(t) or t["id"] in PILOT]
+    """(tasks to list, how many are withheld): of the gated arms (GATED) only PILOT's tasks, while it is non-empty,
+    and none of HELD."""
+    keep = [t for t in tasks if (t["baseline"], t["arm"], t["stage"]) not in HELD
+            and (not PILOT or not reported(t) or t["id"] in PILOT)]
     return keep, len(tasks) - len(keep)
 
 
@@ -443,7 +449,7 @@ def main():
             print(f"stale answers: {sum(redo.values())} tasks listed again, {sum(qs.values())} questions to ask again; "
                   f"{sum(held.get(t['id'], (0, {}))[1].get('status') == 'done' for t in tasks if 'stale' in t)} of them "
                   "done already and still stale (the worker's bank is older than the master's, or the questions failed again)")
-            print(f"pilot gate: {withheld} tasks of the reported-configuration and paid-row arms withheld"
+            print(f"gate: {withheld} tasks withheld (PILOT: the reported-configuration and paid-row arms; HELD: {sorted(HELD)})"
                   + (f"; listed of them: {[t['id'] for t in tasks if reported(t)]}" if PILOT else " (PILOT is empty)"))
             print(f"need a key (pool {', '.join(KEY_POOLS)} only; nexus too where an OpenRouter key is enough): "
                   f"{sum(1 for t in tasks if t.get('needs_env'))} tasks")
