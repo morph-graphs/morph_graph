@@ -40,7 +40,8 @@ run when one is set. Nothing imports upstream ReKV, so it is not a submodule.
 | `../common/hf_results.py` | (shared by all baselines) upload a video's results to the Hugging Face dataset |
 
 Arm `m8` = Qwen/Qwen3-VL-8B-Instruct (bfloat16): 48 GB of GPU memory, as one 48 GB GPU or two 24 GB ones (the
-port loads with `device_map="auto"`), and about 40 GB of host RAM for a 30 min video. There is no `m27` arm:
+port loads with `device_map="auto"`), and host RAM that grows with the video: 18 GB for a 27 min video, 36 GB for
+the longest one, 75 min ("On the job board" below). There is no `m27` arm:
 the port is written against Qwen3-VL's decoder.
 
 ## Running
@@ -103,3 +104,18 @@ Per video, at `rekv/<arm>/<video>/`:
   (start second of each retrieved feature -> number of layers that retrieved it), `version` and `memory_hash`;
 - `blind_<bank>.json.gz`: the same rows with no video;
 - `runs.jsonl`: one line per finished stage (commits, model, torch and transformers versions, GPUs, seconds).
+
+## On the job board
+
+`coord/master.py` lists one `qa` task per bank of its `BANKS` and video (`rekv-m8-qa-<bank>-<video>`), with no
+build to wait for: a task is done when `rekv/m8/<video>/answers_<bank>.json.gz` is in the dataset. `blind` is not a
+board stage. A worker takes the tasks when started with `rekv` in `--baselines`; it needs this baseline's image
+(with Apptainer, `rekv_m8.sif` in `MERIT_SIF_DIR`) and the model in `MERIT_HF_CACHE`. In a worker's queues file the
+plain `m8` names this arm as it does the other baselines': one 48 GB GPU and 40G of RAM are enough.
+
+Measured through `docker/run.sh` with Apptainer, as the worker runs a task (2026-11-14, upload to the outbox):
+
+| video | GPU | stored features, KV-cache | GPU peak | process RAM peak (anonymous) | job | answers |
+|---|---|---|---|---|---|---|
+| P05-20240425-201444, 27 min, `batch10_agree2` | RTX A6000, job with 40G | 407, 11.0 GB | 26.6 GB | 18.0 GB (14.2 GB) | 8 min | 59 of 59, all with a valid option |
+| P03-20240216-185832, 75 min (the longest), `t2_agree2` | A100 80 GB, job with 96G, then 40G | 1121, 30.2 GB | 26.7 GB | 36.0 GB (35.3 GB) | 13 min, 11 min | 139 of 139, all valid; the two runs gave the same answers and retrieved features |

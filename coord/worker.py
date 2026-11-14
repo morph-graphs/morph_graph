@@ -41,13 +41,14 @@ coord/nexus_worker.sbatch the job that runs it on Nexus):
 
     python coord/worker.py --pool vatsal --launcher slurm --queues coord/nexus_queues.json --slots 1 2 3 4 5 6 7 8
 
-The file names each queue's sbatch arguments and the arms its GPU fits ("m8", "m27", or "magic/m27" for one
-baseline). The worker claims only tasks some queue fits, and submits each task to every fitting queue at once, under
-one job name. The first copy to start runs it (coord/slurm_guard.sh: an atomic marker <task>.ran, then it cancels
-the pending copies); a copy starting later exits without work. Each cycle one squeue shows which copies are still
-queued: the task is done when the copy that ran wrote its exit code (<task>.rc), and failed when every copy left the
-queue without one (seen on two cycles in a row, for a slow NFS). The state folder must be on a filesystem the GPU
-nodes share. Slots count tasks, not copies.
+The file names each queue's sbatch arguments and the arms its GPU fits ("m8", "m27", "magic/m27" for one
+baseline, or "m3agent/m3/qa" for one stage of it; a plain "m8" names every baseline's m8). The worker claims only
+tasks some queue fits, and submits each task to every fitting queue at once, under one job name. The first copy to
+start runs it (coord/slurm_guard.sh: an atomic marker <task>.ran, then it cancels the pending copies); a copy
+starting later exits without work. Each cycle one squeue shows which copies are still queued: the task is done when
+the copy that ran wrote its exit code (<task>.rc), and failed when every copy left the queue without one (seen on
+two cycles in a row, for a slow NFS). The state folder must be on a filesystem the GPU nodes share. Slots count
+tasks, not copies.
 
 Each cycle (every --every seconds): read the board, mark finished tasks done/failed with their runtime and
 GPU, renew the leases of running ones, claim the highest-priority free tasks for free slots (one commit to
@@ -83,7 +84,7 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # of baselines/api/configs/ (gpt-5-f1024): lower-case letters and digits in runs joined by one `.`, `-` or `_`, none
 # of which the shell, a Slurm job name or a file pattern reads as anything but itself (no space, quote, `$`, `/`, `*`,
 # and never a leading `-`, so it cannot become an option).
-VALID = dict(baseline=re.compile(r"^(merit|worldmm|magic|m3agent|api|egor1|egagent|egorag|hippomm|direct)$"),
+VALID = dict(baseline=re.compile(r"^(merit|worldmm|magic|m3agent|api|egor1|egagent|egorag|hippomm|direct|rekv)$"),
              arm=re.compile(r"^(m(8|27|3)|[a-z0-9]+([._-][a-z0-9]+)*)$"),
              stage=re.compile(r"^(prep|build|qa|blind)$"), video=re.compile(r"^P\d\d-\d{8}-\d{6}$"),
              bank=re.compile(r"^[A-Za-z0-9_]*$"), id=re.compile(r"^[A-Za-z0-9_.-]+$"))
@@ -157,7 +158,7 @@ def command(task, gpus, a, log):
 
 
 def load_queues(path):
-    """--queues file: {name: {"sbatch": "<sbatch args>", "fits": ["m8", "magic/m27", ...]}}."""
+    """--queues file: {name: {"sbatch": "<sbatch args>", "fits": ["m8", "magic/m27", "m3agent/m3/qa", ...]}}."""
     queues = json.load(open(path))
     for n, q in queues.items():
         if not (VALID["id"].match(n) and q.get("sbatch") and q.get("fits")):
@@ -166,8 +167,10 @@ def load_queues(path):
 
 
 def names(task, arms):
-    """Whether a queue's list of arms (m8) or baseline/arms (magic/m27) names this task."""
-    return task["arm"] in arms or f"{task['baseline']}/{task['arm']}" in arms
+    """Whether a queue's list of arms (m8), baseline/arms (magic/m27) or baseline/arm/stages (m3agent/m3/qa) names
+    this task."""
+    full = f"{task['baseline']}/{task['arm']}"
+    return task["arm"] in arms or full in arms or f"{full}/{task.get('stage')}" in arms
 
 
 def fitting(task, queues, idle=(), full=()):
