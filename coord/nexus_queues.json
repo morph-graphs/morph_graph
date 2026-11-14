@@ -1,0 +1,14 @@
+{
+ "sailon-a6000": {"fits": ["m8"], "note": "vulcan-ampere caps non-H200 GPUs at 4 CPU / 48G each; 48 GPUs per user",
+                  "sbatch": "--partition=vulcan-ampere --account=vulcan-abhinav --qos=vulcan-sailon --gres=gpu:rtxa6000:1 -c 4 --mem=40G --time=4:00:00 --requeue"},
+ "h200":         {"fits": ["m27"], "fallback": ["m8"], "note": "vulcan46; QoS vulcan-high-h200 runs 2 jobs per user, 1.5 days max; 8B only while no 27B task is waiting",
+                  "sbatch": "--partition=vulcan-ampere --account=vulcan-abhinav --qos=vulcan-high-h200 --gres=gpu:h200-sxm:1 -c 8 --mem=96G --time=12:00:00 --requeue"},
+ "scav-a6000":   {"fits": ["m8"], "note": "preemptible (tier 0): --requeue, and every stage resumes",
+                  "sbatch": "--partition=scavenger --account=scavenger --qos=scavenger --gres=gpu:rtxa6000:1 -c 4 --mem=40G --time=4:00:00 --requeue"},
+ "scav-l40s":    {"fits": ["m8"], "note": "48 GB Ada, same GPU family as the A6000 for the main table",
+                  "sbatch": "--partition=scavenger --account=scavenger --qos=scavenger --gres=gpu:l40s:1 -c 4 --mem=40G --time=4:00:00 --requeue"},
+ "cml-scav-a6000": {"fits": ["m8"], "note": "preemptible (tier 1); 24 GPUs across all of a user's cml-scavenger jobs",
+                  "sbatch": "--partition=cml-scavenger --account=cml-scavenger --qos=cml-scavenger --gres=gpu:rtxa6000:1 -c 4 --mem=40G --time=4:00:00 --requeue"},
+ "tron-a6000":   {"fits": ["m8"], "note": "QoS high: 1 day max, not preemptible",
+                  "sbatch": "--partition=tron --account=nexus --qos=high --gres=gpu:rtxa6000:1 -c 4 --mem=40G --time=4:00:00"}
+}
