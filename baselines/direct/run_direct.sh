@@ -12,6 +12,9 @@
 #   arm    <model>-f<N>: the model and the frame budget N
 #          model  qwen3vl-8b   Qwen/Qwen3-VL-8B-Instruct   MERIT's m8 environment
 #                 qwen38-27b   Qwen/Qwen3.8-27B            MERIT's m27 environment
+#                 qwen35-9b    Qwen/Qwen3.5-9B             MERIT's m27 environment
+#                 qwen35-35b-a3b  Qwen/Qwen3.5-35B-A3B     MERIT's m27 environment
+#                 molmo2-8b    allenai/Molmo2-8B           MERIT's m8 environment (context 36,864 tokens: N <= 384)
 #          N      at most N frames per question, evenly spaced over the video before t_ask, the last one
 #                 just before t_ask; all of them (1 fps) when the video so far has fewer than N seconds
 #          e.g. qwen3vl-8b-f32, qwen3vl-8b-f128, qwen38-27b-f768
@@ -35,7 +38,8 @@ M=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); REPO=$(cd "$M/../.." && pwd); M
 PY=${PY:?set PY to the python of the model\'s environment}
 EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && pwd)
 [ -f "$MERIT/MERIT/eval/evaluate_egolife.py" ] || { echo "MERIT submodule missing (its model loader, prompt and scorer are used): git submodule update --init baselines/merit/MERIT"; exit 1; }
-[[ $ARM =~ ^(qwen3vl-8b|qwen38-27b)-f([1-9][0-9]*)$ ]] || { echo "arm must be <qwen3vl-8b|qwen38-27b>-f<N>, got $ARM"; exit 1; }
+MODELS='qwen3vl-8b|qwen38-27b|qwen35-9b|qwen35-35b-a3b|molmo2-8b'
+[[ $ARM =~ ^($MODELS)-f([1-9][0-9]*)$ ]] || { echo "arm must be <$MODELS>-f<N>, got $ARM"; exit 1; }
 MODEL=${BASH_REMATCH[1]}; FRAMES=${BASH_REMATCH[2]}
 VIDEOS=${HDEPIC_VIDEOS:-$EPIC/data/HD-EPIC/videos}; WORK=${DIRECT_WORK:-${MERIT_WORK:-$MERIT/work}}; OUTROOT=${DIRECT_OUT:-$M/results}
 [ -n "${DIRECT_WORK:-${MERIT_WORK:-}}" ] && umask 002   # a shared work folder, as run_merit.sh
