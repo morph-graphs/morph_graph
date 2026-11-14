@@ -223,7 +223,9 @@ upload() {   # only a finished memory: a half-built folder would overwrite a goo
     log upload
     if [ "$ARM" != "$MEM" ]; then   # an answer arm: its count, answers and runs, and the reference to their memory
         has_answers || { echo "no answers in $OUT: run qa first"; exit 1; }
-        memory_ref
+        # the reference written when the answers were made stands; only a folder without one (a blind run) gets it here,
+        # and only from a memory that is on this machine
+        [ -s "$OUT/${V}_memory_ref.json" ] || { have_memory || { echo "no memory in $MOUT to reference: run build first"; exit 1; }; memory_ref; }
         "$PY" "$M/../common/hf_results.py" upload --baseline hippomm --memory '{video}_memory_ref.json' --arm "$ARM" --video "$V" --dir "$OUT"
         return 0
     fi
