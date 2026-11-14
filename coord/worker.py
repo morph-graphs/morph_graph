@@ -78,9 +78,12 @@ import jobs  # noqa: E402
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # A task's fields go into a shell command, so only these shapes are ever run (anything else is skipped).
-# An arm is m8 / m27 / m3 for the local-model baselines, a reported-configuration arm (g5m, g5m-q8, ...), or a config
-# name of baselines/api/configs/ (gpt-5-f1024).
-VALID = dict(baseline=re.compile(r"^(merit|worldmm|magic|m3agent|api)$"), arm=re.compile(r"^(m(8|27|3)|[a-z0-9]+([.-][a-z0-9]+)*)$"),
+# An arm is m8 / m27 / m3 for the local-model baselines, a reported-configuration arm (g5m, g5m-q8, ...), a paid row's
+# arm (q25vl7b-gpt4o, egogpt_gpt4o) or a config name of baselines/api/configs/ (gpt-5-f1024): lower-case letters and
+# digits in runs joined by one `.`, `-` or `_`, none of which the shell, a Slurm job name or a file pattern reads
+# as anything but itself (no space, quote, `$`, `/`, `*`, and never a leading `-`, so it cannot become an option).
+VALID = dict(baseline=re.compile(r"^(merit|worldmm|magic|m3agent|api|egor1|egagent|egorag|hippomm)$"),
+             arm=re.compile(r"^(m(8|27|3)|[a-z0-9]+([._-][a-z0-9]+)*)$"),
              stage=re.compile(r"^(prep|build|qa|blind)$"), video=re.compile(r"^P\d\d-\d{8}-\d{6}$"),
              bank=re.compile(r"^[A-Za-z0-9_]*$"), id=re.compile(r"^[A-Za-z0-9_.-]+$"))
 
@@ -128,7 +131,7 @@ def substance(pool_file):
 
 
 def valid(task):
-    return all(VALID[k].match(str(task.get(k) or "")) for k in VALID)
+    return all(VALID[k].fullmatch(str(task.get(k) or "")) for k in VALID)   # fullmatch: `$` alone lets a final newline by
 
 
 def inner(task, gpus, a):

@@ -227,10 +227,17 @@ qa() {
     # checked when a cutoff needs building)
     [ -z "$ROUTED" ] || need_keys control $( [ -n "$SERVE" ] || echo reason)
     need_clips; bank_file; start_server   # a memory fetched from the dataset comes without the clips
+    # the video's answers under its other banks (same arm, memory and variant): a question they answered is not asked
+    # again. The dataset's count only while its MEM_ARM memory is the one in $MEM (and run_qa.py checks each row's
+    # memory_hash and models)
+    local earlier
+    earlier=$("$PY" "$M/../common/hf_results.py" earlier-answers --baseline magic --memory "${MEMORY[@]}" --arm "$ARM" \
+        --memory_arm "$MEM_ARM" --memory_dir "$MEM" --video "$V" --dir "$OUT" --epic "$EPIC" --suffix="$SUF" \
+        | grep -vxF "$OUT/answers_$BANK$SUF.json.gz" || true)
     # each pass answers what has no valid answer yet (MAGIC errors are retried); nothing runs when all are done
     for k in 1 2 3; do
         rc=0; "$PY" "$M/epic/run_qa.py" --video "$V" --bank_file "$BF" --memory "$MEM" --clip_root "$CLIPS" \
-            --answers "$OUT/answers_$BANK$SUF.json.gz" --cache_dir "$WORK/cache/${ARM}_$V" || rc=$?
+            --answers "$OUT/answers_$BANK$SUF.json.gz" --cache_dir "$WORK/cache/${ARM}_$V" --prev $earlier || rc=$?
         [ $rc = 2 ] || break
     done
     [ $rc = 0 ] || { echo "qa did not finish (exit $rc); rerun the same command to retry"; exit 1; }
