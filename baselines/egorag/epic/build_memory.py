@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """EgoRAG's memory for one EPIC-Morph video, after the captions: the index and the event summaries.
 
-Runs upstream's own code (EgoRAG/create_database.py), unpatched, in two steps:
+Runs upstream's own code (EgoRAG/create_database.py) in two steps:
 
   db      RagAgent.create_database_from_json: the captions split into sentences, embedded with Chroma's default
           OpenCLIP text encoder (ViT-B-32, laion2b_s34b_b79k), into a Chroma collection. No LLM. The collection
           is an index of the captions, kept in --work and rebuilt from them when missing.
-  events  gen_event: 10 min summaries (GPT-4o), 1 h summaries of those (DeepSeek-R1), a day summary of those
+  events  gen_event: 10 min summaries (GPT-4o), 1 h summaries of those (DeepSeek), a day summary of those
           (GPT-4o)  -> <video>_l1_10min.json, <video>_l2_1h.json, <video>_l3_day.json in --out.
-          PAID API CALLS: runs only with EGORAG_PAID_API=1 and upstream's Azure variables set (paid_api()).
+          PAID API CALLS: runs only when the keys are in the environment (paid_api()); else exit 4.
 
 Nothing here depends on the questions. Streaming: the summaries cover the whole video, but at question time
 upstream uses an hour summary only when it ends at or before the question, and summarises the captions since
@@ -31,21 +31,19 @@ except ImportError:
     pass
 
 MEMORY = ["{video}_30sec.json", "{video}_l1_10min.json", "{video}_l2_1h.json", "{video}_l3_day.json"]
-# upstream reads these (egorag/utils/util.py). Its other branches cannot run as released: call_gpt4's
-# OPENAI_API_KEY branch calls openai.ChatCompletion (removed in the openai 1.x it pins), and call_deepseek's
-# DEEPSEEK_API_KEY branch indexes the response object like a dict.
-GPT_VARS = ["AZURE_API_KEY", "AZURE_API_ENDPOINT"]             # a GPT-4o deployment's chat completions URL
-DEEPSEEK_VARS = ["AZURE_DEEPSEEK_KEY", "AZURE_DEEPSEEK_ENDPOINT"]   # DeepSeek-R1 on Azure AI
+# What upstream's call_gpt4 / call_deepseek read (egorag/utils/util.py, with ../EgoLife.patch): Azure when both
+# of its variables are set, else the provider's own API with a plain key.
+GPT_KEYS = [["AZURE_API_KEY", "AZURE_API_ENDPOINT"], ["OPENAI_API_KEY"]]
+DEEPSEEK_KEYS = [["AZURE_DEEPSEEK_KEY", "AZURE_DEEPSEEK_ENDPOINT"], ["DEEPSEEK_API_KEY"]]
 
 
 def paid_api(deepseek):
-    """Stop (exit 4) unless the paid calls were explicitly allowed and upstream's endpoints are set."""
-    need = GPT_VARS + (DEEPSEEK_VARS if deepseek else [])
-    missing = [v for v in need if not os.environ.get(v)]
-    if os.environ.get("EGORAG_PAID_API") != "1" or missing:
-        print("this step calls paid APIs (GPT-4o" + (", DeepSeek-R1" if deepseek else "") + "): set EGORAG_PAID_API=1"
-              f" and {', '.join(need)} to run it (missing: {', '.join(missing) or 'none'}). estimate_api.py"
-              " counts the calls and tokens first.", file=sys.stderr)
+    """Stop (exit 4) before a paid step unless its keys are in the environment."""
+    need = [GPT_KEYS] + ([DEEPSEEK_KEYS] if deepseek else [])
+    missing = [" + ".join(ways[-1]) for ways in need if not any(all(os.environ.get(v) for v in w) for w in ways)]
+    if missing:
+        print(f"this step calls paid APIs and its key is not set: export {' and '.join(missing)} "
+              "(or upstream's Azure variables; README.md). Nothing was called.", file=sys.stderr)
         sys.exit(4)
 
 

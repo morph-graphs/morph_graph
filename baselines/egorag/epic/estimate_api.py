@@ -5,7 +5,7 @@ From the video's EgoGPT captions (and, with --bank_file, its questions) this wal
 (gen_event.py for the memory; RagAgent.query / extract_evidence / get_answer per question) and counts their
 input tokens from upstream's real prompts and the real captions. What a call's input takes from an earlier
 call's output, and every output, is not known before running: those use the ASSUMED lengths below.
-Tokens are counted with tiktoken's o200k_base (GPT-4o's; also used for DeepSeek-R1, an approximation).
+Tokens are counted with tiktoken's o200k_base (GPT-4o's; also used for the DeepSeek model, an approximation).
 
     python estimate_api.py --video <V> --captions <V>_30sec.json [--bank_file <V>_questions.json] [--out est.json]
 """
@@ -26,13 +26,14 @@ from prepare_epic import convert_questions            # noqa: E402
 
 # ASSUMED output lengths, in tokens (upstream's caps: max_tokens 2048 for the summaries, 2200 elsewhere)
 OUT = {"l1": 500,          # a 10 min summary, "one paragraph per major event"
-       "l2": 650 + 1500,   # a 1 h summary under 500 words, plus DeepSeek-R1's reasoning, billed as output
+       "l2": 650 + 1500,   # a 1 h summary under 500 words, plus the DeepSeek model's reasoning, assumed billed as output
        "l3": 2048,         # "around 1500 words", cut by max_tokens
        "tail": 300,        # the merged event of the captions since the last hour summary
        "day": 4, "hour": 14, "keywords": 30, "pick_id": 16,
        "evidence": 60, "answer": 2}
-# ASSUMED list prices, USD per million tokens (input, output); checked against nothing at run time
-PRICE = {"gpt-4o": (2.50, 10.00), "deepseek-r1": (1.35, 5.40)}
+# List prices, USD per million tokens (input, output), read 2026-11-13: OpenAI gpt-4o; DeepSeek's own API,
+# deepseek-v4-pro at the peak rate (cache miss). Not checked at run time.
+PRICE = {"gpt-4o": (2.50, 10.00), "deepseek": (1.32, 3.96)}
 ENC = tiktoken.get_encoding("o200k_base")
 tok = lambda s: len(ENC.encode(str(s)))
 
@@ -60,7 +61,7 @@ def main():
         add("build", "l1", "gpt-4o", tok(gen_event.system_message_min) + tok(f"All descriptions: {ctx}"))
         hours.setdefault(w // 6, []).append(w)
     for h, ws in hours.items():
-        add("build", "l2", "deepseek-r1", tok(gen_event.system_message_hour) + len(ws) * OUT["l1"] + 20)
+        add("build", "l2", "deepseek", tok(gen_event.system_message_hour) + len(ws) * OUT["l1"] + 20)
     add("build", "l3", "gpt-4o", tok(gen_event.system_message_day) + len(hours) * 650 + 20)
     # an hour summary ends where its last 10 min window ends, and is used by questions asked at or after that
     hour_end = {h: (max(ws) + 1) * 600 for h, ws in hours.items()}

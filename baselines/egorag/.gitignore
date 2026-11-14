@@ -1,5 +1,0 @@
-# EgoRAG runs: clips, Chroma index, logs (run_egorag.sh); results go to the Hugging Face dataset
-work/
-results/
-# the root .gitignore's ENV/ matches env/ on case-insensitive filesystems; the environment files are code
-!env/

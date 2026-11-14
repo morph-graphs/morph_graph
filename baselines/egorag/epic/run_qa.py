@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Answer one video's questions of an EPIC-Morph bank with EgoRAG, from a built memory. PAID API CALLS (GPT-4o).
 
-Per question, upstream's own steps (EgoRAG/main.py, stages query and answer; RagAgent unpatched):
+Per question, upstream's own steps (EgoRAG/main.py, stages query and answer; RagAgent as released):
   query             the LLM picks a day, then a time range, from the hour summaries that ended by the question
                     plus its own summary of the captions since; the top 3 caption sentences in that range by
                     OpenCLIP text similarity. ("last time" questions: LLM keywords and search time, top 50
@@ -65,6 +65,7 @@ def main():
     ap.add_argument("--memory", required=True, help="the memory folder (build_memory.py --out)")
     ap.add_argument("--work", required=True, help="where the Chroma index lives (build_memory.py --work)")
     ap.add_argument("--answers", required=True)
+    ap.add_argument("--limit", type=int, help="answer at most this many unanswered questions (a smoke test)")
     a = ap.parse_args()
     V = a.video
     a.memory, a.work, a.answers, a.bank_file = map(os.path.abspath, (a.memory, a.work, a.answers, a.bank_file))
@@ -80,7 +81,7 @@ def main():
         qh = {r["key"]: r["qhash"] for r in rows}
         done = {r["key"]: r for r in json.load(gzip.open(a.answers, "rt")) if r.get("version") == VERSION
                 and r.get("memory_hash") == mh and r.get("qhash") == qh.get(r["key"])}
-    todo = [r for r in rows if r["key"] not in done]
+    todo = [r for r in rows if r["key"] not in done][: a.limit]
     print(f"{V}: {len(rows)} questions, {len(done)} done, {len(todo)} to answer (memory {mh})", flush=True)
     if todo:
         paid_api(deepseek=False)
@@ -112,9 +113,9 @@ def main():
         print(f"[{n}/{len(todo)}] {r['key']} @ {done[r['key']]['cutoff']}s: {res['response']!r} gold {r['answer']} "
               f"({res['branch']}, {len(res['retrieved'])} clips, {len(res['evidence_cards'])} evidence)", flush=True)
         save()
-    missing = [r["key"] for r in rows if r["key"] not in done]
+    missing = [r["key"] for r in todo if r["key"] not in done]   # with --limit: of what this run was asked
     right = sum(done[r["key"]]["evaluate"] for r in rows if r["key"] in done)
-    print(f"# {len(rows) - len(missing)}/{len(rows)} answered, {right} right, {len(missing)} missing -> {a.answers}", flush=True)
+    print(f"# {len(done)}/{len(rows)} answered, {right} right, {len(missing)} missing -> {a.answers}", flush=True)
     sys.exit(2 if missing else 0)
 
 

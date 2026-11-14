@@ -267,3 +267,8 @@ baselines/api/results/
 baselines/vgent/work/
 !baselines/vgent/env/
 baselines/vgent/results/
+
+# EgoRAG runs: clips, the Chroma index, upstream's events_diary; results (baselines/egorag/run_egorag.sh)
+baselines/egorag/work/
+!baselines/egorag/env/
+baselines/egorag/results/
