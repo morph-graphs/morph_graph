@@ -4,8 +4,9 @@
 # Hugging Face dataset), the epic-morph checkout at /epic-morph (the banks), the videos read-only at /videos.
 #   EPIC_MORPH_DIR=<epic-morph checkout> OPENAI_API_KEY=... bash baselines/egagent/docker/run.sh <stage> <video> <arm> [bank]
 #   EPIC_MORPH_DIR   the epic-morph checkout (required)
-#   OPENAI_API_KEY   for build (the memory, both arms) and for qa / blind of arm gpt41
-#   GEMINI_API_KEY   for qa / blind of arm gemini25pro
+#   OPENAI_API_KEY   for build (the memory, both arms) and for qa / blind of arm gpt41; or OPENROUTER_API_KEY
+#                    without it: the same GPT-4.1 calls through OpenRouter (README "Through OpenRouter")
+#   GEMINI_API_KEY   for qa / blind of arms gemini25pro and gemini36flash
 #                    Export a key in the shell: it is handed to the container by name, so it never appears on a
 #                    command line, in a file or in the image. A paid stage without its key stops, nothing spent
 #   HF_TOKEN         for upload and for taking a memory from the dataset; or `hf auth login` on the host (the
@@ -41,15 +42,16 @@ mkdir -p "$HF"
 VIDEOS=${HDEPIC_VIDEOS:-$EPIC/data/HD-EPIC/videos}
 [ -d "$VIDEOS" ] || { echo "no videos at $VIDEOS (set HDEPIC_VIDEOS; epic-morph v3/DATA.md)"; exit 1; }
 BINDS=("$REPO:/repo" "$EPIC:/epic-morph" "$HF:/hf" "$(cd -P "$VIDEOS" && pwd):/videos:ro")
-# a folder that is not a git checkout (a synced copy) records an empty commit instead of stopping the run
+# a folder that is not a git checkout (a synced copy) records the commit named in the environment
+# (EGAGENT_REPO_COMMIT, EGAGENT_EPIC_COMMIT, EGAGENT_UPSTREAM_COMMIT), or an empty one, instead of stopping the run
 ENVS=(EPIC_MORPH_DIR=/epic-morph HDEPIC_VIDEOS=/videos HF_HOME=/hf HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-0}"
-      EGAGENT_REPO_COMMIT="$(git -C "$REPO" rev-parse HEAD 2>/dev/null || true)"
-      EGAGENT_EPIC_COMMIT="$(git -C "$EPIC" rev-parse HEAD 2>/dev/null || true)"
-      EGAGENT_UPSTREAM_COMMIT="$(git -C "$REPO/baselines/egagent/egagent" rev-parse HEAD 2>/dev/null || true)")
+      EGAGENT_REPO_COMMIT="${EGAGENT_REPO_COMMIT:-$(git -C "$REPO" rev-parse HEAD 2>/dev/null || true)}"
+      EGAGENT_EPIC_COMMIT="${EGAGENT_EPIC_COMMIT:-$(git -C "$EPIC" rev-parse HEAD 2>/dev/null || true)}"
+      EGAGENT_UPSTREAM_COMMIT="${EGAGENT_UPSTREAM_COMMIT:-$(git -C "$REPO/baselines/egagent/egagent" rev-parse HEAD 2>/dev/null || true)}")
 if [ -n "${MERIT_WORK:-}" ]; then   # the shared work folder: EGAgent's own subfolder in it
     umask 002; mkdir -p "$MERIT_WORK"; BINDS+=("$(cd -P "$MERIT_WORK" && pwd):/work"); export EGAGENT_WORK=${EGAGENT_WORK:-/work/egagent}
 fi
-PASS=(OPENAI_API_KEY GEMINI_API_KEY HF_TOKEN MERIT_HF_REPO EGAGENT_TAG EGAGENT_FETCH EGAGENT_FRAME_PX EGAGENT_CHUNK_S
+PASS=(OPENAI_API_KEY OPENROUTER_API_KEY OPENROUTER_BASE_URL GEMINI_API_KEY HF_TOKEN MERIT_HF_REPO EGAGENT_TAG EGAGENT_FETCH EGAGENT_FRAME_PX EGAGENT_CHUNK_S
       THREADS LIMIT EGAGENT_OUT EGAGENT_WORK)
 if [ "$RUNTIME" = apptainer ]; then
     case $IMAGE in *.sif) ;; *) IMAGE=docker://$IMAGE ;; esac
