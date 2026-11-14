@@ -114,10 +114,10 @@ REPORTED = [("worldmm", "g5m", "build", KEY_POOLS, None), ("merit", "g5m", "buil
 # (the API tasks and the local-model tasks are not affected). Empty it (a one-line PR) once the pilot's token usage has
 # been read, and the rest is listed.
 PILOT = []   # emptied 2026-11-14 (Anubhav): the pilot, worldmm-g5m-build-P05-20240425-201444, cost $2.71 through OpenRouter
-# Withheld whatever PILOT says: work that is running off the board, which a board copy would pay for twice. WorldMM's
-# gpt-5-mini memories are being built by Slurm arrays on Nexus (2026-11-14: 70 of 156 in the dataset). A qa task
-# keeps its wait on such a build until the memory is uploaded. Empty this when the arrays are done.
-HELD = {("worldmm", "g5m", "build")}
+# Withheld whatever PILOT says: (baseline, arm, stage) lines whose work is running off the board, which a board copy
+# would pay for twice. A qa task keeps its wait on such a build until the memory is uploaded. Empty since 2026-11-14:
+# WorldMM's gpt-5-mini memories, built by Slurm arrays on Nexus, are in the dataset for all 156 videos.
+HELD = set()
 # The other paid rows of the sheet, each baseline with the models it was published with (baselines/<b>/README.md).
 # Decided by Anubhav: batch10 only (a build line with a bank builds only that bank's videos: 10 memories, no tranche,
 # no 156-video builds), and run by Max: every line is for KEY_POOLS, also a stage that calls no API (HippoMM's build,
