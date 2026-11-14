@@ -7,11 +7,16 @@ input tokens from upstream's real prompts and the real captions. What a call's i
 call's output, and every output, is not known before running: those use the ASSUMED lengths below.
 Tokens are counted with tiktoken's o200k_base (GPT-4o's; also used for the DeepSeek model, an approximation).
 
-    python estimate_api.py --video <V> --captions <V>_30sec.json [--bank_file <V>_questions.json] [--out est.json]
+    python estimate_api.py --video <V> --captions <V>_30sec.json [--bank_file <V>_questions.json ...] [--out est.json]
+    --gpt gpt-4.1                       price the GPT calls as arm egogpt_gpt41 (default gpt-4o)
+    --like <W>_30sec.json --seconds S   a video without captions yet: video W's captions, repeated over S seconds,
+                                        stand in for its own (ASSUMES W's caption lengths; the questions are real)
+    --sum est1.json est2.json ...       add up --out files (one per video): the cost of a set of videos
 """
 import argparse
 import inspect
 import json
+import math
 import os
 import re
 import sys
@@ -31,28 +36,52 @@ OUT = {"l1": 500,          # a 10 min summary, "one paragraph per major event"
        "tail": 300,        # the merged event of the captions since the last hour summary
        "day": 4, "hour": 14, "keywords": 30, "pick_id": 16,
        "evidence": 60, "answer": 2}
-# List prices, USD per million tokens (input, output), read 2026-11-13: OpenAI gpt-4o; DeepSeek's own API,
-# deepseek-v4-pro at the peak rate (cache miss). Not checked at run time.
-PRICE = {"gpt-4o": (2.50, 10.00), "deepseek": (1.32, 3.96)}
+# List prices, USD per million tokens (input, output), read 2026-11-13: OpenAI gpt-4o; gpt-4.1 (arm egogpt_gpt41,
+# read 2026-11-14); DeepSeek's own API, deepseek-v4-pro at the peak rate (cache miss). Not checked at run time.
+PRICE = {"gpt-4o": (2.50, 10.00), "gpt-4.1": (2.00, 8.00), "deepseek": (1.32, 3.96)}
 ENC = tiktoken.get_encoding("o200k_base")
 tok = lambda s: len(ENC.encode(str(s)))
 
 
+def sum_up(files):
+    """--sum: the per-video estimates added up, per stage and call."""
+    ests = [json.load(open(f)) for f in files]
+    print(f"{len(ests)} videos, {sum(e['minutes'] for e in ests) / 60:.1f} h, {sum(e['clips'] for e in ests)} clips, "
+          f"{sum(e['questions'] for e in ests)} questions; {sum(1 for e in ests if e.get('captions_like'))} with stand-in captions")
+    print(f"{'stage':6} {'call':9} {'model':12} {'calls':>7} {'input tok':>12} {'output tok':>11} {'USD':>9}")
+    for stage in ("build", "qa"):
+        for call in OUT:
+            rows = [e["stages"][stage][call] for e in ests if call in e["stages"].get(stage, {})]
+            if rows:
+                print(f"{stage:6} {call:9} {rows[0]['model']:12} {sum(r['calls'] for r in rows):7d} {sum(r['input_tokens'] for r in rows):12d} "
+                      f"{sum(r['output_tokens'] for r in rows):11d} {sum(r['usd'] for r in rows):9.2f}")
+        print(f"{stage:6} total USD {sum(e['stages'].get(stage, {}).get('usd', 0) for e in ests):.2f}")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--video", required=True)
-    ap.add_argument("--captions", required=True)
-    ap.add_argument("--bank_file")
+    ap.add_argument("--video")
+    ap.add_argument("--captions")
+    ap.add_argument("--like", help="another video's <W>_30sec.json, when this one has no captions yet (with --seconds)")
+    ap.add_argument("--seconds", type=float, help="with --like: this video's length")
+    ap.add_argument("--bank_file", nargs="+", default=[], help="the video's questions, of one or more banks")
+    ap.add_argument("--gpt", default="gpt-4o", choices=["gpt-4o", "gpt-4.1"], help="the arm's GPT model, for the prices")
+    ap.add_argument("--sum", nargs="+", help="add up these --out files instead")
     ap.add_argument("--out")
     a = ap.parse_args()
+    if a.sum:
+        return sum_up(a.sum)
     from egorag.utils import agent_fun, gen_event, prompts as P
-    caps = [c for c in json.load(open(a.captions)) if c.get("text")]
+    caps = [c for c in json.load(open(a.captions or a.like)) if c.get("text")]
     # the sentences of each clip, as create_database_from_json splits them
     for c in caps:
         c["sent"] = [s.strip() for s in re.split(r"(?<=[.!?])\s*", c["text"]) if s.strip()]
         c["s"], c["e"] = video_sec(c["start_time"]), video_sec(c["end_time"])
+    if not a.captions:   # stand-in captions: the other video's, in order and repeated, on this video's 30 s clips
+        end = math.ceil(a.seconds)
+        caps = [{**caps[i % len(caps)], "s": 30 * i, "e": min(30 * (i + 1), end)} for i in range(math.ceil(end / 30))]
     calls = []   # (stage, call, model, input tokens, output tokens)
-    add = lambda stage, call, model, tin: calls.append((stage, call, model, tin, OUT[call]))
+    add = lambda stage, call, model, tin: calls.append((stage, call, a.gpt if model == "gpt-4o" else model, tin, OUT[call]))
 
     # memory (gen_event.py): 10 min windows of captions -> hours of those -> the day
     hours = {}
@@ -68,7 +97,7 @@ def main():
 
     nq = 0
     if a.bank_file:
-        rows = convert_questions(a.bank_file, a.video, caps[-1]["e"])
+        rows = [r for f in a.bank_file for r in convert_questions(f, a.video, caps[-1]["e"])]
         nq = len(rows)
         cap_tok = sum(tok(" ".join(c["sent"][:21])) for c in caps) / len(caps)   # a clip's caption, +-10 sentences
         for r in rows:
@@ -97,7 +126,8 @@ def main():
             add("qa", "answer", "gpt-4o", tok(P.with_evidence) + tok(q) + tok(opts) + n_ev * (OUT["evidence"] + 25) + 30)
 
     res = {"video": a.video, "clips": len(caps), "minutes": round(caps[-1]["e"] / 60, 1), "questions": nq,
-           "caption_tokens_per_clip": round(sum(tok(c["text"]) for c in caps) / len(caps), 1), "stages": {}}
+           "caption_tokens_per_clip": round(sum(tok(c["text"]) for c in caps) / len(caps), 1),
+           "captions_like": None if a.captions else a.like, "stages": {}}
     print(f"{a.video}: {len(caps)} clips ({res['minutes']} min), {res['caption_tokens_per_clip']} caption tokens per clip, {nq} questions")
     print(f"{'stage':6} {'call':9} {'model':12} {'calls':>6} {'input tok':>10} {'output tok':>10} {'USD':>8}")
     for stage in ("build", "qa"):

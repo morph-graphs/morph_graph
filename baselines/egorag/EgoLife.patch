@@ -1,14 +1,15 @@
 diff --git a/EgoRAG/egorag/utils/util.py b/EgoRAG/egorag/utils/util.py
-index 1fe0152..e5f06a8 100644
+index 1fe0152..c64ddaa 100644
 --- a/EgoRAG/egorag/utils/util.py
 +++ b/EgoRAG/egorag/utils/util.py
-@@ -13,6 +13,26 @@ from azure.core.pipeline.transport import RequestsTransport
+@@ -13,6 +13,50 @@ from azure.core.pipeline.transport import RequestsTransport
  from openai import OpenAI
  
  
-+def _log_usage(call, response):
++def _log_usage(call, response, endpoint=None):
 +    """EPIC-Morph port: append the model id the API returned and the token usage of one call to the JSON-lines
-+    file named by EGORAG_USAGE_LOG (run_egorag.sh sums it into runs.jsonl). Never the prompt, never a key.
++    file named by EGORAG_USAGE_LOG (run_egorag.sh sums it into runs.jsonl), with the endpoint asked and, through
++    OpenRouter, the provider that served the call and the dollars charged. Never the prompt, never a key.
 +    Takes a client's response object or a response dict; never raises (a logging problem must not make the
 +    caller retry a call that was already paid for)."""
 +    try:
@@ -16,20 +17,51 @@ index 1fe0152..e5f06a8 100644
 +        if not path:
 +            return
 +        import json
-+        get = (lambda o, k: o.get(k)) if isinstance(response, dict) or hasattr(response, "keys") else (lambda o, k: getattr(o, k, None))
-+        usage = get(response, "usage") or {}
-+        get_u = (lambda k: usage.get(k)) if hasattr(usage, "get") else (lambda k: getattr(usage, k, None))
++        at = lambda o, k: None if o is None else o.get(k) if hasattr(o, "get") else getattr(o, k, None)
++        extra = lambda o: getattr(o, "model_extra", None) or {}   # what OpenRouter adds to a reply
++        usage = at(response, "usage")
 +        with open(path, "a") as f:
-+            f.write(json.dumps({"t": time.time(), "call": call, "model": get(response, "model"),
-+                                "prompt_tokens": get_u("prompt_tokens"), "completion_tokens": get_u("completion_tokens")}) + "\n")
++            f.write(json.dumps({"t": time.time(), "call": call, "model": at(response, "model"),
++                                "prompt_tokens": at(usage, "prompt_tokens"), "completion_tokens": at(usage, "completion_tokens"),
++                                "cached_tokens": at(at(usage, "prompt_tokens_details"), "cached_tokens"),
++                                "reasoning_tokens": at(at(usage, "completion_tokens_details"), "reasoning_tokens"),
++                                "endpoint": endpoint, "provider": extra(response).get("provider"),
++                                "cost": extra(usage).get("cost")}) + "\n")
 +    except Exception as e:
 +        print(f"usage log failed: {e}")
++
++
++# EPIC-Morph port, the gateway: with OPENROUTER_API_KEY set and a provider's own key not (nor upstream's Azure
++# variables for it), that provider's calls go through OpenRouter, pinned to the provider itself with no fallback
++# (OpenRouter also lists Azure for gpt-4o and other hosts for DeepSeek's models): it answers or the call fails.
++# The request is otherwise the one the provider's own API gets. OpenRouter's id of what each name is at its
++# provider: deepseek-v4-pro is DeepSeek-V4-Pro-0813 on DeepSeek's API (its pricing page, read 2026-11-14), the
++# only V4 Pro that DeepSeek itself serves on OpenRouter (deepseek/deepseek-v4-pro there is the 0423 version, on
++# other hosts). A name not listed is sent as it is.
++_ROUTER_URL = os.getenv("OPENROUTER_BASE_URL") or "https://openrouter.ai/api/v1"
++_ROUTER_IDS = {"gpt-4o": "openai/gpt-4o", "gpt-4.1": "openai/gpt-4.1", "deepseek-v4-pro": "deepseek/deepseek-v4-pro-0813"}
++
++
++def _client(own_key, own_url, model, provider):
++    """(client, model id, extra_body) of a plain-key call: the provider's own API with its key, else OpenRouter."""
++    if own_key:
++        return OpenAI(api_key=own_key, base_url=own_url), model, None
++    return (OpenAI(api_key=os.environ["OPENROUTER_API_KEY"], base_url=_ROUTER_URL), _ROUTER_IDS.get(model, model),
++            {"provider": {"only": [provider], "allow_fallbacks": False}})
 +
 +
  def call_gpt4(
      prompt: str,
      system_message: str = "You are an effective first perspective assistant.",
-@@ -60,7 +80,9 @@ def call_gpt4(
+@@ -37,6 +81,7 @@ def call_gpt4(
+     azure_key = os.getenv("AZURE_API_KEY")
+     azure_endpoint = os.getenv("AZURE_API_ENDPOINT")
+     openai_key = os.getenv("OPENAI_API_KEY")
++    router_key = os.getenv("OPENROUTER_API_KEY")
+ 
+     # Use Azure if both Azure credentials are available
+     if azure_key and azure_endpoint:
+@@ -60,7 +105,9 @@ def call_gpt4(
              try:
                  response = requests.post(azure_endpoint, headers=headers, json=payload)
                  response.raise_for_status()
@@ -40,23 +72,27 @@ index 1fe0152..e5f06a8 100644
              except Exception as e:
                  print(f"Attempt {attempt + 1} failed. Error: {e}")
                  if attempt < retries - 1:
-@@ -70,21 +92,24 @@ def call_gpt4(
+@@ -69,22 +116,28 @@ def call_gpt4(
+                     print("All retry attempts failed.")
                      return "error"
      # Fall back to standard OpenAI API if OpenAI key is available
-     elif openai_key:
+-    elif openai_key:
 -        openai.api_key = openai_key
 -        
++    elif openai_key or router_key:
 +        # EPIC-Morph port: the released branch calls openai.ChatCompletion (removed in the openai 1.x this
 +        # package pins) with model "gpt-4" and a fixed max_tokens. Same request as the Azure branch above,
-+        # through the 1.x client; OPENAI_BASE_URL, when set, is read by the client.
-+        client = OpenAI(api_key=openai_key)
++        # through the 1.x client; OPENAI_BASE_URL, when set, is read by the client. The model is the arm's
++        # (EGORAG_GPT_MODEL, set by run_egorag.sh: gpt-4o, or gpt-4.1 for egogpt_gpt41). Without OpenAI's
++        # key, through OpenRouter (_client).
++        client, model, extra = _client(openai_key, None, os.getenv("EGORAG_GPT_MODEL", "gpt-4o"), "openai")
          retries = 5
          for attempt in range(retries):
              try:
 -                response = openai.ChatCompletion.create(
 -                    model="gpt-4",
 +                response = client.chat.completions.create(
-+                    model=os.getenv("EGORAG_GPT_MODEL", "gpt-4o"),
++                    model=model,
                      messages=[
                          {"role": "system", "content": system_message},
                          {"role": "user", "content": prompt}
@@ -64,13 +100,22 @@ index 1fe0152..e5f06a8 100644
                      temperature=temperature,
                      top_p=top_p,
 -                    max_tokens=2200
-+                    max_tokens=max_tokens
++                    max_tokens=max_tokens,
++                    extra_body=extra
                  )
-+                _log_usage("call_gpt4", response)
++                _log_usage("call_gpt4", response, str(client.base_url))
                  return response.choices[0].message.content
              except Exception as e:
                  print(f"Attempt {attempt + 1} failed. Error: {e}")
-@@ -140,6 +165,7 @@ def call_deepseek(
+@@ -117,6 +170,7 @@ def call_deepseek(
+     azure_key = os.getenv("AZURE_DEEPSEEK_KEY")
+     azure_endpoint = os.getenv("AZURE_DEEPSEEK_ENDPOINT")
+     deepseek_api_key = os.getenv("DEEPSEEK_API_KEY")
++    router_key = os.getenv("OPENROUTER_API_KEY")
+ 
+     # Use Azure if both Azure credentials are available
+     if azure_key and azure_endpoint:
+@@ -140,6 +194,7 @@ def call_deepseek(
                      model=model_name,
                      max_tokens=max_tokens,
                  )
@@ -78,35 +123,41 @@ index 1fe0152..e5f06a8 100644
                  full_response = response["choices"][0]["message"]["content"]
                  # Only split if the response contains </think> tag
                  if "</think>" in full_response:
-@@ -155,9 +181,12 @@ def call_deepseek(
+@@ -154,11 +209,12 @@ def call_deepseek(
+                     return None
  
      # Fall back to standard DeepSeek API if API key is available
-     elif deepseek_api_key:
+-    elif deepseek_api_key:
+-        client = OpenAI(
+-            api_key=deepseek_api_key,
+-            base_url="https://api.deepseek.com"
+-        )
++    elif deepseek_api_key or router_key:
 +        # EPIC-Morph port: the released branch asks for "deepseek-chat" and indexes the response object like
 +        # a dict (a TypeError on every call). The model id comes from EGORAG_DEEPSEEK_MODEL (run_egorag.sh
-+        # sets it), the base URL from DEEPSEEK_BASE_URL.
-         client = OpenAI(
-             api_key=deepseek_api_key,
--            base_url="https://api.deepseek.com"
-+            base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
-         )
++        # sets it), the base URL from DEEPSEEK_BASE_URL. Without DeepSeek's key, through OpenRouter (_client).
++        client, model, extra = _client(deepseek_api_key, os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
++                                       os.environ["EGORAG_DEEPSEEK_MODEL"], "deepseek")
  
          max_retries = 3
-@@ -166,7 +195,7 @@ def call_deepseek(
+         retry_count = 0
+@@ -166,15 +222,17 @@ def call_deepseek(
          while retry_count < max_retries:
              try:
                  response = client.chat.completions.create(
 -                    model="deepseek-chat",
-+                    model=os.environ["EGORAG_DEEPSEEK_MODEL"],
++                    model=model,
                      messages=[
                          {"role": "system", "content": system_message},
                          {"role": "user", "content": prompt},
-@@ -174,7 +203,8 @@ def call_deepseek(
+                     ],
                      max_tokens=max_tokens,
-                     stream=False
+-                    stream=False
++                    stream=False,
++                    extra_body=extra
                  )
 -                full_response = response["choices"][0]["message"]["content"]
-+                _log_usage("call_deepseek", response)
++                _log_usage("call_deepseek", response, str(client.base_url))
 +                full_response = response.choices[0].message.content
                  if "</think>" in full_response:
                      response = full_response.split("</think>")[1]
