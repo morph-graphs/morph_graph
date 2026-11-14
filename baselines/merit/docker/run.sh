@@ -24,6 +24,7 @@
 #   MERIT_CONTEXT   optional, blind only: a context file, as a path inside the container (under /repo or /epic-morph); needs MERIT_TAG
 #   OPENAI_API_KEY  arms g5m (build) and g5m-g5 (qa): the key, taken from this environment and handed to the container
 #                   as an environment variable only (never on a command line); no other arm's container gets it.
+#                   OPENROUTER_API_KEY instead (without OPENAI_API_KEY): the same calls through OpenRouter
 #                   MERIT_SERVICE_TIER, MERIT_API_CONCURRENCY, MERIT_API_THREADS, MERIT_TOP_K: see run_merit.sh
 # The g5m arms run in the existing images: g5m, g5m-q8 and g5m-g5 in m8's, g5m-q27 in m27's.
 set -euo pipefail
@@ -31,7 +32,7 @@ ARM=${3:?usage: run.sh <stage> <video> <arm> [bank]}
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && pwd)
 case $ARM in g5m-q27) ENV=m27 ;; g5m*) ENV=m8 ;; *) ENV=$ARM ;; esac   # the image (environment) the arm runs in
-case $ARM in g5m|g5m-g5) ;; *) unset OPENAI_API_KEY ;; esac             # only the arms that call the API keep the key
+case $ARM in g5m|g5m-g5) ;; *) unset OPENAI_API_KEY OPENROUTER_API_KEY ;; esac             # only the arms that call the API keep the key
 IMAGE=${MERIT_IMAGE:-ghcr.io/morph-graphs/merit:$(bash "$REPO/baselines/merit/docker/image_tag.sh" "$ENV")}
 if [ -z "${MERIT_IMAGE:-}" ] && [ -n "${MERIT_SIF_DIR:-}" ] && [ -s "$MERIT_SIF_DIR/merit_$ENV.sif" ]; then
     IMAGE=$MERIT_SIF_DIR/merit_$ENV.sif
@@ -55,7 +56,7 @@ if [ "$RUNTIME" = apptainer ]; then
     export APPTAINERENV_HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-0} "${COMMITS[@]/#/APPTAINERENV_}"
     [ -n "${WORK:-}" ] && export APPTAINERENV_MERIT_WORK=/work
     for v in HF_TOKEN MERIT_HF_REPO MERIT_OUTBOX MERIT_TAG MERIT_NO_FRAMES MERIT_FETCH MERIT_OUT MERIT_CONTEXT CUDA_VISIBLE_DEVICES \
-             OPENAI_API_KEY OPENAI_BASE_URL MERIT_SERVICE_TIER MERIT_API_CONCURRENCY MERIT_API_THREADS MERIT_TOP_K; do
+             OPENAI_API_KEY OPENAI_BASE_URL OPENROUTER_API_KEY OPENROUTER_BASE_URL MERIT_SERVICE_TIER MERIT_API_CONCURRENCY MERIT_API_THREADS MERIT_TOP_K; do
         [ -n "${!v:-}" ] && export "APPTAINERENV_$v=${!v}"
     done
     exec apptainer exec --nv --cleanenv --pwd /repo \
@@ -75,5 +76,6 @@ exec docker run --rm --gpus "\"device=$GPU\"" --shm-size 32g --user "$(id -u):$(
     -e "${COMMITS[0]}" -e "${COMMITS[1]}" -e "${COMMITS[2]}" \
     ${MERIT_OUT:+-e MERIT_OUT="$MERIT_OUT"} ${MERIT_CONTEXT:+-e MERIT_CONTEXT="$MERIT_CONTEXT"} \
     ${OPENAI_API_KEY:+-e OPENAI_API_KEY} ${OPENAI_BASE_URL:+-e OPENAI_BASE_URL} ${MERIT_SERVICE_TIER:+-e MERIT_SERVICE_TIER} \
+    ${OPENROUTER_API_KEY:+-e OPENROUTER_API_KEY} ${OPENROUTER_BASE_URL:+-e OPENROUTER_BASE_URL} \
     ${MERIT_API_CONCURRENCY:+-e MERIT_API_CONCURRENCY} ${MERIT_API_THREADS:+-e MERIT_API_THREADS} ${MERIT_TOP_K:+-e MERIT_TOP_K} \
     "$IMAGE" bash baselines/merit/run_merit.sh "$@"

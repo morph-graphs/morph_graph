@@ -56,7 +56,14 @@ def test_fitting():
     assert W.fitting(task(arm="m27"), {"a6000": QUEUES["a6000"]}) == []
     shipped = W.load_queues(os.path.join(HERE, "nexus_queues.json"))   # the example file for Nexus users
     assert W.fitting(task(arm="m27"), shipped) == ["h200"]
-    assert len(W.fitting(task(arm="m8"), shipped)) == len(shipped) - 1 == 5   # the H200 only when idle (fallback)
+    assert len(W.fitting(task(arm="m8"), shipped)) == len(shipped) - 2 == 5   # not the CPU queue; the H200 only when idle (fallback)
+    # the keyed arms: MERIT's gpt-5-mini memory needs no GPU; the others one GPU, on the queues nobody preempts
+    assert W.fitting(task("merit", "g5m"), shipped) == ["cpu"]
+    for b, arm in (("worldmm", "g5m"), ("worldmm", "g5m-q8"), ("magic", "oss120"), ("magic", "oss120-flash")):
+        assert W.fitting(task(b, arm), shipped) == ["sailon-a6000", "tron-a6000"], (b, arm)
+    assert W.fitting(task("merit", "g5m-g5"), shipped) == W.fitting(task("worldmm", "g5m-g5"), shipped) == []   # Max's
+    assert W.fitting(task("magic", "oss120-q27"), shipped) == ["h200"]
+    assert not any("--export" in q["sbatch"] for q in shipped.values())   # the jobs get the worker's environment (the key)
     assert W.fitting(dict(task(), baseline="api", arm="gpt-5-f1024"), shipped) == []
 
 
@@ -92,6 +99,57 @@ def test_guard_race(tmp):
             codes = list(ex.map(lambda j: guard(env, j, marker).returncode, range(200, 216)))
         assert sorted(codes) == [0] + [3] * 15, codes
         assert lines(marker) == [str(200 + codes.index(0))]
+
+
+def test_has_env():
+    """needs_env: every name set in the worker's environment; "A|B" is met by either; an unset or empty one is not."""
+    keep = {k: os.environ.pop(k, None) for k in ("OPENAI_API_KEY", "OPENROUTER_API_KEY", "GEMINI_API_KEY")}
+    try:
+        either, t = "OPENAI_API_KEY|OPENROUTER_API_KEY", lambda *need: {"needs_env": list(need)}
+        assert W.has_env({}) and not W.has_env(t(either)) and not W.has_env(t("OPENROUTER_API_KEY"))
+        os.environ["OPENROUTER_API_KEY"] = "sk-or-test-not-a-key"
+        assert W.has_env(t(either)) and W.has_env(t("OPENROUTER_API_KEY"))
+        assert not W.has_env(t("OPENAI_API_KEY")) and not W.has_env(t(either, "GEMINI_API_KEY"))   # every entry must hold
+        os.environ["OPENROUTER_API_KEY"] = ""
+        assert not W.has_env(t(either))
+        os.environ["OPENAI_API_KEY"] = "sk-test-not-a-key"
+        assert W.has_env(t(either)) and W.has_env(t("OPENAI_API_KEY")) and not W.has_env(t("OPENROUTER_API_KEY"))
+        assert not W.has_env({"needs_env": [["OPENAI_API_KEY"]]})   # not a name: left alone
+    finally:
+        for k, v in keep.items():
+            os.environ.pop(k, None)
+            if v is not None:
+                os.environ[k] = v
+
+
+def test_key_stays_in_the_environment():
+    """A keyed task's job: the key is in no sbatch argument and no file of the state folder; the job would get it from
+    the worker's environment (sbatch exports it), and a failure note is scrubbed of it."""
+    key = "sk-or-v1-test0not0a0key0123456789"
+    with tempfile.TemporaryDirectory() as tmp:
+        env = fake_slurm(tmp)
+        old = {k: os.environ.get(k) for k in ("FAKE", "PATH", "OPENROUTER_API_KEY")}
+        os.environ.update(FAKE=env["FAKE"], PATH=env["PATH"], OPENROUTER_API_KEY=key)
+        try:
+            state = f"{tmp}/state"
+            os.makedirs(state)
+            t = dict(task("worldmm", "g5m"), needs_env=["OPENAI_API_KEY|OPENROUTER_API_KEY"])
+            q = {"gpu": {"fits": ["worldmm/g5m"], "sbatch": "--partition=a --gres=gpu:rtxa6000:1"},
+                 "cpu": {"fits": ["merit/g5m"], "sbatch": "--partition=c -c 4"}}
+            a = types.SimpleNamespace(launcher="slurm", runtime="apptainer")
+            assert W.has_env(t) and W.fitting(t, q) == ["gpu"] and W.fitting(task("merit", "g5m"), q) == ["cpu"]
+            assert W.submit_copies(t, a, q, state) == {"101": "gpu"}
+            call = open(f"{tmp}/sbatch.log").read()
+            assert "--export" not in call and "OPENROUTER" not in call   # sbatch's default: the worker's environment
+            assert "nvidia-smi -L || true" in call                       # a CPU queue's node has no nvidia-smi
+            for d, _, fs in os.walk(tmp):
+                assert not any(key in open(os.path.join(d, f), errors="replace").read() for f in fs)
+            assert key not in W.scrub(f"401 Incorrect API key provided: {key}")
+        finally:
+            for k, v in old.items():
+                os.environ.pop(k, None)
+                if v is not None:
+                    os.environ[k] = v
 
 
 def test_copies(tmp):

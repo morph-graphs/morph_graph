@@ -17,9 +17,9 @@ The bank is generated afresh each cycle (v3/export_bank.py <bank>, deterministic
 checkout EPIC_MORPH_DIR, the master's own (not a worker's, which may be reading its bank files). publish stops
 without EPIC_MORPH_DIR: a tasks.json without the qa tasks would drop them from the board.
 
-Arms that call a paid API (NEEDS_ENV) carry `needs_env`, the variables a worker must have set to take them, and go
-to pool `max` only. The reported-configuration arms (REPORTED: a gpt-5-mini memory per video, answered by several
-models) are listed right after the API tasks, and while PILOT is non-empty only the tasks it names are listed.
+Arms that call a paid API (NEEDS_ENV) carry `needs_env`, the variables a worker must have set to take them ("A|B":
+either one), and go to pool `max` only, or also to `nexus` when an OpenRouter key is all they need (ROUTER_POOLS).
+The reported-configuration arms (REPORTED: a gpt-5-mini memory per video, answered by several models) are listed right after the API tasks, and while PILOT is non-empty only the tasks it names are listed.
 The other paid rows (PAID: Ego-R1, EGAgent, EgoRAG, HippoMM and MAGIC-Video with their published models) follow the
 reported-configuration arms, for batch10 only, on pool `max` only, behind the same PILOT gate.
 """
@@ -73,9 +73,16 @@ MEMORY_ARM = {("worldmm", "g5m-q8"): "g5m", ("worldmm", "g5m-g5"): "g5m",
 # WorldMM's answer arms both call gpt-5-mini (its retriever); MERIT's Qwen answer arms (g5m-q8, g5m-q27) call nothing
 # at answer time, so they run on the GPU pools of m8 / m27 once the memory is in the dataset.
 KEY_POOLS = ["max", "pulkit"]   # Max and Pulkit (NVIDIA) run with their own API keys
+# A name of the form "A|B" is met by either variable. MERIT's and WorldMM's gpt-5-mini calls go to OpenAI with
+# OPENAI_API_KEY, or through OpenRouter with OPENROUTER_API_KEY alone (each README, "Through OpenRouter").
+# A task whose every need an OpenRouter key meets is also offered to our own Nexus worker (ROUTER_POOLS), which has
+# that key and no other; the worker still takes it only with the key in its environment. The gpt-5 answer arms
+# (g5m-g5) stay with Max and OpenAI's key (Anubhav, 2026-11-14), although the code could route them too.
+GPT = "OPENAI_API_KEY|OPENROUTER_API_KEY"
+ROUTER_POOLS = KEY_POOLS + ["nexus"]
 NEEDS_ENV = {("api", c): ["GEMINI_API_KEY" if c.startswith("gemini") else "OPENAI_API_KEY"] for c in API_CONFIGS} | {
-    ("worldmm", "g5m"): ["OPENAI_API_KEY"], ("worldmm", "g5m-q8"): ["OPENAI_API_KEY"], ("worldmm", "g5m-g5"): ["OPENAI_API_KEY"],
-    ("merit", "g5m"): ["OPENAI_API_KEY"], ("merit", "g5m-g5"): ["OPENAI_API_KEY"]}
+    ("worldmm", "g5m"): [GPT], ("worldmm", "g5m-q8"): [GPT], ("worldmm", "g5m-g5"): ["OPENAI_API_KEY"],
+    ("merit", "g5m"): [GPT], ("merit", "g5m-g5"): ["OPENAI_API_KEY"]}
 # OpenAI shuts gpt-5 and gpt-5-mini down on 2026-12-11, and a built memory can be reused afterwards: the g5m memories
 # are built for ALL videos, as every memory is (desired: build_order.txt plus the batch10 videos it lacks, batch10's
 # first, then each bank's of BANKS in order, then the rest); the answer arms answer every one of these banks.
@@ -196,6 +203,11 @@ def needs(b, arm, stage):
     return NEEDS_ENV.get((b, arm, stage), NEEDS_ENV.get((b, arm)))
 
 
+def key_pools(need):
+    """The pools a task with these needs is listed for: ROUTER_POOLS when an OpenRouter key meets all of them."""
+    return ROUTER_POOLS if all("OPENROUTER_API_KEY" in n.split("|") for n in need) else KEY_POOLS
+
+
 def desired(have, files):
     order = [v.strip() for v in open(BUILD_ORDER) if v.strip()]
     # every memory is built for all videos: each bank's (batch10's first: build_order.txt lacks them, as MERIT built
@@ -208,7 +220,7 @@ def desired(have, files):
     tasks, ids = [], set()
     for b, arm, stage, pools, bank in EXPERIMENTS:
         env = {"needs_env": needs(b, arm, stage)} if needs(b, arm, stage) else {}
-        pools = KEY_POOLS if env else pools
+        pools = key_pools(env["needs_env"]) if env else pools
         mem = MEMORY_ARM.get((b, arm), arm)
         if mem != arm:   # for the worker: the arm whose dataset folder holds this task's memory (worker.py --prefetch)
             env["memory_arm"] = mem
@@ -298,7 +310,8 @@ def main():
                 print(f"{' '.join(k):30} {c:4} tasks ({wait[k]} waiting on a build)")
             print(f"pilot gate: {withheld} tasks of the reported-configuration and paid-row arms withheld"
                   + (f"; listed of them: {[t['id'] for t in tasks if reported(t)]}" if PILOT else " (PILOT is empty)"))
-            print(f"need a key (pool {', '.join(KEY_POOLS)} only): {sum(1 for t in tasks if t.get('needs_env'))} tasks")
+            print(f"need a key (pool {', '.join(KEY_POOLS)} only; nexus too where an OpenRouter key is enough): "
+                  f"{sum(1 for t in tasks if t.get('needs_env'))} tasks")
             print(f"dry run, nothing committed: {len(tasks)} tasks, {len(have)} memories already built; "
                   f"first: {[t['id'] for t in tasks[:5]]}")
             return
