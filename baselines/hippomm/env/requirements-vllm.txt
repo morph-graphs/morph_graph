@@ -1,0 +1,4 @@
+# The Qwen2.5-VL-7B-Instruct endpoint (upstream serves it with vLLM), in its own virtualenv: vLLM pins its own
+# torch (2.6.0) and transformers, which HippoMM's process (torch 2.1.2, ImageBind) cannot share.
+vllm==0.8.5.post1
+transformers==4.51.3   # vLLM 0.8.5 predates transformers 5 (pip otherwise picks the newest)

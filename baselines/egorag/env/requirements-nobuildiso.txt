@@ -1,0 +1,4 @@
+# Source builds whose setup.py imports pkg_resources (gone from setuptools 81, which pip's isolated build
+# environment would use): installed with --no-build-isolation, after torch.
+deepspeed==0.15.2
+openai-whisper==20240930

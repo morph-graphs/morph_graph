@@ -75,11 +75,12 @@ bash baselines/m3agent/docker/run.sh upload P05-20240425-201444 m3
 ```
 
 `docker/run.sh` mounts this checkout at `/repo`, the epic-morph checkout at `/epic-morph`, the videos at `/videos`,
-the models at `/models` and the Hugging Face cache (`M3AGENT_HF_CACHE`, default `~/.cache/huggingface`) at `/hf`.
+the models at `/models` and the Hugging Face cache (`M3AGENT_HF_CACHE`, default `MERIT_HF_CACHE`, else
+`~/.cache/huggingface`) at `/hf`.
 Keys (`GEMINI_API_KEY`, `OPENAI_API_KEY` for arm `m3api`; `HF_TOKEN`) are handed to the container by name from the shell's
 environment, never on a command line or in the image. `M3AGENT_RUNTIME=apptainer` runs the same image with
-Apptainer (the GPUs are the job's); the job board sets `MERIT_GPU` / `MERIT_RUNTIME` / `MERIT_SIF_DIR`, which
-`run.sh` takes when the `M3AGENT_` ones are unset.
+Apptainer (the GPUs are the job's); the job board sets `MERIT_GPU` / `MERIT_RUNTIME` / `MERIT_SIF_DIR` /
+`MERIT_HF_CACHE` / `MERIT_WORK`, which `run.sh` takes when the `M3AGENT_` ones are unset ("On the job board" below).
 
 **Build once, answer many times.** `build` needs no questions, so every video's memory can be built before its
 questions exist. It first takes the memory from the dataset when it is there (`M3AGENT_FETCH=0` to skip that), and
@@ -103,6 +104,20 @@ Questions that are not streaming see the whole video. `M3AGENT_TAG=<name>` write
   seconds).
 
 The clips, the per-clip face and voice outputs and the control runs stay in `M3AGENT_WORK`.
+
+## On the job board
+
+`coord/master.py` lists arm `m3`: a `build` task per video (`m3agent-m3-build-<video>`; built once
+`<video>_m3graph.pkl` is in the dataset next to `runs.jsonl`) and a `qa` task per bank and video, which waits for
+that build. `build` goes to the pools of 48 GB GPUs and `qa` to the pools with 2x 48 GB or 80 GB GPUs (see "GPUs");
+a worker's queues file names the two stages, `m3agent/m3/build` and `m3agent/m3/qa` (`coord/nexus_queues.json`).
+Arm `m3api` is not listed (it calls paid APIs), and `blind` is not a board stage.
+
+A worker takes the tasks when started with `m3agent` in `--baselines`. It needs the image (with Apptainer,
+`m3agent_m3.sif` in `MERIT_SIF_DIR`), the submodule checked out, and `M3AGENT_MODELS` set in its environment to the
+filled models folder: `docker/run.sh` stops without it, and mounts only that folder (a model linked from outside
+it is missing in the container). The worker's `MERIT_GPU`, `MERIT_RUNTIME`, `MERIT_SIF_DIR`,
+`MERIT_HF_CACHE` and `MERIT_WORK` (work goes to its `m3agent/` subfolder) are read when the `M3AGENT_` ones are unset.
 
 ## How this differs from the published method
 

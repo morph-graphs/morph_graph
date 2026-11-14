@@ -1,0 +1,100 @@
+--- a/MemStream/model/patch.py
++++ b/MemStream/model/patch.py
+@@ -14,16 +14,12 @@
+     # These imports may not be available in older transformers versions
+     pass
+ 
+-from model.attention import RotaryEmbeddingESM, rekv_attention_forward
+-from model.attention import RotaryEmbeddingQwenVL, rekv_attention_forward_qwenvl
++from model.attention import rekv_attention_forward_qwenvl
+ from model.attention import RotaryEmbeddingQwen3VL
+ 
+-from model.patch_qwen2_vl import model_forward_qwen_vl
+ from model.patch_qwen3_vl import model_forward_qwen3_vl
+ from model.patch_qwen3_vl import huggingface_forward as huggingface_forward_qwen3_vl
+ 
+-from model.patch_internvl3 import model_forward_intern3_5_vl
+-from model.patch_internvl3 import huggingface_forward as huggingface_forward_intern3_5_vl
+ 
+ from ezcolorlog import root_logger as logger
+ from einops import rearrange
+@@ -359,14 +355,17 @@
+         rope = RotaryEmbeddingQwen3VL(dim, base, distance_scale, trope_section=_trope)
+         forward = huggingface_forward_qwen3_vl(rekv_attention_forward_qwenvl(**attn_kwargs))
+     elif is_qwen_vl:
++        raise RuntimeError("not vendored: Qwen2-VL / Qwen2.5-VL (model/attention/qwenvl/rope.py, model/patch_qwen2_vl.py)")
+         logger.info("Patching RotaryEmbeddingQwen (Qwen2_VL/Qwen2.5_VL)")
+         rope = RotaryEmbeddingQwenVL(dim, base, distance_scale)
+         forward = huggingface_forward(rekv_attention_forward_qwenvl(**attn_kwargs))
+     elif is_internvl3_5:
++        raise RuntimeError("not vendored: InternVL3.5 (model/attention/rope.py, model/attention/rekv_attention.py, model/patch_internvl3.py)")
+         logger.info("Patching InternVL3.5 (Qwen3ForCausalLM backbone, 1D RoPE)")
+         rope = RotaryEmbeddingESM(dim, base, distance_scale)
+         forward = huggingface_forward_intern3_5_vl(rekv_attention_forward(**attn_kwargs))
+     else:
++        raise RuntimeError("not vendored: 1-D RoPE models (model/attention/rope.py, model/attention/rekv_attention.py)")
+         logger.info("Patching RotaryEmbeddingESM")
+         rope = RotaryEmbeddingESM(dim, base, distance_scale)
+         forward = huggingface_forward(rekv_attention_forward(**attn_kwargs))
+--- a/MemStream/model/attention/__init__.py
++++ b/MemStream/model/attention/__init__.py
+@@ -1,11 +1,6 @@
+-from .rope import RotaryEmbeddingESM
+-from .rekv_attention import rekv_attention_forward
+-
+-from .qwenvl.rope import RotaryEmbeddingQwenVL
+ from .qwenvl.rekv_attention import rekv_attention_forward as rekv_attention_forward_qwenvl
+ 
+ from .qwenvl.rope_qwen3 import RotaryEmbeddingQwen3VL
+ 
+-__all__ = ["RotaryEmbeddingESM", "rekv_attention_forward", 
+-           "RotaryEmbeddingQwenVL", "rekv_attention_forward_qwenvl", 
++__all__ = ["rekv_attention_forward_qwenvl", 
+            "RotaryEmbeddingQwen3VL"]
+\ No newline at end of file
+--- a/MemStream/model/attention/kv_cache_manager.py
++++ b/MemStream/model/attention/kv_cache_manager.py
+@@ -161,9 +161,6 @@
+     no_compression
+ )
+ 
+-from .utils import (
+-    select_topk_watershed,
+-)
+ from model.qwen3_utils import get_qwen3_vl_retrieved_position_ids
+ from . import diagnostics
+ 
+@@ -1918,6 +1915,7 @@
+                chunked_logits = chunked_logits.mean(dim=1) # (batch_size, 1)
+ 
+             if self.retrieval_method == "topk_watershed_rekv":
++                raise RuntimeError("not vendored: topk_watershed_rekv (model/attention/utils.py)")
+                 topk_result = select_topk_watershed(chunked_logits.cpu().squeeze(dim=0).numpy(), self.topk)
+                 self.sorted_block_indices = torch.tensor(topk_result['frame_indices'], dtype=torch.long)[None, :]
+             else:
+--- a/MemStream/model/attention/compression_methods.py
++++ b/MemStream/model/attention/compression_methods.py
+@@ -36,7 +36,6 @@
+ import math
+ from ezcolorlog import root_logger as logger
+ 
+-from model.attention.utils import get_bipartite_soft_matching
+ 
+ def apply_clustered_compression(
+     local_k, local_v, local_q, 
+@@ -570,6 +569,7 @@
+         # apply token merging across framewise K features 
+         merge_ratio = kwargs['merge_ratio']
+         
++        raise RuntimeError("not vendored: ToMe (model/attention/utils.py)")
+         sparse_k, sparse_v, hw_grid = get_bipartite_soft_matching(sparse_k, sparse_v, merge_ratio, num_iters=5)
+         sparse_k = rearrange(sparse_k, "b nh m n d -> b nh (m n) d").to(local_k.dtype)
+         sparse_v = rearrange(sparse_v, "b nh m n d -> b nh (m n) d").to(local_v.dtype)
+@@ -792,6 +792,7 @@
+     sparse_v_sampled = sparse_v[:, :, sampled_indices, :, :, :]
+     
+     # Step 2: Apply ToMe to the sampled frames
++    raise RuntimeError("not vendored: ToMe (model/attention/utils.py)")
+     sparse_k_merged, sparse_v_merged, hw_grid = get_bipartite_soft_matching(
+         sparse_k_sampled, sparse_v_sampled, merge_ratio, num_iters=num_iters
+     )

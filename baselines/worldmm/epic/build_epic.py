@@ -22,6 +22,7 @@ import shutil
 import time
 
 import wmm_paths  # noqa: F401  (first)
+import openai_usage
 from wmm_paths import GRANULARITIES, memory_files
 from build_memory import run_episodic, run_semantic
 from visual_memory.extract_visual_features import process_caption_dir
@@ -46,15 +47,18 @@ def main():
     t0 = time.time()
 
     print("== 1. multiscale", flush=True)
+    openai_usage.stage("multiscale")
     generate_multiscale_memory(caption_dir=cap, model_name=a.model, base_name="10sec.json", windows=[30, 180, 600],
                                granularity_names=["30sec", "3min", "10min"], perspective="egocentric")
     llm = LLMModel(model_name=a.model)
     print(f"== 2. episodic triples ({time.time() - t0:.0f}s)", flush=True)
+    openai_usage.stage("triples")
     run_episodic([v], a.caption_root, a.meta_root, a.model, llm)
 
     emb = EmbeddingModel()   # WorldMM's defaults: Qwen3-Embedding-4B, VLM2Vec-V2.0 (WORLDMM_MODEL_DIR to load locally)
     emb.load_model(model_type="text")
     print(f"== 3. semantic ({time.time() - t0:.0f}s)", flush=True)
+    openai_usage.stage("semantic")
     run_semantic([v], a.caption_root, a.meta_root, a.model, llm, emb)
     sem = os.path.join(a.meta_root, "semantic_memory", v, f"semantic_consolidation_results_{a.model}.json")
     assert os.path.exists(sem), f"semantic consolidation missing: {sem}"
@@ -71,6 +75,7 @@ def main():
     torch.cuda.empty_cache()
 
     print(f"== 5. HippoRAG OpenIE ({time.time() - t0:.0f}s)", flush=True)
+    openai_usage.stage("openie")
     hippo = os.path.join(a.meta_root, "hippo_openie", v)
     if not os.path.exists(os.path.join(hippo, "DONE")):
         ep = EpisodicMemory(embedding_model=emb, llm_model=llm, prompt_template_manager=PromptTemplateManager(),

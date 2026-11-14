@@ -1,0 +1,39 @@
+# HippoMM's own process (frame/audio extraction, ImageBind, Whisper, memory build, answering).
+# Python 3.11, CUDA 12.1; torch 2.1.2 / torchvision 0.16.2 / torchaudio 2.1.2 come first, from setup_env.sh.
+# These are upstream's requirements.txt pins (commit d7000b4) for everything its code imports, plus the
+# packages it imports without listing (token-count, soundfile, scikit-learn, opencv, pyyaml, scipy).
+# Left out because no code path imports them: transformers, accelerate, bitsandbytes, moviepy, matplotlib,
+# cartopy, neo4j, hnswlib, xxhash, nano-vectordb.
+numpy==1.26.4
+# ImageBind (installed without its own requirements by install_requirements.sh) and what it imports
+pytorchvideo @ git+https://github.com/facebookresearch/pytorchvideo.git@28fe037d212663c6a24f373b94cc5d478c8c1a1d
+timm==1.0.15
+types-regex
+ftfy==6.3.1
+regex
+einops==0.8.1
+fvcore==0.1.5.post20221221
+iopath==0.1.10
+eva-decord==0.6.1
+setuptools<81
+# Whisper (distil-large-v3 through faster-whisper); ctranslate2 4.4 uses the cuDNN 8 that torch 2.1.2 brings
+ctranslate2==4.4.0
+faster-whisper==1.0.3
+# the OpenAI client: the local Qwen2.5-VL endpoint and the reasoning model
+openai==1.75.0
+tenacity==9.1.2
+tiktoken==0.9.0
+token-count==0.2.1
+qwen-vl-utils==0.0.8
+librosa==0.11.0
+soundfile==0.13.1
+scikit-image==0.25.2
+scikit-learn==1.6.1
+scipy==1.15.2
+opencv-python-headless==4.10.0.84
+pillow==11.2.1
+pyyaml==6.0.2
+tqdm
+requests
+# ../common/hf_results.py (upload / fetch of results)
+huggingface-hub==0.30.2

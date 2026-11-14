@@ -3,7 +3,8 @@
 
 MERIT writes a *_final.json per run and turns a per-question failure (e.g. CUDA OOM) into the answer
 "Error". A video can therefore need a second run on the failed IDs (eval --question-ids). This merges
-the earlier answers file (--prev, e.g. from the dataset) and every run's answers for the video, keeps the
+the earlier answers files (--prev: this bank's, then the video's other banks', hf_results.py earlier-answers)
+and every run's answers for the video, keeps the
 first valid answer per question, writes them in question-file order, and prints the IDs of the question file
 that have no valid answer (empty line if none). An answer is kept only while its question's wording, options
 and gold letter are unchanged (prepare_epic.match_answers): after a tranche adds or edits questions, only those
@@ -11,7 +12,7 @@ are listed. Answer files from before keys (positional IDs) are matched by that c
 An --out ending in .gz is written gzipped (the per-round retrieval history makes answers ~2 MB a video).
 
     python epic/collect_answers.py --qa_file <EgoLifeQA_<V>.json> --runs '<run dir>/*/*_final.json' \
-        [--prev <answers.json.gz>] --out <answers.json[.gz]>
+        [--prev <answers.json.gz> ...] --out <answers.json[.gz]>
 """
 import argparse
 import glob
@@ -31,11 +32,11 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--qa_file", required=True)
     ap.add_argument("--runs", required=True, help="glob of MERIT *_final.json files for this video")
-    ap.add_argument("--prev", default=None, help="an earlier answers file to reuse (read before --out is written)")
+    ap.add_argument("--prev", nargs="*", default=[], help="earlier answers files to reuse, first wins (read before --out is written)")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
     qa = json.load(open(a.qa_file))
-    srcs = ([a.prev] if a.prev and os.path.exists(a.prev) else []) + sorted(glob.glob(a.runs))
+    srcs = [p for p in a.prev if os.path.exists(p)] + sorted(glob.glob(a.runs))
     answers = [r for f in srcs for r in load(f)]
     got = match_answers(qa, answers)
     rows = [got[str(q["ID"])] for q in qa if str(q["ID"]) in got]

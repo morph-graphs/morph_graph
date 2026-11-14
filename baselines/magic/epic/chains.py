@@ -7,6 +7,10 @@ captions, 3 min summaries and semantic-extraction groups ending <= the cutoff. T
 (run_qa.py), cached per cutoff under <memory dir>/chains/c<seconds>/ and reused by every bank that asks at
 the same second. A topic prompt whose input did not change since an earlier cutoff is answered from
 chains/topic_cache.json.
+
+They are the memory role's work (upstream: extract_{topic,event}_chains.py --model openai/gpt-oss-120b). With
+the reported arms that is a paid API, so cutoffs another machine already built are first taken from the dataset
+(MAGIC_MEMORY_REPO_PATH, the memory's folder there), and a cutoff with a failed call is not kept.
 """
 import copy
 import json
@@ -14,9 +18,11 @@ import logging
 import os
 import re
 import shutil
+import tempfile
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 
+import roles
 from build_memory import TAG, jload, jsave, llm, secs
 
 log = logging.getLogger("chains")
@@ -177,6 +183,9 @@ PERSONS = {"i", "me", "my", "we", "us", "everyone", "narrator", "person", "peopl
            "camera wearer", "the camera wearer", "user", "the user"}
 
 
+MERGE_TOKENS = 16000 if roles.ROUTED else 8000   # upstream's 16000 for its API model (reasoning tokens count too)
+
+
 def chains_at(cut, caps, m3, sem_triples, model, topic_cache):
     """Topic + event chains from the video before `cut` seconds only."""
     caps = [c for c in caps if secs(c["end_time"]) <= cut]
@@ -218,7 +227,7 @@ def chains_at(cut, caps, m3, sem_triples, model, topic_cache):
         daily = "\n=== DAY1 ===\n" + "".join(
             f"- [{x.get('time_range', '')}] {x.get('name', '')}: {x.get('summary', '')}\n"
             + (f"  Entities: {', '.join(map(str, x['key_entities']))}\n" if x.get("key_entities") else "") for x in acts)
-        chains = call(model, EVENT_STEP2.format(daily_activities=daily), max_tokens=8000) or []
+        chains = call(model, EVENT_STEP2.format(daily_activities=daily), max_tokens=MERGE_TOKENS) or []
         chains = [c for c in chains if isinstance(c, dict) and isinstance(c.get("steps"), list)]
         if chains:
             found = "\n".join(f"- {c.get('name', '')}" for c in chains)
@@ -227,7 +236,7 @@ def chains_at(cut, caps, m3, sem_triples, model, topic_cache):
                       f"Already found chains (do NOT repeat these):\n{found}\n\nActivities:\n{daily}\n\n"
                       "For each NEW event chain, output:\n- name: specific name\n- steps: list of {day, start_time, end_time, description}\n"
                       "- key_entities: important objects and places only\n\nReturn JSON list. If no additional chains found, return [].",
-                      max_tokens=8000)
+                      max_tokens=MERGE_TOKENS)
             names = {c.get("name", "").lower() for c in chains}
             chains += [c for c in (r2 or []) if isinstance(c, dict) and isinstance(c.get("steps"), list)
                        and c.get("name", "").lower() not in names]
@@ -261,6 +270,28 @@ def chains_at(cut, caps, m3, sem_triples, model, topic_cache):
     return topics, enriched
 
 
+def fetch_chains(cdir, memory_hash, todo):
+    """Copy the cutoffs in todo that the dataset holds for this same memory into cdir (best effort)."""
+    from huggingface_hub import snapshot_download
+    path = os.environ["MAGIC_MEMORY_REPO_PATH"]
+    with tempfile.TemporaryDirectory() as tmp:
+        try:
+            snapshot_download(os.environ.get("MERIT_HF_REPO", "morph-graphs/epic-morph-results"), repo_type="dataset",
+                              allow_patterns=[f"{path}/chains/*"], local_dir=tmp)
+        except Exception as e:
+            log.warning(f"could not look for chains in the dataset ({type(e).__name__}: {str(e)[:160]})")
+            return
+        src = os.path.join(tmp, path, "chains")
+        if not os.path.exists(os.path.join(src, "memory_hash")) or open(os.path.join(src, "memory_hash")).read().strip() != memory_hash:
+            return
+        got = [c for c in todo if os.path.exists(os.path.join(src, f"c{c:05d}", "step3_enriched_chains.json"))]
+        for c in got:
+            shutil.copytree(os.path.join(src, f"c{c:05d}"), os.path.join(cdir, f"c{c:05d}"), dirs_exist_ok=True)
+        if os.path.exists(os.path.join(src, "topic_cache.json")) and not os.path.exists(os.path.join(cdir, "topic_cache.json")):
+            shutil.copy(os.path.join(src, "topic_cache.json"), cdir)
+        log.info(f"chains for {len(got)} of {len(todo)} missing cutoffs taken from the dataset ({path})")
+
+
 def ensure_chains(mem, video, cuts, memory_hash):
     """Chains for every cutoff (seconds) in cuts, built when missing; returns {cutoff: chain dir}. Chains made
     from another memory (a rebuild) are removed first."""
@@ -270,14 +301,25 @@ def ensure_chains(mem, video, cuts, memory_hash):
         shutil.rmtree(cdir)
     os.makedirs(cdir, exist_ok=True)
     open(stamp, "w").write(memory_hash + "\n")
-    todo = [c for c in sorted(set(cuts)) if not os.path.exists(os.path.join(cdir, f"c{c:05d}", "step3_enriched_chains.json"))]
+    missing = lambda: [c for c in sorted(set(cuts)) if not os.path.exists(os.path.join(cdir, f"c{c:05d}", "step3_enriched_chains.json"))]
+    todo = missing()
+    if todo and os.environ.get("MAGIC_MEMORY_REPO_PATH") and os.environ.get("MAGIC_FETCH", "1") != "0":
+        fetch_chains(cdir, memory_hash, todo)
+        todo = missing()
+    if todo and roles.ROUTED and roles.missing(["memory"]):
+        raise SystemExit(f"chains for {len(todo)} cutoffs of {video} are neither here nor in the dataset, and building "
+                         f"them calls a paid API: {roles.missing(['memory'])[0]}. Run this bank's qa first where the key is.")
     if todo:
         caps, m3 = jload(os.path.join(mem, f"{video}_30sec.json")), jload(os.path.join(mem, f"{video}_3min.json"))
         sem = jload(os.path.join(mem, f"semantic_extraction_results_{TAG}.json"))["semantic_triples"]
         model, cache_f = llm(), os.path.join(cdir, "topic_cache.json")
         cache = jload(cache_f) if os.path.exists(cache_f) else {}
         for cut in todo:
+            failed = roles.errors()
             topics, events = chains_at(cut, caps, m3, sem, model, cache)
+            if roles.errors() > failed:   # a failed call would be kept as an empty chain
+                raise SystemExit(f"{roles.errors() - failed} LLM calls failed building the chains at {cut}s"
+                                 f"{': ' + roles.FATAL[0] if roles.FATAL else ''}; not kept, rerun to retry")
             d = os.path.join(cdir, f"c{cut:05d}")
             jsave(topics, os.path.join(d, "topic_chains.json"))
             jsave(events, os.path.join(d, "step3_enriched_chains.json"))   # written last: marks the cutoff done

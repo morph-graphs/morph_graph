@@ -1,0 +1,148 @@
+diff --git a/hippomm/core/hippocampal_memory.py b/hippomm/core/hippocampal_memory.py
+index 862ec91..92d57ce 100644
+--- a/hippomm/core/hippocampal_memory.py
++++ b/hippomm/core/hippocampal_memory.py
+@@ -636,7 +636,7 @@ class HippocampalMemory:
+             # process frames in parallel with progress bar
+             with multiprocessing.Pool(processes=num_workers) as pool:
+                 frame_captions_results = list(tqdm(
+-                    pool.starmap(process_frame_with_api, frame_index_model_triples),
++                    pool.starmap(partial(process_frame_with_api, config=self.config), frame_index_model_triples),  # epic-morph: the config's endpoints
+                     total=len(frame_index_model_triples),
+                     desc="Processing frames",
+                     unit="frame"
+@@ -663,7 +663,7 @@ class HippocampalMemory:
+         # add audio transcription if available
+         if has_audio:
+             transcription_text = " ".join(
+-                [segment["text"] for segment in event['content']['transcription']]
++                [segment["text"] for segment in event['content']['transcription'] or []]  # epic-morph: None when Whisper heard no speech
+             )
+             formatted_messages[0]["content"].append({
+                 "type": "text",
+@@ -1198,7 +1198,7 @@ class HippocampalMemory:
+             # process audio
+             if segment.audio_data is not None and audio_sample_rate:
+                 # save audio segment to temporary file
+-                audio_file_path = f"/tmp/audio_segment_{int(time.time())}_{hash(str(segment.start_time))}.wav"
++                audio_file_path = f"{tempfile.gettempdir()}/audio_segment_{int(time.time())}_{hash(str(segment.start_time))}.wav"
+                 
+                 try:
+                     # ensure audio is mono and float32
+@@ -1379,7 +1379,7 @@ class HippocampalMemory:
+                 return None
+                 
+             # extract audio using ffmpeg
+-            temp_audio_path = f"/tmp/audio_{video_id}_{int(time.time())}.wav"
++            temp_audio_path = f"{tempfile.gettempdir()}/audio_{video_id}_{int(time.time())}.wav"
+             
+             try:
+                 # extract audio at 16kHz, mono
+@@ -2214,7 +2214,7 @@ Event Summaries:
+ 
+                 for frame_time in segment.frame_times:
+                     window_start = max(0, frame_time - 1)
+-                    window_end = frame_time + 1
++                    window_end = min(frame_time + 1, getattr(self.memory, 'max_time', None) or float('inf'))  # epic-morph: not past t_ask
+                     
+                     # set video position to window start
+                     cap.set(cv2.CAP_PROP_POS_MSEC, window_start * 1000)
+@@ -2228,7 +2228,7 @@ Event Summaries:
+                         if not ret:
+                             break
+                             
+-                        temp_frame_path = f"/tmp/frame_{int(current_time * 1000)}.jpg"
++                        temp_frame_path = f"{tempfile.gettempdir()}/frame_{int(current_time * 1000)}.jpg"
+                         frame_small = cv2.resize(frame, (320, 180))
+                         cv2.imwrite(temp_frame_path, frame_small)
+                         
+@@ -2260,7 +2260,7 @@ Event Summaries:
+                 num_workers = multiprocessing.cpu_count()
+                 with multiprocessing.Pool(processes=num_workers) as pool:
+                     frame_captions_results = list(tqdm(
+-                        pool.starmap(lambda f, i, m: process_frame_with_api(f, i, m, self.config), frame_index_model_triples),
++                        pool.starmap(partial(process_frame_with_api, config=self.config), frame_index_model_triples),  # epic-morph: was an unpicklable lambda
+                         total=len(frame_index_model_triples),
+                         desc="Processing all frames",
+                         unit="frame"
+@@ -2777,7 +2777,7 @@ Answer:"""
+ 
+                     for frame_time in segment.frame_times:
+                         window_start = max(0, frame_time - 1)
+-                        window_end = frame_time + 1
++                        window_end = min(frame_time + 1, getattr(self.memory, 'max_time', None) or float('inf'))  # epic-morph: not past t_ask
+                         
+                         # set video position to window start
+                         cap.set(cv2.CAP_PROP_POS_MSEC, window_start * 1000)
+@@ -2791,7 +2791,7 @@ Answer:"""
+                             if not ret:
+                                 break
+                                 
+-                            temp_frame_path = f"/tmp/frame_{int(current_time * 1000)}.jpg"
++                            temp_frame_path = f"{tempfile.gettempdir()}/frame_{int(current_time * 1000)}.jpg"
+                             frame_small = cv2.resize(frame, (320, 180))
+                             cv2.imwrite(temp_frame_path, frame_small)
+                             
+@@ -2824,7 +2824,7 @@ Answer:"""
+                     num_workers = multiprocessing.cpu_count()
+                     with multiprocessing.Pool(processes=num_workers) as pool:
+                         frame_captions_results = list(tqdm(
+-                            pool.starmap(lambda f, i, m: process_frame_with_api(f, i, m, self.config), frame_index_model_triples),
++                            pool.starmap(partial(process_frame_with_api, config=self.config), frame_index_model_triples),  # epic-morph: was an unpicklable lambda
+                             total=len(frame_index_model_triples),
+                             desc="Processing all frames",
+                             unit="frame"
+@@ -3055,11 +3055,11 @@ Answer:"""
+         try:
+             # calculate time window (with buffer)
+             buffered_start = max(0, start_time - 2)  # 2 second buffer
+-            buffered_end = end_time + 2
++            buffered_end = min(end_time + 2, getattr(self.memory, 'max_time', None) or float('inf'))  # epic-morph: not past t_ask
+             duration = buffered_end - buffered_start
+             
+             # create temporary audio file
+-            temp_audio_path = f"/tmp/audio_segment_{video_id}_{int(time.time())}.wav"
++            temp_audio_path = f"{tempfile.gettempdir()}/audio_segment_{video_id}_{int(time.time())}.wav"
+             
+             # use ffmpeg to extract audio for specified time window
+             cmd = [
+diff --git a/hippomm/models/foundation_models.py b/hippomm/models/foundation_models.py
+index 0c33b20..07ae089 100644
+--- a/hippomm/models/foundation_models.py
++++ b/hippomm/models/foundation_models.py
+@@ -30,7 +30,15 @@ class ImageBind(nn.Module):
+         
+     def _load_model(self, model_path: str) -> nn.Module:
+         """Load ImageBind model from path"""
+-        model = imagebind_model.imagebind_huge(pretrained=True).cuda()
++        # epic-morph: use <model_path>/imagebind_huge.pth when it is there (the config's imagebind_path, as the
++        # README describes); upstream ignored the path and downloaded into ./.checkpoints of the working folder
++        ckpt = Path(model_path) / "imagebind_huge.pth"
++        if ckpt.is_file():
++            model = imagebind_model.imagebind_huge(pretrained=False)
++            model.load_state_dict(torch.load(ckpt, map_location="cpu"))
++            model = model.cuda()
++        else:
++            model = imagebind_model.imagebind_huge(pretrained=True).cuda()
+         model.eval()
+         return model
+     
+@@ -217,14 +225,16 @@ class Whisper:
+ class QwenVL:
+     """Qwen VL model for video and image understanding"""
+     
+-    def __init__(self, model_name: str = "/home/yl768/ckpt/Qwen/Qwen2.5-VL-7B-Instruct"):
++    def __init__(self, model_name: str = "/home/yl768/ckpt/Qwen/Qwen2.5-VL-7B-Instruct", config: Optional[Dict[str, Any]] = None):
+         """
+         Initialize OpenAI client for Qwen VL
+         
+         Args:
+             model_name: Path to the model
+         """
+-        self.client = OpenAI(base_url="http://localhost:8000/v1", api_key="sk-")
++        # epic-morph: HippocampalMemory passes config (a TypeError upstream); the endpoint is the config's api.qwen
++        api = (config or {}).get('api', {}).get('qwen', {})
++        self.client = OpenAI(base_url=api.get('base_url', "http://localhost:8000/v1"), api_key=api.get('api_key') or "sk-")
+         models = self.client.models.list()
+         model = models.data[0].id
+         print(f"Using model: {model}")
