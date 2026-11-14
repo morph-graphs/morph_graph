@@ -73,7 +73,7 @@ def test_experiments():
     direct = {(arm, stage, bank) for b, arm, stage, bank in ex if b == "direct"}
     assert direct == {(arm, "qa", bank) for arm in M.DIRECT for bank in M.BANKS} and len(direct) == len(M.DIRECT) * len(M.BANKS)
     for arm, pools in M.DIRECT.items():
-        assert pools == (M.M8 + M.NEXUS if arm.startswith("molmo2-8b") else M.M8 if arm.startswith(("qwen3vl-8b", "qwen35-9b")) else ["pulkit"] if arm == "qwen38-27b-f768" else M.M27)
+        assert pools == (M.M8 if arm.startswith(("qwen3vl-8b", "qwen35-9b", "molmo2-8b")) else ["pulkit"] if arm == "qwen38-27b-f768" else M.M27)
         assert all(ex["direct", arm, "qa", bank] == pools for bank in M.BANKS) and not M.needs("direct", arm, "qa")
 
 

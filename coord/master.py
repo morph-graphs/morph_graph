@@ -66,10 +66,8 @@ FAILED = ("", "Error", "Unable to generate answer")   # no answer: earlier.reuse
 # through an 80 GB queue (the H200). nexus-tron, nexus-sailon and nexus-scavenger are the per-queue workers `nexus`
 # replaces.
 # Since 2026-11-14 (Anubhav) the Qwen work leaves Nexus, to free it for other research: Max and Pulkit (NVIDIA,
-# GB200/GB300) take it first, Zaratan, wriva and arm00 help. Nexus's pools (NEXUS: ours and Vatsal's) keep only the
-# arms that run no Qwen model (Molmo2). Claims already running there finish: a worker renews its claims whatever
-# the task's pools say.
-NEXUS = ["nexus", "nexus-tron", "nexus-sailon", "nexus-scavenger", "vatsal"]
+# GB200/GB300) take it first, Zaratan, wriva and arm00 help; Molmo2-8B (a public download) goes the same way. Claims
+# already running on Nexus finish: a worker renews its claims whatever the task's pools say.
 M8 = ["max", "pulkit", "wriva", "zaratan"]   # zaratan: H100 jobs
 M27 = ["wriva", "zaratan", "max", "pulkit"]
 POOLS = {("merit", "m27"): M27 + ["arm00"], ("merit", "m8"): M8,
@@ -167,7 +165,7 @@ DIRECT = {"qwen3vl-8b-f32": M8, "qwen3vl-8b-f128": M8, "qwen3vl-8b-f768": M8,
           # Qwen3.5-9B and Molmo2-8B fit a 48 GB GPU like the 8B (the 9B runs in the m27 image); Qwen3.5-35B-A3B needs
           # the 27B pools' GPUs, and its N = 768 is not sized, so it is not listed
           "qwen35-9b-f32": M8, "qwen35-9b-f128": M8, "qwen35-9b-f768": M8,
-          "molmo2-8b-f32": M8 + NEXUS, "molmo2-8b-f128": M8 + NEXUS, "molmo2-8b-f384": M8 + NEXUS,
+          "molmo2-8b-f32": M8, "molmo2-8b-f128": M8, "molmo2-8b-f384": M8,
           "qwen35-35b-a3b-f32": M27, "qwen35-35b-a3b-f128": M27}
 EXPERIMENTS = [("api", c, "qa", KEY_POOLS, "batch10_agree2") for c in API_CONFIGS] + REPORTED + PAID + [
     ("direct", arm, "qa", pools, bank) for bank in BANKS for arm, pools in DIRECT.items()] + [
