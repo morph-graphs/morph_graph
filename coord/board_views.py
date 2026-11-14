@@ -48,6 +48,9 @@ POOLS = {   # the old Nexus names (nexus, nexus-test, nexus-slurm) until their l
     "zaratan": ("Zaratan", "Anubhav's agent", "H100 / A100 (AAC)", ""),
     "arm00": ("arm00", "Anubhav's agent", "1x GH200 96 GB (vulcan-arm00)", ""),
 }
+# Nexus pools retired when one worker took over all our queues (pool nexus, #36/#47, 2026-11-14): their workers are
+# stopped on purpose, so a silent heartbeat is no problem (their unfinished claims' leases lapse and the tasks return)
+RETIRED = {"nexus-tron", "nexus-scavenger", "nexus-sailon", "nexus-test", "nexus-slurm"}
 SITES = ["Nexus", "wriva", "Max", "Pulkit", "Zaratan", "arm00"]
 OURS = {p for p, v in POOLS.items() if v[0] in ("Nexus", "wriva")}   # pools on Nexus: the collector's squeue shows their jobs
 
@@ -355,7 +358,7 @@ def update(out, raw, live, nxq, built_src):
     up = {n for n, a in age.items() if a is not None and a <= 30}
     # a silent worker whose queue has a live one (an old pool name after its rename, #28) is not stale
     stale = {n for n, a in age.items() if a is not None and a > 30 and (hb[n].get("running") or 0) > 0
-             and place(n) not in {place(u) for u in up}}
+             and place(n) not in {place(u) for u in up} and n not in RETIRED}
     pools = []
     for s_ in SITES + sorted({site(n) for n in hb} - set(SITES)):
         names = [n for n in list(POOLS) + sorted(set(hb) - set(POOLS)) if site(n) == s_]
