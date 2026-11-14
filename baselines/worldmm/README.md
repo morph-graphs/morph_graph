@@ -104,7 +104,8 @@ own rows).** "Memory model" is everything that builds the memory (10 s captions 
 multiscale caption filter). "Reasoning model" is WorldMM's *respond* model: in `WorldMemory.answer` it decides
 each round whether to search, which memory and with what query, and then writes the answer, seeing the retrieved
 captions, triples and frames. The embedding models (Qwen3-Embedding-4B, VLM2Vec-V2) stay local in every arm, so
-each stage still needs a GPU (they take about 13 GB; `g5m-q8` needs 40 GB, for the 8B server too).
+each stage still needs a GPU (24 GB: a 16 GB card ran out of memory in Qwen3-Embedding on the first keyed build;
+`g5m-q8` needs 40 GB, for the 8B server too).
 
 Everything else is the same code path as `m8`: WorldMM's prompts and defaults, the strict-streaming patches
 (a question's HippoRAG graphs, semantic snapshot and visual clips hold only what ends by its `t_ask`), the
@@ -149,7 +150,7 @@ export OPENROUTER_API_KEY=...      # typed into the shell (or read -s): never an
 unset OPENAI_API_KEY GOOGLE_API_KEY GEMINI_API_KEY HF_TOKEN       # no other provider's key in the job
 export PY=<client environment>/bin/python EPIC_MORPH_DIR=<epic-morph checkout> WORLDMM_FETCH=0
 bash baselines/worldmm/run_worldmm.sh prep  P05-20240425-201444 g5m   # no GPU: ffmpeg (512 px video, 10 s segments)
-bash baselines/worldmm/run_worldmm.sh build P05-20240425-201444 g5m   # one GPU >= 16 GB (see below)
+bash baselines/worldmm/run_worldmm.sh build P05-20240425-201444 g5m   # one GPU >= 24 GB (see below)
 # upload (no GPU) needs HF_TOKEN back; it makes no API call:  bash baselines/worldmm/run_worldmm.sh upload <video> g5m
 ```
 For an sbatch job, export the key in the submitting shell and let `sbatch` pass the environment (its default,
@@ -158,9 +159,9 @@ For an sbatch job, export the key in the submitting shell and let `sbatch` pass 
 | stage | GPU | API calls |
 |---|---|---|
 | `prep` | none | none |
-| `build` | one GPU >= 16 GB: the embedding models (Qwen3-Embedding-4B, VLM2Vec-V2) are local and take about 13 GB. The 10 s captions, its first step, are API calls only | gpt-5-mini: captions (10 frames per 10 s segment), multiscale captions, triples, semantic memory, OpenIE |
+| `build` | one GPU >= 24 GB (an A5000): the embedding models (Qwen3-Embedding-4B, VLM2Vec-V2) are local; a 16 GB A4000 ran out of memory in Qwen3-Embedding. 4 CPUs, 32 GB of RAM (22.9 GB used). The 10 s captions, its first step, are API calls only | gpt-5-mini: captions (10 frames per 10 s segment), multiscale captions, triples, semantic memory, OpenIE |
 | `qa g5m-q8` | one GPU >= 40 GB (the embedding models and the Qwen3-VL-8B server) | gpt-5-mini, the retriever's filters |
-| `qa g5m-g5` | one GPU >= 16 GB | gpt-5-mini (retriever) and gpt-5 (respond) |
+| `qa g5m-g5` | one GPU >= 24 GB | gpt-5-mini (retriever) and gpt-5 (respond) |
 | `upload` | none | none |
 
 - **What changes in the request.** The endpoint (`https://openrouter.ai/api/v1`; `OPENROUTER_BASE_URL` overrides
@@ -192,17 +193,24 @@ For an sbatch job, export the key in the submitting shell and let `sbatch` pass 
   `runs.jsonl` lines then show both.
 - **One gateway per run.** With both keys set OpenAI's is used and `OPENROUTER_API_KEY` is removed from the
   stage's environment; stages that call no API get neither key.
-- **Not known until a keyed call**: whether OpenRouter's Responses endpoint accepts WorldMM's requests as they
-  are (structured output through `text.format`, messages without `"type": "message"`); its published schema
-  allows both. Build one short video first and read its `runs.jsonl` line.
+- **First keyed build** (2026-11-14, P05-20240425-201444, 27 min of video, on an A5000, run by Anubhav's main
+  session, numbers as reported from its `runs.jsonl` and `sacct`): OpenRouter's Responses endpoint took WorldMM's
+  requests as they are; 1,048 calls, $2.71, 29 minutes, 22.9 GB of host RAM. That is about $6.0 per video-hour,
+  2.3 times the estimate below ($2.55), so all 156 memories (41.3 h) come to about $250, not $106.
+- **No `provider` in these rows.** A Responses reply from OpenRouter does not name the provider that served it
+  (a Chat Completions reply does, which is why MERIT's rows have it); it would take the opt-in request header
+  `X-OpenRouter-Metadata: enabled`, which we do not send. The pin (`only: ["openai"]`, no fallbacks) is in every
+  request all the same, and `endpoint`, the returned model id and `cost` are recorded.
 - **Check without a key**: `GATEWAY=openrouter bash baselines/worldmm/test_official.sh <scratch dir>` runs the same
   test with only `OPENROUTER_API_KEY` set (a dummy) against the stand-in, and checks the path, the `openai/...`
-  ids, the provider pin, the image detail and the recorded endpoint, provider and cost; without `GATEWAY` it
+  ids, the provider pin, the image detail and the recorded endpoint and cost; without `GATEWAY` it
   checks that the OpenAI route is what it was, even when an OpenRouter key is also set.
 
 ### Cost estimate
 
-Estimated 2026-11-13 with `epic/cost_official.py` (standard tier; nothing was run against the API):
+Estimated 2026-11-13 with `epic/cost_official.py` (standard tier; nothing was run against the API). **The first
+real build cost 2.3 times the memory estimate** ($2.71 for the 27 min P05-20240425-201444 through OpenRouter,
+2026-11-14, against $1.15 by the table's rate); the memory column below is not corrected for that:
 
 | scope | memory `g5m` (once) | answers `g5m-q8` | answers `g5m-g5` | both sheet rows | range |
 |---|---|---|---|---|---|

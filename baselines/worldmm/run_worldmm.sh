@@ -14,9 +14,9 @@
 #   arm    m8   Qwen3-VL-8B-Instruct for every role (captions, memory, retrieval, answers)   one GPU with >= 40 GB
 #          m27  Qwen3.8-27B (instruct mode) for every role                                  one 80 GB GPU, or 2x 48 GB
 #          WorldMM's published models (README "Official arms"; OpenAI API, paid: OPENAI_API_KEY in the environment):
-#          g5m     the memory, built with gpt-5-mini (build, upload); shared by the two answer arms   one GPU >= 16 GB
+#          g5m     the memory, built with gpt-5-mini (build, upload); shared by the two answer arms   one GPU >= 24 GB
 #          g5m-q8  answers from the g5m memory: retriever gpt-5-mini, respond Qwen3-VL-8B (local)     one GPU >= 40 GB
-#          g5m-g5  answers from the g5m memory: retriever gpt-5-mini, respond gpt-5                   one GPU >= 16 GB
+#          g5m-g5  answers from the g5m memory: retriever gpt-5-mini, respond gpt-5                   one GPU >= 24 GB
 #   bank   a named bank of the epic-morph checkout, e.g. batch10_agree2 (generated there with
 #          v3/export_bank.py <bank> when missing; byte-identical for anyone at that commit)
 #

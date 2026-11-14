@@ -129,7 +129,8 @@ bash baselines/merit/run_merit.sh build P05-20240425-201444 g5m   # no GPU: one 
 # upload (no GPU) needs HF_TOKEN back; it makes no API call:  bash baselines/merit/run_merit.sh upload <video> g5m
 ```
 For an sbatch job, export the key in the submitting shell and let `sbatch` pass the environment (its default,
-`--export=ALL`); do not write it into the script. `g5m` needs no GPU at any stage. Answering needs one: `g5m-q8`
+`--export=ALL`); do not write it into the script. `g5m` needs no GPU at any stage (the first keyed build ran on a
+CPU node: the image starts without a GPU, 3 GB of RAM used; ask for 4 CPUs and 8 GB). Answering needs one: `g5m-q8`
 and `g5m-q27` as `m8` / `m27` (no API call), `g5m-g5` one GPU of 16 GB for the embedding model (its gpt-5 calls
 take the same route, as `openai/gpt-5`).
 
@@ -161,6 +162,10 @@ take the same route, as `openai/gpt-5`).
   `runs.jsonl` lines then show both.
 - **One gateway per run.** With both keys set OpenAI's is used and `OPENROUTER_API_KEY` is removed from the
   stage's environment; stages that call no API get neither key.
+- **First keyed build** (2026-11-14, P05-20240425-201444, 55 clips, run by Anubhav's main session, numbers as
+  reported from its `runs.jsonl` and `sacct`): 110 calls, $0.38, provider `OpenAI` in every row. The estimate
+  below gives $0.22 for this video (range $0.13 to $0.40), so reasoning tokens run near the upper assumption: at
+  this rate all 156 memories (5,030 clips) come to about $35, not $20.
 - **Check without a key**: `epic/test_api_arms.py --work <scratch> --gateway openrouter` runs the same test with
   only `OPENROUTER_API_KEY` set (a dummy) against the stand-in, and asserts the path, the `openai/...` ids, the
   provider pin and the recorded endpoint, provider and cost; without `--gateway` it asserts that the OpenAI route

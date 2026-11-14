@@ -12,8 +12,9 @@ The gateway: with OPENROUTER_API_KEY set and OPENAI_API_KEY not, the same Respon
 (OPENROUTER_BASE_URL, default https://openrouter.ai/api/v1) as openai/gpt-5-mini / openai/gpt-5, pinned to the
 provider OpenAI with no fallback (OpenRouter also lists Azure for these models). The request is otherwise the
 same, except that each image part says detail "auto": OpenRouter's schema requires the field, and auto is what
-the OpenAI API assumes without it. The rows are then keyed by the id OpenRouter returns, with its endpoint,
-"provider" (who served the call, as OpenRouter names it) and "cost" (dollars OpenRouter charged, summed).
+the OpenAI API assumes without it. The rows are then keyed by the id OpenRouter returns, with its endpoint and
+"cost" (dollars OpenRouter charged, summed), and "provider" when the reply names who served it (a Responses reply
+does not, unless asked with the header X-OpenRouter-Metadata, which is not sent).
 WorldMM's reply cache keys on the model id, so replies of one gateway are never served as the other's.
 
 An empty reply (no text and nothing parsed) is counted, since it was billed, and then raised as an error: WorldMM's

@@ -104,11 +104,11 @@ if n_log != n_use:
 urows = [m for st in used.values() for m in st.values()]
 gok = all(m["endpoint"].rstrip("/") == f"http://127.0.0.1:{PORT}" + gw[0][:-len("/responses")] for m in urows)
 if GATEWAY == "openrouter":
-    gok = gok and all(m.get("provider") == "OpenAI" and abs(m["cost"] - 0.001 * m["calls"]) < 1e-6 for m in urows)
+    gok = gok and all("provider" not in m and abs(m["cost"] - 0.001 * m["calls"]) < 1e-6 for m in urows)
 else:
     gok = gok and not any("provider" in m or "cost" in m for m in urows)
 if not gok:
-    fail.append("runs.jsonl's endpoint, provider or cost is not the gateway's")
+    fail.append("runs.jsonl's endpoint or cost is not the gateway's")
 # 3. streaming: nothing that ends after t_ask in the rows (both arms) or in any call of the all-OpenAI arm
 caps = json.load(open(f"{T}/results/g5m/{V}/{V}_10sec.json"))
 end = lambda c: int(c["end_time"][:2]) * 3600 + int(c["end_time"][2:4]) * 60 + int(c["end_time"][4:6])

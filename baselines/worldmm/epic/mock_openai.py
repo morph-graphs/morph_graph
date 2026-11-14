@@ -6,8 +6,8 @@
 
 Answers POST /v1/responses with canned content in the shape each WorldMM call expects, and logs one line per call
 (kind, model, images and their sizes, text tokens, the time markers the prompt carried, the request's path, its
-`provider` field and its images' `detail`). Under /openrouter/ it answers as OpenRouter does: the reply also
-names the provider that served the call and the usage has a cost (OPENROUTER_BASE_URL=http://127.0.0.1:8765/openrouter/api/v1). Every canned caption
+`provider` field and its images' `detail`). Under /openrouter/ it answers as OpenRouter does: the usage has a
+cost (OPENROUTER_BASE_URL=http://127.0.0.1:8765/openrouter/api/v1). Every canned caption
 names the seconds it covers as CAP<start-end>, and the entities and triples made from it as tm<start>x<end>, so
 whatever later reaches a retriever or answer call shows which part of the video it came from: the test checks that
 none of it ends after the question's t_ask. The reasoning replies walk through episodic, semantic, visual by time
@@ -131,8 +131,7 @@ class Handler(BaseHTTPRequestHandler):
                 "usage": {"input_tokens": text_in + img_in, "input_tokens_details": {"cached_tokens": 0},
                           "output_tokens": row["output_tokens"], "output_tokens_details": {"reasoning_tokens": 0},
                           "total_tokens": text_in + img_in + row["output_tokens"]}}
-        if self.path.startswith("/openrouter/"):
-            resp["provider"] = "OpenAI"
+        if self.path.startswith("/openrouter/"):   # a cost, and no `provider`: OpenRouter's Responses replies name none
             resp["usage"].update(cost=0.001, is_byok=False)
         data = json.dumps(resp).encode()
         self.send_response(200)
