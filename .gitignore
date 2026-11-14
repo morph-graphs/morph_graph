@@ -268,10 +268,13 @@ baselines/vgent/work/
 !baselines/vgent/env/
 baselines/vgent/results/
 
-# coord/sheet_update.py: its default download cache
-.sheet_cache/
-
 # Ego-R1 runs: clips, tool caches, logs; results (baselines/egor1/run_egor1.sh)
 baselines/egor1/work/
 !baselines/egor1/env/
 baselines/egor1/results/
+
+# coord/sheet_update.py: its default download cache
+.sheet_cache/
+
+# job board: results a worker started with --outbox leaves for the relay (coord/worker.py)
+/outbox/

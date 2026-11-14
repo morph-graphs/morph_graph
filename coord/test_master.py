@@ -69,3 +69,30 @@ def test_build_waits_on_base(monkeypatch, tmp_path):
     tasks = {t["id"]: t for t in M.desired({("merit", "m8", "P01-20240101-000001")}, set())}
     assert tasks["magic-m8-build-P01-20240101-000001"]["deps"] == []   # MERIT's memory exists
     assert tasks["magic-m8-build-P01-20240101-000002"]["deps"] == ["merit-m8-build-P01-20240101-000002"]
+
+
+def test_relay_claims_hold_but_are_not_done(tmp_path, monkeypatch):
+    """worker --outbox: a finished task waiting for the relay is held from every pool, ranks below done and above
+    running, and the upload leaves the folder (with .upload.json) in the outbox instead of the dataset."""
+    import jobs
+    live = dict(status="running", lease_until=9e12)
+    held = jobs.taken({"a": {"claims": {"x": {"status": "relay"}}}, "b": {"claims": {"x": live, "y": live}},
+                       "c": {"claims": {"x": {"status": "failed"}}}}, 1)
+    assert {k: (p, c["status"]) for k, (p, c) in held.items()} == {"x": ("a", "relay"), "y": ("b", "running")}
+    held = jobs.taken({"b": {"claims": {"x": live}}, "a": {"claims": {"x": {"status": "done"}}},
+                       "z": {"claims": {"x": {"status": "relay"}}}}, 1)
+    assert held["x"][0] == "a"
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "baselines", "common"))
+    import hf_results
+    v, src = "P01-20240203-123350", tmp_path / "res"
+    src.mkdir()
+    for f in (f"{v}_graph.pkl", "answers_t2.json.gz", "runs.jsonl", "x.partial"):
+        (src / f).write_text(f)
+    monkeypatch.setattr(hf_results, "OUTBOX", str(tmp_path / "outbox"))
+    monkeypatch.setenv("MERIT_OUTBOX", "magic-m27-qa-t2-" + v)
+    monkeypatch.setattr(sys, "argv", ["hf_results.py", "upload", "--baseline", "magic", "--memory", "{video}_graph.pkl",
+                                      "--arm", "m27", "--video", v, "--dir", str(src)])
+    hf_results.main()
+    out = tmp_path / "outbox" / ("magic-m27-qa-t2-" + v)
+    assert sorted(os.listdir(out)) == sorted([".upload.json", f"{v}_graph.pkl", "answers_t2.json.gz", "runs.jsonl"])
+    assert json.load(open(out / ".upload.json")) == dict(baseline="magic", arm="m27", video=v, memory=["{video}_graph.pkl"])

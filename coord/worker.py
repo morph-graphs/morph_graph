@@ -23,6 +23,15 @@ With --launcher slurm the worker runs where `sbatch` works (a login node) and ea
 `sbatch --wait` job that runs the baseline's container on a GPU node (the scheduler picks the GPU); slots are
 just how many jobs may be queued or running at once.
 
+With --outbox (machines whose jobs cannot reach the results dataset: Zaratan) a task's upload copies its results
+folder to <checkout>/outbox/<task id>/ instead (hf_results.py, MERIT_OUTBOX). The finished task stays claimed as
+`relay` (no other pool takes it, and tasks that depend on it wait) until a relay uploads the folder
+(`hf_results.py relay --dir <it>`, from a machine that can) and marks it with an `.relayed` file; then it is done.
+With --prefetch the worker downloads the results dataset's folders for a task's video and arm (every baseline's:
+MAGIC reads MERIT's captions) into MERIT_HF_CACHE before starting it, so a job whose node reaches the Hub's API but
+not its file storage still finds a memory built elsewhere: in the cache, hf_hub_download needs only the API
+(Zaratan compute nodes, measured 2026-11-13: huggingface.co answers over IPv6, the xet/LFS file hosts are IPv4-only).
+
 One worker for all of a person's queues: --queues <file> instead of --sbatch (coord/nexus_queues.json is the example,
 coord/nexus_worker.sbatch the job that runs it on Nexus):
 
@@ -77,7 +86,8 @@ def inner(task, gpus, a):
         run = f"MERIT_RUNTIME={a.runtime} bash baselines/{b}/docker/run.sh"
     else:
         run = f"CUDA_VISIBLE_DEVICES={gpus} bash baselines/{b}/run_{b}.sh"
-    return f"{run} {stage} {v} {arm} {bank} && {run} upload {v} {arm}"
+    up = f"MERIT_OUTBOX={task['id']} {run}" if getattr(a, "outbox", False) else run
+    return f"{run} {stage} {v} {arm} {bank} && {up} upload {v} {arm}"
 
 
 def command(task, gpus, a, log):
@@ -176,6 +186,17 @@ def alive(pidfile):
         return isinstance(e, PermissionError)
 
 
+def prefetch(task):
+    """Download <baseline>/<arm>/<video>/ of every baseline from the results dataset into the jobs' model cache."""
+    from huggingface_hub import snapshot_download
+    cache = os.path.join(os.environ.get("MERIT_HF_CACHE") or os.path.expanduser("~/.cache/huggingface"), "hub")
+    try:
+        snapshot_download(os.environ.get("MERIT_HF_REPO", "morph-graphs/epic-morph-results"), repo_type="dataset",
+                          cache_dir=cache, allow_patterns=[f"*/{task['arm']}/{task['video']}/*"])
+    except Exception as e:   # the job then fetches (or builds) by itself
+        print(f"{jobs.iso()} prefetch for {task['id']} failed: {type(e).__name__}: {str(e)[:200]}", flush=True)
+
+
 def gpu_name(gpus):
     try:
         out = subprocess.run(["nvidia-smi", "--query-gpu=index,name", "--format=csv,noheader"], capture_output=True,
@@ -201,13 +222,19 @@ def main():
     ap.add_argument("--every", type=int, default=300, help="seconds between cycles")
     ap.add_argument("--max-tasks", type=int, default=0, help="stop claiming after this many (0 = no limit)")
     ap.add_argument("--state", default=None, help="local folder for logs and exit codes (default ~/.cache/coord/<pool>)")
+    ap.add_argument("--outbox", action="store_true", help="leave results in <checkout>/outbox/ for a relay to upload "
+                    "(jobs that cannot reach the results dataset); the task is done once the relay marks it")
+    ap.add_argument("--host", default=socket.gethostname(), help="this worker's name in its claims (default the hostname; "
+                    "fix it when the worker itself runs as a Slurm job, so a requeued worker on another node keeps its claims)")
+    ap.add_argument("--prefetch", action="store_true", help="download the task's video folders from the results dataset "
+                    "into MERIT_HF_CACHE before starting it (job nodes that cannot download dataset files)")
     a = ap.parse_args()
     if a.queues and (a.launcher != "slurm" or a.sbatch):
         ap.error("--queues needs --launcher slurm and replaces --sbatch")
     queues = load_queues(a.queues) if a.queues else None
     state = os.path.abspath(a.state or os.path.expanduser(f"~/.cache/coord/{a.pool}"))   # the jobs write there too
     os.makedirs(state, exist_ok=True)
-    host = socket.gethostname()
+    host = a.host
     claimed_total = 0
     while True:
         head, tasks, pools = jobs.read()
@@ -218,11 +245,13 @@ def main():
         others = {tid: (n, c) for n, p in pools.items() if n != a.pool for tid, c in p.get("claims", {}).items()}
         # finished, still running, lost, or taken over by another pool?
         for tid, c in claims.items():
+            if c["status"] == "relay" and os.path.exists(os.path.join(REPO_ROOT, "outbox", tid, ".relayed")):
+                c.update(status="done", relayed=jobs.iso())
             if c["status"] != "running" or c.get("host") != host:
                 continue
             ex = os.path.join(state, f"{tid}.exit")
             o = others.get(tid)
-            if o and (o[1]["status"] == "done" or (o[1]["status"] == "running" and o[1].get("claimed", "") > c.get("claimed", ""))):
+            if o and (o[1]["status"] in ("done", "relay") or (o[1]["status"] == "running" and o[1].get("claimed", "") > c.get("claimed", ""))):
                 # our lease lapsed and another pool took the task: stop renewing (our copy may still finish; outputs are idempotent)
                 c.update(status="superseded", finished=jobs.iso(), note=f"taken over by pool {o[0]}")
                 continue
@@ -245,7 +274,9 @@ def main():
                     open(ex, "w").write(str(code))   # recorded below, as for the other launchers
             if os.path.exists(ex):
                 code = int(open(ex).read().strip() or 1)
-                c.update(status="done" if code == 0 else "failed", exit=code, finished=jobs.iso(),
+                if code == 0 and a.outbox and not os.path.exists(os.path.join(REPO_ROOT, "outbox", tid, ".upload.json")):
+                    code = 2   # nothing for the relay: the run.sh did not pass MERIT_OUTBOX on (or uploaded itself)
+                c.update(status=("relay" if a.outbox else "done") if code == 0 else "failed", exit=code, finished=jobs.iso(),
                          seconds=int(t - c.get("started_t", t)))
                 if code:   # the job's log, or (slurm, job never started) sbatch's own error
                     for f in (os.path.join(state, f"{tid}.log"), os.path.join(state, f"{tid}.log.submit")):
@@ -323,6 +354,8 @@ def main():
             continue
         for task, slot, qs in start:   # start only after the claim is committed
             tid = task["id"]
+            if a.prefetch:   # before any copy can start
+                prefetch(task)
             if queues:
                 ids = submit_copies(task, a, {n: queues[n] for n in qs}, state)
                 if not ids:   # no queue took it: fails next cycle with sbatch's error as its note
