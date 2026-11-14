@@ -151,7 +151,7 @@ build() {
         rc=0; "$PY" "$M/../common/hf_results.py" fetch-memory --baseline hippomm --memory "${MEMORY[@]}" \
             --arm "$MEM" --video "$V" --dir "$MOUT" || rc=$?
         case $rc in
-            0) rm -f "$OUT"/answers_*.json.gz "$OUT"/count_*.json "$MOUT/summaries.json" ;;   # made from an earlier memory
+            0) rm -f "$OUT"/answers_*.json.gz "$OUT"/count_*.json "$OUT/${V}_memory_ref.json" "$MOUT/summaries.json" ;;   # made from an earlier memory
             3) echo "no HippoMM memory in the dataset yet: building it here" ;;
             *) echo "could not reach the dataset; HIPPOMM_FETCH=0 builds the memory here instead"; exit 1 ;;
         esac
@@ -184,8 +184,9 @@ count() {
     bank_file
     "$PY" "$M/epic/run_qa.py" --count --video "$V" --bank_file "$BF" --memory "$MOUT" --answers "$OUT/count_$BANK.json"
 }
+has_answers() { compgen -G "$OUT/answers_*.json.gz" >/dev/null || compgen -G "$OUT/blind_*.json.gz" >/dev/null; }
 memory_ref() {   # an answer arm's folder names the memory its answers were made from, by file hashes
-    [ "$ARM" != "$MEM" ] || return 0
+    [ "$ARM" != "$MEM" ] && has_answers || return 0   # written once there are answers
     "$PY" -c 'import hashlib, json, os, sys
 print(json.dumps({"memory_arm": sys.argv[1], "sha256": {os.path.basename(f): hashlib.sha256(open(f, "rb").read()).hexdigest()
                                                          for f in sys.argv[2:]}}, sort_keys=True))' \
@@ -201,10 +202,11 @@ qa() {
     need_key
     have_memory || build
     [ -s "$VIDEO" ] || { echo "missing $VIDEO"; exit 1; }
-    memory_ref; bank_file; imagebind; start_vlm
+    bank_file; imagebind; start_vlm
     rm -f "$TMPDIR/usage.json"
     "$PY" "$M/epic/run_qa.py" --video "$V" --bank_file "$BF" --memory "$MOUT" --video_file "$VIDEO" --store "$STORE" \
         --answers "$OUT/answers_$BANK$SUF.json.gz" --usage "$TMPDIR/usage.json" --limit "${HIPPOMM_LIMIT:-0}" || rc=$?
+    memory_ref
     record "qa $BANK$SUF" $((SECONDS - t)) "$TMPDIR/usage.json"   # also when it stopped early: the calls were made
     [ $rc = 0 ] || { echo "qa did not finish (exit $rc); rerun the same command to retry"; exit 1; }
 }
@@ -220,7 +222,8 @@ blind() {
 upload() {   # only a finished memory: a half-built folder would overwrite a good one in the dataset
     log upload
     if [ "$ARM" != "$MEM" ]; then   # an answer arm: its count, answers and runs, and the reference to their memory
-        [ -s "$OUT/${V}_memory_ref.json" ] || { echo "no answers in $OUT: run qa first"; exit 1; }
+        has_answers || { echo "no answers in $OUT: run qa first"; exit 1; }
+        memory_ref
         "$PY" "$M/../common/hf_results.py" upload --baseline hippomm --memory '{video}_memory_ref.json' --arm "$ARM" --video "$V" --dir "$OUT"
         return 0
     fi
