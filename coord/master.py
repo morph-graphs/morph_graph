@@ -26,8 +26,9 @@ without EPIC_MORPH_DIR: a tasks.json without the qa tasks would drop them from t
 Arms that call a paid API (NEEDS_ENV) carry `needs_env`, the variables a worker must have set to take them ("A|B":
 either one), and go to pools `max` and `pulkit` only (ROUTER_POOLS once also took `nexus` for OpenRouter-only arms).
 The reported-configuration arms (REPORTED: a gpt-5-mini memory per video, answered by several models) are listed right after the API tasks, and while PILOT is non-empty only the tasks it names are listed.
-The other paid rows (PAID: Ego-R1, EGAgent, EgoRAG, HippoMM and MAGIC-Video with their published models) follow the
-reported-configuration arms, for batch10 only, on pools `max` and `pulkit` only, behind the same PILOT gate.
+The other paid rows (PAID: Ego-R1, EGAgent, EgoRAG, HippoMM and MAGIC-Video, with the models Max's and Pulkit's
+gateway serves) follow the reported-configuration arms, for every bank of BANKS, on pools `max` and `pulkit` only,
+behind the same PILOT gate.
 """
 import argparse
 import functools
@@ -56,7 +57,7 @@ BUILD_ORDER = os.path.join(ROOT, "baselines", "merit", "build_order.txt")
 ANSWERS_CACHE = os.path.join(constants.HF_HOME, "coord", "answers")
 FAILED = ("", "Error", "Unable to generate answer")   # no answer: earlier.reuse's failures, and WorldMM's own
 
-# (baseline, arm, stage, pools that may run it, bank). A qa task answers its bank on the build's GPU family, so it
+# (baseline, arm, stage, pools that may run it, bank; a build line: None, or the banks whose videos it builds). A qa task answers its bank on the build's GPU family, so it
 # takes the build's pools. Every baseline's m8 needs one GPU of 40 GB or more. m27: MERIT one 80 GB GPU (H100 / H200 /
 # GH200) or 2x 48 GB; MAGIC one 80 GB GPU or 3+ GPUs; WorldMM one 80 GB GPU or 2x 48 GB. arm00 (GH200, aarch64) runs
 # MERIT only: the images are x86, and only MERIT has a native arm environment there. A worker takes only the
@@ -127,34 +128,40 @@ PILOT = []   # emptied 2026-11-14 (Anubhav): the pilot, worldmm-g5m-build-P05-20
 # would pay for twice. A qa task keeps its wait on such a build until the memory is uploaded. Empty since 2026-11-14:
 # WorldMM's gpt-5-mini memories, built by Slurm arrays on Nexus, are in the dataset for all 156 videos.
 HELD = set()
-# The other paid rows of the sheet, each baseline with the models it was published with (baselines/<b>/README.md).
-# Decided by Anubhav: batch10 only (a build line with a bank builds only that bank's videos: 10 memories, no tranche,
-# no 156-video builds), and run by Max: every line is for KEY_POOLS, also a stage that calls no API (HippoMM's build,
-# local on a 48 GB GPU), which gets no needs_env but still goes nowhere else. In this order: the rows that use
-# Gemini 2.5 Pro first (Ego-R1, EGAgent's Gemini arm), since Google stops it on 2026-12-01.
-#   egor1    gemini25pro: Gemini 2.5 Pro captions + GPT-4.1 summaries (build); agent tools GPT-4o / Gemini, answer GPT-4.1 (qa)
-#   egagent  one GPT-4.1 memory, built under gpt41; gemini25pro's qa takes it from the dataset (MEMORY_ARM) and keeps a
-#            copy with its answers. It names OPENAI_API_KEY too: without the fetched memory it would have to build it
-#   egorag   egogpt_gpt4o: local EgoGPT captions (48 GB GPU), then GPT-4o and DeepSeek summaries (build); GPT-4o (qa)
-#   hippomm  q25vl7b-gpt4o: the build is local (Qwen2.5-VL-7B, ImageBind, Whisper); qa reasons with gpt-4o
+# The other paid rows of the sheet (baselines/<b>/README.md). Max and Pulkit run them through their gateway, which has
+# GPT-4.1, GPT-5-mini, Gemini 3.6 Flash and DeepSeek but no GPT-4o and no Gemini 2.5 Pro, so each row is listed with a
+# stand-in arm it can run (Anubhav, 2026-11-14). The published arms' code stays in each baseline; their lines are off
+# the board (egor1 gemini25pro, egagent gemini25pro, egorag egogpt_gpt4o, hippomm q25vl7b-gpt4o's qa).
+# Every bank of BANKS (Anubhav, 2026-11-14; batch10 only before): a build line names its banks and builds only their
+# videos, the ones with questions, not all 156. Every line is for KEY_POOLS, also a stage that calls no API (HippoMM's
+# build, local on a 48 GB GPU), which gets no needs_env but still goes nowhere else.
+#   egor1    gemini36flash: Gemini 3.6 Flash captions + GPT-4.1 summaries (build). gemini36flash-gpt41 answers from that
+#            memory: video_llm Gemini 3.6 Flash; rag, vlm and the answer GPT-4.1 (qa)
+#   egagent  one GPT-4.1 memory, built under gpt41 and answered by the GPT-4.1 agent; gemini36flash's qa (a Gemini 3.6
+#            Flash agent) takes that memory from the dataset and keeps a copy with its answers
+#   egorag   egogpt_gpt41: local EgoGPT captions (48 GB GPU), then GPT-4.1 and DeepSeek summaries (build); GPT-4.1 (qa)
+#   hippomm  the memory is local (Qwen2.5-VL-7B, ImageBind, Whisper), built under the published arm q25vl7b-gpt4o;
+#            q25vl7b-gpt41 answers from it with gpt-4.1
 #   magic    oss120 is the memory, oss120-flash / oss120-q27 answer from it: every stage calls OpenRouter (row q27 its
 #            search loop), and oss120-q27 also serves Qwen3.8-27B, so it needs one of Max's 80 GB GPUs
 # Stages the board does not run (worker.py runs build and qa, then upload): Ego-R1's `firstturn` and EGAgent's `check`
 # (checks without an API), HippoMM's `count` (a cost count, part of `all`), and the paid `blind` floors.
-PAID_BANK = "batch10_agree2"
-PAID = [(b, arm, stage, KEY_POOLS, PAID_BANK) for b, arm, stage in (
-    ("egor1", "gemini25pro", "build"), ("egor1", "gemini25pro", "qa"),
-    ("egagent", "gpt41", "build"), ("egagent", "gemini25pro", "qa"), ("egagent", "gpt41", "qa"),
-    ("egorag", "egogpt_gpt4o", "build"), ("egorag", "egogpt_gpt4o", "qa"),
-    ("hippomm", "q25vl7b-gpt4o", "build"), ("hippomm", "q25vl7b-gpt4o", "qa"),
-    ("magic", "oss120", "build"), ("magic", "oss120-flash", "qa"), ("magic", "oss120-q27", "qa"))]
-MEMORY_ARM |= {("egagent", "gemini25pro"): "gpt41", ("magic", "oss120-flash"): "oss120", ("magic", "oss120-q27"): "oss120"}
+PAID_BANKS = BANKS
+# (baseline, the arm that builds the memory, the arms that answer from it)
+PAID_ROWS = [("egor1", "gemini36flash", ["gemini36flash-gpt41"]), ("egagent", "gpt41", ["gemini36flash", "gpt41"]),
+             ("egorag", "egogpt_gpt41", ["egogpt_gpt41"]), ("hippomm", "q25vl7b-gpt4o", ["q25vl7b-gpt41"]),
+             ("magic", "oss120", ["oss120-flash", "oss120-q27"])]
+PAID = [line for b, mem, answer in PAID_ROWS for line in
+        [(b, mem, "build", KEY_POOLS, tuple(PAID_BANKS))]
+        + [(b, arm, "qa", KEY_POOLS, bank) for bank in PAID_BANKS for arm in answer]]
+MEMORY_ARM |= {(b, arm): mem for b, mem, answer in PAID_ROWS for arm in answer if arm != mem}
 # what each of their stages needs: a key (baseline, arm, stage) where the stages differ, else (baseline, arm)
 NEEDS_ENV |= {
-    ("egor1", "gemini25pro"): ["GEMINI_API_KEY", "OPENAI_API_KEY"],
-    ("egagent", "gpt41"): ["OPENAI_API_KEY"], ("egagent", "gemini25pro"): ["GEMINI_API_KEY", "OPENAI_API_KEY"],
-    ("egorag", "egogpt_gpt4o", "build"): ["OPENAI_API_KEY", "DEEPSEEK_API_KEY"], ("egorag", "egogpt_gpt4o", "qa"): ["OPENAI_API_KEY"],
-    ("hippomm", "q25vl7b-gpt4o", "qa"): ["OPENAI_API_KEY"],
+    ("egor1", "gemini36flash"): ["GEMINI_API_KEY", "OPENAI_API_KEY"],
+    ("egor1", "gemini36flash-gpt41"): ["GEMINI_API_KEY", "OPENAI_API_KEY"],
+    ("egagent", "gpt41"): ["OPENAI_API_KEY"], ("egagent", "gemini36flash"): ["GEMINI_API_KEY"],
+    ("egorag", "egogpt_gpt41", "build"): ["OPENAI_API_KEY", "DEEPSEEK_API_KEY"], ("egorag", "egogpt_gpt41", "qa"): ["OPENAI_API_KEY"],
+    ("hippomm", "q25vl7b-gpt41"): ["OPENAI_API_KEY"],
     ("magic", "oss120"): ["OPENROUTER_API_KEY"], ("magic", "oss120-flash"): ["OPENROUTER_API_KEY"],
     ("magic", "oss120-q27"): ["OPENROUTER_API_KEY"]}
 # The arms behind the pilot gate: every arm of the REPORTED and PAID lines. A new paid baseline joins the gate by
@@ -377,7 +384,8 @@ def desired(have, files, answers=None, busy=()):
         if mem != arm:   # for the worker: the arm whose dataset folder holds this task's memory (worker.py --prefetch)
             env["memory_arm"] = mem
         if stage == "build":
-            for v in bank_videos(bank) if bank else videos:   # a build line with a bank: that bank's videos only
+            # a build line with banks: their videos only, each once, in the banks' order
+            for v in dict.fromkeys(v for x in bank for v in bank_videos(x)) if bank else videos:
                 if (b, arm, v) not in have:
                     base = f"{BUILD_ON.get(b)}-{arm}-build-{v}"
                     tasks.append(dict(id=f"{b}-{arm}-build-{v}", baseline=b, arm=arm, stage="build", video=v, bank=None,
@@ -398,14 +406,15 @@ def desired(have, files, answers=None, busy=()):
                               pools=pools, deps=[build] if build in ids else [], **env, **stale))
             ids.add(tasks[-1]["id"])
     # the reported arms by video (batch10: both memories, then its answers; then tranche 2; then the other memories),
-    # so the first rows of the sheet do not wait behind 300 builds; every other task keeps its EXPERIMENTS order
-    # (the paid rows, batch10 only, keep their EXPERIMENTS order like the rest: after all of these, before the local arms)
+    # so the first rows of the sheet do not wait behind 300 builds; the paid rows after them, by video in the same way
+    # (batch10's memories and answers of every row, then tranche 2's, ...); every other task keeps its EXPERIMENTS order
     rank = {id(t): i for i, t in enumerate(tasks)}
-    by_group = {(b, arm) for b, arm, *_ in REPORTED}
-    first = min([rank[id(t)] for t in tasks if (t["baseline"], t["arm"]) in by_group], default=0)
+    block = {id(t): i for t in tasks for i, lines in enumerate((REPORTED, PAID))
+             if (t["baseline"], t["arm"]) in {(b, arm) for b, arm, *_ in lines}}
+    first = {i: min(rank[k] for k in block if block[k] == i) for i in set(block.values())}
     urgent = {(b, arm, stage) for b, arm, stage, *_ in URGENT}   # right after the API tasks, whatever their rank
     tasks.sort(key=lambda t: (0 if t["baseline"] == "api" else 1 if (t["baseline"], t["arm"], t["stage"]) in urgent else 2,)
-               + ((first, group[t["video"]], rank[id(t)]) if (t["baseline"], t["arm"]) in by_group else (rank[id(t)], 0, 0)))
+               + ((first[block[id(t)]], group[t["video"]], rank[id(t)]) if id(t) in block else (rank[id(t)], 0, 0)))
     for i, t in enumerate(tasks):
         t["priority"] = i
     return tasks

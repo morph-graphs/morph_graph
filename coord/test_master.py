@@ -65,6 +65,9 @@ def test_experiments():
     """Every baseline on the board has build + qa of every bank per arm, qa on the build's pools; arm00 (aarch64)
     runs MERIT only."""
     ex = {(b, arm, stage, bank): pools for b, arm, stage, pools, bank in M.EXPERIMENTS}
+    # the api rows are as they were: three configs (gpt-5-f1024 among them), batch10
+    assert {(arm, stage, bank) for b, arm, stage, bank in ex if b == "api"} == {
+        (c, "qa", "batch10_agree2") for c in ("gemini-3.1-flash-lite-high", "gemini-3.6-flash-high", "gpt-5-f1024")}
     assert M.BANKS == M.REPORTED_BANKS == ["batch10_agree2", "t2_agree2", "t3_agree2", "t4_agree2", "t5_agree2",
                                            "rescue_agree2", "extra_agree2"]
     for b in ("merit", "magic", "worldmm"):
@@ -246,46 +249,76 @@ def test_memory_arm(monkeypatch, tmp_path):
 
 
 def test_paid_rows(monkeypatch, tmp_path):
-    """The other paid rows: batch10 only (builds too), pool max only, each stage's own keys, shared memories, after the
-    g5m lines and before the local-model lines, and all of them behind the pilot gate."""
+    """The other paid rows, with the arms Max's and Pulkit's gateway can run: every bank, builds for the banks' videos
+    only, pool max / pulkit only, each stage's own keys, shared memories, after the g5m lines and before the
+    local-model lines, by video group, and all of them behind the pilot gate."""
     board(monkeypatch, tmp_path)
     v, w = B10
     have = {("egagent", "gpt41", w)}                                       # one EGAgent memory already in the dataset
-    files = {f"egor1/gemini25pro/{v}/answers_batch10_agree2.json.gz"}      # one Ego-R1 video already answered
+    files = {f"egor1/gemini36flash-gpt41/{v}/answers_batch10_agree2.json.gz"}   # one Ego-R1 video already answered
     tasks = M.desired(have, files)
     by = {t["id"]: t for t in tasks}
     rows = {(b, arm) for b, arm, *_ in M.PAID}
     paid = [t for t in tasks if (t["baseline"], t["arm"]) in rows]
-    assert rows == {("egor1", "gemini25pro"), ("egagent", "gpt41"), ("egagent", "gemini25pro"), ("egorag", "egogpt_gpt4o"),
-                    ("hippomm", "q25vl7b-gpt4o"), ("magic", "oss120"), ("magic", "oss120-flash"), ("magic", "oss120-q27")}
+    assert rows == {("egor1", "gemini36flash"), ("egor1", "gemini36flash-gpt41"), ("egagent", "gpt41"),
+                    ("egagent", "gemini36flash"), ("egorag", "egogpt_gpt41"), ("hippomm", "q25vl7b-gpt4o"),
+                    ("hippomm", "q25vl7b-gpt41"), ("magic", "oss120"), ("magic", "oss120-flash"), ("magic", "oss120-q27")}
     assert {(t["baseline"], t["arm"]) for t in paid} == rows
-    # batch10 only: no other video is built or answered, no other bank; pool max only, with or without a key
-    assert {t["video"] for t in paid} == set(B10) and {t["bank"] for t in paid} == {None, "batch10_agree2"}
+    # the lines: per row one build naming every bank, and a qa per answer arm and bank; the published arms nobody can
+    # run (no GPT-4o, no Gemini 2.5 Pro) are off the board
+    lines = {(b, arm, stage, bank) for b, arm, stage, _, bank in M.PAID}
+    assert M.PAID_BANKS == M.BANKS and len(lines) == len(M.PAID) == 5 + 7 * len(M.BANKS)
+    assert {(b, arm) for b, arm, stage, _ in lines if stage == "build"} == {
+        ("egor1", "gemini36flash"), ("egagent", "gpt41"), ("egorag", "egogpt_gpt41"), ("hippomm", "q25vl7b-gpt4o"), ("magic", "oss120")}
+    assert all(bank == tuple(M.BANKS) for *_, stage, bank in lines if stage == "build")
+    assert {(b, arm, bank) for b, arm, stage, bank in lines if stage == "qa"} == {(b, arm, bank) for bank in M.BANKS for b, arm in (
+        ("egor1", "gemini36flash-gpt41"), ("egagent", "gpt41"), ("egagent", "gemini36flash"), ("egorag", "egogpt_gpt41"),
+        ("hippomm", "q25vl7b-gpt41"), ("magic", "oss120-flash"), ("magic", "oss120-q27"))}
+    assert not any(arm in ("gemini25pro", "egogpt_gpt4o") for _, arm, *_ in M.EXPERIMENTS) and not any(
+        "gemini25pro" in k or "egogpt_gpt4o" in k for k in list(M.NEEDS_ENV) + list(M.MEMORY_ARM))
+    assert ("hippomm", "q25vl7b-gpt4o", "qa") not in {l[:3] for l in lines}
+    # every bank is answered; builds only for the videos that have questions (REST has none), each once; pool max /
+    # pulkit only, with or without a key
+    asked = list(dict.fromkeys(x for vs in BANK_VIDEOS.values() for x in vs))
+    assert {t["video"] for t in paid} == set(asked) and {t["bank"] for t in paid} == {None, *M.BANKS}
     assert all(t["pools"] == (M.ROUTER_POOLS if t["baseline"] == "magic" else M.KEY_POOLS) for t in paid)
     count = lambda b, arm, stage: sum((t["baseline"], t["arm"], t["stage"]) == (b, arm, stage) for t in paid)
-    assert count("egor1", "gemini25pro", "build") == 2 and count("egor1", "gemini25pro", "qa") == 1   # v is answered
-    assert count("egagent", "gpt41", "build") == 1 and count("egagent", "gemini25pro", "build") == 0  # w is built
-    assert count("magic", "oss120", "build") == 2 and count("magic", "oss120-flash", "build") == 0
+    pairs = sum(len(vs) for vs in BANK_VIDEOS.values())                    # (bank, video) with questions
+    assert count("egor1", "gemini36flash", "build") == len(asked) and count("egor1", "gemini36flash-gpt41", "qa") == pairs - 1   # v is answered
+    assert count("egagent", "gpt41", "build") == len(asked) - 1 and count("egagent", "gemini36flash", "build") == 0   # w is built
+    assert count("egagent", "gpt41", "qa") == count("egagent", "gemini36flash", "qa") == pairs
+    assert count("egorag", "egogpt_gpt41", "build") == len(asked) and count("egorag", "egogpt_gpt41", "qa") == pairs
+    assert count("hippomm", "q25vl7b-gpt4o", "build") == len(asked) and count("hippomm", "q25vl7b-gpt4o", "qa") == 0
+    assert count("hippomm", "q25vl7b-gpt41", "qa") == pairs and count("hippomm", "q25vl7b-gpt41", "build") == 0
+    assert count("magic", "oss120", "build") == len(asked) and count("magic", "oss120-flash", "build") == 0
+    assert count("magic", "oss120-flash", "qa") == count("magic", "oss120-q27", "qa") == pairs
     need = lambda tid: by[tid].get("needs_env")
-    assert need(f"egor1-gemini25pro-build-{v}") == ["GEMINI_API_KEY", "OPENAI_API_KEY"] == need(f"egor1-gemini25pro-qa-batch10_agree2-{w}")
+    assert need(f"egor1-gemini36flash-build-{v}") == ["GEMINI_API_KEY", "OPENAI_API_KEY"] == need(f"egor1-gemini36flash-gpt41-qa-batch10_agree2-{w}")
     assert need(f"egagent-gpt41-build-{v}") == ["OPENAI_API_KEY"] == need(f"egagent-gpt41-qa-batch10_agree2-{v}")
-    assert need(f"egagent-gemini25pro-qa-batch10_agree2-{v}") == ["GEMINI_API_KEY", "OPENAI_API_KEY"]
-    assert need(f"egorag-egogpt_gpt4o-build-{v}") == ["OPENAI_API_KEY", "DEEPSEEK_API_KEY"]
-    assert need(f"egorag-egogpt_gpt4o-qa-batch10_agree2-{v}") == ["OPENAI_API_KEY"]
+    assert need(f"egagent-gemini36flash-qa-batch10_agree2-{v}") == ["GEMINI_API_KEY"]
+    assert need(f"egorag-egogpt_gpt41-build-{v}") == ["OPENAI_API_KEY", "DEEPSEEK_API_KEY"]
+    assert need(f"egorag-egogpt_gpt41-qa-batch10_agree2-{v}") == ["OPENAI_API_KEY"]
     assert need(f"hippomm-q25vl7b-gpt4o-build-{v}") is None and "needs_env" not in by[f"hippomm-q25vl7b-gpt4o-build-{v}"]
-    assert need(f"hippomm-q25vl7b-gpt4o-qa-batch10_agree2-{v}") == ["OPENAI_API_KEY"]
-    assert all(need(f"magic-{arm}-{x}-{v}") == ["OPENROUTER_API_KEY"]
-               for arm, x in (("oss120", "build"), ("oss120-flash", "qa-batch10_agree2"), ("oss120-q27", "qa-batch10_agree2")))
+    assert need(f"hippomm-q25vl7b-gpt41-qa-t2_agree2-{T2[0]}") == ["OPENAI_API_KEY"]
+    assert all(need(f"magic-{arm}-{x}-{T3[0]}") == ["OPENROUTER_API_KEY"]
+               for arm, x in (("oss120", "build"), ("oss120-flash", "qa-extra_agree2"), ("oss120-q27", "qa-t3_agree2")))
     # shared memories: the answer arm waits on the memory arm's build while it is listed, and says where the memory is
-    assert by[f"egagent-gemini25pro-qa-batch10_agree2-{v}"]["deps"] == [f"egagent-gpt41-build-{v}"]
-    assert by[f"egagent-gemini25pro-qa-batch10_agree2-{w}"]["deps"] == []          # that memory exists
-    assert by[f"egagent-gemini25pro-qa-batch10_agree2-{v}"]["memory_arm"] == "gpt41"
+    assert by[f"egagent-gemini36flash-qa-batch10_agree2-{v}"]["deps"] == [f"egagent-gpt41-build-{v}"]
+    assert by[f"egagent-gemini36flash-qa-batch10_agree2-{w}"]["deps"] == []          # that memory exists
+    assert by[f"egagent-gemini36flash-qa-batch10_agree2-{v}"]["memory_arm"] == "gpt41"
+    assert by[f"egor1-gemini36flash-gpt41-qa-t4_agree2-{T4[0]}"]["deps"] == [f"egor1-gemini36flash-build-{T4[0]}"]
+    assert by[f"egor1-gemini36flash-gpt41-qa-t4_agree2-{T4[0]}"]["memory_arm"] == "gemini36flash"
     assert by[f"magic-oss120-q27-qa-batch10_agree2-{v}"]["deps"] == [f"magic-oss120-build-{v}"]
     assert by[f"magic-oss120-build-{v}"]["deps"] == []                             # no MERIT oss120 captions to wait for
-    assert by[f"hippomm-q25vl7b-gpt4o-qa-batch10_agree2-{v}"]["deps"] == [f"hippomm-q25vl7b-gpt4o-build-{v}"]
-    # order: api, the g5m arms, the paid rows, the local-model arms
+    assert by[f"hippomm-q25vl7b-gpt41-qa-rescue_agree2-{T2[0]}"]["deps"] == [f"hippomm-q25vl7b-gpt4o-build-{T2[0]}"]
+    assert by[f"hippomm-q25vl7b-gpt41-qa-rescue_agree2-{T2[0]}"]["memory_arm"] == "q25vl7b-gpt4o"
+    assert "memory_arm" not in by[f"egorag-egogpt_gpt41-qa-batch10_agree2-{v}"]
+    # order: api, the g5m arms, the paid rows, the local-model arms; the paid rows by video group (every row's batch10
+    # memories and answers before any tranche-2 build), a second bank's questions with their video
     kind = [0 if t["baseline"] == "api" else 1 if urgent(t) else 2 if t["arm"].startswith("g5m") else 3 if t in paid else 4 for t in tasks]
     assert kind == sorted(kind) and set(kind) == {0, 1, 2, 3, 4}
+    group = [next(i for i, vs in enumerate(BANK_VIDEOS.values()) if t["video"] in vs) for t in paid]
+    assert group == sorted(group) and set(group) == {0, 1, 2, 3, 4}
     assert all(by[d]["priority"] < t["priority"] for t in paid for d in t["deps"])
     # a non-empty PILOT withholds every one of them, and --only-pools moves none of them (the keyless HippoMM build either)
     assert all(M.reported(t) for t in paid) and M.GATED == rows | {(b, arm) for b, arm, *_ in M.REPORTED}
@@ -299,11 +332,11 @@ def test_paid_rows(monkeypatch, tmp_path):
     assert len(M.gate(tasks)[0]) == len(tasks)
     # built: each baseline's last memory file, next to runs.jsonl
     done, _ = M.built_from({f"{b}/{arm}/{v}/{f}" for b, arm, last in (
-        ("egor1", "gemini25pro", f"{v}_1day.json"), ("egagent", "gpt41", f"{v}_graph.json"),
-        ("egorag", "egogpt_gpt4o", f"{v}_l3_day.json"), ("hippomm", "q25vl7b-gpt4o", f"{v}_memory.json"),
-        ("magic", "oss120", "graph.pkl")) for f in ("runs.jsonl", last)} | {f"egorag/egogpt_gpt4o/{w}/runs.jsonl",
-                                                                           f"egorag/egogpt_gpt4o/{w}/{w}_30sec.json"})
-    assert done == {("egor1", "gemini25pro", v), ("egagent", "gpt41", v), ("egorag", "egogpt_gpt4o", v),
+        ("egor1", "gemini36flash", f"{v}_1day.json"), ("egagent", "gpt41", f"{v}_graph.json"),
+        ("egorag", "egogpt_gpt41", f"{v}_l3_day.json"), ("hippomm", "q25vl7b-gpt4o", f"{v}_memory.json"),
+        ("magic", "oss120", "graph.pkl")) for f in ("runs.jsonl", last)} | {f"egorag/egogpt_gpt41/{w}/runs.jsonl",
+                                                                           f"egorag/egogpt_gpt41/{w}/{w}_30sec.json"})
+    assert done == {("egor1", "gemini36flash", v), ("egagent", "gpt41", v), ("egorag", "egogpt_gpt41", v),
                     ("hippomm", "q25vl7b-gpt4o", v), ("magic", "oss120", v)}
 
 

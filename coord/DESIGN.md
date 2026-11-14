@@ -299,25 +299,43 @@ answered by several reasoning models: `g5m-q8`, `g5m-q27`, `g5m-g5`; each baseli
   restriction, the worker's check and the gate then apply to it as they are (the variable may be any name, e.g.
   `OPENROUTER_API_KEY`).
 
-## The other paid rows: batch10 only, pool `max`, behind the gate
+## The other paid rows: every bank, pools `max` and `pulkit`, behind the gate
 
-Added 2026-11-13. `master.PAID` lists Ego-R1 (`gemini25pro`), EGAgent (`gpt41`, `gemini25pro`), EgoRAG
-(`egogpt_gpt4o`), HippoMM (`q25vl7b-gpt4o`) and MAGIC-Video's reported arms (`oss120`, `oss120-flash`, `oss120-q27`),
-each with the models it was published with, after the g5m lines and before the local-model lines.
+Added 2026-11-13 for batch10 with each baseline's published models; changed 2026-11-14 (Anubhav). Max and Pulkit run
+these rows through their gateway, which has GPT-4.1, GPT-5-mini, Gemini 3.6 Flash and DeepSeek but no GPT-4o and no
+Gemini 2.5 Pro, so `master.PAID` lists each row with a stand-in arm the gateway can run (each baseline's README says
+what the stand-in replaces), for every bank of `master.BANKS`, after the g5m lines and before the local-model lines.
 
-- Batch10 only (Anubhav): a `build` line with a bank lists a build for that bank's videos only, here the 10 of
-  `batch10_agree2`, and each `qa` line answers that bank. No tranche, no 156-video builds.
-- Run by Max: every line is for `KEY_POOLS`. `NEEDS_ENV` may be keyed by (baseline, arm, stage) where a baseline's
-  stages need different keys (EgoRAG's build also needs `DEEPSEEK_API_KEY`; HippoMM's build needs none and carries no
-  `needs_env`, but stays on pool `max`: `--only-pools` cannot move a task listed for the key pool only).
-- Shared memories: EGAgent's GPT-4.1 memory is built under `gpt41`, and `gemini25pro`'s `qa` waits for that build and
-  fetches it (`MEMORY_ARM`); MAGIC's `oss120-flash` and `oss120-q27` answer from `oss120`.
+| baseline | build (the memory) | qa (one line per bank) | off the board, code kept |
+|---|---|---|---|
+| Ego-R1 | `gemini36flash` | `gemini36flash-gpt41`, from that memory | `gemini25pro` |
+| EGAgent | `gpt41` | `gpt41`; `gemini36flash`, from the `gpt41` memory | `gemini25pro` (qa) |
+| EgoRAG | `egogpt_gpt41` | `egogpt_gpt41` | `egogpt_gpt4o` |
+| HippoMM | `q25vl7b-gpt4o` (local models, no key) | `q25vl7b-gpt41`, from that memory | `q25vl7b-gpt4o` (qa) |
+| MAGIC-Video | `oss120` | `oss120-flash`, `oss120-q27` | |
+
+- Every bank (batch10 only before): `master.PAID_ROWS` holds (baseline, memory arm, answer arms); each row gives one
+  `build` line and a `qa` line per answer arm and bank. A `build` line's bank field is the tuple of banks whose videos
+  it builds: the videos with questions in any of them, each once (107 of the 156), not all videos. A `build` line
+  without banks (`None`) builds every video, as before.
+- Order: within the paid rows a task is ranked by its video's group, as the g5m arms are (batch10's memories and
+  answers of every row, then tranche 2's, ...; a second bank's questions with their video), so batch10's rows do not
+  wait behind 97 other builds per baseline.
+- Run by Max and Pulkit: every line is for `KEY_POOLS`. `NEEDS_ENV` may be keyed by (baseline, arm, stage) where a
+  baseline's stages need different keys (EgoRAG's build also needs `DEEPSEEK_API_KEY`; HippoMM's build needs none and
+  carries no `needs_env`, but stays on the key pools: `--only-pools` cannot move a task listed for them only).
+  Ego-R1's two arms name `GEMINI_API_KEY` and `OPENAI_API_KEY`; EGAgent's `gpt41` `OPENAI_API_KEY` and its
+  `gemini36flash` `GEMINI_API_KEY` alone (its qa waits for the `gpt41` build and takes the memory from the dataset);
+  EgoRAG's qa and HippoMM's `q25vl7b-gpt41` `OPENAI_API_KEY`; MAGIC's three `OPENROUTER_API_KEY`.
+- Shared memories (`MEMORY_ARM`, derived from `PAID_ROWS`): an answer arm other than the memory arm waits for that
+  arm's build and fetches its folder (`memory_arm` in the task).
 - The gate: `master.GATED` is every arm of the `REPORTED` and `PAID` lines, so a paid baseline is withheld by `PILOT`
   because it is listed there, not because of its name.
 - Not board stages: Ego-R1's `firstturn`, EGAgent's `check`, HippoMM's `count` and the paid `blind` floors. The worker
   runs `build` or `qa`, then `upload`, through each baseline's `docker/run.sh`, whose interface is the same as MERIT's.
 - `oss120-q27` serves Qwen3.8-27B and needs an 80 GB GPU: the board cannot say that about one task of a pool, so Max's
   worker must give those tasks such a slot (or leave `magic` out of `--baselines` on a smaller machine).
+- Our own queues (`coord/nexus_queues.json`) name none of the stand-in arms: we do not run them.
 
 ## The plain video model (`baselines/direct`): qa tasks with no build
 
