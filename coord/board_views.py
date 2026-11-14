@@ -364,7 +364,8 @@ def update(out, raw, live, nxq, built_src):
         rph = rate.get(e["experiment"])
         e["rate_per_h"] = round(rph, 1) if rph else None
         e["eta_h"] = round(e["open"] / rph, 1) if rph and e["open"] else None
-        e["state"] = ("built off the board" if e["held"] and not e["open"] and e["n"] < e["of"] else
+        short = not e["open"] and stage == "build" and (b, arm) in targets and e["n"] < e["of"]   # memories missing, no task
+        e["state"] = ("built off the board" if short and e["held"] else "not listed yet" if short else
                       "done" if not e["open"] else "failing" if e["failing"] else
                       "running" if e["running"] else "queued" if e["queued"] or e["claimed"] else
                       "waiting on builds" if e["waiting"] == e["open"] else "partly done" if e["done"] else "not started")

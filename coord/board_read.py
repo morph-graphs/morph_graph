@@ -69,8 +69,11 @@ if mine:
         answered_q.append([b, arm, v, bank, len(got)])
 order = [v.strip() for v in open(master.BUILD_ORDER) if v.strip()]
 every = list(dict.fromkeys([v for bank in master.REPORTED_BANKS for v in sorted(keys.get(bank, {}))] + order))
-targets = {f"{b}|{arm}": (sorted(keys.get(bank, {})) if bank else every)
-           for b, arm, stage, _, bank in master.EXPERIMENTS if stage == "build"}
+targets = {}   # an arm with several build lines covers all their videos
+for b, arm, stage, _, bank in master.EXPERIMENTS:
+    if stage == "build":
+        targets.setdefault(f"{b}|{arm}", set()).update(keys.get(bank, {}) if bank else every)
+targets = {k: sorted(v) for k, v in targets.items()}
 print(json.dumps(dict(head=head, read=jobs.iso(), tasks=tasks, claims=claims, pools=heart, built=sorted(have),
                       build_targets=targets, held=sorted(map(list, getattr(master, "HELD", set()))),
                       answered=answered, master=m, answered_q=answered_q,
