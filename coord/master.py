@@ -164,16 +164,30 @@ DIRECT = {"qwen3vl-8b-f32": M8, "qwen3vl-8b-f128": M8, "qwen3vl-8b-f768": M8,
           "qwen35-9b-f32": M8, "qwen35-9b-f128": M8, "qwen35-9b-f768": M8,
           "molmo2-8b-f32": M8, "molmo2-8b-f128": M8, "molmo2-8b-f384": M8,
           "qwen35-35b-a3b-f32": M27, "qwen35-35b-a3b-f128": M27}
+# ReKV (baselines/rekv, arm m8: Qwen3-VL-8B through the vendored port; it has no m27 arm): qa lines only, every bank.
+# Its memory is the video's KV-cache, held in host RAM while qa runs and never stored, so nothing is built: as with the
+# plain video model, a task waits on nothing and is done when its answers_<bank>.json.gz is in the dataset. No key.
+# One 48 GB GPU and up to 36 GB of host RAM (the cache grows with the video; measured on the longest one), so the
+# m8 pools, and a queues file's plain m8 names it too. After the plain video model's short tasks.
+# M3-Agent (baselines/m3agent, arm m3: the published checkpoints with local ASR and embeddings, no key): its two
+# stages need different GPUs, so its lines differ in pools. build (the memory graph, every video) fits one GPU of
+# 40 GB or more: the m8 pools. qa serves the 32.8B control model: 2x 48 GB or one 80 GB GPU, the m27 pools (a queues
+# file names the stages: m3agent/m3/build, m3agent/m3/qa). Listed last. Its arm m3api calls paid APIs (Gemini speech
+# segments, OpenAI embeddings) and is not listed: it would be a paid row (PAID, NEEDS_ENV).
+M3AGENT = {"build": M8, "qa": M27}
 EXPERIMENTS = [("api", c, "qa", KEY_POOLS, "batch10_agree2") for c in API_CONFIGS] + REPORTED + PAID + [
     ("direct", arm, "qa", pools, bank) for bank in BANKS for arm, pools in DIRECT.items()] + [
+    ("rekv", "m8", "qa", M8, bank) for bank in BANKS] + [
     (b, arm, stage, POOLS[b, arm], bank)
     for b in ("merit", "magic", "worldmm") for stage in ("build", "qa") for arm in ("m27", "m8")
+    for bank in (BANKS if stage == "qa" else [None])] + [
+    ("m3agent", "m3", stage, pools, bank) for stage, pools in M3AGENT.items()
     for bank in (BANKS if stage == "qa" else [None])]
 # the file whose presence in <baseline>/<arm>/<video>/ (next to runs.jsonl) means the memory is built: the last
 # one each baseline writes ({v}: the video)
 MEMORY_DONE = {"merit": "{v}_30sec_4_key.json", "magic": "graph.pkl", "worldmm": "{v}_visual.pkl",
                "egor1": "{v}_1day.json", "egagent": "{v}_graph.json", "egorag": "{v}_l3_day.json",
-               "hippomm": "{v}_memory.json"}
+               "hippomm": "{v}_memory.json", "m3agent": "{v}_m3graph.pkl"}
 # a build that starts from another baseline's memory waits for that build while it is listed: MAGIC's 30 s captions
 # are MERIT's (same backbone), fetched from the dataset; without the wait it would caption the video itself
 BUILD_ON = {"magic": "merit"}

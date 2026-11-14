@@ -38,7 +38,9 @@ VIDEOS=${HDEPIC_VIDEOS:-$EPIC/data/HD-EPIC/videos}
 [ -d "$VIDEOS" ] || { echo "no videos at $VIDEOS (set HDEPIC_VIDEOS; epic-morph v3/DATA.md)"; exit 1; }
 BINDS=("$REPO:/repo" "$EPIC:/epic-morph" "$HF:/hf" "$(cd -P "$VIDEOS" && pwd):/videos:ro")
 ENVS=(EPIC_MORPH_DIR=/epic-morph HDEPIC_VIDEOS=/videos HF_HOME=/hf HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-0}"
-      REKV_REPO_COMMIT="$(git -C "$REPO" rev-parse HEAD)" REKV_EPIC_COMMIT="$(git -C "$EPIC" rev-parse HEAD)")
+      # || true: a folder without .git (a synced copy of epic-morph) gives an empty commit, not the end of the job
+      REKV_REPO_COMMIT="$(git -C "$REPO" rev-parse HEAD 2>/dev/null || true)"
+      REKV_EPIC_COMMIT="$(git -C "$EPIC" rev-parse HEAD 2>/dev/null || true)")
 TRITON=/tmp/triton_$(id -u)   # apptainer shares the host's /tmp: a per-user Triton cache
 if [ -n "${MERIT_WORK:-}" ]; then   # the shared work folder: Triton's cache in ReKV's own subfolder
     umask 002; mkdir -p "$MERIT_WORK/rekv"; BINDS+=("$(cd -P "$MERIT_WORK" && pwd):/work"); TRITON=/work/rekv/triton_$(id -u)

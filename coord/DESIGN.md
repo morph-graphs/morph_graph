@@ -343,6 +343,47 @@ Qwen3.8-27B at N = 32, 128 and 768 frames) to its pools, and `EXPERIMENTS` gets 
 - Another model or frame budget (`baselines/direct/README.md`) is one entry in `DIRECT`, its name in the queues it
   fits, and, for a new model, its environment in `baselines/direct/docker/image_tag.sh`.
 
+## ReKV and M3-Agent: no stored memory, and stages that need different GPUs
+
+Added 2026-11-14. Two more local-model baselines: no key, no gate.
+
+**ReKV** (`baselines/rekv`, arm `m8`, Qwen3-VL-8B; it has no `m27` arm). `EXPERIMENTS` gets one `qa` line per bank of
+`master.BANKS`, after the plain video model's lines and before the memory arms.
+
+- No build line and no `MEMORY_DONE` entry, as for `direct`: ReKV's memory is the video's KV-cache, held in host RAM
+  while `qa` runs and never written (its `build` stage does nothing). A task's `deps` are empty, and it is listed until
+  `rekv/m8/<video>/answers_<bank>.json.gz` is in the results dataset; the folder also holds `memory.json` (what was
+  encoded) and `runs.jsonl`.
+- Pools: the `m8` pools (one 48 GB GPU). Its own image, `ghcr.io/morph-graphs/rekv:m8-<env hash>`; with Apptainer
+  `rekv_m8.sif` in `MERIT_SIF_DIR`.
+- Queues: nothing to add. A `fits` entry that names plain `m8` names every baseline's `m8`, ReKV's too, and the
+  `m8` queues fit it: the GPU peak is 27 GB whatever the video's length, and host RAM grows with the video, 18 GB
+  for a 27 min video and 36 GB for the longest one (75 min; 30 GB of it the KV-cache), which ran to the end in a job
+  with 40G (measured 2026-11-14, `baselines/rekv/README.md`). A queue with less than 40G of RAM should not name `m8`
+  for a worker that takes `rekv`.
+
+**M3-Agent** (`baselines/m3agent`, arm `m3`: the published checkpoints with local ASR and embeddings). `EXPERIMENTS`
+gets a `build` line (every video) and a `qa` line per bank, after the other memory arms.
+
+- `MEMORY_DONE`: `<video>_m3graph.pkl`, the last file its build writes (`<video>_memories.json` just before it).
+- The stages need different GPUs, so the lines differ in pools (`master.M3AGENT`): `build` fits one GPU of 40 GB or
+  more and goes to the `m8` pools; `qa` serves the 32.8B control model on vLLM, on 2x 48 GB (tensor parallel 2) or
+  one 80 GB GPU (`run_m3agent.sh` sets tensor parallel to the number of GPUs the job has), and goes to the `m27` pools.
+- Queues: a `fits` entry may name one stage of an arm, `baseline/arm/stage`. `coord/nexus_queues.json` has
+  `m3agent/m3/build` on every 48 GB queue and `m3agent/m3/qa` on the H200 (it has no 2x 48 GB queue). A worker
+  without a queues file cannot tell the stages apart: its slots must fit `qa`, as for the 27B arms.
+- What a worker needs besides the image (`m3agent_m3.sif`): the submodule
+  (`git submodule update --init baselines/m3agent/m3-agent`) and `M3AGENT_MODELS` in its environment, the folder
+  `docker/run.sh models` fills (~95 GB): `docker/run.sh` has no default for it, and every task fails at once without
+  it. Only that folder is mounted, so a model that is a link to somewhere outside it is missing in the container.
+  `MERIT_HF_CACHE` and `MERIT_WORK` are read as by the other baselines (work in its `m3agent/` subfolder).
+- Not run yet: `build` and `qa` inside the image (`baselines/m3agent/README.md`, "Checked"), and `qa` on 2x 48 GB or
+  one 80 GB GPU (the checked run used 4x 24 GB). A pool's first task of each stage is that check: start with one video
+  (`--max-tasks 1`) before giving the worker more slots.
+- Not listed: arm `m3api` (Gemini speech segments, OpenAI embeddings). It is a paid row: it would join `PAID` and
+  `NEEDS_ENV` (`build`: `GEMINI_API_KEY` and `OPENAI_API_KEY`; `qa`: `OPENAI_API_KEY`) and wait behind the gate. The
+  `blind` floors of both baselines are not board stages.
+
 ## A worker restart (slurm launcher), and the Hub's rate limit
 
 Added 2026-11-13, after a restart recorded three finished and uploaded tasks as failed, and after workers stopped on

@@ -51,9 +51,11 @@ def test_built_from():
              f"magic/m8/{v}/runs.jsonl", f"magic/m8/{v}/graph.pkl",
              f"magic/m27/{v}/runs.jsonl",                                    # prep or half a build: not built
              f"worldmm/m8/{v}/runs.jsonl", f"worldmm/m8/{v}/{v}_visual.pkl",
+             f"m3agent/m3/{v}/runs.jsonl", f"m3agent/m3/{v}/{v}_m3graph.pkl", f"m3agent/m3/{v}/{v}_memories.json",
+             f"rekv/m8/{v}/runs.jsonl", f"rekv/m8/{v}/memory.json",          # ReKV stores no memory: nothing to build
              f"other/m8/{v}/runs.jsonl"}
     have, _ = M.built_from(files)
-    assert have == {("merit", "m8", v), ("magic", "m8", v), ("worldmm", "m8", v)}
+    assert have == {("merit", "m8", v), ("magic", "m8", v), ("worldmm", "m8", v), ("m3agent", "m3", v)}
 
 
 def test_experiments():
@@ -75,6 +77,14 @@ def test_experiments():
     for arm, pools in M.DIRECT.items():
         assert pools == (M.M8 if arm.startswith(("qwen3vl-8b", "qwen35-9b", "molmo2-8b")) else ["nexus", "vatsal"] if arm == "qwen38-27b-f768" else M.M27)
         assert all(ex["direct", arm, "qa", bank] == pools for bank in M.BANKS) and not M.needs("direct", arm, "qa")
+    # ReKV: qa only, as the plain video model, every bank, on the m8 pools. M3-Agent: a build on the m8 pools, its qa
+    # (a 32.8B control model) on the m27 pools; its paid arm m3api is not listed. Neither needs a key or is gated
+    lines = lambda x: {(arm, stage, bank): pools for (b, arm, stage, bank), pools in ex.items() if b == x}
+    assert lines("rekv") == {("m8", "qa", bank): M.M8 for bank in M.BANKS} and "rekv" not in M.MEMORY_DONE
+    assert lines("m3agent") == {("m3", "build", None): M.M8} | {("m3", "qa", bank): M.M27 for bank in M.BANKS}
+    assert not any(M.needs(b, arm, stage) or (b, arm) in M.GATED for b, arm, stage, _ in ex if b in ("rekv", "m3agent"))
+    import worker   # a baseline or arm the worker does not know would make every task of it malformed there
+    assert all(worker.VALID["baseline"].fullmatch(b) and worker.VALID["arm"].fullmatch(arm) for b, arm, *_ in ex)
 
 
 def test_build_waits_on_base(monkeypatch, tmp_path):
@@ -328,19 +338,27 @@ def test_existing_tasks_unchanged(monkeypatch, tmp_path):
     files = {f"magic/m8/{T2[1]}/answers_t2_agree2.json.gz", f"api/gpt-5-f1024/{B10[0]}/answers_batch10_agree2.json.gz"}
     full = list(M.EXPERIMENTS)
     board(monkeypatch, tmp_path, [e for e in full if e not in M.REPORTED + M.PAID])
-    assert len(M.EXPERIMENTS) == len(full) - len(M.REPORTED) - len(M.PAID) == 6 * (1 + len(M.BANKS)) + 3 + len(M.DIRECT) * len(M.BANKS)   # 6 arms x (build + banks) + 3 api + the direct arms x banks
+    assert len(M.EXPERIMENTS) == len(full) - len(M.REPORTED) - len(M.PAID) == 6 * (1 + len(M.BANKS)) + 3 + len(M.DIRECT) * len(M.BANKS) + len(M.BANKS) + 1 + len(M.BANKS)   # 6 arms x (build + banks) + 3 api + the direct arms x banks + rekv's banks + m3agent's build + banks
     old = desired_before(have, files)
     strip = lambda ts: [{k: v for k, v in t.items() if k != "needs_env"} for t in ts]
     new = M.desired(have, files)
-    assert {t["baseline"] for t in old} == {"api", "direct", "merit", "magic", "worldmm"} and strip(new) == old
+    assert {t["baseline"] for t in old} == {"api", "direct", "rekv", "merit", "magic", "worldmm", "m3agent"} and strip(new) == old
     assert [t.get("needs_env") for t in new] == [M.needs(t["baseline"], t["arm"], t["stage"]) for t in old]
     assert M.gate(new) == (new, 0)                                          # the gate holds none of them back
     # direct: a task per arm, bank and video unless answered, waiting on nothing, after api and before the memory arms
     direct = [t for t in M.desired(have, files | {f"direct/qwen3vl-8b-f32/{T2[0]}/answers_t2_agree2.json.gz"}) if t["baseline"] == "direct"]
     assert len(direct) == len(M.DIRECT) * sum(len(v) for v in BANK_VIDEOS.values()) - 1 and not any(t["deps"] or t.get("needs_env") for t in direct)
     assert f"direct-qwen3vl-8b-f32-qa-t2_agree2-{T2[0]}" not in {t["id"] for t in direct}
-    kind = [0 if t["baseline"] == "api" else 1 if t["baseline"] == "direct" else 2 for t in new]
-    assert kind == sorted(kind)
+    kind = [0 if t["baseline"] == "api" else 1 if t["baseline"] == "direct" else 2 if t["baseline"] == "rekv"
+            else 4 if t["baseline"] == "m3agent" else 3 for t in new]
+    assert kind == sorted(kind) and set(kind) == {0, 1, 2, 3, 4}
+    # ReKV: as direct, a task per bank and video, waiting on nothing; M3-Agent: a build per video, and qa waits on it
+    by = {t["id"]: t for t in new}
+    rekv = [t for t in new if t["baseline"] == "rekv"]
+    assert len(rekv) == sum(len(v) for v in BANK_VIDEOS.values()) and not any(t["deps"] or t["stage"] != "qa" for t in rekv)
+    assert sum(t["baseline"] == "m3agent" and t["stage"] == "build" for t in new) == len(B10 + T2 + T3 + T4 + T5 + REST)
+    assert by[f"m3agent-m3-qa-t2_agree2-{T2[0]}"]["deps"] == [f"m3agent-m3-build-{T2[0]}"]
+    assert by[f"m3agent-m3-build-{T2[0]}"]["pools"] == M.M8 and by[f"m3agent-m3-qa-t2_agree2-{T2[0]}"]["pools"] == M.M27
     monkeypatch.setattr(M, "EXPERIMENTS", full)
     noprio = lambda ts: [{k: v for k, v in t.items() if k != "priority"} for t in ts]
     assert noprio(strip(t for t in M.desired(have, files) if not M.reported(t))) == noprio(old)
