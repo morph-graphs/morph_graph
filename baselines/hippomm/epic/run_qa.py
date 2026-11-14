@@ -121,6 +121,8 @@ def meter(client, flush):
     create = client.chat.completions.create
 
     def metered(*args, **kw):
+        # every reasoning request names the arm's model (upstream: QARecallSystem.reasoning_model; blind: below)
+        assert kw.get("model") == hm.REASONING, f"request for model {kw.get('model')!r}, the arm's is {hm.REASONING!r}"
         if hm.OPENROUTER:
             kw.update(model="openai/" + kw["model"], extra_body={**(kw.get("extra_body") or {}), "provider": hm.PROVIDER})
         r = create(*args, **kw)
