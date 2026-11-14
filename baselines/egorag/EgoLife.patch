@@ -1,5 +1,5 @@
 diff --git a/EgoRAG/egorag/utils/util.py b/EgoRAG/egorag/utils/util.py
-index 1fe0152..9608c11 100644
+index 1fe0152..c64ddaa 100644
 --- a/EgoRAG/egorag/utils/util.py
 +++ b/EgoRAG/egorag/utils/util.py
 @@ -13,6 +13,50 @@ from azure.core.pipeline.transport import RequestsTransport
@@ -39,7 +39,7 @@ index 1fe0152..9608c11 100644
 +# only V4 Pro that DeepSeek itself serves on OpenRouter (deepseek/deepseek-v4-pro there is the 0423 version, on
 +# other hosts). A name not listed is sent as it is.
 +_ROUTER_URL = os.getenv("OPENROUTER_BASE_URL") or "https://openrouter.ai/api/v1"
-+_ROUTER_IDS = {"gpt-4o": "openai/gpt-4o", "deepseek-v4-pro": "deepseek/deepseek-v4-pro-0813"}
++_ROUTER_IDS = {"gpt-4o": "openai/gpt-4o", "gpt-4.1": "openai/gpt-4.1", "deepseek-v4-pro": "deepseek/deepseek-v4-pro-0813"}
 +
 +
 +def _client(own_key, own_url, model, provider):
@@ -72,7 +72,7 @@ index 1fe0152..9608c11 100644
              except Exception as e:
                  print(f"Attempt {attempt + 1} failed. Error: {e}")
                  if attempt < retries - 1:
-@@ -69,22 +116,27 @@ def call_gpt4(
+@@ -69,22 +116,28 @@ def call_gpt4(
                      print("All retry attempts failed.")
                      return "error"
      # Fall back to standard OpenAI API if OpenAI key is available
@@ -82,8 +82,9 @@ index 1fe0152..9608c11 100644
 +    elif openai_key or router_key:
 +        # EPIC-Morph port: the released branch calls openai.ChatCompletion (removed in the openai 1.x this
 +        # package pins) with model "gpt-4" and a fixed max_tokens. Same request as the Azure branch above,
-+        # through the 1.x client; OPENAI_BASE_URL, when set, is read by the client. Without OpenAI's key,
-+        # through OpenRouter (_client).
++        # through the 1.x client; OPENAI_BASE_URL, when set, is read by the client. The model is the arm's
++        # (EGORAG_GPT_MODEL, set by run_egorag.sh: gpt-4o, or gpt-4.1 for egogpt_gpt41). Without OpenAI's
++        # key, through OpenRouter (_client).
 +        client, model, extra = _client(openai_key, None, os.getenv("EGORAG_GPT_MODEL", "gpt-4o"), "openai")
          retries = 5
          for attempt in range(retries):
@@ -106,7 +107,7 @@ index 1fe0152..9608c11 100644
                  return response.choices[0].message.content
              except Exception as e:
                  print(f"Attempt {attempt + 1} failed. Error: {e}")
-@@ -117,6 +169,7 @@ def call_deepseek(
+@@ -117,6 +170,7 @@ def call_deepseek(
      azure_key = os.getenv("AZURE_DEEPSEEK_KEY")
      azure_endpoint = os.getenv("AZURE_DEEPSEEK_ENDPOINT")
      deepseek_api_key = os.getenv("DEEPSEEK_API_KEY")
@@ -114,7 +115,7 @@ index 1fe0152..9608c11 100644
  
      # Use Azure if both Azure credentials are available
      if azure_key and azure_endpoint:
-@@ -140,6 +193,7 @@ def call_deepseek(
+@@ -140,6 +194,7 @@ def call_deepseek(
                      model=model_name,
                      max_tokens=max_tokens,
                  )
@@ -122,7 +123,7 @@ index 1fe0152..9608c11 100644
                  full_response = response["choices"][0]["message"]["content"]
                  # Only split if the response contains </think> tag
                  if "</think>" in full_response:
-@@ -154,11 +208,12 @@ def call_deepseek(
+@@ -154,11 +209,12 @@ def call_deepseek(
                      return None
  
      # Fall back to standard DeepSeek API if API key is available
@@ -140,7 +141,7 @@ index 1fe0152..9608c11 100644
  
          max_retries = 3
          retry_count = 0
-@@ -166,15 +221,17 @@ def call_deepseek(
+@@ -166,15 +222,17 @@ def call_deepseek(
          while retry_count < max_retries:
              try:
                  response = client.chat.completions.create(

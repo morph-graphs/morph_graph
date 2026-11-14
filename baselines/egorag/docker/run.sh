@@ -12,10 +12,11 @@
 #   EGORAG_GPU       docker: the GPU index for this job (one 48 GB GPU for build's captions; qa needs none
 #                    and runs without it)
 #   EPIC_MORPH_DIR   the epic-morph checkout (required)
-#   EGORAG_IMAGE     image (default ghcr.io/morph-graphs/egorag:<arm>-<env hash>, from image_tag.sh); for
-#                    apptainer, a .sif built once with `apptainer pull egorag_<arm>.sif docker://<that image>`
-#   EGORAG_SIF_DIR   apptainer: a folder of such files (default MERIT_SIF_DIR); uses <dir>/egorag_<arm>.sif when
-#                    it exists and EGORAG_IMAGE is unset, so one board worker runs every baseline and arm
+#   EGORAG_IMAGE     image (default ghcr.io/morph-graphs/egorag:egogpt_gpt4o-<env hash>, from image_tag.sh: one
+#                    image for both arms); for apptainer, a .sif built once with
+#                    `apptainer pull egorag_egogpt_gpt4o.sif docker://<that image>`
+#   EGORAG_SIF_DIR   apptainer: a folder of such files (default MERIT_SIF_DIR); uses <dir>/egorag_egogpt_gpt4o.sif
+#                    when it exists and EGORAG_IMAGE is unset, so one board worker runs every baseline and arm
 #   EGORAG_HF_CACHE  Hugging Face cache on the host (default MERIT_HF_CACHE, else ~/.cache/huggingface), mounted
 #                    at /hf: EgoGPT-7b, SigLIP so400m and the OpenCLIP ViT-B-32 text encoder are downloaded into it
 #   MERIT_WORK       optional, the cluster's shared host work folder (MERIT's), mounted at /work; EgoRAG's work
@@ -32,11 +33,12 @@ set -euo pipefail
 ARM=${3:?usage: run.sh <stage> <video> <arm> [bank]}
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && pwd)
-IMAGE=${EGORAG_IMAGE:-ghcr.io/morph-graphs/egorag:$(bash "$REPO/baselines/egorag/docker/image_tag.sh" "$ARM")}
+TAG=$(bash "$REPO/baselines/egorag/docker/image_tag.sh" "$ARM")   # egogpt_gpt4o-<env hash> for either arm
+IMAGE=${EGORAG_IMAGE:-ghcr.io/morph-graphs/egorag:$TAG}
 RUNTIME=${EGORAG_RUNTIME:-${MERIT_RUNTIME:-docker}}
 SIFS=${EGORAG_SIF_DIR:-${MERIT_SIF_DIR:-}}
-if [ "$RUNTIME" = apptainer ] && [ -z "${EGORAG_IMAGE:-}" ] && [ -n "$SIFS" ] && [ -s "$SIFS/egorag_$ARM.sif" ]; then
-    IMAGE=$SIFS/egorag_$ARM.sif
+if [ "$RUNTIME" = apptainer ] && [ -z "${EGORAG_IMAGE:-}" ] && [ -n "$SIFS" ] && [ -s "$SIFS/egorag_${TAG%-*}.sif" ]; then
+    IMAGE=$SIFS/egorag_${TAG%-*}.sif
 fi
 HF=${EGORAG_HF_CACHE:-${MERIT_HF_CACHE:-$HOME/.cache/huggingface}}
 [ -f "$REPO/baselines/egorag/EgoLife/EgoRAG/egorag/agents/RagAgent.py" ] || { echo "run: git submodule update --init baselines/egorag/EgoLife"; exit 1; }

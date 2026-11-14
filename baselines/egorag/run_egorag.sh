@@ -14,6 +14,8 @@
 #          all      prep + build, then qa when a bank is given (no upload)
 #   arm    egogpt_gpt4o   the paper's configuration: captions by EgoGPT-7b (EgoIT-99K + EgoLife day 1),
 #                         summaries, retrieval reasoning and answers by GPT-4o, hour summaries by DeepSeek
+#          egogpt_gpt41   the same with GPT-4.1 for every GPT-4o call (README.md: for machines without GPT-4o);
+#                         its own results folder and memory, since the summaries change with the model
 #   bank   a named bank of the epic-morph checkout, e.g. batch10_agree2
 # No blind stage: the no-memory floor would be GPT-4o on question and options alone, which is not this method.
 #
@@ -29,8 +31,12 @@
 #                    AZURE_DEEPSEEK_KEY + AZURE_DEEPSEEK_ENDPOINT [+ DEPLOYMENT_NAME])
 #   OPENROUTER_API_KEY   instead of either key above when it is not set: that provider's calls through OpenRouter,
 #                    served by the provider itself (README.md "Through OpenRouter")
-#   EGORAG_GPT_MODEL       default gpt-4o             } the ids asked for; runs.jsonl records the ids the
-#   EGORAG_DEEPSEEK_MODEL  default deepseek-v4-pro    } API returned (README.md: DeepSeek no longer lists R1)
+#   EGORAG_GPT_MODEL       default the arm's model: gpt-4o or gpt-4.1. Set it only to the name the endpoint
+#                          (OPENAI_BASE_URL, a gateway) gives that model, never to another model
+#   EGORAG_DEEPSEEK_MODEL  default deepseek-v4-pro (README.md: DeepSeek no longer lists R1), asked at
+#   DEEPSEEK_BASE_URL      default https://api.deepseek.com, with DEEPSEEK_API_KEY: an OpenAI-compatible gateway
+#                          that has the model takes these three. runs.jsonl records the ids asked for and, per
+#                          call, the id the API returned and the endpoint
 #   EGORAG_EGOGPT    default lmms-lab/EgoGPT-7b-EgoIT-EgoLife (Hugging Face cache), or a local copy
 #   EGORAG_WORK      default baselines/egorag/work: clips, the Chroma index, upstream's events_diary
 #   EGORAG_OUT       default baselines/egorag/results: per <arm>/<video> the memory, answers_<bank>.json.gz,
@@ -41,13 +47,13 @@
 #   EGORAG_FETCH     0 to never take the memory from the dataset (build normally reuses it when it is there)
 # Every step skips finished work, so rerunning the same command resumes.
 set -euo pipefail
-STAGE=${1:?usage: run_egorag.sh <prep|build|qa|upload|all> <video> <egogpt_gpt4o> [bank]}
-V=${2:?video id}; ARM=${3:?arm egogpt_gpt4o}; BANK=${4:-}
+STAGE=${1:?usage: run_egorag.sh <prep|build|qa|upload|all> <video> <egogpt_gpt4o|egogpt_gpt41> [bank]}
+V=${2:?video id}; ARM=${3:?arm egogpt_gpt4o or egogpt_gpt41}; BANK=${4:-}
 M=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); REPO=$(cd "$M/../.." && pwd); R=$M/EgoLife   # R: the submodule (upstream)
 PY=${PY:?set PY to the python of the egorag environment}
 EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && pwd)
 [ -f "$R/EgoRAG/egorag/agents/RagAgent.py" ] || { echo "submodule missing: git submodule update --init baselines/egorag/EgoLife"; exit 1; }
-[ "$ARM" = egogpt_gpt4o ] || { echo "arm must be egogpt_gpt4o"; exit 1; }
+case $ARM in egogpt_gpt4o) GPT=gpt-4o ;; egogpt_gpt41) GPT=gpt-4.1 ;; *) echo "arm must be egogpt_gpt4o or egogpt_gpt41"; exit 1 ;; esac
 EGOGPT=${EGORAG_EGOGPT:-lmms-lab/EgoGPT-7b-EgoIT-EgoLife}
 VIDEOS=${HDEPIC_VIDEOS:-$EPIC/data/HD-EPIC/videos}; WORK=${EGORAG_WORK:-$M/work}; OUTROOT=${EGORAG_OUT:-$M/results}
 OUT=$OUTROOT/$ARM/$V; CLIPS=$WORK/clips_448; SKEL=$WORK/prep/${V}_30sec_skeleton.json; CAP=$OUT/${V}_30sec.json
@@ -62,7 +68,7 @@ mkdir -p "$OUT" "$WORK/locks"
   fi
 ) 9>"$WORK/locks/patch.lock"
 export PYTHONPATH="$R/EgoRAG:$R/EgoGPT${PYTHONPATH:+:$PYTHONPATH}"
-export EGORAG_GPT_MODEL=${EGORAG_GPT_MODEL:-gpt-4o} EGORAG_DEEPSEEK_MODEL=${EGORAG_DEEPSEEK_MODEL:-deepseek-v4-pro}
+export EGORAG_GPT_MODEL=${EGORAG_GPT_MODEL:-$GPT} EGORAG_DEEPSEEK_MODEL=${EGORAG_DEEPSEEK_MODEL:-deepseek-v4-pro}
 # Chroma's telemetry off: nothing leaves the machine but the API calls
 export EGORAG_USAGE_LOG=$OUT/api_usage.jsonl ANONYMIZED_TELEMETRY=False
 read -ra MEMORY <<< "$("$PY" "$M/epic/build_memory.py" --memory_files)"

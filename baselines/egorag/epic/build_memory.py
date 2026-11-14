@@ -116,8 +116,9 @@ def main():
         return bad
 
     # what a run that stopped inside gen_event left: before any call, so a rerun does not summarise an empty level
-    for n, k in enumerate(levels):
-        if os.path.exists(src(k)) and failed(n):
+    # (a level without its file takes the later ones with it: they were made from a file that is gone)
+    for n in range(len(levels)):
+        if failed(n):
             break
     paid_api(deepseek=True)
     del agent
