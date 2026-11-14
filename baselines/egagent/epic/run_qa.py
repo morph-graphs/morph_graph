@@ -153,6 +153,7 @@ def main():
     print(f"{len(qs)} questions, {len(done)} answered, {len(todo)} to do ({a.backbone}{', blind' if a.blind else ''})", flush=True)
     os.makedirs(os.path.dirname(os.path.abspath(a.rows)), exist_ok=True)
     if todo:
+        eg_paths.watch_api("blind" if a.blind else "qa", a.backbone)
         if a.blind:
             from langgraph_agent import generate_finalanswer
         else:

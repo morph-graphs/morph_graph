@@ -10,6 +10,7 @@ authors' text. Writes [{"start": s, "end": s, "caption": str}] in time order; re
 --dry prints the calls it would make and makes none.
 """
 import argparse
+import contextvars
 import json
 import os
 from concurrent.futures import ThreadPoolExecutor
@@ -38,6 +39,7 @@ def main():
     part = a.out + ".partial"
     done = {r["start"]: r for r in map(json.loads, open(part))} if os.path.exists(part) else {}
     from utils import query_multimodal   # needs OPENAI_API_KEY
+    eg_paths.watch_api("captions", eg_paths.MEMORY_LLM)
 
     def cap(w):
         s, e = w
@@ -47,7 +49,8 @@ def main():
 
     todo = [w for w in wins if w[0] not in done]
     with ThreadPoolExecutor(a.workers) as ex, open(part, "a") as f:
-        for r in ex.map(cap, todo):
+        # each call in a copy of this context: a new thread starts without the API watch
+        for r in (fut.result() for fut in [ex.submit(contextvars.copy_context().run, cap, w) for w in todo]):
             done[r["start"]] = r
             f.write(json.dumps(r) + "\n")
             f.flush()

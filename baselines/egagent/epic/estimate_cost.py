@@ -2,16 +2,27 @@
 """What EGAgent's paid API calls would cost on EPIC-Morph, from the calls the code makes (no API call here).
 
     estimate_cost.py --hours 5.66 --questions 598          # batch10_agree2: 10 videos
-    estimate_cost.py --hours 41.3 --questions 9330         # all 156 HD-EPIC videos, at batch10's questions per video
+    estimate_cost.py --hours 5.66 --questions 598 --frame_px 512
 
 Calls are counted from the code; tokens per call are estimates (image tokens from the providers' published
-formulas for a 1408 x 1408 frame, text and output lengths assumed), to be replaced by the `total_tokens` that
+formulas, text and output lengths assumed), to be replaced by the `total_tokens` that
 run_qa.py and caption_epic.py record once a first video has run. Prices are list prices per million tokens.
 """
 import argparse
+import math
 
 PRICE = {"gpt-4.1": (2.00, 8.00), "gemini-2.5-pro": (1.25, 10.00)}   # $ per 1M input, output tokens
-IMG = {"gpt-4.1": 765, "gemini-2.5-pro": 1032}   # 1408 px frame: 4 tiles x 170 + 85 | 4 tiles x 258
+
+
+def image_tokens(px):
+    """Tokens of one square px x px frame, by each provider's published formula."""
+    s = min(px, 768)                                   # OpenAI, detail high: shortest side at most 768, 512 px tiles
+    gpt = 85 + 170 * math.ceil(s / 512) ** 2
+    unit = max(256, min(768, px // 1.5))               # Gemini: 258 a tile; one tile up to 384 px
+    gem = 258 if px <= 384 else 258 * math.ceil(px / unit) ** 2
+    return {"gpt-4.1": gpt, "gemini-2.5-pro": gem}
+
+
 CLIP_S, CHUNK_S, FRAMES_PER_SEARCH = 30, 300, 50
 
 
@@ -23,7 +34,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--hours", type=float, required=True)
     ap.add_argument("--questions", type=int, required=True)
+    ap.add_argument("--frame_px", type=int, default=1408, help="frame size sent to the APIs (EGAGENT_FRAME_PX; HD-EPIC's own is 1408)")
     a = ap.parse_args()
+    IMG = image_tokens(a.frame_px)
+    print(f"frames of {a.frame_px} px: {IMG['gpt-4.1']} tokens each for GPT-4.1, {IMG['gemini-2.5-pro']} for Gemini 2.5 Pro")
     sec = a.hours * 3600
     # memory (GPT-4.1): a caption per 30 s (30 frames + prompt in, ~300 tokens out); per 300 s chunk one graph
     # extraction (10 captions + LLMGraphTransformer's prompt in, ~1.5k out) and one time-stamping call

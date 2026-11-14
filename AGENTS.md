@@ -21,6 +21,7 @@ each package has its own README (`epic_eval/`, `event_eval/`).
 | `baselines/m3agent/` | M3-Agent memory baseline on EPIC-Morph: run script, Docker image, m3-agent fork as a submodule |
 | `baselines/vst/` | VST (Video Streaming Thinking, VST-7B) streaming video model on EPIC-Morph: run script, environment, upstream VST as a submodule |
 | `baselines/vgent/` | Vgent graph-RAG baseline on EPIC-Morph, as released (Qwen2.5-VL-7B): run script, environment, upstream Vgent as a submodule |
+| `baselines/egagent/` | EGAgent (entity-graph agent) on EPIC-Morph, as published (paid APIs: GPT-4.1 memory, GPT-4.1 or Gemini 2.5 Pro agent): run script, Docker image, upstream as a submodule + our patch |
 | `baselines/api/` | closed-source API models (Gemini, GPT) on EPIC-Morph through `epic_eval`: run script, Docker image, converter to the baselines' result layout |
 | `proj_context/` | design docs, notes; `setup/` holds the container definition + pinned versions |
 

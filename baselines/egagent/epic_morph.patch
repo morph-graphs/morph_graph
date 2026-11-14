@@ -127,24 +127,25 @@ index 30223c9..d21a6ae 100644
  TIMESTAMP_EPISODES_ROOT = EGAGENT_ROOT / "timestamp_episodes"
 \ No newline at end of file
 diff --git a/utils.py b/utils.py
-index be92d88..4da7fee 100644
+index be92d88..9377811 100644
 --- a/utils.py
 +++ b/utils.py
-@@ -180,8 +180,15 @@ def get_file_contents(filename):
+@@ -180,8 +180,16 @@ def get_file_contents(filename):
      except FileNotFoundError:
          raise FileNotFoundError(f"'{filename}' file not found")
  
 -GOOGLE_GENAI_API_KEY = get_file_contents(GOOGLE_GENAI_KEY_PATH)
 -OPENAI_API_KEY = get_file_contents(OPENAI_API_KEY_PATH)
-+def get_api_key(env_name, filename):
-+    """EPIC-Morph port: the key from the environment, else upstream's key file; a provider this arm never
-+    calls may have neither (its client is then built with a placeholder and fails if it is ever called)."""
-+    if os.environ.get(env_name):
-+        return os.environ[env_name]
-+    return get_file_contents(filename) if os.path.exists(filename) else "MISSING"
++def get_api_key(*env_names):
++    """EPIC-Morph port: API keys come from the environment only, never from a key file. A provider this arm
++    never calls may have none: its client is then built with a placeholder and fails if it is ever called."""
++    for name in env_names:
++        if os.environ.get(name):
++            return os.environ[name]
++    return "MISSING"
 +
-+GOOGLE_GENAI_API_KEY = get_api_key("GOOGLE_API_KEY", GOOGLE_GENAI_KEY_PATH)
-+OPENAI_API_KEY = get_api_key("OPENAI_API_KEY", OPENAI_API_KEY_PATH)
++GOOGLE_GENAI_API_KEY = get_api_key("GEMINI_API_KEY", "GOOGLE_API_KEY")
++OPENAI_API_KEY = get_api_key("OPENAI_API_KEY")
  
  def get_50_frames_from_video(image_dir:str, n_samples=50) -> Tuple[int, List[str]]:
      """Get 50 image frames from a video."""

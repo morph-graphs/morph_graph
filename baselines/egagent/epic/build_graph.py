@@ -44,6 +44,7 @@ def main():
     part = a.out + ".partial"
     done = {r["start"]: r for r in map(json.loads, open(part))} if os.path.exists(part) else {}
     from create_entity_graph import generate_graph_for_hour, get_rel_timestamper_llm, parse_relationships
+    eg_paths.watch_api("graph", eg_paths.MEMORY_LLM)
     stamper = get_rel_timestamper_llm(model=eg_paths.MEMORY_LLM, config="fused_dt_and_captions")
 
     out = []
