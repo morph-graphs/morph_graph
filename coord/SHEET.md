@@ -41,6 +41,26 @@ by content for answer files from before keys, such as the batch10 MERIT runs). W
 its recorded `evaluate`. A blind file with a tag (`blind_<bank>_<tag>.json`, MERIT answering from a given
 context) is a row of its own, tag `blind-<tag>`, not a floor.
 
+## The same scores as JSON (`--json`, for the job board)
+
+`--json <file>` writes the scoring pass of that run to a file (one line, replaced whole; with `--dry-run` too, and
+then nothing touches the sheet). The job board's Accuracy tab is drawn from it (`coord/collect_live.py` reads the
+file, `coord/board_views.py` `accuracy()` turns it into the datasets `accuracy` and `accuracy_breakdown`), so the
+board and the sheet cannot disagree: nothing is scored a second time.
+
+- `meta`: `written_utc`, the results dataset and its revision, the epic-morph commit of the banks, the banks.
+- `runs`: the table's rows under the column names above (an empty cell is `null`), without the leaf columns, plus
+  `partial` (`videos_done < videos_in_bank`). The interval is the sheet's (`ci95_*`, `ci_method`).
+- `breakdown`: per run (`run` = its `row_key`), `dimension` (`leaf`, `video`, `hops`, `form`) and `category`
+  (`label`: the leaf's name): `n_answered`, `n_right`, `n_in_bank`. These are the counts the leaf columns are
+  computed from. Within `video`, `hops` and `form` the categories of a run add up to its `q_answered` and
+  `n_right`; within `leaf` they add up to more, because a question with two leaves counts in both. The `all` rows
+  have no `video` breakdown (their videos are the banks' own rows'). No interval here: the reader computes one
+  from the counts (the board page: Wilson).
+
+After a failed run the file is left as it was, so its `written_utc` ages; the board marks scores older than 90
+minutes as stale.
+
 ## Adding a method
 
 Add a line to `METHODS` in `coord/sheet_update.py`: `(baseline, arm): (Method, Memory Model, Reasoning Model,
