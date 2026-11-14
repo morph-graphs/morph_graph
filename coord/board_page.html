@@ -587,7 +587,8 @@ dash.draw('acc-runs', (body) => {
     const m = el('td', '', x.method || x.row_key); if (x.tag) { m.appendChild(document.createTextNode(' ')); m.appendChild(el('span', 'jb-chip', x.tag)); }
     if (x.asked) { m.appendChild(document.createTextNode(' ')); const a = el('span', 'jb-chip' + (isTrue(x.provisional) ? ' is-warn' : ''), x.asked + (isTrue(x.provisional) ? ', provisional' : '')); m.appendChild(a); }
     tr.appendChild(m);
-    tr.appendChild(el('td', 'jb-muted', x.memory_model || '—')); tr.appendChild(el('td', 'jb-muted', x.reasoning_model || '—'));
+    const blank = (v) => v && v !== '--' ? v : '—';   // the sheet writes -- for no memory model
+    tr.appendChild(el('td', 'jb-muted', blank(x.memory_model))); tr.appendChild(el('td', 'jb-muted', blank(x.reasoning_model)));
     const c = el('td'); c.appendChild(bar(+x.q_answered || 0, +x.q_in_bank || 0, false)); tr.appendChild(c);
     for (const f of ['q_answered', 'q_in_bank', 'n_right']) tr.appendChild(el('td', 'jb-num', fmt(+x[f] || 0)));
     const t = el('td'); if (+x.q_answered) t.appendChild(accTrack(x)); else t.textContent = '—'; tr.appendChild(t);
