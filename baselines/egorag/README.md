@@ -29,7 +29,8 @@ What differs from the release, all of it:
    `deepseek-chat`). The patch makes the plain-key branches work: GPT-4o through the OpenAI API (model `gpt-4o`,
    the same request as the Azure branch), DeepSeek through `https://api.deepseek.com`, and it logs each call's
    returned model id and token usage. The Azure branches are unchanged and still take precedence when their
-   variables are set. `run_egorag.sh` applies the patch to the submodule's files once.
+   variables are set. `run_egorag.sh` applies the patch to the submodule's files once. With neither of a
+   provider's own variables but `OPENROUTER_API_KEY`, its calls go through OpenRouter ("Through OpenRouter" below).
 2. **DeepSeek-R1 is no longer offered by DeepSeek's API.** Its pricing page (read 2026-11-13) lists only
    `deepseek-flash` (DeepSeek-V4.1-Flash) and `deepseek-v4-pro` (DeepSeek-V4-Pro), both thinking by default;
    neither `deepseek-reasoner` nor R1 is named. The hour summaries therefore ask for `deepseek-v4-pro`
@@ -99,6 +100,7 @@ bash baselines/egorag/docker/run.sh upload P05-20240425-201444 egogpt_gpt4o
   missing key; `qa` exits 4. So the GPU part can be done first, by anyone, and the paid part later from the same
   results folder (or from the dataset, after `upload` of a finished memory).
 - `EGORAG_LIMIT=5` answers only 5 questions (a first paid smoke test: a few cents).
+- `OPENROUTER_API_KEY` instead of either key: see "Through OpenRouter" below.
 - `docker/run.sh` mounts this checkout at `/repo`, the epic-morph checkout at `/epic-morph`, the videos at
   `/videos` and the Hugging Face cache (`EGORAG_HF_CACHE`, default `~/.cache/huggingface`) at `/hf`; keys are
   handed to the container by name. `EGORAG_RUNTIME=apptainer` runs the same image with Apptainer. The job board
@@ -114,6 +116,52 @@ bash baselines/egorag/docker/run.sh upload P05-20240425-201444 egogpt_gpt4o
 On our own clusters, a virtualenv: `bash baselines/egorag/env/setup_env.sh <venv dir>` (Python 3.10 or 3.11),
 then `PY=<venv dir>/bin/python bash baselines/egorag/run_egorag.sh ...` with `ffmpeg` and `patch` on the path and
 `CUDA_HOME` set to a CUDA 12 toolkit.
+
+### Through OpenRouter (our own runs)
+
+With `OPENROUTER_API_KEY` in the environment, a provider whose own key is not set (`OPENAI_API_KEY`,
+`DEEPSEEK_API_KEY`; nor upstream's Azure variables for it) is called through OpenRouter instead, so the paid stages
+can run on our cluster without an OpenAI or a DeepSeek account. Nothing else is set; `EgoLife.patch` does the
+switch (`_client` in `egorag/utils/util.py`), per provider: with `OPENAI_API_KEY` and `OPENROUTER_API_KEY`, GPT-4o
+is called directly and only DeepSeek goes through OpenRouter.
+
+```bash
+export OPENROUTER_API_KEY=...      # typed into the shell (or read -s): never an argument, a file, a log or a commit
+unset OPENAI_API_KEY DEEPSEEK_API_KEY GOOGLE_API_KEY GEMINI_API_KEY       # no other provider's key in the job
+EGORAG_RUNTIME=apptainer bash baselines/egorag/docker/run.sh build P05-20240425-201444 egogpt_gpt4o
+EGORAG_RUNTIME=apptainer bash baselines/egorag/docker/run.sh qa    P05-20240425-201444 egogpt_gpt4o batch10_agree2
+```
+
+- **What changes in the request.** The endpoint (`https://openrouter.ai/api/v1`; `OPENROUTER_BASE_URL` overrides
+  it), the key, the model id and one added field, `provider: {"only": [<the provider>], "allow_fallbacks": false}`:
+  the model's own maker answers or the call fails. Prompts, temperature, `top_p` and `max_tokens` are what the
+  port sends to the provider's own API.
+
+  | asked for (`EGORAG_GPT_MODEL`, `EGORAG_DEEPSEEK_MODEL`) | OpenRouter id | pinned provider | why the pin |
+  |---|---|---|---|
+  | `gpt-4o` | `openai/gpt-4o` | `openai` | OpenRouter also lists Azure for it |
+  | `deepseek-v4-pro` | `deepseek/deepseek-v4-pro-0813` | `deepseek` | 19 other hosts serve it, several quantised (fp4, fp8) |
+
+- **Which DeepSeek model.** DeepSeek's API serves DeepSeek-V4-Pro-0813 under the name `deepseek-v4-pro` (its
+  pricing page, read 2026-11-14). OpenRouter has two ids: `deepseek/deepseek-v4-pro-0813`, which DeepSeek itself
+  serves, and `deepseek/deepseek-v4-pro`, the earlier 0423 version, which only other hosts serve (model list and
+  per-model endpoint lists, read 2026-11-14). So the 0813 id pinned to DeepSeek is the same deployment the
+  `DEEPSEEK_API_KEY` route reaches. Another `EGORAG_*_MODEL` name is sent to OpenRouter as it is: give its
+  OpenRouter id.
+- **The account's privacy settings decide whether DeepSeek can be reached.** OpenRouter counts DeepSeek's own
+  endpoint among those that may train on prompts. With such endpoints disallowed in the account
+  (`openrouter.ai/settings/privacy`) the hour-summary call is refused before it reaches a provider (404,
+  `paid-model-training-violation-by-account`: seen 2026-11-14 on P05-20240425-201444) and `build` stops at the
+  hour summaries, with nothing charged for that call. The GPT-4o calls of the same run were served (provider
+  `OpenAI`, reply model id `openai/gpt-4o`).
+- **What may still differ from the direct API.** `openai/gpt-4o` is OpenRouter's alias and the snapshot is not
+  ours to pin (the direct route's `gpt-4o` is OpenAI's alias in the same way); the id each reply names is
+  recorded. The price per token is the provider's ($2.50 / $10 per million for gpt-4o); OpenRouter adds its fee
+  when credits are bought, not per call, so `cost` is before that fee.
+- **What is recorded.** Each line of `api_usage.jsonl` has the `endpoint` asked, and through OpenRouter the
+  `provider` that served the call and its `cost` in dollars, with the cached and reasoning tokens; a stage's
+  `runs.jsonl` line sums them per call and returned model id. The results folder stays
+  `egorag/egogpt_gpt4o/<video>/`: the same models through another gateway.
 
 ## What the paid stages cost
 
@@ -137,8 +185,9 @@ Per video, at `egorag/egogpt_gpt4o/<video>/` in
   chosen option (`response`; `none` when the reply held no letter), `evaluate`, the cutoff, the time range the LLM
   chose, the retrieved clips in video seconds, the evidence cards, `version` and the `memory_hash` the answer was
   made from (a row from another version or memory is redone);
-- `api_usage.jsonl`: one line per paid call (which function, the model id the API returned, prompt and
-  completion tokens; no text, no key);
+- `api_usage.jsonl`: one line per paid call (which function, the model id the API returned, prompt, cached,
+  completion and reasoning tokens, the endpoint, and through OpenRouter the serving provider and the cost; no
+  text, no key);
 - `runs.jsonl`: one line per finished stage (commits of this repo, upstream and epic-morph, the patch's hash, the
-  model ids asked for, per returned model id the calls and tokens of the stage, torch and transformers versions,
-  GPUs, seconds).
+  model ids asked for, per returned model id the calls, tokens, endpoint, provider and cost of the stage, torch
+  and transformers versions, GPUs, seconds).
