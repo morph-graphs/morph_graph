@@ -160,6 +160,9 @@ def fake_gemini():
         if decl is not None:
             schema = {"title": decl.name, **to_json_schema(type(decl.parameters).to_dict(decl.parameters))}
         assert decl is not None or not request.generation_config.response_schema, "a response schema without a tool: not faked"
+        if decl is not None:   # the function call is forced, for every Gemini backbone as for gemini-2.5-pro
+            fc = request.tool_config.function_calling_config
+            assert fc.mode == glm.FunctionCallingConfig.Mode.ANY and list(fc.allowed_function_names) == [decl.name], (decl.name, str(fc))
         value = answer(texts, images, schema, STATE["phase"])
         part = glm.Part(function_call=glm.FunctionCall(name=decl.name, args=value)) if decl is not None else glm.Part(text=value)
         n_in = len("".join(texts)) // 4 + 1032 * len(images)
