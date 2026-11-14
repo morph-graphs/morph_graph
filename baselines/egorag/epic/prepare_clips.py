@@ -38,6 +38,17 @@ def video_sec(hhmmssff):
     return int(s[0:2]) * 3600 + int(s[2:4]) * 60 + int(s[4:6]) - CLOCK0
 
 
+def x264_ffmpeg():
+    """The first ffmpeg on PATH that has libx264: the image's base Python brings its own ffmpeg without it, ahead
+    of the system one the Dockerfile installs for the clips."""
+    for d in os.get_exec_path():
+        f = os.path.join(d, "ffmpeg")
+        if os.access(f, os.X_OK) and "libx264" in subprocess.run([f, "-hide_banner", "-encoders"], capture_output=True,
+                                                                 text=True).stdout:
+            return f
+    sys.exit("no ffmpeg with libx264 on PATH")
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     p.add_argument("--video", required=True)
@@ -65,7 +76,7 @@ def main():
         os.makedirs(tmp)
         s = a.size
         subprocess.run(
-            ["ffmpeg", "-loglevel", "error", "-threads", str(a.threads), "-i", a.video,
+            [x264_ffmpeg(), "-loglevel", "error", "-threads", str(a.threads), "-i", a.video,
              "-vf", f"scale='if(gt(iw,ih),-2,{s})':'if(gt(iw,ih),{s},-2)'",
              "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-c:a", "aac", "-ar", "16000", "-ac", "1",
              "-force_key_frames", f"expr:gte(t,n_forced*{a.clip_sec})",
