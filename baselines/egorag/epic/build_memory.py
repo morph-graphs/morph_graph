@@ -107,9 +107,12 @@ def main():
     src = lambda k: os.path.join("events_diary", f"{V}_{k}", f"{k}_day1.json")
 
     def failed(n):
-        """True when level n has no usable summary (a failed call). Upstream would skip the level's file on a
-        rerun, so it is removed with what was made from it."""
-        rows = json.load(open(src(levels[n]))) if os.path.exists(src(levels[n])) else []
+        """True when level n has no usable summary (a failed call, or a file a killed run left unreadable).
+        Upstream would skip the level's file on a rerun, so it is removed with what was made from it."""
+        try:
+            rows = json.load(open(src(levels[n])))
+        except (OSError, ValueError):
+            rows = []
         bad = not rows or any((r.get("generated_text") or "").strip() in ("", "error") for r in rows)
         for j in levels[n:] if bad else []:
             shutil.rmtree(os.path.join("events_diary", f"{V}_{j}"), ignore_errors=True)
