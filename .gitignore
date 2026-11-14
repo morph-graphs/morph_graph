@@ -267,3 +267,6 @@ baselines/api/results/
 baselines/vgent/work/
 !baselines/vgent/env/
 baselines/vgent/results/
+
+# coord/sheet_update.py: its default download cache
+.sheet_cache/
