@@ -36,7 +36,6 @@ from einops import rearrange
 import math
 from ezcolorlog import root_logger as logger
 
-from model.attention.utils import get_bipartite_soft_matching
 
 def apply_clustered_compression(
     local_k, local_v, local_q, 
@@ -570,6 +569,7 @@ def apply_patch_sample_compression(
         # apply token merging across framewise K features 
         merge_ratio = kwargs['merge_ratio']
         
+        raise RuntimeError("not vendored: ToMe (model/attention/utils.py)")
         sparse_k, sparse_v, hw_grid = get_bipartite_soft_matching(sparse_k, sparse_v, merge_ratio, num_iters=5)
         sparse_k = rearrange(sparse_k, "b nh m n d -> b nh (m n) d").to(local_k.dtype)
         sparse_v = rearrange(sparse_v, "b nh m n d -> b nh (m n) d").to(local_v.dtype)
@@ -792,6 +792,7 @@ def apply_tome_with_frame_sampling(
     sparse_v_sampled = sparse_v[:, :, sampled_indices, :, :, :]
     
     # Step 2: Apply ToMe to the sampled frames
+    raise RuntimeError("not vendored: ToMe (model/attention/utils.py)")
     sparse_k_merged, sparse_v_merged, hw_grid = get_bipartite_soft_matching(
         sparse_k_sampled, sparse_v_sampled, merge_ratio, num_iters=num_iters
     )

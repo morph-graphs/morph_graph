@@ -14,16 +14,12 @@ except ImportError:
     # These imports may not be available in older transformers versions
     pass
 
-from model.attention import RotaryEmbeddingESM, rekv_attention_forward
-from model.attention import RotaryEmbeddingQwenVL, rekv_attention_forward_qwenvl
+from model.attention import rekv_attention_forward_qwenvl
 from model.attention import RotaryEmbeddingQwen3VL
 
-from model.patch_qwen2_vl import model_forward_qwen_vl
 from model.patch_qwen3_vl import model_forward_qwen3_vl
 from model.patch_qwen3_vl import huggingface_forward as huggingface_forward_qwen3_vl
 
-from model.patch_internvl3 import model_forward_intern3_5_vl
-from model.patch_internvl3 import huggingface_forward as huggingface_forward_intern3_5_vl
 
 from ezcolorlog import root_logger as logger
 from einops import rearrange
@@ -359,14 +355,17 @@ def patch_hf(
         rope = RotaryEmbeddingQwen3VL(dim, base, distance_scale, trope_section=_trope)
         forward = huggingface_forward_qwen3_vl(rekv_attention_forward_qwenvl(**attn_kwargs))
     elif is_qwen_vl:
+        raise RuntimeError("not vendored: Qwen2-VL / Qwen2.5-VL (model/attention/qwenvl/rope.py, model/patch_qwen2_vl.py)")
         logger.info("Patching RotaryEmbeddingQwen (Qwen2_VL/Qwen2.5_VL)")
         rope = RotaryEmbeddingQwenVL(dim, base, distance_scale)
         forward = huggingface_forward(rekv_attention_forward_qwenvl(**attn_kwargs))
     elif is_internvl3_5:
+        raise RuntimeError("not vendored: InternVL3.5 (model/attention/rope.py, model/attention/rekv_attention.py, model/patch_internvl3.py)")
         logger.info("Patching InternVL3.5 (Qwen3ForCausalLM backbone, 1D RoPE)")
         rope = RotaryEmbeddingESM(dim, base, distance_scale)
         forward = huggingface_forward_intern3_5_vl(rekv_attention_forward(**attn_kwargs))
     else:
+        raise RuntimeError("not vendored: 1-D RoPE models (model/attention/rope.py, model/attention/rekv_attention.py)")
         logger.info("Patching RotaryEmbeddingESM")
         rope = RotaryEmbeddingESM(dim, base, distance_scale)
         forward = huggingface_forward(rekv_attention_forward(**attn_kwargs))

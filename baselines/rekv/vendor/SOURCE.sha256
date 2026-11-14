@@ -1,21 +1,21 @@
+# sha256 of the kept files as they are in the source working tree (4 of them differ here by MemStream.patch)
 fcd95990a713d2263b4475668aae4699334848031436eef0af07c10614b7db52  ./model/abstract_rekv.py
+66d4926ff97b8761d41302047aaa9e8fa19f83d64d8ee7d45b4a1457e1b01836  ./model/attention/__init__.py
 3d954f3fb336b998a5a75a6efd3be62dc8802eefa7aa0cef348a439f17a4e52f  ./model/attention/compression_methods.py
 060662ec7adef949cd506438384bc7953234669955162b2db181ded8a8ad80cc  ./model/attention/diagnostics.py
-4752c3ed00050b1578efc94e1a793dc1d9068270dd594dfef1255ee1c0503ca5  ./model/attention/dot_production_attention/base.py
 4c6a3b66ea0ce484667d175479a3a5f7bfe64636d9b90c7c773e78f146bf5c42  ./model/attention/dot_production_attention/__init__.py
+4752c3ed00050b1578efc94e1a793dc1d9068270dd594dfef1255ee1c0503ca5  ./model/attention/dot_production_attention/base.py
 6659851cfe1658298861057aad3c1d823728daa1f1707c019f79215ef1b0ed5a  ./model/attention/dot_production_attention/triton_impl.py
-66d4926ff97b8761d41302047aaa9e8fa19f83d64d8ee7d45b4a1457e1b01836  ./model/attention/__init__.py
 fc476ca5b31d8acf4eab5fef396b5d3d83e64ea51c8e9614cb43becb11de6db6  ./model/attention/kv_cache_manager.py
 176849907b2b118f0eeb8117ab7dc6ae8e5ecc8f9dfad20d9e97eef76ef950b5  ./model/attention/memory_units.py
 492bdc45a116835de76b5bcb28df2472bd2894301e144b82acdbdf7038e53e18  ./model/attention/qwenvl/rekv_attention.py
-0ac5fce3b47530e72f6ed9c8e92709e424ee6a43d91b48d9ce2051bc64b1d817  ./model/attention/qwenvl/rope.py
 7c9f4c1eaa985fd5565bc6c65252b553aec635f6d1f9a9d52cdf19003f2fd575  ./model/attention/qwenvl/rope_qwen3.py
-a9631d20e69e97c0cc9f36d6d21e8c2ac8ebdd86a2ade3237263c5e99eeaf7b8  ./model/attention/rekv_attention.py
-a86eeae5ddb4bab66d9b380996945150aa5862dd65da435049a29d9fe526d358  ./model/attention/rope.py
-2f56d745488ac190240ca593d89fd7956562e7677a7997e5ddc465c405d4d73d  ./model/attention/utils.py
-a6e168789fe79a4476762aa7329d4dfbb35af861e7859c80869b9c62eeea3194  ./model/patch_internvl3.py
 0f517707d5486458dc9c250c93fd19e822a950af329aa31d8ee3aad0eb52461b  ./model/patch.py
-4eb4113c72c3d465646c89919e87641255affe5dfd622f045b1a0f4430a12bf2  ./model/patch_qwen2_vl.py
 dfdf79bd9f0d68603fd1de2f77e5468a621cc3790a1449808e243efcf4616fc4  ./model/patch_qwen3_vl.py
 14d0a5a00998a695e565b25151677df4fa365111f192ed797d7a7e684dab5c90  ./model/qwen3_utils.py
 96d591fe0d12396a875a5260d8156a5d4b3f70de4be58aaa27a050ad107d5782  ./model/qwen3_vl_rekv.py
+# sha256 of the 4 edited files as vendored (source + MemStream.patch)
+82590bbc60297ac0e4cce4f3e82a0ccad2e725ff555d7856d85e5a1e764bf032  ./model/patch.py
+fafc66dc30014931072c0600352c7fd0ffb2f5e8187c394349e48d68a25fa61a  ./model/attention/__init__.py
+20d82e6769ea36f930a5d65df42d5501aa04faa32d16325a2841a81dc7f84fca  ./model/attention/kv_cache_manager.py
+9e745bb362bb2b24477d280fa15366e8b8be07264f4f4fbef77769e75cb0a4e7  ./model/attention/compression_methods.py

@@ -1,7 +1,7 @@
 # baselines/rekv: ReKV on EPIC-Morph, with Qwen3-VL-8B
 
-> **The vendored snapshot may be re-synced.** `vendor/MemStream` is a subset (the 21 files a run imports) of
-> Vatsal Agarwal's working tree (his commit `0efaa6e` plus uncommitted changes, `vendor/SOURCE.md`). Which state is canonical is being
+> **The vendored snapshot may be re-synced.** `vendor/MemStream` is a subset (15 files) of Vatsal Agarwal's
+> working tree (his commit `0efaa6e` plus uncommitted changes, `vendor/SOURCE.md`). Which state is canonical is being
 > confirmed; once it is, the snapshot is copied again. Every answer row records a hash of the snapshot
 > (`memory_hash`, over `vendor/SOURCE.sha256` and the settings), so answers made with another snapshot count as
 > not done and are redone.
@@ -13,7 +13,9 @@ caches of the most relevant frames, which the model then attends to as if it had
 second model and no API: the memory model is the answering model. Our sheet lists ReKV with Qwen3-VL-8B.
 
 Upstream supports LLaVA-OneVision, LongVA and Video-LLaVA only. **The Qwen3-VL port used here is Vatsal
-Agarwal's**, from his ReKV fork MemStream; the files a run needs are copied unmodified into `vendor/MemStream`. It is run in its plain
+Agarwal's**, from his ReKV fork MemStream; the files a run needs are copied into `vendor/MemStream`, unmodified
+except for import-only edits in 4 of them (`vendor/MemStream.patch`: imports of code for other models and
+research features are removed, and the branches that would use it raise "not vendored"). It is run in its plain
 ReKV configuration: `prefill_method swa`, `retrieval_method rekv`, none of the fork's research knobs
 (`MEMSTREAM_*`, compression, ToMe, top-p attention, external retrievers); `epic/run_memstream.py` refuses to
 run when one is set. Nothing imports upstream ReKV, so it is not a submodule.
@@ -30,7 +32,7 @@ run when one is set. Nothing imports upstream ReKV, so it is not a submodule.
 
 | path | what |
 |---|---|
-| `vendor/MemStream/` | the vendored port: `model/qwen3_vl_rekv.py` and the files it imports in a run (measured, 21 files); never edited here. `vendor/SOURCE.md`: source path, commit, date, the kept files and why; `vendor/SOURCE.sha256`: their hashes |
+| `vendor/MemStream/` | the vendored port: `model/qwen3_vl_rekv.py` and what a run of it needs (15 files). `vendor/SOURCE.md`: source path, commit, date, the kept files and their state; `vendor/MemStream.patch`: the only differences from the source (4 files, imports); `vendor/SOURCE.sha256`: the source's hashes of the kept files, and ours of the 4 edited ones |
 | `epic/run_memstream.py` | one video: encode once with the port, answer a bank's questions with the streaming cutoff; `--blind` |
 | `run_rekv.sh` | one video, one arm, one stage (prep, build, qa, blind, upload, all) |
 | `env/` | the environment, pinned to the versions the port was developed with (torch 2.6.0, transformers 5.0.0): `requirements.txt`, `setup_env.sh` |

@@ -161,9 +161,6 @@ from .compression_methods import (
     no_compression
 )
 
-from .utils import (
-    select_topk_watershed,
-)
 from model.qwen3_utils import get_qwen3_vl_retrieved_position_ids
 from . import diagnostics
 
@@ -1918,6 +1915,7 @@ class ContextManager:
                chunked_logits = chunked_logits.mean(dim=1) # (batch_size, 1)
 
             if self.retrieval_method == "topk_watershed_rekv":
+                raise RuntimeError("not vendored: topk_watershed_rekv (model/attention/utils.py)")
                 topk_result = select_topk_watershed(chunked_logits.cpu().squeeze(dim=0).numpy(), self.topk)
                 self.sorted_block_indices = torch.tensor(topk_result['frame_indices'], dtype=torch.long)[None, :]
             else:
