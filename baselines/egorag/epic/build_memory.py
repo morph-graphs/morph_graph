@@ -104,19 +104,33 @@ def main():
     levels = ["l1", "l2", "l3"]
     if "events" not in a.step or all(os.path.exists(files[k]) and os.path.getsize(files[k]) > 2 for k in levels):
         return
+    src = lambda k: os.path.join("events_diary", f"{V}_{k}", f"{k}_day1.json")
+
+    def failed(n):
+        """True when level n has no usable summary (a failed call). Upstream would skip the level's file on a
+        rerun, so it is removed with what was made from it."""
+        rows = json.load(open(src(levels[n]))) if os.path.exists(src(levels[n])) else []
+        bad = not rows or any((r.get("generated_text") or "").strip() in ("", "error") for r in rows)
+        for j in levels[n:] if bad else []:
+            shutil.rmtree(os.path.join("events_diary", f"{V}_{j}"), ignore_errors=True)
+        return bad
+
+    # what a run that stopped inside gen_event left: before any call, so a rerun does not summarise an empty level
+    for n, k in enumerate(levels):
+        if os.path.exists(src(k)) and failed(n):
+            break
     paid_api(deepseek=True)
     del agent
     from egorag.utils.gen_event import gen_event
-    gen_event(V, "events_diary")   # resumes per level; a level it fails on is missing or empty below
+    try:
+        gen_event(V, "events_diary")   # resumes per level; a level it fails on is missing or empty below
+    except Exception as e:   # after a failed hour level upstream's day level raises from its own error handler
+        print(f"gen_event stopped: {type(e).__name__}: {e}", file=sys.stderr)
     for n, k in enumerate(levels):
-        src = os.path.join("events_diary", f"{V}_{k}", f"{k}_day1.json")
-        rows = json.load(open(src)) if os.path.exists(src) else []
-        if not rows or any((r.get("generated_text") or "").strip() in ("", "error") for r in rows):
-            for j in levels[n:]:   # upstream would skip the level's file on a rerun: remove it and what was made from it
-                shutil.rmtree(os.path.join("events_diary", f"{V}_{j}"), ignore_errors=True)
-            sys.exit(f"{k} summaries missing or failed ({src}): rerun to retry")
-        shutil.copy(src, files[k])
-        print(f"{k}: {len(rows)} summaries -> {files[k]}")
+        if failed(n):
+            sys.exit(f"{k} summaries missing or failed ({src(k)}): rerun to retry")
+        shutil.copy(src(k), files[k])
+        print(f"{k}: {len(json.load(open(src(k))))} summaries -> {files[k]}")
 
 
 if __name__ == "__main__":
