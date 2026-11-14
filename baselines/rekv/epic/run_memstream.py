@@ -78,10 +78,15 @@ def read_video(video_file, sample_fps, tokens):
     stride = int(round(float(num) / float(den)) / sample_fps)
     gw = max(1, round((tokens * s["width"] / s["height"]) ** 0.5))
     w, h = gw * 32, max(1, round(tokens / gw)) * 32
-    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", video_file, "-vf",
-                          f"select=not(mod(n\\,{stride})),scale={w}:{h}:flags=bicubic", "-fps_mode", "passthrough",
-                          "-f", "rawvideo", "-pix_fmt", "rgb24", "-"], capture_output=True, check=True).stdout
-    return np.frombuffer(raw, np.uint8).reshape(-1, h, w, 3), float(j["format"]["duration"])
+    def decode(passthrough):   # the selected frames as they are: none repeated or dropped to fill a constant rate
+        return subprocess.run(["ffmpeg", "-v", "error", "-i", video_file, "-vf",
+                               f"select=not(mod(n\\,{stride})),scale={w}:{h}:flags=bicubic", passthrough, "passthrough",
+                               "-f", "rawvideo", "-pix_fmt", "rgb24", "-"], capture_output=True)
+    r = decode("-fps_mode")
+    if r.returncode and b"fps_mode" in r.stderr:   # ffmpeg before 5.1 (the image's is 4.4) knows it as -vsync only
+        r = decode("-vsync")
+    assert r.returncode == 0, f"ffmpeg failed on {video_file}: {r.stderr.decode(errors='replace')[-500:]}"
+    return np.frombuffer(r.stdout, np.uint8).reshape(-1, h, w, 3), float(j["format"]["duration"])
 
 
 def cap_retrieval():
