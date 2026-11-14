@@ -16,6 +16,10 @@ merit:<tag>, the tag from baselines/<b>/docker/image_tag.sh <arm>). Every baseli
 worker's MERIT_GPU, MERIT_RUNTIME, MERIT_SIF_DIR, MERIT_HF_CACHE and MERIT_WORK (one shared work folder per cluster),
 so one worker and one environment run them all.
 
+A task that calls a paid API lists the variables it needs (`needs_env`, e.g. OPENAI_API_KEY): the worker takes it
+only when they are set in its own environment, from where the task's container gets the key by name. A key is never
+part of a command, and failure notes are scrubbed of keys before they go to the board.
+
 Builds need the videos; qa tasks also need EPIC_MORPH_DIR, an epic-morph checkout that has the task's bank (DESIGN.md,
 "Answer (qa) tasks").
 
@@ -49,7 +53,14 @@ Each cycle (every --every seconds): read the board, mark finished tasks done/fai
 GPU, renew the leases of running ones, claim the highest-priority free tasks for free slots (one commit to
 this pool's own file; if anyone committed meanwhile it re-reads), then start them. A task runs the baseline's
 own script (stage, then upload), so results go to the results dataset as usual. Stop with Ctrl-C; running
-tasks keep going, and a restarted worker picks them up again from its state folder.
+tasks keep going, and a restarted worker picks them up again from its state folder. With --launcher slurm that
+holds on any host that sees the state folder, whatever host the claims name: with --queues the jobs write their own
+exit codes; with --sbatch a task whose `sbatch --wait` died with the old worker is followed through squeue, and when
+its job has ended sacct decides (COMPLETED 0:0: done; anything else: failed).
+
+The Hub allows a repository 128 commits an hour, shared by every pool: a cycle with nothing to report but renewed
+leases and the heartbeat commits every 10 minutes at most, and when the Hub refuses a read or a commit (429, or the
+network is down) the worker waits for the time it names, or a few minutes, and goes on. It never stops for that.
 """
 import argparse
 import getpass
@@ -67,10 +78,53 @@ import jobs  # noqa: E402
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # A task's fields go into a shell command, so only these shapes are ever run (anything else is skipped).
-# An arm is m8 / m27 / m3 for the local-model baselines, or a config name of baselines/api/configs/ (gpt-5-f1024).
+# An arm is m8 / m27 / m3 for the local-model baselines, a reported-configuration arm (g5m, g5m-q8, ...), or a config
+# name of baselines/api/configs/ (gpt-5-f1024).
 VALID = dict(baseline=re.compile(r"^(merit|worldmm|magic|m3agent|api)$"), arm=re.compile(r"^(m(8|27|3)|[a-z0-9]+([.-][a-z0-9]+)*)$"),
              stage=re.compile(r"^(prep|build|qa|blind)$"), video=re.compile(r"^P\d\d-\d{8}-\d{6}$"),
              bank=re.compile(r"^[A-Za-z0-9_]*$"), id=re.compile(r"^[A-Za-z0-9_.-]+$"))
+
+
+# What a failed task's log may carry: the value of any key or token in this worker's environment, or a key by shape
+KEYLIKE = re.compile(r"\b(sk-[A-Za-z0-9_*.-]{6,}|AIza[A-Za-z0-9_-]{10,}|hf_[A-Za-z0-9]{10,})")
+
+
+def scrub(text):
+    """The text with keys and tokens removed, for a note that goes to the board."""
+    for k, v in os.environ.items():
+        if len(v) >= 8 and re.search(r"(KEY|TOKEN|SECRET)$", k):
+            text = text.replace(v, f"<{k}>")
+    return KEYLIKE.sub(lambda m: m.group(0)[:3] + "...", text)
+
+
+def has_env(task):
+    """Does this worker's environment have every variable the task needs (needs_env: an API key, by name)?"""
+    return all(isinstance(e, str) and os.environ.get(e) for e in task.get("needs_env") or [])
+
+
+HEARTBEAT_S = 600   # a cycle that changes nothing but leases and the heartbeat commits at most this often
+
+
+def board_wait(e, what):
+    """The board could not be read or written (the Hub's rate limit, 429: 128 commits an hour per repository; or the
+    network): say so and wait, for the time the Hub names or a few minutes. The worker never stops for it."""
+    r = getattr(e, "response", None)
+    code = getattr(r, "status_code", None)
+    try:
+        wait = int(float(r.headers.get("Retry-After")))
+    except Exception:
+        wait = 0
+    wait = min(3600, max(wait, 300 if code == 429 else 120))
+    print(f"{jobs.iso()} board {what} failed ({type(e).__name__}{f' {code}' if code else ''}: {scrub(str(e))[:200]}); "
+          f"waiting {wait} s", flush=True)
+    time.sleep(wait)
+
+
+def substance(pool_file):
+    """A pool file without what changes every cycle (the heartbeat time, the leases): equal means nothing to report."""
+    return json.dumps({**{k: v for k, v in pool_file.items() if k not in ("updated", "claims")},
+                       "claims": {tid: {k: v for k, v in c.items() if k != "lease_until"}
+                                  for tid, c in pool_file.get("claims", {}).items()}}, sort_keys=True)
 
 
 def valid(task):
@@ -167,14 +221,36 @@ def copies_state(p, queued):
     return -1, jobs.get(ran), cancel   # every copy left the queue without an exit code
 
 
-def slurm_job_alive(submit_log):
-    """The Slurm job of a task whose `sbatch --wait` is gone (worker host restarted): still queued or running?"""
+def slurm_job_state(submit_log, run=subprocess.run):
+    """Where the Slurm job of a task stands, asked of Slurm itself (for when its `sbatch --wait` is gone, e.g. the
+    worker was restarted, and so nothing will write the task's exit code): (state, detail) with state one of
+        running   still queued or running (squeue lists it)
+        done      ended COMPLETED with exit code 0:0 (sacct)
+        failed    ended any other way; detail is sacct's state and exit code. Also: no job id in the submit log
+        unknown   left squeue and sacct has no record of it yet (accounting lags a little): ask again next cycle
+    """
     try:
         jid = open(submit_log).readline().strip().split(";")[0]
-        return bool(jid.isdigit() and subprocess.run(["squeue", "-h", "-j", jid], capture_output=True, text=True,
-                                                    timeout=60).stdout.strip())
-    except Exception:
-        return False
+    except OSError:
+        jid = ""
+    if not jid.isdigit():
+        return "failed", "no Slurm job was submitted"
+    try:
+        if run(["squeue", "-h", "-j", jid], capture_output=True, text=True, timeout=60).stdout.strip():
+            return "running", jid
+        rows = run(["sacct", "-j", jid, "-X", "-n", "-o", "State,ExitCode"], capture_output=True, text=True,
+                   timeout=60).stdout.strip().splitlines()
+    except Exception as e:   # the scheduler did not answer: no verdict from that
+        return "unknown", f"job {jid}: {type(e).__name__}"
+    if not rows or not rows[-1].split():
+        return "unknown", f"job {jid}: not in squeue, not in sacct yet"
+    *state, code = rows[-1].split()   # the last row: a requeued job has one per run; "CANCELLED by <uid>" is two words
+    state = " ".join(state)
+    if state in ("PENDING", "RUNNING", "REQUEUED", "RESIZING", "SUSPENDED", "COMPLETING"):
+        return "running", jid   # between runs of a requeued job
+    if state == "COMPLETED" and code == "0:0":
+        return "done", jid
+    return "failed", f"Slurm job {jid} ended {state or '?'} {code}"
 
 
 def alive(pidfile):
@@ -189,10 +265,12 @@ def alive(pidfile):
 def prefetch(task):
     """Download <baseline>/<arm>/<video>/ of every baseline from the results dataset into the jobs' model cache."""
     from huggingface_hub import snapshot_download
+    mem = str(task.get("memory_arm") or "")   # an answer arm reads another arm's memory (master.MEMORY_ARM)
+    arms = [task["arm"]] + ([mem] if VALID["arm"].match(mem) else [])
     cache = os.path.join(os.environ.get("MERIT_HF_CACHE") or os.path.expanduser("~/.cache/huggingface"), "hub")
     try:
         snapshot_download(os.environ.get("MERIT_HF_REPO", "morph-graphs/epic-morph-results"), repo_type="dataset",
-                          cache_dir=cache, allow_patterns=[f"*/{task['arm']}/{task['video']}/*"])
+                          cache_dir=cache, allow_patterns=[f"*/{arm}/{task['video']}/*" for arm in arms])
     except Exception as e:   # the job then fetches (or builds) by itself
         print(f"{jobs.iso()} prefetch for {task['id']} failed: {type(e).__name__}: {str(e)[:200]}", flush=True)
 
@@ -236,10 +314,20 @@ def main():
     os.makedirs(state, exist_ok=True)
     host = a.host
     claimed_total = 0
+    # Whose running claims this worker looks after. slurm: all of the pool's (a pool has one writer, the state folder
+    # is on a shared filesystem, and the jobs outlive the worker), so a worker restarted on another host adopts them.
+    # docker / local: only those started on this host, where their processes are.
+    here = (lambda c: True) if a.launcher == "slurm" else (lambda c: c.get("host") == host)
+    last_commit = 0
     while True:
-        head, tasks, pools = jobs.read()
+        try:
+            head, tasks, pools = jobs.read()
+        except Exception as e:   # a 429 or a network failure must not end the worker: its tasks would be orphaned
+            board_wait(e, "read")
+            continue
         mine = pools.get(a.pool, {"pool": a.pool, "claims": {}})
         claims = mine.setdefault("claims", {})
+        before = substance(mine) if a.pool in pools else None
         t = jobs.now()
         queued = my_jobs() if queues else None   # one squeue per cycle for every task's copies
         others = {tid: (n, c) for n, p in pools.items() if n != a.pool for tid, c in p.get("claims", {}).items()}
@@ -247,7 +335,7 @@ def main():
         for tid, c in claims.items():
             if c["status"] == "relay" and os.path.exists(os.path.join(REPO_ROOT, "outbox", tid, ".relayed")):
                 c.update(status="done", relayed=jobs.iso())
-            if c["status"] != "running" or c.get("host") != host:
+            if c["status"] != "running" or not here(c):
                 continue
             ex = os.path.join(state, f"{tid}.exit")
             o = others.get(tid)
@@ -272,25 +360,40 @@ def main():
                     continue
                 if code is not None:
                     open(ex, "w").write(str(code))   # recorded below, as for the other launchers
+            code = how = None   # the exit code once the task is over, and for a failure without one, why
             if os.path.exists(ex):
                 code = int(open(ex).read().strip() or 1)
-                if code == 0 and a.outbox and not os.path.exists(os.path.join(REPO_ROOT, "outbox", tid, ".upload.json")):
-                    code = 2   # nothing for the relay: the run.sh did not pass MERIT_OUTBOX on (or uploaded itself)
-                c.update(status=("relay" if a.outbox else "done") if code == 0 else "failed", exit=code, finished=jobs.iso(),
-                         seconds=int(t - c.get("started_t", t)))
-                if code:   # the job's log, or (slurm, job never started) sbatch's own error
-                    for f in (os.path.join(state, f"{tid}.log"), os.path.join(state, f"{tid}.log.submit")):
-                        if os.path.exists(f) and os.path.getsize(f):
-                            c["note"] = open(f).read()[-400:]
-                            break
             elif os.path.exists(p + ".jobs"):
+                pass
+            # the waiter (the process that writes the exit code): its pid means something only on the machine it runs on
+            # (a claim from before `node` was recorded: slurm compares its host; docker / local trust it, as they did)
+            elif not ((c.get("node") or (c.get("host") if a.launcher == "slurm" else socket.gethostname())) == socket.gethostname()
+                      and alive(p + ".pid")):
+                if a.launcher == "slurm":   # --sbatch: the `sbatch --wait` died with the old worker; Slurm knows the outcome
+                    verdict, how = slurm_job_state(p + ".log.submit")
+                    if verdict == "unknown" and c.get("unknown", 0) < 10:   # not in sacct yet: ask again next cycle
+                        c["unknown"] = c.get("unknown", 0) + 1
+                        verdict = "running"
+                    code = {"done": 0, "running": None}.get(verdict, -1)
+                    how = how if code == -1 else None
+                else:
+                    code, how = -1, "the task's process ended without an exit code (killed or host restarted)"
+            if code is None:
                 c["lease_until"] = t + jobs.LEASE_S
-            elif not alive(os.path.join(state, f"{tid}.pid")) and not (
-                    a.launcher == "slurm" and slurm_job_alive(os.path.join(state, f"{tid}.log.submit"))):
-                c.update(status="failed", exit=-1, finished=jobs.iso(), note="the task's process ended without an exit code (killed or host restarted)")
-            else:
-                c["lease_until"] = t + jobs.LEASE_S
-        busy = {c["slot"] for c in claims.values() if c["status"] == "running" and c.get("host") == host}
+                continue
+            if code == 0 and a.outbox and not os.path.exists(os.path.join(REPO_ROOT, "outbox", tid, ".upload.json")):
+                code = 2   # nothing for the relay: the run.sh did not pass MERIT_OUTBOX on (or uploaded itself)
+            c.update(status=("relay" if a.outbox else "done") if code == 0 else "failed", exit=code, finished=jobs.iso(),
+                     seconds=int(t - c.get("started_t", t)))
+            if code:   # what Slurm said, then the job's log, or (slurm, job never started) sbatch's own error
+                note = ""
+                for f in (p + ".log", p + ".log.submit"):
+                    if os.path.exists(f) and os.path.getsize(f):
+                        note = scrub(open(f).read()[-4000:])[-400:]   # scrub before trimming: no half key
+                        break
+                if how or note:
+                    c["note"] = f"{how}: {note}" if how and note and a.launcher == "slurm" else how or note
+        busy = {c["slot"] for c in claims.values() if c["status"] == "running" and here(c)}
         free = [s for s in a.slots if s not in busy]
         held = jobs.taken(pools, t)
         fails = jobs.failures(pools)
@@ -299,7 +402,7 @@ def main():
             tid = task["id"]
             return (valid(task) and tid not in held and fails.get(tid, 0) < 2 and claims.get(tid, {}).get("status") != "failed"
                     and (a.pool in task.get("pools", []) or "*" in task.get("pools", [])) and task["baseline"] in a.baselines
-                    and all(d in done for d in task.get("deps", [])))
+                    and has_env(task) and all(d in done for d in task.get("deps", [])))
         # A queue with a fallback (an H200: fits 27B, fallback 8B) takes fallback work only while it is idle: no task its
         # `fits` names is waiting, none of this worker's own is still active, and fewer than fallback_max (default 1)
         # of this worker's tasks have a copy on it.
@@ -333,10 +436,12 @@ def main():
                 continue
             if task["baseline"] not in a.baselines:   # this worker has no image (or setup) for it
                 continue
+            if not has_env(task):   # a paid-API task and no key here: claiming it would only fail it
+                continue
             if any(d not in done for d in task.get("deps", [])):
                 continue
             slot = free.pop(0)
-            claims[tid] = dict(status="running", host=host, slot=slot,
+            claims[tid] = dict(status="running", host=host, node=socket.gethostname(), slot=slot,
                                gpu="(scheduler)" if a.launcher == "slurm" else gpu_name(slot), claimed=jobs.iso(),
                                started=jobs.iso(), started_t=t, lease_until=t + jobs.LEASE_S)
             qs = fitting(task, queues, idle) if queues else []
@@ -349,9 +454,18 @@ def main():
             start.append((task, slot, qs))
         mine.update(pool=a.pool, host=host, slots=a.slots, launcher=a.launcher, updated=jobs.iso(), queues=sorted(queues or []),
                     running=sum(1 for c in claims.values() if c["status"] == "running"))
-        if not jobs.commit({f"pools/{a.pool}.json": mine}, head, f"{a.pool}: {len(start)} claimed"):
-            print(f"{jobs.iso()} board moved under us; re-reading", flush=True)
-            continue
+        # nothing to report but renewed leases and the heartbeat: commit that every HEARTBEAT_S at most (leases last
+        # LEASE_S, three times as long), since the Hub allows a repository 128 commits an hour, shared by every pool
+        if start or substance(mine) != before or jobs.now() - last_commit >= HEARTBEAT_S:
+            try:
+                ok = jobs.commit({f"pools/{a.pool}.json": mine}, head, f"{a.pool}: {len(start)} claimed")
+            except Exception as e:   # nothing was started: the next cycle decides again from the board
+                board_wait(e, "commit")
+                continue
+            if not ok:
+                print(f"{jobs.iso()} board moved under us; re-reading", flush=True)
+                continue
+            last_commit = jobs.now()
         for task, slot, qs in start:   # start only after the claim is committed
             tid = task["id"]
             if a.prefetch:   # before any copy can start
@@ -375,7 +489,7 @@ def main():
             open(os.path.join(state, f"{tid}.pid"), "w").write(str(pid))
             claimed_total += 1
             print(f"{jobs.iso()} started {tid} on GPU {slot}: {task['baseline']} {task['arm']} {task['stage']} {task['video']}", flush=True)
-        running = sum(1 for c in claims.values() if c["status"] == "running" and c.get("host") == host)
+        running = sum(1 for c in claims.values() if c["status"] == "running" and here(c))
         if a.max_tasks and claimed_total >= a.max_tasks and running == 0:
             print(f"{jobs.iso()} done: {claimed_total} task(s) claimed and finished", flush=True)
             return

@@ -38,7 +38,9 @@ from zoneinfo import ZoneInfo
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "baselines", "merit", "epic"))
+sys.path.insert(0, os.path.join(ROOT, "coord"))
 from prepare_epic import convert_questions, match_answers  # noqa: E402
+import master  # noqa: E402
 
 RESULTS = os.environ.get("MERIT_HF_REPO", "morph-graphs/epic-morph-results")
 API = "https://sheets.googleapis.com/v4/spreadsheets/1huSbWg8HCiWnaRdX4I3imscqA90vrZ86xB2zAIVbfZs"
@@ -46,7 +48,10 @@ TAB = "Auto: EPIC-Morph"                    # the one tab this script writes (--
 PREFIX = "Auto: "                           # a tab name without it is refused before anything is sent
 SENTINEL = "AUTO (coord/sheet_update.py)"   # start of A1 of a tab this script created
 GRID = (2000, 80)                           # rows, columns the tab is created with; a larger table is an error
-BANKS = ["batch10_agree2", "t2_agree2", "t3_agree2"]     # epic-morph v3/export_bank.py names, in table order
+# every bank the job board answers (coord/master.py EXPERIMENTS), in its order: a new bank there is a new set of rows
+# here, and the "all" rows (ALL) are over the questions of every one of them
+BANKS = list(dict.fromkeys(e[4] for e in master.EXPERIMENTS if e[4]))
+ALL = "all"
 # (baseline, arm) -> Method, Memory Model, Reasoning Model, N. Frames: the rows of the hand tab "Epic Morph Results".
 # An arm not listed here is shown as "<baseline>/<arm>".
 METHODS = {
@@ -193,6 +198,11 @@ def build(a, now):
         else:
             kind, bank, tag = parse(f)
             sets.setdefault((b, arm, bank, kind, tag), {})[v] = data
+    # the "all" rows: each (baseline, arm, kind, tag) over the questions of every bank, videos keyed <bank>/<video>
+    # (unanswered = wrong, as in every row, so a method that has answered one bank shows partial)
+    banks[ALL] = {f"{bank}/{v}": qa for bank in BANKS for v, qa in banks[bank].items()}
+    for (b, arm, bank, kind, tag), by_video in list(sets.items()):
+        sets.setdefault((b, arm, ALL, kind, tag), {}).update({f"{bank}/{v}": d for v, d in by_video.items()})
     for s in info.siblings:   # answers of a bank not in BANKS: said in the header, not silently left out
         p = s.rfilename.split("/")
         skipped += len(p) == 4 and p[3].startswith(("answers_", "blind_")) and not parse(p[3])
@@ -214,8 +224,10 @@ def build(a, now):
         floor, _ = score(qa, sets.get((b, arm, bank, "blind", ""), {}))
         f_ans, f_right = sum(len(x) for x in floor.values()), sum(sum(x.values()) for x in floor.values())
         # runs.jsonl lines of these videos: the memory's stages (no bank named) and this bank's
-        lines = [x for v in by_video for x in runs.get((b, arm, v), [])
-                 if not any(o in f"{x.get('stage', '')} {x.get('bank', '')}".split() for o in BANKS if o != bank)]
+        # (an "all" row: each video's own bank's, from its key <bank>/<video>)
+        own = lambda v: v.split("/")[0] if bank == ALL else bank
+        lines = [x for v in by_video for x in runs.get((b, arm, v.split("/")[-1]), [])
+                 if not any(o in f"{x.get('stage', '')} {x.get('bank', '')}".split() for o in BANKS if o != own(v))]
         notes = list(dict.fromkeys(str(x["note"]) for x in lines if x.get("note")))
         if done < len(qa):
             notes.insert(0, f"partial: {done}/{len(qa)} videos done" + (f", {len(per) - done} more started" if len(per) > done else ""))
@@ -244,7 +256,7 @@ def build(a, now):
                       round(100 * sum(1 / q["meta"]["n_options"] for x in qa.values() for q in x) / n_bank, 2),
                       dropped, "; ".join(notes), ", ".join(gpus),
                       max(times).strftime("%Y-%m-%d %H:%M") if times else "", *leaf])
-    table.sort(key=lambda r: (BANKS.index(r[7]), r[5], r[6], r[8]))
+    table.sort(key=lambda r: ((BANKS + [ALL]).index(r[7]), r[5], r[6], r[8]))
 
     tax = json.load(open(os.path.join(epic, "v3", "taxonomy.json")))["leaves"]
     head = [

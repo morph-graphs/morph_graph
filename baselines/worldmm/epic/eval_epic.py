@@ -29,8 +29,10 @@ import re
 import shutil
 import sys
 import time
+import traceback
 
 import wmm_paths  # noqa: F401  (first)
+import openai_usage  # noqa: F401
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "common"))
 from earlier import reuse  # noqa: E402
 from wmm_paths import GRANULARITIES
@@ -82,7 +84,9 @@ def main():
     p.add_argument("--qa_file", required=True, help="prepare_epic.py questions")
     p.add_argument("--memory_dir", help="results folder holding the memory files (not needed with --blind)")
     p.add_argument("--video_file", help="the local 512 px video (prepare_epic.py video)")
-    p.add_argument("--model", default="qwen3vl-8b", help="retriever = responder, as WorldMM's qwen3vl-8b setting")
+    p.add_argument("--model", default="qwen3vl-8b", help="the retriever model (HippoRAG's fact filter, the multiscale filter)")
+    p.add_argument("--respond_model", help="the model that decides each round's search and answers (WorldMM's "
+                   "respond model); default --model, as WorldMM's qwen3vl-8b setting")
     p.add_argument("--rows", required=True)
     p.add_argument("--out", required=True)
     p.add_argument("--cache_dir", help="HippoRAG's working folder for this run (emptied at start)")
@@ -90,6 +94,9 @@ def main():
     p.add_argument("--max_errors", type=int, default=5)
     p.add_argument("--blind", action="store_true")
     p.add_argument("--prev", nargs="*", default=[], help="the video's answers files under other banks (same memory)")
+    p.add_argument("--final_pass", action="store_true", help="a question that stops on an assertion inside WorldMM "
+                   "(HippoRAG's retrieval) is kept as answered \"Error\", i.e. wrong, as WorldMM's eval.py records it, "
+                   "instead of holding back the video's other answers; any other failure is still left for a rerun")
     a = p.parse_args()
     v = a.video
 
@@ -99,7 +106,7 @@ def main():
     if os.path.exists(a.rows):
         for line in open(a.rows):
             r = json.loads(line)
-            if (r.get("response") or "").strip() not in FAILED:   # failed questions are redone
+            if (r.get("response") or "").strip() not in FAILED or r.get("error_final"):   # failed questions are redone
                 done[r["ID"]] = r
     if a.prev and not a.blind:
         want = {r["key"]: (r["question"], build_choices(r), r["answer"], qtime(r)) for r in rows if r.get("key") and r["ID"] not in done}
@@ -110,8 +117,12 @@ def main():
     print(f"{v}: {len(rows)} questions, {len(todo)} to answer{' (blind)' if a.blind else ''}", flush=True)
 
     if todo:
-        llm = LLMModel(model_name=a.model, fps=1)
-        wm = WorldMemory(embedding_model=EmbeddingModel(), retriever_llm_model=llm, respond_llm_model=llm,
+        # as WorldMM's eval.py: LLMModel(retriever), LLMModel(respond, fps=1); one object when they are the same
+        respond = LLMModel(model_name=a.respond_model or a.model, fps=1)
+        same = a.blind or (a.respond_model or a.model) == a.model   # blind makes no retriever call
+        retriever = respond if same else LLMModel(model_name=a.model)
+        retriever.model.usage_role, respond.model.usage_role = "retriever", "respond"   # same object: all "respond"
+        wm = WorldMemory(embedding_model=EmbeddingModel(), retriever_llm_model=retriever, respond_llm_model=respond,
                          prompt_template_manager=PromptTemplateManager(), episodic_granularities=GRANULARITIES,
                          qa_template_name="qa_egolife", max_rounds=0 if a.blind else a.max_rounds,
                          max_errors=a.max_errors)
@@ -131,8 +142,13 @@ def main():
                 res = wm.answer(query=row["question"], choices=choices, until_time=None if a.blind else until)
                 response, hist, nr = res.answer, res.round_history, res.num_rounds
             except Exception as e:
-                print(f"ERROR on {row['ID']}: {type(e).__name__}: {e}", flush=True)
+                scrub = lambda x: re.sub(r"sk-[A-Za-z0-9_*.-]+", "sk-...", x)   # an API error can quote the key
+                print(f"ERROR on {row['ID']}: {type(e).__name__}: {scrub(str(e))}\n{scrub(traceback.format_exc())[-1200:]}", flush=True)
                 response, hist, nr = "Error", [], 0
+                err = scrub(f"{type(e).__name__}: {e}")[:300]
+                final = a.final_pass and isinstance(e, AssertionError)
+            else:
+                err, final = None, False
             ok = evaluate_prediction(response, row["answer"], choices)
             rec = {"key": row.get("key"), "ID": row["ID"], "video": v, "type": row["type"], "question": row["question"],
                    "choices": choices, "answer": row["answer"], "response": response,
@@ -143,9 +159,13 @@ def main():
                 rec["indexed"] = ({g: len(wm.episodic_memory.indexed_entries[g]) for g in GRANULARITIES}
                                   | {"visual": len(wm.visual_memory.indexed_entries),
                                      "semantic_ts": wm.semantic_memory.indexed_timestamp})
+            if err:
+                rec["error"] = err
+            if final:
+                rec["error_final"] = True
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
             f.flush()
-            if response.strip() not in FAILED:
+            if response.strip() not in FAILED or final:
                 done[row["ID"]] = rec
             print(f"[{n}/{len(todo)}] ID {row['ID']} t={row['t_ask']:.0f}s pred={response!r} gold={row['answer']} "
                   f"ok={ok} rounds={nr} {rec['sec']}s | acc {sum(bool(r['evaluate']) for r in done.values())}/{len(done)}",

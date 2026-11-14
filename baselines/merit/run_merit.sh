@@ -12,6 +12,11 @@
 #          all    prep + build, then qa + blind when a bank is given (no upload)
 #   arm    m8   Qwen3-VL-8B (captions and answers)    one GPU with >= 40 GB (8B + the 4B embedding model)
 #          m27  Qwen3.8-27B (captions and answers)    one 80 GB GPU, or 2x 48 GB, or 4x 24 GB
+#          MERIT's published models (README "Reported-configuration arms"); gpt-* models are the OpenAI API, paid:
+#          g5m      the memory, written by gpt-5-mini (prep, build, upload); shared by the three answer arms   no GPU
+#          g5m-q8   answers from the g5m memory with Qwen3-VL-8B (qa, upload); no API call                    as m8
+#          g5m-q27  answers from the g5m memory with Qwen3.8-27B (qa, upload); no API call                    as m27
+#          g5m-g5   answers from the g5m memory with gpt-5 (qa, upload), top-k 10 as published      one GPU >= 16 GB
 #   bank   a named bank of the epic-morph checkout, e.g. batch10_agree2 (generated there with
 #          v3/export_bank.py <bank> when missing; byte-identical for anyone at that commit)
 #
@@ -27,27 +32,61 @@
 #   MERIT_CONTEXT  blind only: a JSON file {question ID: context text}; the model answers from that text instead of an
 #                  empty context, with no search. Needs MERIT_TAG (one per context file); written to blind_<bank>_<tag>.json
 #   MERIT_FETCH    0 to never take the memory from the dataset (build normally reuses it when it is there)
+#   OPENAI_API_KEY g5m build and g5m-g5 qa: the key, from the environment only (never an argument or a file);
+#                  every other arm and stage runs with it removed from its environment
+#   MERIT_SERVICE_TIER  the OpenAI service tier, e.g. flex (half price, slower); default the API's standard tier
+#   MERIT_API_CONCURRENCY  g5m build: captions / keys requested at once (default 8); MERIT_API_THREADS  g5m-g5 qa:
+#                  questions answered at once (default 4)
+#   MERIT_TOP_K    clips retrieved per search round (default 5; g5m-g5: 10); setting it defaults MERIT_TAG to top<k>
 # Every step skips finished work, so rerunning the same command resumes. The memory is built once per video
 # and arm and shared by every bank, probe set and variant.
 set -euo pipefail
-STAGE=${1:?usage: run_merit.sh <prep|build|qa|blind|upload|all> <video> <m8|m27> [bank]}
-V=${2:?video id}; ARM=${3:?arm m8 or m27}; BANK=${4:-}
+STAGE=${1:?usage: run_merit.sh <prep|build|qa|blind|upload|all> <video> <m8|m27|g5m|g5m-q8|g5m-q27|g5m-g5> [bank]}
+V=${2:?video id}; ARM=${3:?arm m8, m27, g5m, g5m-q8, g5m-q27 or g5m-g5}; BANK=${4:-}
 M=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); REPO=$(cd "$M/../.." && pwd); R=$M/MERIT   # R: the MERIT submodule
 PY=${PY:?set PY to the python of the $ARM environment}
 EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && pwd)
 [ -f "$R/eval/evaluate_egolife.py" ] || { echo "MERIT submodule missing: git submodule update --init baselines/merit/MERIT"; exit 1; }
-case $ARM in m8) MODEL=qwen3vl-8b ;; m27) MODEL=qwen38-27b ;; *) echo "arm must be m8 or m27"; exit 1 ;; esac
+# MODEL writes the memory (captions, keys); RESPOND decides the searches, filters the neighbours and answers
+# (the same model for m8 and m27). MEM is the arm whose folder holds the memory: an answer arm (ARM != MEM)
+# reads it from there and keeps only its answers in its own folder.
+case $ARM in
+    m8) MODEL=qwen3vl-8b ;; m27) MODEL=qwen38-27b ;;
+    g5m) MODEL=gpt-5-mini ;;
+    g5m-q8) MEM=g5m; MODEL=gpt-5-mini; RESPOND=qwen3vl-8b ;;
+    g5m-q27) MEM=g5m; MODEL=gpt-5-mini; RESPOND=qwen38-27b ;;
+    g5m-g5) MEM=g5m; MODEL=gpt-5-mini; RESPOND=gpt-5; TOPK=10 ;;   # top-k 10 with GPT-5, 5 with Qwen3-VL-8B (paper, Table 7)
+    *) echo "arm must be m8, m27, g5m, g5m-q8, g5m-q27 or g5m-g5"; exit 1 ;;
+esac
+MEM=${MEM:-$ARM}; RESPOND=${RESPOND:-$MODEL}
+case $ARM:$STAGE in
+    g5m:qa|g5m:blind) echo "g5m is the memory only: answer from it with g5m-q8, g5m-q27 or g5m-g5"; exit 1 ;;
+    g5m-*:blind) echo "blind uses no memory: it is the reasoning model's own (m8, m27; gpt-5: the API baseline)"; exit 1 ;;
+esac
 VIDEOS=${HDEPIC_VIDEOS:-$EPIC/data/HD-EPIC/videos}; WORK=${MERIT_WORK:-$M/work}; OUTROOT=${MERIT_OUT:-$M/results}
 [ -n "${MERIT_WORK:-}" ] && umask 002   # a shared work folder: files the other workers' users can reuse and reset
-OUT=$OUTROOT/$ARM/$V; PREP=$WORK/prep; CAP=$OUT/${V}_30sec.json
-TAG=${MERIT_TAG:-}; [ "${MERIT_NO_FRAMES:-0}" = 1 ] && [ -z "$TAG" ] && TAG=noframes; SUF=${TAG:+_$TAG}
-mkdir -p "$OUT" "$WORK/logs"
+OUT=$OUTROOT/$ARM/$V; MOUT=$OUTROOT/$MEM/$V; PREP=$WORK/prep; CAP=$MOUT/${V}_30sec.json; KEYS=$MOUT/${V}_30sec_4_key.json
+TAG=${MERIT_TAG:-}; [ "${MERIT_NO_FRAMES:-0}" = 1 ] && [ -z "$TAG" ] && TAG=noframes
+[ -n "${MERIT_TOP_K:-}" ] && [ -z "$TAG" ] && TAG=top$MERIT_TOP_K   # another top-k is a variant, never the arm's main answers
+SUF=${TAG:+_$TAG}; TOPK=${MERIT_TOP_K:-${TOPK:-5}}
+mkdir -p "$OUT" "$MOUT" "$WORK/logs"
+# The OpenAI API: only a stage whose model is gpt-* keeps the key (g5m: writing the memory; g5m-g5: answering).
+# Every call is counted in USAGE (epic/openai_usage.py) and goes into the stage's runs.jsonl line.
+USAGE=$WORK/usage/$ARM/$V.jsonl; API=
+case $ARM:$STAGE in g5m:build|g5m:all) API=$MODEL ;; g5m-g5:qa|g5m-g5:all) API=$RESPOND ;; esac
+if [ -n "$API" ]; then
+    [ -n "${OPENAI_API_KEY:-}" ] || { echo "$ARM $STAGE calls the OpenAI API ($API): set OPENAI_API_KEY in the environment"; exit 1; }
+    mkdir -p "$(dirname "$USAGE")"
+    export MERIT_USAGE_LOG=$USAGE MERIT_OPENAI_CACHE=$WORK/openai_cache/${ARM}_$V   # the reply cache: a rerun pays nothing twice
+else
+    unset OPENAI_API_KEY MERIT_USAGE_LOG
+fi
 # eval_egolife.sh calls plain `python`: this environment's first
 export PATH="$(dirname "$PY"):$PATH" PYTHONPATH="$R/src${PYTHONPATH:+:$PYTHONPATH}" PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 NGPU=$( (nvidia-smi -L 2>/dev/null || true) | wc -l | tr -d ' ')
 if [ -n "${CUDA_VISIBLE_DEVICES:-}" ]; then
     NGPU=$(echo "$CUDA_VISIBLE_DEVICES" | tr ',' '\n' | grep -c .); GPU_IDS=$CUDA_VISIBLE_DEVICES
-elif [ "$NGPU" -gt 1 ] && [ "$STAGE" != prep ]; then
+elif [ "$NGPU" -gt 1 ] && [ "$STAGE" != prep ] && [ "$STAGE" != upload ] && [ "$ARM" != g5m ]; then
     # MERIT would spread one model over every GPU it sees; choose them: one H100 for m27, one GPU for m8
     echo "several GPUs visible: set CUDA_VISIBLE_DEVICES to the GPU(s) for this job (e.g. CUDA_VISIBLE_DEVICES=0)"; exit 1
 else
@@ -57,13 +96,14 @@ if [ "$NGPU" -gt 1 ]; then
     export MERIT_DEVICE_MAP=auto
     # a model near the GPUs' total size needs more of GPU 0, and answering split over GPUs hit an
     # illegal memory access without blocking launches (Qwen3.8-27B on 4x A5000, 2026-11-10)
-    [ "$ARM" = m27 ] && export MERIT_GPU0_FRAC=0.6 CUDA_LAUNCH_BLOCKING=1
+    [ "$RESPOND" = qwen38-27b ] && export MERIT_GPU0_FRAC=0.6 CUDA_LAUNCH_BLOCKING=1
 else
     export MERIT_DEVICE_MAP=cuda:0
 fi
 log() { echo "=== $V $ARM $1 ($(date '+%F %H:%M'), $NGPU GPU)"; }
 record() {   # one line per finished stage, for the hand-back
-    "$PY" - "$1" "$2" >> "$OUT/runs.jsonl" <<'EOF'
+    local use=; case $1 in build*|qa*) use=${MERIT_USAGE_LOG:-} ;; esac   # the OpenAI calls since this stage's last line
+    MERIT_USAGE_LOG=$use "$PY" - "$1" "$2" >> "$OUT/runs.jsonl" <<'EOF'
 import json, os, platform, subprocess, sys, time
 import torch, transformers
 git = lambda *a, cwd=None: subprocess.run(["git", *a], capture_output=True, text=True, cwd=cwd).stdout.strip()
@@ -73,13 +113,22 @@ merit = os.environ.get("MERIT_SUBMODULE_COMMIT") or git("rev-parse", "HEAD", cwd
 bank = os.environ.get("MERIT_EPIC_COMMIT") or git("rev-parse", "HEAD", cwd=os.environ["EPIC"])
 dirty = bool(git("status", "--porcelain", "baselines/merit"))
 gpus = [torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())]
-print(json.dumps({"stage": sys.argv[1], "seconds": int(float(sys.argv[2])), "commit": commit, "dirty": dirty,
-                  "merit_commit": merit, "epic_morph_commit": bank,
-                  "model": os.environ.get("MODEL"), "torch": torch.__version__, "transformers": transformers.__version__,
-                  "gpus": gpus, "host": platform.node(), "finished": time.strftime("%Y-%m-%dT%H:%M:%S%z")}))
+row = {"stage": sys.argv[1], "seconds": int(float(sys.argv[2])), "commit": commit, "dirty": dirty,
+       "merit_commit": merit, "epic_morph_commit": bank,
+       "model": os.environ.get("MODEL"), "torch": torch.__version__, "transformers": transformers.__version__,
+       "gpus": gpus, "host": platform.node(), "finished": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
+if os.environ["RESPOND"] != os.environ["MODEL"]:   # an answer arm: who answered, from which arm's memory
+    row.update(respond_model=os.environ["RESPOND"], memory_arm=os.environ["MEM"], top_k=int(os.environ["TOPK"]))
+if os.environ.get("MERIT_USAGE_LOG"):   # {role: {model id the API answered with: calls and billed tokens}}
+    sys.path.insert(0, "baselines/merit/epic")
+    from openai_usage import summary
+    row["openai"] = summary(os.environ["MERIT_USAGE_LOG"])
+print(json.dumps(row))
 EOF
+    # counted once: the next line of this stage (a rerun, another bank) starts from an empty log
+    if [ -n "$use" ] && [ -s "$use" ]; then mv "$use" "$use.$(date +%Y%m%d%H%M%S)"; fi
 }
-export MODEL EPIC
+export MODEL RESPOND MEM TOPK EPIC
 cd "$REPO"
 
 prep() {
@@ -100,24 +149,35 @@ build() {
     log build; local t=$SECONDS
     # the memory depends only on the video and the model: take it from the dataset when it is there and no
     # local one is started (a half-built local memory is resumed, never overwritten)
-    if [ ! -s "$CAP" ] && [ ! -s "$OUT/${V}_30sec_4_key.json" ] && [ "${MERIT_FETCH:-1}" != 0 ]; then
-        local rc=0; "$PY" "$M/../common/hf_results.py" fetch-memory --arm "$ARM" --video "$V" --dir "$OUT" || rc=$?
+    if [ ! -s "$CAP" ] && [ ! -s "$KEYS" ] && [ "${MERIT_FETCH:-1}" != 0 ]; then
+        local rc=0; "$PY" "$M/../common/hf_results.py" fetch-memory --arm "$MEM" --video "$V" --dir "$MOUT" || rc=$?
         case $rc in
             0) # anything made from an earlier local memory is stale: embeddings, answering runs, answers
-               rm -rf "$WORK/cache/${ARM}_$V" "$WORK/runs/$ARM/$V"; rm -f "$OUT"/answers_*.json.gz ;;
+               # (an answer arm compares the memory with the one its answers were made from: memory_ref)
+               [ "$ARM" != "$MEM" ] || { rm -rf "$WORK/cache/${ARM}_$V" "$WORK/runs/$ARM/$V"; rm -f "$OUT"/answers_*.json.gz; } ;;
             3) echo "no memory in the dataset yet: building it here" ;;
             *) echo "could not reach the dataset; MERIT_FETCH=0 builds the memory here instead"; exit 1 ;;
         esac
     fi
+    if [ "$ARM" != "$MEM" ]; then   # an answer arm never writes the memory: that is the memory arm's build (and its key)
+        [ -s "$KEYS" ] && return 0
+        echo "no finished $MEM memory of $V here or in the dataset: build it first (run_merit.sh build $V $MEM)"; exit 1
+    fi
     [ -s "$PREP/captions/$V/${V}_30sec_skeleton.json" ] || prep
-    "$PY" "$M/epic/caption_clips_qwen.py" --model "$MODEL" --skeleton "$PREP/captions/$V/${V}_30sec_skeleton.json" --output "$CAP"
+    local api=; case $MODEL in gpt-*) api=1 ;; esac
+    "$PY" "$M/epic/caption_clips_qwen.py" --model "$MODEL" --skeleton "$PREP/captions/$V/${V}_30sec_skeleton.json" --output "$CAP" \
+        ${api:+--concurrency "${MERIT_API_CONCURRENCY:-8}"}
     # extract_keys resumes only the clips already in its own output: redo it if that output covers fewer
     # clips than the (now complete) captions, e.g. after an interrupted build
-    local keys=$OUT/${V}_30sec_4_key.json
+    local keys=$KEYS
     if [ -s "$keys" ] && ! "$PY" -c "import json,sys; sys.exit(len(json.load(open(sys.argv[1]))) != len(json.load(open(sys.argv[2]))))" "$CAP" "$keys"; then
         mv "$keys" "$keys.partial"; rm -rf "$WORK/cache/${ARM}_$V"     # its embeddings were built from the old keys
     fi
-    "$PY" "$R/preprocess/extract_keys.py" --input-file "$CAP" --model "$MODEL" --concurrency 1   # resumes; no-op when done
+    if [ -n "$api" ]; then   # the same script, started through epic/openai_usage.py, which counts its calls
+        "$PY" "$M/epic/openai_usage.py" keys --input-file "$CAP" --model "$MODEL" --concurrency "${MERIT_API_CONCURRENCY:-8}"
+    else
+        "$PY" "$R/preprocess/extract_keys.py" --input-file "$CAP" --model "$MODEL" --concurrency 1   # resumes; no-op when done
+    fi
     "$PY" -c "import json,sys; k=json.load(open(sys.argv[1])); sys.exit(not k or any(not x.get('event_key') for x in k))" "$keys" \
         || { echo "keys for $V are missing or incomplete: $keys"; exit 1; }
     record build $((SECONDS - t))
@@ -146,20 +206,38 @@ json.dump(convert_questions(bank, v, end_s), open(tmp, "w"), indent=2)
 os.replace(tmp, out)
 EOF
 }
+memory_ref() {   # an answer arm's folder names the memory its answers were made from, by file hashes
+    [ "$ARM" != "$MEM" ] || return 0
+    local ref=$OUT/${V}_memory_ref.json new
+    new=$("$PY" -c 'import hashlib, json, os, sys
+print(json.dumps({"memory_arm": sys.argv[1], "sha256": {os.path.basename(f): hashlib.sha256(open(f, "rb").read()).hexdigest()
+                                                         for f in sys.argv[2:]}}, sort_keys=True))' "$MEM" "$CAP" "$KEYS")
+    if [ -f "$ref" ] && [ "$(cat "$ref")" != "$new" ]; then
+        echo "the $MEM memory of $V changed: removing this arm's answers made from the old one"
+        rm -rf "$WORK/cache/${ARM}_$V" "$WORK/runs/$ARM/$V"; rm -f "$OUT"/answers_*.json.gz
+    fi
+    echo "$new" > "$ref"
+}
 qa() {
     log "qa $BANK$SUF"; local t=$SECONDS runs=$WORK/runs/$ARM/$V/$BANK$SUF sel
-    [ -s "$OUT/${V}_30sec_4_key.json" ] || build
+    [ -s "$KEYS" ] || build
+    memory_ref
     qa_file; mkdir -p "$runs"
+    # a gpt-* reasoning model: MERIT's evaluation started through epic/openai_usage.py, which counts its calls
+    local merit=(bash "$R/script/eval_egolife.sh")
+    case $RESPOND in gpt-*) merit=("$PY" "$M/epic/openai_usage.py" eval --num-threads "${MERIT_API_THREADS:-4}") ;; esac
     local n; n=$("$PY" -c "import json,sys; print(len(json.load(open(sys.argv[1]))))" "$QA")
     # Question IDs are the bank's keys, and an answer is reused only for an unchanged question (collect_answers.py),
     # so the answers file of an earlier tranche (or the dataset's) is a source like any run, and so are the video's
     # answers under its other banks (same arm, memory and variant): a question they answered is not asked again.
-    # Pass "full" answers every question (MERIT resumes it from its temp file if interrupted); later passes, each under a new name so
-    # no earlier answers are overwritten, answer only the IDs with no valid answer yet: new or edited questions,
+    # Pass "full" answers every question (MERIT resumes it from its temp file if interrupted); later passes, each
+    # under a new name so no earlier answers are overwritten, answer only the IDs with no valid answer yet: new or edited questions,
     # or ones MERIT failed on (it writes "Error"). Nothing runs when all are answered.
-    local ans=$OUT/answers_$BANK$SUF.json.gz earlier
-    earlier=$("$PY" "$M/../common/hf_results.py" earlier-answers --arm "$ARM" --video "$V" --dir "$OUT" --epic "$EPIC" \
-        --suffix="$SUF" | grep -vxF "$ans" || true)
+    # An answer arm's folder holds its memory as {video}_memory_ref.json (memory_ref), the memory arm's the files.
+    local ans=$OUT/answers_$BANK$SUF.json.gz earlier mem=("{video}_30sec.json" "{video}_30sec_4_key.json")
+    [ "$ARM" = "$MEM" ] || mem=("{video}_memory_ref.json")
+    earlier=$("$PY" "$M/../common/hf_results.py" earlier-answers --memory "${mem[@]}" --arm "$ARM" --video "$V" --dir "$OUT" \
+        --epic "$EPIC" --suffix="$SUF" | grep -vxF "$ans" || true)
     collect() { "$PY" "$M/epic/collect_answers.py" --qa_file "$QA" --runs "$runs/*/*_final.json" --prev "$ans" $earlier --out "$ans" | tail -1; }
     for k in 1 2 3; do
         if [ -s "$ans" ] || [ -n "$earlier" ] || ls "$runs"/*/*_final.json >/dev/null 2>&1; then
@@ -169,10 +247,10 @@ qa() {
         else
             sel=(--start-num 1 --end-num "$n"); name=${ARM}_${V}_${BANK}${SUF}_full
         fi
-        bash "$R/script/eval_egolife.sh" --subject "$V" --data-dir "$PREP" --video-root "$WORK/clips_448" \
-            --exp-name "$name" --respond-model "$MODEL" --top-k 5 --max-rounds 5 \
+        "${merit[@]}" --subject "$V" --data-dir "$PREP" --video-root "$WORK/clips_448" \
+            --exp-name "$name" --respond-model "$RESPOND" --top-k "$TOPK" --max-rounds 5 \
             --image-max-tokens 512 --num-workers 1 --gpu-ids "$GPU_IDS" --gpus-per-worker "$NGPU" \
-            --key event object summary --cache-dir "$WORK/cache/${ARM}_$V" --caption-dir "$OUT" --qa-file "$QA" \
+            --key event object summary --cache-dir "$WORK/cache/${ARM}_$V" --caption-dir "$MOUT" --qa-file "$QA" \
             "${sel[@]}" --output-dir "$runs" --log-dir "$WORK/logs" 2>&1 | tee "$WORK/logs/$name.log" \
             || echo "pass $name exited with an error; the next pass resumes or retries"
     done
@@ -193,13 +271,23 @@ blind() {
 
 upload() {   # only a finished memory: a half-built folder would overwrite a good one in the dataset
     log upload
-    [ -s "$CAP" ] && [ -s "$OUT/${V}_30sec_4_key.json" ] || { echo "no finished memory in $OUT: run build first"; exit 1; }
+    if [ "$ARM" != "$MEM" ]; then   # an answer arm: its answers, and the reference to the memory they were made from
+        # (a changed reference mirrors the folder, so answers made from an older memory leave the dataset too)
+        [ -s "$OUT/${V}_memory_ref.json" ] || { echo "no answers in $OUT: run qa first"; exit 1; }
+        "$PY" "$M/../common/hf_results.py" upload --arm "$ARM" --video "$V" --dir "$OUT" --memory '{video}_memory_ref.json'
+        return 0
+    fi
+    [ -s "$CAP" ] && [ -s "$KEYS" ] || { echo "no finished memory in $OUT: run build first"; exit 1; }
     "$PY" "$M/../common/hf_results.py" upload --arm "$ARM" --video "$V" --dir "$OUT"
 }
 
 case $STAGE in
     prep) prep ;; build) build ;; qa) qa ;; blind) blind ;; upload) upload ;;
-    all) prep; build; [ -z "$BANK" ] || { qa; blind; } ;;
+    all) case $ARM in
+             g5m) prep; build ;;                                    # the memory only
+             g5m-*) qa ;;                                           # answers only, from the g5m memory
+             *) prep; build; [ -z "$BANK" ] || { qa; blind; } ;;
+         esac ;;
     *) echo "stage must be prep, build, qa, blind, upload or all"; exit 1 ;;
 esac
 echo "=== $V $ARM $STAGE done"
