@@ -26,7 +26,7 @@
 #   HDEPIC_VIDEOS    videos on the host (default $EPIC_MORPH_DIR/data/HD-EPIC/videos), mounted read-only at /videos
 #   HIPPOMM_OUT, HIPPOMM_WORK  optional, paths inside the container (e.g. /repo/baselines/hippomm/work/check)
 #   passed through when set: HF_TOKEN MERIT_HF_REPO HIPPOMM_TAG HIPPOMM_FETCH HIPPOMM_LIMIT HIPPOMM_VLLM_MEM
-#                    HIPPOMM_VLM_URL
+#                    HIPPOMM_VLM_URL HIPPOMM_VLLM_WAIT
 set -euo pipefail
 ARM=${3:?usage: run.sh <stage> <video> <arm> [bank]}
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
@@ -57,7 +57,7 @@ if [ -n "${MERIT_WORK:-}" ]; then   # the shared work folder: HippoMM's own subf
 fi
 # every one of these, the key included, goes in by name: the value stays out of `ps`, files and logs
 PASS=(OPENAI_API_KEY OPENAI_BASE_URL OPENROUTER_API_KEY OPENROUTER_BASE_URL HF_TOKEN MERIT_HF_REPO HIPPOMM_TAG HIPPOMM_FETCH HIPPOMM_LIMIT HIPPOMM_VLLM_MEM HIPPOMM_VLM_URL
-      HIPPOMM_OUT HIPPOMM_WORK)
+      HIPPOMM_VLLM_WAIT HIPPOMM_OUT HIPPOMM_WORK)
 if [ "$RUNTIME" = apptainer ]; then
     case $IMAGE in *.sif) ;; *) IMAGE=docker://$IMAGE ;; esac
     # through APPTAINERENV_* (the environment), not --env: a command line, key included, is visible in `ps`

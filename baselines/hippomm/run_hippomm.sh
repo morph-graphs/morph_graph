@@ -114,12 +114,13 @@ start_vlm() {   # Qwen2.5-VL-7B-Instruct behind an OpenAI-compatible endpoint, a
     "$vpy" -m vllm.entrypoints.openai.api_server --model "$VLM" --served-model-name "$VLM" --host 127.0.0.1 \
         --port "$port" --seed 0 --gpu-memory-utilization "${HIPPOMM_VLLM_MEM:-0.6}" > "$slog" 2>&1 &
     SPID=$!
-    for i in $(seq 1 180); do
+    # 15 min by default; HIPPOMM_VLLM_WAIT (seconds) for a slow node: one took over 15 min where another took 4
+    for i in $(seq 1 $(( ${HIPPOMM_VLLM_WAIT:-900} / 5 ))); do
         curl -sf "http://127.0.0.1:$port/v1/models" >/dev/null && break
         kill -0 $SPID 2>/dev/null || { echo "vLLM died:"; tail -30 "$slog"; exit 1; }
         sleep 5
     done
-    curl -sf "http://127.0.0.1:$port/v1/models" >/dev/null || { echo "vLLM not up after 15 min"; tail -30 "$slog"; exit 1; }
+    curl -sf "http://127.0.0.1:$port/v1/models" >/dev/null || { echo "vLLM not up after ${HIPPOMM_VLLM_WAIT:-900} s (HIPPOMM_VLLM_WAIT)"; tail -30 "$slog"; exit 1; }
     echo "vLLM up after $((i * 5)) s on port $port, log $slog"
     export HIPPOMM_VLM_URL=http://127.0.0.1:$port/v1
     export VLLM_VERSION=$("$vpy" -c "import vllm; print(vllm.__version__)" 2>/dev/null | tail -1)
