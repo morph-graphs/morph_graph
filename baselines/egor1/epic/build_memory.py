@@ -85,7 +85,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--memory_files", action="store_true")
     ap.add_argument("--video")
-    ap.add_argument("--arm", default="gemini25pro", help="the arm, for the model of the captions (apis.ARMS)")
+    ap.add_argument("--arm", choices=list(apis.ARMS), help="the arm, for the model of the captions (required to build)")
     ap.add_argument("--clips", help="<clip_root>/<video> (prepare_clips.py)")
     ap.add_argument("--out")
     ap.add_argument("--clip_sec", type=int, default=30)
@@ -97,7 +97,7 @@ def main():
     if all(os.path.exists(p) for p in paths.values()):
         print(f"{a.video}: memory already in {a.out}")
         return
-    apis.use_arm(a.arm)
+    apis.use_arm(a.arm)      # stops when --arm is missing
     apis.need("caption", "summary")
     os.makedirs(a.out, exist_ok=True)
     apis.USAGE = os.path.join(a.out, "api_usage.jsonl")

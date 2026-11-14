@@ -96,6 +96,8 @@ PYEOF
 }
 export EPIC ARM
 cd "$REPO"
+# upstream's vlm would send this one Azure deployment whatever model the arm names (its rag does not read it)
+unset AZURE_DEPLOYMENT_NAME
 # keys: a stage that calls no model gets none; one gateway per run for the GPT calls (Azure, then OpenAI's key, win)
 case $STAGE in prep|firstturn|upload) unset GEMINI_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY AZURE_OPENAI_API_KEY ;; esac
 if [ -n "${OPENAI_API_KEY:-}" ] || { [ -n "${AZURE_OPENAI_ENDPOINT:-}" ] && [ -n "${AZURE_OPENAI_API_KEY:-}" ]; }; then

@@ -89,7 +89,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--videos", required=True, help="HD-EPIC videos dir (<P>/<video>.mp4)")
     ap.add_argument("--bank_dir", required=True, nargs="+", help="one or more bank folders (<video>_questions.json)")
-    ap.add_argument("--arm", default="gemini36flash-gpt41", choices=list(apis.ARMS))
+    ap.add_argument("--arm", default="gemini36flash-gpt41", choices=[x for x in apis.ARMS if x != "llava"])
     a = ap.parse_args()
     apis.use_arm(a.arm)
     M = apis.MODELS
