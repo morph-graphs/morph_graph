@@ -11,7 +11,8 @@ tasks, every claim, heartbeats, what the results dataset holds), our own Slurm q
     people.json     the same rows, with a state for the overview cards
     attention.json  current problems only: failures grouped by (site, baseline, model, stage, cause), unreachable
                     machines, stale workers, open decisions
-    progress.json, tranches.json, decisions.json   fixed context (tranche 1 results, banks, decisions)
+    tranches.json   the real units, counted once: videos to build memories for, and each bank's videos and questions
+    progress.json, decisions.json   fixed context (tranche 1 results, decisions)
 
 Readers see sites only: a pool's queue is detail text ("Nexus · vulcan-sailon"), never a row or a column value,
 so renamed pools and several workers on one cluster read as one machine. A task state is decided once, here, and every view counts from it. History kept next to the outputs:
@@ -61,14 +62,9 @@ def place(pool):
 
 VID = re.compile(r"P\d\d-\d{8}-\d{6}")
 
-TRANCHES = [
-    dict(tranche="t1", bank="batch10_agree2", videos=10, questions=598, state="frozen",
-         source="epic-morph tag bank/batch10_agree2 (0f30904)"),
-    dict(tranche="t2", bank="t2_agree2", videos=20, questions=None, state="answers on the board",
-         source="epic-morph v3/tranche2.txt; questions from Max's Stage A + B"),
-    dict(tranche="later", bank="—", videos=126, questions=None, state="building questions",
-         source="Max's Stage A on the remaining videos; memories are built ahead of their questions"),
-]
+# what each bank is; its videos and questions are counted from the banks themselves (board_read.py)
+BANKS = {"batch10_agree2": ("t1", "frozen", "epic-morph tag bank/batch10_agree2 (0f30904)"),
+         "t2_agree2": ("t2", "answers on the board", "epic-morph v3/tranche2.txt; questions from Max's Stage A + B")}
 # tranche 1, run before the board existed (2026-11-12); fixed, not read live
 PROGRESS = [
     dict(experiment="MERIT 8B · answers (with frames)", tranche="t1", done=598, total=598, unit="questions", note=""),
@@ -395,7 +391,16 @@ def update(out, raw, live, nxq, built_src):
     W("people.json", people)
     W("attention.json", att)
     W("progress.json", PROGRESS)
-    W("tranches.json", TRANCHES)
+    # the real units, counted once (not once per method): every video some method builds a memory for, and each bank
+    bq = raw.get("bank_questions") or {}
+    videos = {v for _, _, v in built} | {x["video"] for x in tasks if x["stage"] == "build"}
+    tranches = [dict(kind="videos", tranche="all", bank="—", videos=len(videos), questions=None,
+                     state="videos with a memory for some method, or a build on the board",
+                     source="results dataset and the board's task list")]
+    for bank, per in sorted(bq.items(), key=lambda kv: BANKS.get(kv[0], ("z",))[0]):
+        t_, st, src_ = BANKS.get(bank, ("—", "", "epic-morph outputs/v3/banks"))
+        tranches.append(dict(kind="bank", tranche=t_, bank=bank, videos=len(per), questions=sum(per.values()), state=st, source=src_))
+    W("tranches.json", tranches)
     W("decisions.json", DECISIONS)
     W("ledger.json", ledger)
     return dict(tasks=len(task_rows), running=len(running), attention=len(att))

@@ -97,13 +97,13 @@
   <header style="display:flex;flex-direction:column;gap:6px">
     <div class="jb-eyebrow">EPIC-Morph · job board</div>
     <h1 class="jb-title" id="title">EPIC-Morph Job Board</h1>
-    <p class="jb-lede" id="lede"><b data-draw="l-mem" data-source="mem_total" data-field="n" data-row="0">—</b> of <b data-draw="l-mem-of" data-source="mem_total" data-field="of" data-row="0">—</b> memories built and <b data-draw="l-ans" data-source="ans_total" data-field="n" data-row="0">—</b> of <b data-draw="l-ans-of" data-source="ans_total" data-field="of" data-row="0">—</b> questions answered across every baseline. <span data-draw="l-need" data-source="summary">—</span></p>
+    <p class="jb-lede" id="lede">Memories for <b data-draw="l-videos" data-source="scope" data-field="videos" data-row="0">—</b> videos and answers to <b data-draw="l-questions" data-source="scope" data-field="questions" data-row="0">—</b> questions in <b data-draw="l-banks" data-source="scope" data-field="banks" data-row="0">—</b> banks, for each method; how far each method is, is below. <span data-draw="l-need" data-source="summary">—</span></p>
     <p class="jb-note">Read from the job board, the results dataset, our Nexus and Zaratan queues and the arm00 loop every 15 minutes. Snapshot <span data-draw="snap" data-source="pools">—</span>.</p>
   </header>
 
   <div class="jb-kpis" id="kpis">
-    <div class="jb-kpi"><b data-draw="k-mem" data-source="mem_total" data-field="pct" data-row="0">—</b><span>of all memories built (videos)</span></div>
-    <div class="jb-kpi"><b data-draw="k-ans" data-source="ans_total" data-field="pct" data-row="0">—</b><span>of all questions answered</span></div>
+    <div class="jb-kpi"><b data-draw="k-videos" data-source="scope" data-field="videos" data-row="0">—</b><span>videos (a memory each, per method)</span></div>
+    <div class="jb-kpi"><b data-draw="k-questions" data-source="scope" data-field="questions" data-row="0">—</b><span>questions, in <span data-draw="k-banks" data-source="scope" data-field="banks" data-row="0">—</span> banks (an answer each, per method)</span></div>
     <div class="jb-kpi"><b data-draw="k-running" data-source="summary" data-field="running" data-row="0">—</b><span>tasks running on a GPU</span></div>
     <div class="jb-kpi"><b data-draw="k-queued" data-source="summary" data-field="waiting" data-row="0">—</b><span>tasks queued or claimed, not yet seen running</span></div>
     <div class="jb-kpi" id="kpi-prob"><b data-draw="k-prob" data-source="summary" data-field="failing_tasks" data-row="0">—</b><span>open tasks whose last attempt failed</span></div>
@@ -129,7 +129,7 @@
 
     <h2 id="h-ans">How many questions have an answer?</h2>
     <p class="jb-note">Per question bank, out of all its questions (summed over its videos). A question counts when the answers file in the results dataset has a response for it that is not an error.</p>
-    <div class="jb-prog jb-ph" data-draw="ans" data-source="matrix bank_totals"></div>
+    <div class="jb-prog jb-ph" data-draw="ans" data-source="matrix tranches"></div>
 
     <h2 id="h-who">Who is working right now?</h2>
     <p class="jb-note">Counts are board tasks; "other jobs" are our own Slurm jobs outside the board (smoke tests, ports), listed under Running now.</p>
@@ -189,7 +189,8 @@
   </section>
 
   <section class="jb-sec" id="context" hidden>
-    <h2>Which question banks are there?</h2>
+    <h2>Which videos and question banks are there?</h2>
+    <p class="jb-note">Counted once each, from the board and the banks the master generates: "all" is every video some method builds a memory for.</p>
     <div class="jb-tablewrap">
       <table class="jb-table" data-source="tranches" data-row-key="tranche">
         <thead><tr><th data-field="tranche">Tranche</th><th data-field="bank">Bank</th><th data-field="videos" class="jb-num">Videos</th><th data-field="questions" class="jb-num">Questions</th><th data-field="state">State</th><th data-field="source">Source</th></tr></thead>
@@ -225,27 +226,15 @@ dash.calc('summary', {
     }];
   },
 });
-const totalOf = (rows) => { const n = d3.sum(rows, (r) => +r.n || 0), of = d3.sum(rows, (r) => +r.of || 0); return {n, of, pct: of ? Math.round(1000 * n / of) / 10 : null}; };
-dash.calc('mem_total', {
-  inputs: ['matrix'],
-  title: 'Memories built, all baselines',
-  description: 'Sum over every memory-build row of videos with a memory, and of videos that should have one.',
-  fn: (matrix) => [totalOf(matrix.filter((r) => r.stage === 'memory build'))],
+dash.calc('scope', {
+  inputs: ['tranches'],
+  title: 'Videos and questions, counted once',
+  description: 'Videos that some method builds a memory for, and the questions of every bank, each counted once (not once per method).',
+  fn: (tranches) => {
+    const banks = tranches.filter((t) => t.kind === 'bank'), all = tranches.find((t) => t.kind === 'videos');
+    return [{videos: all ? +all.videos : null, questions: d3.sum(banks, (b) => +b.questions || 0), banks: banks.length}];
+  },
 });
-dash.calc('ans_total', {
-  inputs: ['matrix'],
-  title: 'Questions answered, all baselines and banks',
-  description: 'Sum over every answers row (counted in questions) of questions with a valid answer, and of the banks\' questions.',
-  fn: (matrix) => [totalOf(matrix.filter((r) => r.stage === 'answers' && r.unit === 'questions'))],
-});
-dash.calc('bank_totals', {
-  inputs: ['matrix'],
-  title: 'Questions answered per bank',
-  description: 'Per question bank, summed over every baseline and model answering it.',
-  fn: (matrix) => d3.groups(matrix.filter((r) => r.stage === 'answers' && r.unit === 'questions'), (r) => r.bank)
-    .map(([bank, rows]) => ({bank, systems: rows.length, ...totalOf(rows)})),
-});
-
 window.jb = window.jb || {shown: 50, q: '', state: 'moving', exp: '', pool: ''};
 const fmt = d3.format(',');
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
@@ -288,10 +277,8 @@ dash.draw('snap', (e) => {
   const p = dash.data('pools');
   e.textContent = p.status === 'ok' && p.data[0] ? `${hhmm(p.data[0].snapshot)} UTC (${ago(p.data[0].snapshot)})` : '—';
 });
-for (const [name, id, f] of [['l-mem', 'mem_total', 'n'], ['l-mem-of', 'mem_total', 'of'], ['l-ans', 'ans_total', 'n'], ['l-ans-of', 'ans_total', 'of']])
-  dash.draw(name, (e) => { const s = one(id); e.textContent = s ? fmt(s[f]) : '—'; });
-for (const [name, id] of [['k-mem', 'mem_total'], ['k-ans', 'ans_total']])
-  dash.draw(name, (e) => { const s = one(id); e.textContent = s ? pct(s.pct) : '—'; });
+for (const [name, f] of [['l-videos', 'videos'], ['l-questions', 'questions'], ['l-banks', 'banks'], ['k-videos', 'videos'], ['k-questions', 'questions'], ['k-banks', 'banks']])
+  dash.draw(name, (e) => { const s = one('scope'); e.textContent = s && s[f] != null ? fmt(s[f]) : '—'; });
 dash.draw('l-need', (e) => {
   const s = one('summary');
   if (!s) { e.textContent = '—'; return; }
@@ -333,12 +320,14 @@ dash.draw('mem', (e) => {
   }
 });
 dash.draw('ans', (e) => {
-  const m = dash.data('matrix'), t = dash.data('bank_totals');
+  const m = dash.data('matrix'), t = dash.data('tranches');
   e.replaceChildren();
-  if (m.status !== 'ok' || !t.data) { e.textContent = '—'; return; }
+  if (m.status !== 'ok' || t.status !== 'ok') { e.textContent = '—'; return; }
   const rows = m.data.filter((r) => r.stage === 'answers');
-  for (const b of t.data) {
-    e.appendChild(progRow(b.bank, `all ${b.systems} systems`, b.n, b.of, 'questions', false, true));
+  for (const b of t.data.filter((x) => x.kind === 'bank')) {
+    const h = el('div', 'jb-prow is-head');   // the bank itself, counted once
+    h.appendChild(el('span', '', b.bank)); h.appendChild(el('span', 'jb-sub', `${b.tranche} · ${fmt(+b.videos)} videos`));
+    h.appendChild(el('span', 'jb-mono', `${fmt(+b.questions)} questions`)); e.appendChild(h);
     for (const x of rows.filter((r) => r.bank === b.bank)) {
       const sub = x.state === 'waiting on builds' ? 'waiting for its memories' : +x.failing ? `${x.failing} videos failed` : +x.running ? `${x.running} videos running` : '';
       e.appendChild(progRow(x.system, sub, x.n, x.of, x.unit, +x.failing > 0));
