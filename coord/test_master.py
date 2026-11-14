@@ -58,6 +58,9 @@ def test_built_from():
     assert have == {("merit", "m8", v), ("magic", "m8", v), ("worldmm", "m8", v), ("m3agent", "m3", v)}
 
 
+urgent = lambda t: (t["baseline"], t["arm"], t["stage"]) in {(b, arm, s) for b, arm, s, *_ in M.URGENT}   # right after the API tasks
+
+
 def test_experiments():
     """Every baseline on the board has build + qa of every bank per arm, qa on the build's pools; arm00 (aarch64)
     runs MERIT only."""
@@ -66,7 +69,7 @@ def test_experiments():
                                            "rescue_agree2", "extra_agree2"]
     for b in ("merit", "magic", "worldmm"):
         for arm in ("m8", "m27"):
-            assert ex[b, arm, "build", None] == M.POOLS[b, arm]
+            assert ex[b, arm, "build", None] == M.POOLS[b, arm] + (M.LEFTOVER_POOLS if b == "magic" else [])   # URGENT
             for bank in M.BANKS:
                 assert ex[b, arm, "qa", bank] == M.POOLS[b, arm]
             assert ("arm00" in M.POOLS[b, arm]) == (b == "merit" and arm == "m27")
@@ -228,7 +231,7 @@ def test_memory_arm(monkeypatch, tmp_path):
     assert f"merit-g5m-g5-qa-batch10_agree2-{v}" not in by and f"merit-g5m-g5-qa-batch10_agree2-{w}" in by
     assert not any(t["bank"] == "t2_agree2" and t["video"] in B10 for t in tasks)
     # order: the API tasks, then the reported arms by video group (a batch10 answer before any tranche-2 build), then the rest
-    kind = [0 if t["baseline"] == "api" else 1 if M.reported(t) else 2 for t in tasks]
+    kind = [0 if t["baseline"] == "api" else 1 if urgent(t) else 2 if M.reported(t) else 3 for t in tasks]
     assert kind == sorted(kind) and [t["priority"] for t in tasks] == list(range(len(tasks)))
     rep = [t for t in tasks if g5m(t)]
     group = [0 if t["video"] in B10 else 1 if t["video"] in T2 else 2 if t["video"] in T3 else 3 if t["video"] in T4
@@ -281,8 +284,8 @@ def test_paid_rows(monkeypatch, tmp_path):
     assert by[f"magic-oss120-build-{v}"]["deps"] == []                             # no MERIT oss120 captions to wait for
     assert by[f"hippomm-q25vl7b-gpt4o-qa-batch10_agree2-{v}"]["deps"] == [f"hippomm-q25vl7b-gpt4o-build-{v}"]
     # order: api, the g5m arms, the paid rows, the local-model arms
-    kind = [0 if t["baseline"] == "api" else 1 if t["arm"].startswith("g5m") else 2 if t in paid else 3 for t in tasks]
-    assert kind == sorted(kind) and set(kind) == {0, 1, 2, 3}
+    kind = [0 if t["baseline"] == "api" else 1 if urgent(t) else 2 if t["arm"].startswith("g5m") else 3 if t in paid else 4 for t in tasks]
+    assert kind == sorted(kind) and set(kind) == {0, 1, 2, 3, 4}
     assert all(by[d]["priority"] < t["priority"] for t in paid for d in t["deps"])
     # a non-empty PILOT withholds every one of them, and --only-pools moves none of them (the keyless HippoMM build either)
     assert all(M.reported(t) for t in paid) and M.GATED == rows | {(b, arm) for b, arm, *_ in M.REPORTED}
@@ -348,9 +351,9 @@ def test_existing_tasks_unchanged(monkeypatch, tmp_path):
     direct = [t for t in M.desired(have, files | {f"direct/qwen3vl-8b-f32/{T2[0]}/answers_t2_agree2.json.gz"}) if t["baseline"] == "direct"]
     assert len(direct) == len(M.DIRECT) * sum(len(v) for v in BANK_VIDEOS.values()) - 1 and not any(t["deps"] or t.get("needs_env") for t in direct)
     assert f"direct-qwen3vl-8b-f32-qa-t2_agree2-{T2[0]}" not in {t["id"] for t in direct}
-    kind = [0 if t["baseline"] == "api" else 1 if t["baseline"] == "direct" else 2 if t["baseline"] == "rekv"
-            else 4 if t["baseline"] == "m3agent" else 3 for t in new]
-    assert kind == sorted(kind) and set(kind) == {0, 1, 2, 3, 4}
+    kind = [0 if t["baseline"] == "api" else 1 if urgent(t) else 2 if t["baseline"] == "direct" else 3 if t["baseline"] == "rekv"
+            else 5 if t["baseline"] == "m3agent" else 4 for t in new]
+    assert kind == sorted(kind) and set(kind) == {0, 1, 2, 3, 4, 5}
     # ReKV: as direct, a task per bank and video, waiting on nothing; M3-Agent: a build per video, and qa waits on it
     by = {t["id"]: t for t in new}
     rekv = [t for t in new if t["baseline"] == "rekv"]
