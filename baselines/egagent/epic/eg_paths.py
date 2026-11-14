@@ -38,10 +38,11 @@ def watch_api(stage, model):
     """Watch every LLM call this process makes through LangChain: count calls and tokens per model id the API
     says answered, and stop the run (exit 4) when that id is not `model` (a provider may route a retired model's
     requests to another one). On exit one line is appended to $EGAGENT_USAGE (run_egagent.sh sums the lines of
-    its stage, $EGAGENT_USAGE_STAGE, into runs.jsonl). A call whose reply names no model is counted under "unreported". output_tokens is what the API
-    billed as output (Gemini's thinking included), cached_tokens and reasoning_tokens the parts of the input and
-    the output it reported as such. A GPT row also has the `endpoint` that was called, and through OpenRouter
-    the `provider` that served it and `cost`, the dollars OpenRouter charged, summed."""
+    its stage, $EGAGENT_USAGE_STAGE, into runs.jsonl). A call whose reply names no model is counted under
+    "unreported". output_tokens is what the API billed as output (Gemini's thinking included), cached_tokens and
+    reasoning_tokens the parts of the input and the output it reported as such. A GPT row also has the
+    `endpoint` that was called, and through OpenRouter the `provider` that served it and `cost`, the dollars
+    OpenRouter charged, summed."""
     from contextvars import ContextVar
     from langchain_core.callbacks import BaseCallbackHandler
     from langchain_core.tracers.context import register_configure_hook

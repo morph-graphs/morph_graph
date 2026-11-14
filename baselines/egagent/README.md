@@ -10,9 +10,15 @@ are paid APIs; the embedder (SigLIP 2) is local.
 
 ## Read first
 
-- **Nothing paid has run yet.** Frames, embeddings and the per-question tables have run on a real video; the
-  captions, graph, answer and blind stages have only run against fake APIs (`epic/stub_check.py`). The first
-  real video will show what the method costs and whether the models' replies parse.
+- **Only the memory has run for real.** One video's memory was built on 2026-11-14 (P05-20240425-201444,
+  27 min, GPT-4.1 through OpenRouter; see Cost for what it took). The answer and blind stages have only run
+  against fake APIs (`epic/stub_check.py`): no agent call has been paid for, so what an answer costs and
+  whether the agent's replies parse is still unknown.
+- **Google refuses `gemini-2.5-pro` on our Gemini API key** (2026-11-14, before the shutdown date): the model
+  is listed, and every `generateContent` call, a text-only one included, returns `404 NOT_FOUND: This model
+  models/gemini-2.5-pro is no longer available to new users`. The `gemini25pro` arm's `qa` failed on every
+  question that way (nothing billed) and was stopped. It needs a key of a project that Google still serves
+  the model to.
 - **Both models are being retired** (the providers' deprecation pages, read 2026-11-13):
   - `gemini-2.5-pro`: shutdown **2026-12-01**; from then Google routes requests for it to `gemini-3.8-flash`
     ([Google](https://ai.google.dev/gemini-api/docs/deprecations)). The `gemini25pro` arm refuses to start
@@ -186,6 +192,21 @@ stage. For `batch10_agree2` (5.66 h, 598 questions):
 Frames are nearly all of it: a caption call carries 30 frames and a frame search up to 50. `EGAGENT_FRAME_PX`
 is not the published setting and makes a different memory (give it its own `EGAGENT_WORK` and `EGAGENT_OUT`);
 the default stays the video's own resolution, which is what upstream sends.
+
+**Measured, the memory of one video** (2026-11-14, P05-20240425-201444, 1,630 s, 1408 px frames, GPT-4.1
+through OpenRouter, from its `runs.jsonl`; every reply named `openai/gpt-4.1` and the provider OpenAI):
+
+| step | calls | input tokens | output tokens | charged |
+|---|---|---|---|---|
+| captions | 55 | 1,251,295 (22,751 a call: 30 frames of 765) | 34,793 (633 a call) | $2.78 |
+| graph extraction + time stamps | 12 | 98,421 | 36,098 (3,008 a call) | $0.49 |
+| the memory | 67 | 1,349,716 | 70,891 | **$3.27** |
+
+That is $7.21 per video-hour, 13% above the estimate's $6.36 (the replies are about twice as long as
+assumed; the frames, most of the cost, are as computed), so `batch10_agree2`'s ten memories come to about $41,
+not $36. OpenRouter charged the list price (tokens x $2 / $8 per million gives the same $3.27; no cached
+input). The stage took 611 s on an A5000 (about 4 min of embedding with the model's load, 3.5 min of
+captions, 2.7 min of graph), 9.3 GB of GPU memory at most and 6.0 GB of host RAM; the frames before it, 184 s.
 
 ## What comes back (in the Hugging Face dataset)
 
