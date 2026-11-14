@@ -96,10 +96,11 @@ def earlier_answers(path, a):
     try:   # optional: without the dataset, only the questions it alone answered are asked again
         there = {os.path.basename(i.path) for i in HfApi().list_repo_tree(REPO, path_in_repo=path, repo_type="dataset")}
         remote = [n for n in names if n in there]
-        if remote and same_memory(path, a.video, a.dir):
+        mpath = f"{a.baseline}/{a.memory_arm}/{a.video}" if a.memory_arm else path
+        if remote and same_memory(mpath, a.video, a.memory_dir or a.dir):
             out += [hf_hub_download(REPO, f"{path}/{n}", repo_type="dataset") for n in remote]
         elif remote:
-            print(f"{REPO}/{path} holds another memory: its answers are not reused", file=sys.stderr)
+            print(f"{REPO}/{mpath} holds another memory: the answers of {path} are not reused", file=sys.stderr)
     except Exception as e:
         print(f"earlier answers in {REPO}/{path} not read ({type(e).__name__}: {str(e)[:160]})", file=sys.stderr)
     return out
@@ -116,6 +117,9 @@ def main():
     ap.add_argument("--dest", help="download: local root; files land in <dest>/merit/<arm>/<video>/")
     ap.add_argument("--epic", help="earlier-answers: the epic-morph checkout whose v3/export_bank.py BANKS names the banks")
     ap.add_argument("--suffix", default="", help="earlier-answers: the variant suffix of the answers files (_<tag>, or empty)")
+    ap.add_argument("--memory_arm", help="earlier-answers: the arm whose dataset folder holds the memory the answers were "
+                    "made from (default --arm), compared with the one in --memory_dir (default --dir)")
+    ap.add_argument("--memory_dir")
     a = ap.parse_args()
     if a.action == "relay":   # an outbox folder: upload it with the arguments its job's upload was given
         meta = json.load(open(os.path.join(a.dir, ".upload.json")))

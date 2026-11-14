@@ -14,7 +14,11 @@ Hyperparameters are eval/eval_egolife.py's paper defaults (unified graph, chain_
 Writes --answers (.json.gz): one row per question in bank order, keyed by `key`, with the chosen option,
 correctness and MAGIC's retrieval rounds (what was retrieved, with its time stamps). Resumes from it, then from
 --prev (the video's answers under other banks): a row counts as done when it has a valid answer from this VERSION,
-this memory (memory_hash), the same key and question (qhash), gold letter and query time. Exit code 2 when
+this memory (memory_hash), the same key and question (qhash), gold letter and query time, and the same
+`reason_model` and `control_model`. With the reported arms (MAGIC_ROLES=1, roles.py) the retriever is the memory role,
+the search/answer loop the control role (the memory role's model unless MAGIC_CONTROLLER=reason), the final answer and
+the time parser the reason role; rows also carry those two model names, and when the answers live in another folder
+than the memory, memory.json there names the memory they were made from. Exit code 2 when
 some questions are still unanswered (MAGIC returned an error): run it again to retry them.
 
     python run_qa.py --video <V> --bank_file <V>_questions.json --memory <memory dir> --clip_root <clips> \
@@ -35,7 +39,8 @@ sys.path[:0] = [HERE, os.path.join(HERE, "..", "..", "merit", "epic"), os.path.j
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("qa")
 
-from build_memory import SRC, TAG, TEXT_EMB, VIS_EMB, jload, memory_paths, secs   # noqa: E402
+import roles                                                                       # noqa: E402
+from build_memory import SRC, TAG, TEXT_EMB, VIS_EMB, jload, llm, memory_paths, secs   # noqa: E402
 from chains import ensure_chains                                                   # noqa: E402
 from earlier import reuse                                                          # noqa: E402
 from prepare_epic import convert_questions                                         # noqa: E402
@@ -59,10 +64,13 @@ def until(r):
     return int(r["query_time"]["date"][-1] + r["query_time"]["time"].zfill(8))
 
 
-def done_rows(rows, paths, mh):
-    """{key: answer row} reusable from the answer files: this VERSION and memory, the question unchanged."""
-    want = {r["key"]: (VERSION, mh, r["qhash"], r["answer"], until(r)) for r in rows}
-    sig = lambda o: (o.get("version"), o.get("memory_hash"), o.get("qhash"), o.get("answer"), o.get("query_time"))
+def done_rows(rows, paths, mh, reason={}):
+    """{key: answer row} reusable from the answer files: this VERSION, memory and reason / control models (`reason`,
+    empty for the local arms), the question unchanged."""
+    models = ("reason_model", "control_model")
+    want = {r["key"]: (VERSION, mh, r["qhash"], r["answer"], until(r), *(reason.get(k) for k in models)) for r in rows}
+    sig = lambda o: (o.get("version"), o.get("memory_hash"), o.get("qhash"), o.get("answer"), o.get("query_time"),
+                     *(o.get(k) for k in models))
     ids = {r["key"]: r["ID"] for r in rows}
     return {k: {**o, "ID": ids[k]} for k, o in reuse(want, paths, sig).items()}
 
@@ -89,14 +97,21 @@ def main():
     sys.path.insert(0, os.path.join(SRC, "eval"))
     from _common import evaluate_prediction
     from worldmm.embedding import EmbeddingModel
-    from worldmm.llm import LLMModel, PromptTemplateManager
+    import worldmm.memory.memory as wmem
+    from worldmm.llm import PromptTemplateManager
     from worldmm.memory import WorldMemory
 
     V, M = a.video, a.memory
     caps30 = jload(os.path.join(M, f"{V}_30sec.json"))
     rows = questions(a.bank_file, V, secs(caps30[-1]["end_time"]))
     mh = memory_hash(M, V)
-    done = done_rows(rows, [a.answers] + a.prev, mh)   # a question edited under the same key is redone
+    reason = {"reason_model": roles.endpoint("reason")[0], "control_model": roles.endpoint("control")[0]} if roles.ROUTED else {}
+    if roles.ROUTED:
+        wmem._time_extract_llm = llm("reason")   # upstream hard-codes qwen/qwen3.5-flash-02-23 here: the reason role
+        if os.path.dirname(a.answers) != M:      # an answer arm's folder: its "memory" file for upload (a rebuilt
+            with open(os.path.join(os.path.dirname(a.answers), "memory.json"), "w") as f:   # memory replaces the answers)
+                json.dump({"memory": os.environ.get("MAGIC_MEMORY_REPO_PATH", M), "memory_hash": mh}, f)
+    done = done_rows(rows, [a.answers] + a.prev, mh, reason)   # a question edited under the same key is redone
     todo = [r for r in rows if r["key"] not in done]
     log.info(f"{V}: {len(rows)} questions, {len(done)} done, {len(todo)} to answer (memory {mh})")
     os.chdir(a.clip_root)   # the memory's clip paths are relative to it
@@ -114,12 +129,15 @@ def main():
     chain_dirs = ensure_chains(M, V, list(groups), mh) if groups else {}
     emb = EmbeddingModel(text_model_name=TEXT_EMB, vis_model_name=VIS_EMB) if groups else None
     ptm = PromptTemplateManager()
+    # the reported arms split the respond model by call (roles.responder); the loop's prompt is WorldMemory's default
+    respond = lambda: (roles.responder(TAG, ptm.render("memory_reasoning_unified_egolife"), **QWEN_REASONING) if roles.ROUTED
+                       else llm("reason", **QWEN_REASONING))
     for cut, grp in sorted(groups.items()):
         cdir = chain_dirs[cut]
         wm = WorldMemory(
             embedding_model=emb,
-            retriever_llm_model=LLMModel(model_name=TAG),
-            respond_llm_model=LLMModel(model_name=TAG, **QWEN_REASONING),
+            retriever_llm_model=llm("memory"),   # upstream's --retriever-model; the unified graph never calls it
+            respond_llm_model=respond(),
             prompt_template_manager=ptm, max_rounds=5, max_errors=5,
             retrieval_backend="unified_graph", graph_path=os.path.join(M, "graph.pkl"),
             cache_dir=a.cache_dir, chain_mode="facts",
@@ -138,10 +156,13 @@ def main():
 
         def one(r):
             choices = {L: r[f"choice_{L.lower()}"] for L in "ABCD" if r.get(f"choice_{L.lower()}")}
-            t0, res = time.time(), None
+            t0, res, failed = time.time(), None, roles.thread_errors()
             try:
                 res = wm.answer(query=r["question"], choices=choices, until_time=until_t)
                 resp = (res.answer or "").strip() or "Error"
+                if roles.thread_errors() > failed:   # upstream answers on after a failed loop or time-parser call,
+                    log.error(f"{r['key']}: {roles.thread_errors() - failed} LLM calls failed or came back empty")
+                    resp = "Error"                   # from less evidence: redo the question instead
             except Exception as e:
                 log.error(f"{r['key']} (ID {r['ID']}): {type(e).__name__}: {e}")
                 resp = "Error"
@@ -150,7 +171,7 @@ def main():
                     "evaluate": evaluate_prediction(resp, r["answer"], choices),
                     "t_ask": r["meta"]["t_ask"], "query_time": until_t, "cutoff": cut,
                     "num_rounds": res.num_rounds if res else 0, "round_history": res.round_history if res else [],
-                    "seconds": round(time.time() - t0, 1), "version": VERSION, "memory_hash": mh}
+                    "seconds": round(time.time() - t0, 1), "version": VERSION, "memory_hash": mh, **reason}
         with ThreadPoolExecutor(a.parallel) as ex:
             for res in ex.map(one, grp):
                 if res["response"] != "Error":
