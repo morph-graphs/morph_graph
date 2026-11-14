@@ -184,8 +184,18 @@ bash baselines/egor1/run_egor1.sh qa    P05-20240425-201444 gemini36flash batch1
   calls and cost of one question can be read off. Gemini lines have tokens only (Google returns no price).
 - **Checked with real calls** (2026-11-14, in the image, through OpenRouter only): `apis.gpt41`, upstream's
   `call_gpt4` and upstream's `vlm` on a frame of P05-20240425-201444 (793 input tokens, $0.0027) each answered,
-  with `provider` `OpenAI` and a `cost` in the line. No full `build` or `qa` has run yet: Gemini 2.5 Pro is closed to our
-  key (Open decisions).
+  with `provider` `OpenAI` and a `cost` in the line. 
+- **Pilot, arm `gemini36flash`, stopped part-way** (2026-11-14, P05-20240425-201444, 27 min, on our cluster; Anubhav
+  then decided not to run the paid rows on our end, so the run was cancelled and nothing was uploaded):
+  - `build`: 55 captions (2,710 input tokens per 30 s clip, about 90 per second of video; 125 output and 650
+    thinking tokens each) and 5 summaries, 14 min, $0.32 ($0.27 Gemini at list price, $0.05 GPT-4.1).
+  - `qa`: 43 of the 59 questions answered before the stop, $1.39, about $0.032 a question: per question 2.6
+    `rag`, 1.0 `video_llm` (ranges of 60 s at the median, 73 s on average) and 1.7 `vlm` calls, 5.8 turns, 76 s;
+    7.4 GB of GPU memory. Every GPT line has `provider` `OpenAI`, every Gemini line `gemini-3.6-flash`.
+  - At these rates batch10 (598 questions, 5.66 h, 684 clips) would cost about $23: $4 for the memories and $19
+    for the answers. `epic/plan_cost.py` still assumes Gemini 2.5 Pro (its prices, 300 video tokens a second,
+    1,000 thinking tokens a call, one to three `video_llm` calls of 60 to 600 s a question) and has no
+    `gemini36flash` prices yet.
 
 ## What comes back
 
