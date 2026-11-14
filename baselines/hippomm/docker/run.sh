@@ -5,7 +5,8 @@
 # `hf auth login` on the host (the cache, with its token, is mounted).
 #   HIPPOMM_GPU=0 EPIC_MORPH_DIR=<epic-morph checkout> bash baselines/hippomm/docker/run.sh <stage> <video> <arm> [bank]
 #   OPENAI_API_KEY   for qa and blind (gpt-4o, upstream's reasoning model). Export it in the shell: it is handed
-#                    to the container by name, so it never appears on a command line, in a file or in the image
+#                    to the container by name, so it never appears on a command line, in a file or in the image.
+#                    OPENROUTER_API_KEY instead (without OPENAI_API_KEY): the same calls through OpenRouter
 #   HIPPOMM_RUNTIME  docker (default) or apptainer (clusters without Docker: the same image, run with
 #                    `apptainer exec`; the GPU is the one the scheduler gave the job, so HIPPOMM_GPU is not needed)
 #   HIPPOMM_GPU      docker: the GPU index for this job (one GPU with 48 GB)
@@ -41,16 +42,18 @@ mkdir -p "$HF"
 VIDEOS=${HDEPIC_VIDEOS:-$EPIC/data/HD-EPIC/videos}
 [ -d "$VIDEOS" ] || { echo "no videos at $VIDEOS (set HDEPIC_VIDEOS; epic-morph v3/DATA.md)"; exit 1; }
 BINDS=("$REPO:/repo" "$EPIC:/epic-morph" "$HF:/hf" "$(cd -P "$VIDEOS" && pwd):/videos:ro")
-# a folder that is not a git checkout (a synced copy) records an empty commit instead of stopping the run
+# a folder that is not a git checkout (a synced copy) takes the commits the caller names (HIPPOMM_REPO_COMMIT,
+# HIPPOMM_EPIC_COMMIT, HIPPOMM_UPSTREAM_COMMIT), or records an empty commit instead of stopping the run
+rev() { git -C "$1" rev-parse HEAD 2>/dev/null || true; }
 ENVS=(EPIC_MORPH_DIR=/epic-morph HDEPIC_VIDEOS=/videos HF_HOME=/hf HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-0}"
-      HIPPOMM_REPO_COMMIT="$(git -C "$REPO" rev-parse HEAD 2>/dev/null || true)"
-      HIPPOMM_EPIC_COMMIT="$(git -C "$EPIC" rev-parse HEAD 2>/dev/null || true)"
-      HIPPOMM_UPSTREAM_COMMIT="$(git -C "$REPO/baselines/hippomm/HippoMM" rev-parse HEAD 2>/dev/null || true)")
+      HIPPOMM_REPO_COMMIT="${HIPPOMM_REPO_COMMIT:-$(rev "$REPO")}"
+      HIPPOMM_EPIC_COMMIT="${HIPPOMM_EPIC_COMMIT:-$(rev "$EPIC")}"
+      HIPPOMM_UPSTREAM_COMMIT="${HIPPOMM_UPSTREAM_COMMIT:-$(rev "$REPO/baselines/hippomm/HippoMM")}")
 if [ -n "${MERIT_WORK:-}" ]; then   # the shared work folder: HippoMM's own subfolder in it
     umask 002; mkdir -p "$MERIT_WORK"; BINDS+=("$(cd -P "$MERIT_WORK" && pwd):/work"); export HIPPOMM_WORK=${HIPPOMM_WORK:-/work/hippomm}
 fi
 # every one of these, the key included, goes in by name: the value stays out of `ps`, files and logs
-PASS=(OPENAI_API_KEY HF_TOKEN MERIT_HF_REPO HIPPOMM_TAG HIPPOMM_FETCH HIPPOMM_LIMIT HIPPOMM_VLLM_MEM HIPPOMM_VLM_URL
+PASS=(OPENAI_API_KEY OPENROUTER_API_KEY OPENROUTER_BASE_URL HF_TOKEN MERIT_HF_REPO HIPPOMM_TAG HIPPOMM_FETCH HIPPOMM_LIMIT HIPPOMM_VLLM_MEM HIPPOMM_VLM_URL
       HIPPOMM_OUT HIPPOMM_WORK)
 if [ "$RUNTIME" = apptainer ]; then
     case $IMAGE in *.sif) ;; *) IMAGE=docker://$IMAGE ;; esac

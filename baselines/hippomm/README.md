@@ -12,7 +12,8 @@ around them), then a reflection step that reconciles the two answers.
 ## Read first
 
 - **This is a paid row.** Answering (`qa`, `blind`) calls `gpt-4o` through the OpenAI API, as upstream does; both
-  stages refuse to start without `OPENAI_API_KEY`. The memory build is free (local models). `count` gives the
+  stages refuse to start without `OPENAI_API_KEY` (or `OPENROUTER_API_KEY`: the same calls through OpenRouter,
+  see "Through OpenRouter"). The memory build is free (local models). `count` gives the
   calls, tokens and cost of a bank before anything is spent, and every paid stage records the model id the API
   returned and its token usage in `runs.jsonl`.
 - **The method runs as released.** Our rule for baselines: run the released code as it is, and change only what
@@ -36,7 +37,7 @@ around them), then a reflection step that reconciles the two answers.
 | reasoning: question type, direct answer, search query, frame selection, final answer, reflection | `gpt-4o` | **OpenAI API (paid)** |
 
 So `prep`, `build` and `count` need no API. `qa` and `blind` call gpt-4o and refuse to start without
-`OPENAI_API_KEY`; `count` says beforehand how many calls and tokens a bank needs.
+`OPENAI_API_KEY` or `OPENROUTER_API_KEY`; `count` says beforehand how many calls and tokens a bank needs.
 
 ## Layout
 
@@ -160,6 +161,32 @@ ImageBind similarity is under 0.4), the final answer over all captions, and both
 list goes out three times. Prompt templates are counted as fixed sizes; the caption tokens are counted with
 tiktoken from the real memory.
 
+### Through OpenRouter (our own runs)
+
+With `OPENROUTER_API_KEY` in the environment and `OPENAI_API_KEY` not, `qa` and `blind` send the same gpt-4o
+calls through OpenRouter, so the row can be answered where there is no OpenAI account. Nothing else is set;
+`epic/run_qa.py` (`meter`) does the switch, and `OPENAI_API_KEY`, when set, wins and goes to OpenAI as before.
+
+```bash
+export OPENROUTER_API_KEY=...      # typed into the shell (or read -s): never an argument, a file, a log or a commit
+unset OPENAI_API_KEY GOOGLE_API_KEY GEMINI_API_KEY       # no other provider's key in the job
+bash baselines/hippomm/docker/run.sh qa P05-20240425-201444 q25vl7b-gpt4o batch10_agree2
+```
+
+- **What changes in the request.** The endpoint (`https://openrouter.ai/api/v1`; `OPENROUTER_BASE_URL` overrides
+  it), the key, the model id (`openai/gpt-4o`) and one added field,
+  `provider: {"only": ["openai"], "allow_fallbacks": false}`: OpenRouter also lists Azure for this model, and with
+  the pin OpenAI answers or the call fails. Prompts, `temperature=0` and `response_format` are what upstream
+  sends to OpenAI. Upstream's own token counting (its 120k-token context cap) still uses `gpt-4o`'s tokenizer.
+- **What may still differ from the direct API.** `openai/gpt-4o` is OpenRouter's alias: the snapshot behind it is
+  not ours to pin (upstream pins none either: it asks for `gpt-4o`); the id each reply names is recorded. The
+  price per token is OpenAI's ($2.50 in, $1.25 cached in, $10 out per million; OpenRouter's listing, read
+  2026-11-14); OpenRouter adds its fee when credits are bought, not per call.
+- **What is recorded.** The stage's `api` entry in `runs.jsonl` has `requested` (`openai/gpt-4o`), `endpoint`,
+  the model ids returned, calls, input / cached / output tokens, and through OpenRouter `providers` (who served
+  the calls) and `cost` (dollars charged, summed); each answer row has the same for its question. The results
+  folder stays `hippomm/q25vl7b-gpt4o/<video>/`: the same model answers either way.
+
 ## What comes back
 
 Per video, in `results/q25vl7b-gpt4o/<video>/` (the dataset's `hippomm/q25vl7b-gpt4o/<video>/` after `upload`):
@@ -174,9 +201,9 @@ Per video, in `results/q25vl7b-gpt4o/<video>/` (the dataset's `hippomm/q25vl7b-g
   answer or the reflection was used, the retrieved time spans, `version` and `memory_hash`;
 - `blind_<bank>.json.gz`: the same rows for the no-memory prompt;
 - `runs.jsonl`: one line per finished stage (commits, the patch's hash, models, vLLM and torch versions, GPU,
-  seconds); for `qa` and `blind` also `api`: the model asked for, the model ids the API returned, the number of
-  calls and questions, and input, output and reasoning tokens as the API reported them. Each answer row has the
-  same counts for its question (`api`).
+  seconds); for `qa` and `blind` also `api`: the model asked for, the endpoint, the model ids the API returned, the
+  number of calls and questions, and input, cached, output and reasoning tokens as the API reported them (through
+  OpenRouter also `providers` and `cost`). Each answer row has the same counts for its question (`api`).
 
 ## Open points
 

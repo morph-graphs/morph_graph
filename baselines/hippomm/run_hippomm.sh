@@ -25,7 +25,8 @@
 #   HIPPOMM_IMAGEBIND  folder holding imagebind_huge.pth (4.5 GB); default <HF_HOME or ~/.cache/huggingface>/imagebind,
 #                    where build and qa download it once
 #   OPENAI_API_KEY   for qa and blind only; read from the environment, never written anywhere. Each of those
-#                    stages records the model id the API returned and its token usage in runs.jsonl
+#                    stages records the model id the API returned and its token usage in runs.jsonl.
+#                    Or OPENROUTER_API_KEY alone: the same calls through OpenRouter (README "Through OpenRouter")
 #   EPIC_MORPH_DIR   an epic-morph checkout (required): the banks, and by default the videos
 #   HDEPIC_VIDEOS    default $EPIC_MORPH_DIR/data/HD-EPIC/videos (<P>/<video>.mp4)
 #   HIPPOMM_WORK     default baselines/hippomm/work: upstream's memory_store (frames, audio), server logs
@@ -84,8 +85,8 @@ row = {"stage": sys.argv[1], "seconds": int(float(sys.argv[2])), "commit": commi
        "hippomm_patch": os.environ.get("PATCH"), "epic_morph_commit": bank, "vlm": os.environ.get("VLM"),
        "vllm": os.environ.get("VLLM_VERSION"), "torch": torch.__version__, "faster_whisper": faster_whisper.__version__,
        "gpus": gpus, "host": platform.node(), "finished": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
-if sys.argv[3] and os.path.exists(sys.argv[3]):   # qa, blind: the model asked for, the model ids the API
-    row["api"] = json.load(open(sys.argv[3]))      # returned, calls and tokens (input, output, reasoning)
+if sys.argv[3] and os.path.exists(sys.argv[3]):   # qa, blind: the model asked for, the endpoint, the model ids the API
+    row["api"] = json.load(open(sys.argv[3]))      # returned, calls and tokens; through OpenRouter also providers and cost
 print(json.dumps(row))
 EOF
 }
@@ -168,7 +169,11 @@ count() {
     bank_file
     "$PY" "$M/epic/run_qa.py" --count --video "$V" --bank_file "$BF" --memory "$OUT" --answers "$OUT/count_$BANK.json"
 }
-need_key() { [ -n "${OPENAI_API_KEY:-}" ] || { echo "$STAGE calls gpt-4o (upstream's reasoning model): set OPENAI_API_KEY in the environment; \`count\` gives the calls and tokens first"; exit 1; }; }
+need_key() {
+    [ -n "${OPENAI_API_KEY:-}${OPENROUTER_API_KEY:-}" ] || { echo "$STAGE calls gpt-4o (upstream's reasoning model): set OPENAI_API_KEY (or OPENROUTER_API_KEY, to go through OpenRouter) in the environment; \`count\` gives the calls and tokens first"; exit 1; }
+    # one gateway per run: OpenAI's key wins, and the stage then has no other provider's key
+    if [ -n "${OPENAI_API_KEY:-}" ]; then unset OPENROUTER_API_KEY; else echo "gpt-4o through OpenRouter (openai/gpt-4o, provider OpenAI only)"; fi
+}
 qa() {
     log "qa $BANK$SUF"; local t=$SECONDS rc=0
     need_key
