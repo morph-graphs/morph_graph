@@ -56,7 +56,7 @@ def test_fitting():
     assert W.fitting(task(arm="m27"), {"a6000": QUEUES["a6000"]}) == []
     shipped = W.load_queues(os.path.join(HERE, "nexus_queues.json"))   # the example file for Nexus users
     assert W.fitting(task(arm="m27"), shipped) == ["h200"]
-    assert len(W.fitting(task(arm="m8"), shipped)) == len(shipped) == 6
+    assert len(W.fitting(task(arm="m8"), shipped)) == len(shipped) - 1 == 5   # the H200 only when idle (fallback)
     assert W.fitting(dict(task(), baseline="api", arm="gpt-5-f1024"), shipped) == []
 
 
@@ -199,6 +199,62 @@ def test_worker_loop(tmp):
     assert claims[1][m8["id"]]["queue"] == "a6000" and claims[2][m8["id"]]["status"] == "running"   # grace cycle
     assert claims[3][m8["id"]]["status"] == "done" and claims[3][m8["id"]]["exit"] == 0
     assert commits[-1]["queues"] == ["a6000", "pair48"]
+
+
+def test_fallback_queue_takes_8b_only_when_idle():
+    """An H200 queue (fits m27, fallback m8) gets an 8B task's copy only while no 27B task is waiting."""
+    q = {"a6000": {"sbatch": "x", "fits": ["m8"]}, "h200": {"sbatch": "y", "fits": ["m27"], "fallback": ["m8"]}}
+    t8 = {"baseline": "merit", "arm": "m8"}
+    t27 = {"baseline": "merit", "arm": "m27"}
+    assert W.fitting(t8, q) == ["a6000"]                      # a 27B task is waiting: the H200 is not idle
+    assert W.fitting(t8, q, idle={"h200"}) == ["a6000", "h200"]
+    assert W.fitting(t27, q) == ["h200"] and W.fitting(t27, q, idle={"h200"}) == ["h200"]
+    shipped = W.load_queues(os.path.join(os.path.dirname(os.path.abspath(__file__)), "nexus_queues.json"))
+    assert "h200" not in W.fitting(t8, shipped) and "h200" in W.fitting(t8, shipped, idle={"h200"})
+
+
+def run_one_cycle(tmp, queues, tasks, slots):
+    """worker.main for one claim cycle against a fake board and fake slurm; returns {task id: [queues it got copies on]}."""
+    env = fake_slurm(tmp)
+    os.environ.update(FAKE=env["FAKE"], PATH=env["PATH"])
+    qf = f"{tmp}/queues.json"
+    open(qf, "w").write(json.dumps(queues))
+
+    class Stop(Exception):
+        pass
+
+    def sleep(_):
+        raise Stop
+    saved = (W.jobs.read, W.jobs.commit, W.time.sleep, sys.argv)
+    W.jobs.read, W.jobs.commit, W.time.sleep = (lambda: ("h", tasks, {})), (lambda *_: True), sleep
+    sys.argv = ["worker.py", "--pool", "p", "--launcher", "slurm", "--queues", qf, "--slots", *slots, "--state", f"{tmp}/state"]
+    try:
+        W.main()
+    except Stop:
+        pass
+    finally:
+        W.jobs.read, W.jobs.commit, W.time.sleep, sys.argv = saved
+    out = {}
+    for t in tasks:
+        f = f"{tmp}/state/{t['id']}.jobs"
+        out[t["id"]] = [l.split()[1] for l in open(f) if l.strip()] if os.path.exists(f) else []
+    return out
+
+
+def test_fallback_in_the_loop(tmp):
+    """27B tasks are claimed first even when 8B ones rank higher; with 27B work claimed the H200 gets no 8B copy; with
+    none, at most fallback_max (1) 8B task per cycle gets an H200 copy."""
+    q = {"a6000": {"sbatch": "--partition=a", "fits": ["m8"]},
+         "h200": {"sbatch": "--partition=h", "fits": ["m27"], "fallback": ["m8"]}}
+    def t(arm, n, prio):
+        return dict(id=f"merit-{arm}-build-P01-20240101-00000{n}", baseline="merit", arm=arm, stage="build",
+                    video=f"P01-20240101-00000{n}", pools=["p"], priority=prio)
+    got = run_one_cycle(f"{tmp}/a", q, [t("m8", 1, 0), t("m8", 2, 1), t("m27", 3, 2)], ["1", "2"])
+    assert got[t("m27", 3, 2)["id"]] == ["h200"]                      # claimed although it ranks last
+    assert got[t("m8", 1, 0)["id"]] == ["a6000"] and got[t("m8", 2, 1)["id"]] == []   # no 8B copy beside the 27B
+    got = run_one_cycle(f"{tmp}/b", q, [t("m8", 1, 0), t("m8", 2, 1)], ["1", "2"])
+    assert got[t("m8", 1, 0)["id"]] == ["a6000", "h200"]               # the H200 idle: one fallback copy
+    assert got[t("m8", 2, 1)["id"]] == ["a6000"]                       # fallback_max reached
 
 
 if __name__ == "__main__":

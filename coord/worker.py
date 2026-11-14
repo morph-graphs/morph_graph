@@ -96,9 +96,15 @@ def load_queues(path):
     return queues
 
 
-def fitting(task, queues):
-    """The queues whose GPU can run this task: their `fits` names its arm (m8) or baseline/arm (magic/m27)."""
-    return [n for n, q in queues.items() if task["arm"] in q["fits"] or f"{task['baseline']}/{task['arm']}" in q["fits"]]
+def names(task, arms):
+    """Whether a queue's list of arms (m8) or baseline/arms (magic/m27) names this task."""
+    return task["arm"] in arms or f"{task['baseline']}/{task['arm']}" in arms
+
+
+def fitting(task, queues, idle=()):
+    """The queues whose GPU can run this task: their `fits` names it, or their `fallback` names it and the queue is
+    idle (no task its `fits` names is waiting: an H200 takes 8B work only when no 27B task needs it)."""
+    return [n for n, q in queues.items() if names(task, q["fits"]) or (n in idle and names(task, q.get("fallback", [])))]
 
 
 def submit_copies(task, a, queues, state, sbatch="sbatch"):
@@ -117,7 +123,7 @@ def submit_copies(task, a, queues, state, sbatch="sbatch"):
     wrap = (f"bash {REPO_ROOT}/coord/slurm_guard.sh {shlex.quote(p + '.ran')} || exit 0; "
             f"cd {REPO_ROOT} && nvidia-smi -L && ( {inner(task, '', a)} ); echo $? > {p}.rc.tmp && mv {p}.rc.tmp {p}.rc")
     ids = {}
-    for n in fitting(task, queues):
+    for n in fitting(task, queues, idle=queues):   # the caller passes the queues chosen for it (a fallback one included)
         r = subprocess.run([sbatch, "--parsable", f"--job-name=board-{tid}", f"--output={p}.log", "--open-mode=append",
                             *shlex.split(queues[n]["sbatch"]), "--wrap", wrap], capture_output=True, text=True)
         jid = r.stdout.strip().split(";")[0]
@@ -258,8 +264,30 @@ def main():
         held = jobs.taken(pools, t)
         fails = jobs.failures(pools)
         done = {tid for tid, (_, c) in held.items() if c["status"] == "done"}
+        def claimable(task):   # waiting on the board and this worker may take it (queues aside)
+            tid = task["id"]
+            return (valid(task) and tid not in held and fails.get(tid, 0) < 2 and claims.get(tid, {}).get("status") != "failed"
+                    and (a.pool in task.get("pools", []) or "*" in task.get("pools", [])) and task["baseline"] in a.baselines
+                    and all(d in done for d in task.get("deps", [])))
+        # A queue with a fallback (an H200: fits 27B, fallback 8B) takes fallback work only while it is idle: no task its
+        # `fits` names is waiting, none of this worker's own is still active, and fewer than fallback_max (default 1)
+        # of this worker's tasks have a copy on it.
+        by_id = {x["id"]: x for x in tasks}
+        active = [tid for tid, c in claims.items() if c["status"] == "running"]
+        def on_queue(tid, n):   # a copy of the task on queue n still queued or running, or the one that ran it
+            f, r = os.path.join(state, f"{tid}.jobs"), os.path.join(state, f"{tid}.ran")
+            ran = open(r).read().strip() if os.path.exists(r) else None
+            return os.path.exists(f) and any(l.split()[1:] == [n] and (l.split()[0] == ran or queued is None or l.split()[0] in queued)
+                                             for l in open(f) if l.strip())
+        fallback_used = {n: sum(on_queue(tid, n) for tid in active) for n, q in (queues or {}).items() if q.get("fallback")}
+        idle = {n for n in fallback_used
+                if not any(names(x, queues[n]["fits"]) and claimable(x) for x in tasks)
+                and not any(tid in by_id and names(by_id[tid], queues[n]["fits"]) for tid in active)
+                and fallback_used[n] < queues[n].get("fallback_max", 1)}
+        # tasks only the scarce queues fit (27B) first, so cheaper work cannot use up the free slots ahead of them
+        scarce = [q["fits"] for q in (queues or {}).values() if q.get("fallback")]
         start = []
-        for task in sorted(tasks, key=lambda x: x.get("priority", 0)):
+        for task in sorted(tasks, key=lambda x: (not any(names(x, f) for f in scarce), x.get("priority", 0))):
             if not free or (a.max_tasks and claimed_total + len(start) >= a.max_tasks):
                 break
             tid = task["id"]
@@ -270,7 +298,7 @@ def main():
                 continue
             if a.pool not in task.get("pools", []) and "*" not in task.get("pools", []):
                 continue
-            if queues and not fitting(task, queues):   # none of this worker's GPUs can run it (e.g. 27B, no 80 GB queue)
+            if queues and not fitting(task, queues, idle):   # none of this worker's GPUs can run it (e.g. 27B, no 80 GB queue)
                 continue
             if task["baseline"] not in a.baselines:   # this worker has no image (or setup) for it
                 continue
@@ -280,16 +308,23 @@ def main():
             claims[tid] = dict(status="running", host=host, slot=slot,
                                gpu="(scheduler)" if a.launcher == "slurm" else gpu_name(slot), claimed=jobs.iso(),
                                started=jobs.iso(), started_t=t, lease_until=t + jobs.LEASE_S)
-            start.append((task, slot))
+            qs = fitting(task, queues, idle) if queues else []
+            for n in [n for n in qs if n in idle and not names(task, queues[n]["fits"])]:   # a fallback copy used
+                fallback_used[n] += 1
+                if fallback_used[n] >= queues[n].get("fallback_max", 1):
+                    idle.discard(n)
+            for n in [n for n in list(idle) if names(task, queues[n]["fits"])]:   # its own work just got claimed
+                idle.discard(n)
+            start.append((task, slot, qs))
         mine.update(pool=a.pool, host=host, slots=a.slots, launcher=a.launcher, updated=jobs.iso(), queues=sorted(queues or []),
                     running=sum(1 for c in claims.values() if c["status"] == "running"))
         if not jobs.commit({f"pools/{a.pool}.json": mine}, head, f"{a.pool}: {len(start)} claimed"):
             print(f"{jobs.iso()} board moved under us; re-reading", flush=True)
             continue
-        for task, slot in start:   # start only after the claim is committed
+        for task, slot, qs in start:   # start only after the claim is committed
             tid = task["id"]
             if queues:
-                ids = submit_copies(task, a, queues, state)
+                ids = submit_copies(task, a, {n: queues[n] for n in qs}, state)
                 if not ids:   # no queue took it: fails next cycle with sbatch's error as its note
                     open(os.path.join(state, f"{tid}.exit"), "w").write("1")
                 claimed_total += 1
