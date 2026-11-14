@@ -22,7 +22,9 @@ each package has its own README (`epic_eval/`, `event_eval/`).
 | `baselines/vst/` | VST (Video Streaming Thinking, VST-7B) streaming video model on EPIC-Morph: run script, environment, upstream VST as a submodule |
 | `baselines/vgent/` | Vgent graph-RAG baseline on EPIC-Morph, as released (Qwen2.5-VL-7B): run script, environment, upstream Vgent as a submodule |
 | `baselines/egagent/` | EGAgent (entity-graph agent) on EPIC-Morph, as published (paid APIs: GPT-4.1 memory, GPT-4.1 or Gemini 2.5 Pro agent): run script, Docker image, upstream as a submodule + our patch |
+| `baselines/egorag/` | EgoRAG (EgoLife's EgoButler) on EPIC-Morph, as released (EgoGPT captions; GPT-4o and DeepSeek through paid APIs): run script, Docker image, upstream EgoLife as a submodule plus `EgoLife.patch` |
 | `baselines/api/` | closed-source API models (Gemini, GPT) on EPIC-Morph through `epic_eval`: run script, Docker image, converter to the baselines' result layout |
+| `baselines/egor1/` | Ego-R1 agent baseline on EPIC-Morph (local 3B agent; its tools and memory call paid APIs: GPT-4o, GPT-4.1, Gemini 2.5 Pro): run script, Docker image, upstream Ego-R1 as a submodule plus `epic-morph.patch` |
 | `proj_context/` | design docs, notes; `setup/` holds the container definition + pinned versions |
 
 The repo root is the package (`morph_graph.*` imports), except `epic_eval`, which

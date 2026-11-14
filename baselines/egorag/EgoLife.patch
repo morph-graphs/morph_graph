@@ -1,0 +1,113 @@
+diff --git a/EgoRAG/egorag/utils/util.py b/EgoRAG/egorag/utils/util.py
+index 1fe0152..e5f06a8 100644
+--- a/EgoRAG/egorag/utils/util.py
++++ b/EgoRAG/egorag/utils/util.py
+@@ -13,6 +13,26 @@ from azure.core.pipeline.transport import RequestsTransport
+ from openai import OpenAI
+ 
+ 
++def _log_usage(call, response):
++    """EPIC-Morph port: append the model id the API returned and the token usage of one call to the JSON-lines
++    file named by EGORAG_USAGE_LOG (run_egorag.sh sums it into runs.jsonl). Never the prompt, never a key.
++    Takes a client's response object or a response dict; never raises (a logging problem must not make the
++    caller retry a call that was already paid for)."""
++    try:
++        path = os.getenv("EGORAG_USAGE_LOG")
++        if not path:
++            return
++        import json
++        get = (lambda o, k: o.get(k)) if isinstance(response, dict) or hasattr(response, "keys") else (lambda o, k: getattr(o, k, None))
++        usage = get(response, "usage") or {}
++        get_u = (lambda k: usage.get(k)) if hasattr(usage, "get") else (lambda k: getattr(usage, k, None))
++        with open(path, "a") as f:
++            f.write(json.dumps({"t": time.time(), "call": call, "model": get(response, "model"),
++                                "prompt_tokens": get_u("prompt_tokens"), "completion_tokens": get_u("completion_tokens")}) + "\n")
++    except Exception as e:
++        print(f"usage log failed: {e}")
++
++
+ def call_gpt4(
+     prompt: str,
+     system_message: str = "You are an effective first perspective assistant.",
+@@ -60,7 +80,9 @@ def call_gpt4(
+             try:
+                 response = requests.post(azure_endpoint, headers=headers, json=payload)
+                 response.raise_for_status()
+-                return response.json()["choices"][0]["message"]["content"]
++                data = response.json()
++                _log_usage("call_gpt4", data)
++                return data["choices"][0]["message"]["content"]
+             except Exception as e:
+                 print(f"Attempt {attempt + 1} failed. Error: {e}")
+                 if attempt < retries - 1:
+@@ -70,21 +92,24 @@ def call_gpt4(
+                     return "error"
+     # Fall back to standard OpenAI API if OpenAI key is available
+     elif openai_key:
+-        openai.api_key = openai_key
+-        
++        # EPIC-Morph port: the released branch calls openai.ChatCompletion (removed in the openai 1.x this
++        # package pins) with model "gpt-4" and a fixed max_tokens. Same request as the Azure branch above,
++        # through the 1.x client; OPENAI_BASE_URL, when set, is read by the client.
++        client = OpenAI(api_key=openai_key)
+         retries = 5
+         for attempt in range(retries):
+             try:
+-                response = openai.ChatCompletion.create(
+-                    model="gpt-4",
++                response = client.chat.completions.create(
++                    model=os.getenv("EGORAG_GPT_MODEL", "gpt-4o"),
+                     messages=[
+                         {"role": "system", "content": system_message},
+                         {"role": "user", "content": prompt}
+                     ],
+                     temperature=temperature,
+                     top_p=top_p,
+-                    max_tokens=2200
++                    max_tokens=max_tokens
+                 )
++                _log_usage("call_gpt4", response)
+                 return response.choices[0].message.content
+             except Exception as e:
+                 print(f"Attempt {attempt + 1} failed. Error: {e}")
+@@ -140,6 +165,7 @@ def call_deepseek(
+                     model=model_name,
+                     max_tokens=max_tokens,
+                 )
++                _log_usage("call_deepseek", response)
+                 full_response = response["choices"][0]["message"]["content"]
+                 # Only split if the response contains </think> tag
+                 if "</think>" in full_response:
+@@ -155,9 +181,12 @@ def call_deepseek(
+ 
+     # Fall back to standard DeepSeek API if API key is available
+     elif deepseek_api_key:
++        # EPIC-Morph port: the released branch asks for "deepseek-chat" and indexes the response object like
++        # a dict (a TypeError on every call). The model id comes from EGORAG_DEEPSEEK_MODEL (run_egorag.sh
++        # sets it), the base URL from DEEPSEEK_BASE_URL.
+         client = OpenAI(
+             api_key=deepseek_api_key,
+-            base_url="https://api.deepseek.com"
++            base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+         )
+ 
+         max_retries = 3
+@@ -166,7 +195,7 @@ def call_deepseek(
+         while retry_count < max_retries:
+             try:
+                 response = client.chat.completions.create(
+-                    model="deepseek-chat",
++                    model=os.environ["EGORAG_DEEPSEEK_MODEL"],
+                     messages=[
+                         {"role": "system", "content": system_message},
+                         {"role": "user", "content": prompt},
+@@ -174,7 +203,8 @@ def call_deepseek(
+                     max_tokens=max_tokens,
+                     stream=False
+                 )
+-                full_response = response["choices"][0]["message"]["content"]
++                _log_usage("call_deepseek", response)
++                full_response = response.choices[0].message.content
+                 if "</think>" in full_response:
+                     response = full_response.split("</think>")[1]
+                     return response

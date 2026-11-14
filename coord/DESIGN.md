@@ -176,7 +176,7 @@ What a worker needs for qa, beyond what builds need:
 
 Added 2026-11-13. `EXPERIMENTS` lists build + qa (`t2_agree2`) for MERIT, MAGIC-Video and WorldMM, both arms each,
 in that order (the order is the priority). Pools per (baseline, arm) are in `master.POOLS`: every m8 needs one GPU
-of 40 GB or more (the Nexus A6000 pools, wriva, max); every m27 needs an 80 GB GPU (wriva, max, zaratan), and only
+of 40 GB or more (the Nexus A6000 pools, wriva, max, zaratan); every m27 needs an 80 GB GPU (wriva, max, zaratan), and only
 MERIT's m27 also goes to arm00 (the images are x86; MERIT alone has a native aarch64 environment there). MAGIC's
 build depends on MERIT's build of the same video and arm while that is listed, since it reuses MERIT's captions.
 A memory counts as built when its folder has `runs.jsonl` and the baseline's last memory file (`MEMORY_DONE`).
@@ -187,3 +187,88 @@ failures. All baselines' `docker/run.sh` read the worker's settings: `MERIT_GPU`
 worker.py), `MERIT_SIF_DIR` (a folder of `<baseline>_<arm>.sif`), `MERIT_HF_CACHE` (the models) and `MERIT_WORK`
 (the cluster's shared work folder; MAGIC and WorldMM work in its `magic/` and `worldmm/` subfolders). Each
 baseline's own `MAGIC_*` / `WORLDMM_*` variable wins when set.
+
+## One worker per person, many queues
+
+Added 2026-11-13. A person on a Slurm cluster runs one worker, `worker.py --pool <person> --queues <file>`, not one
+per queue. The file lists their queues, each with its sbatch arguments and the arms its GPU fits
+(`coord/nexus_queues.json`: vulcan-sailon A6000, vulcan-high-h200 H200, scavenger A6000 and L40S, cml-scavenger A6000,
+tron QoS high; `m8` everywhere, `m27` on the H200 only). The pool is listed in `master.POOLS` for both arms, and the
+worker claims only the tasks one of its queues fits, so the master needs no per-person GPU knowledge.
+
+Each claimed task is submitted to every queue that fits it at once, all copies under the job name `board-<task id>`.
+The job's first line is `coord/slurm_guard.sh`: the first copy to start creates the marker `<task>.ran` in the
+worker's state folder (noclobber, so two copies starting in the same second cannot both win) and cancels the
+copies still pending; a copy that starts later exits 0 without work, and the winner restarting after a requeue
+keeps the task. The winner writes the task's exit code to `<task>.rc`. The worker keeps the copies' ids in
+`<task>.jobs` and runs one `squeue` per cycle: it cancels copies left over after a winner exists, records the
+queue that ran the task in the claim (`queue`), marks it done or failed from `<task>.rc`, and failed when every copy
+left the queue without an exit code (time limit, OOM, preemption without requeue). This is the house rule "submit
+to two or three queues, the first to start cancels the rest", done per task by the worker.
+
+`--slots` still caps tasks, not copies: 8 slots over 6 fitting queues can hold 48 pending jobs, well inside
+Nexus's 500 per user and partition. A plain `--sbatch` worker (one queue, `sbatch --wait`) works as before.
+
+Starting one on Nexus (`coord/nexus_worker.sbatch` has the details): a morph_graph checkout of main in a worker
+folder on `/fs`, an HF token in a mode-600 file, then
+`sbatch --output=$W/logs/%x-%j.out --export=ALL,POOL=<person>,W=$W,SLOTS=8 $W/mg/coord/nexus_worker.sbatch`.
+
+
+## Arms that call a paid API: `needs_env`, pool `max`, the pilot gate
+
+Added 2026-11-13 with the reported-configuration arms of MERIT and WorldMM (a gpt-5-mini memory per video, `g5m`,
+answered by several reasoning models: `g5m-q8`, `g5m-q27`, `g5m-g5`; each baseline's README).
+
+- `master.NEEDS_ENV` maps (baseline, arm) to the environment variables a worker must have: the `api` configs
+  (`GEMINI_API_KEY` or `OPENAI_API_KEY`), WorldMM's `g5m`, `g5m-q8`, `g5m-g5` and MERIT's `g5m`, `g5m-g5`
+  (`OPENAI_API_KEY`). Every task of such an arm carries `needs_env` and is listed for `KEY_POOLS` (`max`) only,
+  whatever its `EXPERIMENTS` line says; `--only-pools` can narrow that, never widen it. MERIT's `g5m-q8` and
+  `g5m-q27` call nothing at answer time (the memory model is used at build only), so they carry no `needs_env` and
+  go to the GPU pools of `m8` / `m27`. WorldMM's answer arms both need the key: its retriever is gpt-5-mini.
+- A worker leaves a task when any of its `needs_env` variables is unset in the worker's own environment. The key
+  reaches the task through the environment alone (each `docker/run.sh` passes it by name, and only for the arms
+  that call the API); it is never part of a command, and a failed task's note is scrubbed of keys and tokens before
+  it is written to the board.
+- `master.MEMORY_ARM` names the arm whose memory an answer arm reads: its `qa` waits on that arm's `build` while
+  it is listed. An answer arm's folder in the dataset holds its answers and `<video>_memory_ref.json`, never the
+  memory, so only the memory arm's folder can count as built (`MEMORY_DONE`).
+- The `g5m` memories are built for all 156 videos (OpenAI shuts gpt-5 and gpt-5-mini down on 2026-12-11, and a
+  built memory can be reused after that): the videos of `batch10_agree2`, then of `t2_agree2`, then the rest of
+  `build_order.txt`. These tasks come right after the `api` tasks, by video group: batch10's two memories and its
+  answers, then tranche 2's, then the other memories. The local-model tasks keep their order behind them.
+- `master.PILOT` is a gate: while it lists task ids, those are the only tasks of the reported-configuration arms
+  in `tasks.json`; all their other tasks are withheld (`publish --dry-run` prints how many). The `api` tasks and
+  the local-model tasks are not affected. Emptying the list, after the pilot's token usage has been read from its
+  `runs.jsonl`, releases the rest at the next publish.
+- An answer arm's task carries `memory_arm`, so a `--prefetch` worker (#37) downloads the memory arm's folder
+  too. With `--outbox`, MERIT's answer arms hand one folder to the relay like any task; WorldMM's answer arms upload
+  two folders (the memory's and their own) and need a key anyway, so they run on pool `max`, which uploads itself.
+- Another paid-API baseline adds its arms to `NEEDS_ENV` and `MEMORY_ARM` and its lines to `EXPERIMENTS`; the pool
+  restriction, the worker's check and the gate then apply to it as they are (the variable may be any name, e.g.
+  `OPENROUTER_API_KEY`).
+
+## A worker restart (slurm launcher), and the Hub's rate limit
+
+Added 2026-11-13, after a restart recorded three finished and uploaded tasks as failed, and after workers stopped on
+`429 Too Many Requests` (the Hub allows a repository 128 commits an hour).
+
+What was there already: with `--queues` (#36) each job writes its own exit code (`<task>.rc`), so no waiter process
+is involved; `--host` (#37) gives a worker a fixed name in its claims, so a requeued worker finds them again.
+What this adds:
+- A `--launcher slurm` worker looks after every running claim of its pool, whatever host the claim names (a pool
+  has one writer, and the state folder is on a shared filesystem): the claims keep their slots and their leases are
+  renewed, with or without `--host`.
+- With `--sbatch` (one `sbatch --wait` per task) the exit code is written by a waiter process inside the worker's
+  own job, which dies with the worker while the task's job runs on. For a claim with no exit code and no live
+  waiter the worker asks Slurm, with the job id in `<task>.log.submit`: still in `squeue`, it stays running; gone,
+  `sacct -j <id> -X -n -o State,ExitCode` decides (`COMPLETED` with `0:0` is done, or `relay` with `--outbox`;
+  anything else is failed, with the state in the note); if `sacct` has no record yet the worker asks again next
+  cycle (ten times, then failed).
+- A waiter's pid counts only on the machine that started it (`node` in the claim): after a move, a process of the
+  new machine with the same number is not mistaken for it. The docker and local launchers are otherwise unchanged:
+  a worker there looks after the claims of its own `--host` only.
+- Rate limit: a cycle that changes nothing but leases and the heartbeat commits every 10 minutes at most (leases
+  last 30), so an idle or merely waiting worker makes 6 commits an hour instead of one per cycle; every real change
+  (a claim, a finished task, a queue, a wait counter) is still committed at once. When the Hub refuses a read or a
+  commit (429, or the network), the worker waits for `Retry-After`, or 5 minutes (2 for other errors), and goes on;
+  nothing is started from a cycle whose commit failed.
