@@ -6,19 +6,34 @@ planning agent over three tools: frame search (SigLIP 2 embeddings of 1 fps fram
 queried with SQL (people, objects and locations, and timed relations between them, extracted from captions),
 and transcript search. Here it runs on EPIC-Morph's HD-EPIC videos and multiple-choice questions **with the
 models it was published with**: GPT-4.1 builds the memory, and GPT-4.1 or Gemini 2.5 Pro is the agent. Those
-are paid APIs; the embedder (SigLIP 2) is local.
+are paid APIs; the embedder (SigLIP 2) is local. One arm is not the paper's: `gemini36flash` (Gemini 3.6 Flash
+as the agent) stands in for the Gemini 2.5 Pro arm, which Google no longer serves to us (see Read first).
 
 ## Read first
 
-- **Only the memory has run for real.** One video's memory was built on 2026-11-14 (P05-20240425-201444,
-  27 min, GPT-4.1 through OpenRouter; see Cost for what it took). The answer and blind stages have only run
-  against fake APIs (`epic/stub_check.py`): no agent call has been paid for, so what an answer costs and
-  whether the agent's replies parse is still unknown.
+- **What has run for real** (2026-11-14): the memory of all ten `batch10_agree2` videos (GPT-4.1 through
+  OpenRouter, in the dataset under `egagent/gpt41/`), and the stand-in arm `gemini36flash` on the 59 questions
+  of P05-20240425-201444; see Cost for what both took. The paper's two agents (GPT-4.1, Gemini 2.5 Pro) have
+  only run against fake APIs (`epic/stub_check.py`): no agent call of theirs has been paid for.
 - **Google refuses `gemini-2.5-pro` on our Gemini API key** (2026-11-14, before the shutdown date): the model
   is listed, and every `generateContent` call, a text-only one included, returns `404 NOT_FOUND: This model
   models/gemini-2.5-pro is no longer available to new users`. The `gemini25pro` arm's `qa` failed on every
-  question that way (nothing billed) and was stopped. It needs a key of a project that Google still serves
-  the model to.
+  question that way (nothing billed) and was stopped; the collaborators' gateway does not have the model
+  either. The arm's code stays as it is: it documents the published setting, and runs for anyone Google
+  still serves the model to.
+- **`gemini36flash` stands in for it** (Gemini 3.6 Flash as the agent, on the same `gpt41` memory). Anubhav's
+  choice of stand-in (2026-11-14) was Gemini 3.5 Flash; Google routes `gemini-3.5-flash` requests to
+  `gemini-3.6-flash` (its deprecations page says so, and a call on our key answered with `modelVersion`
+  `gemini-3.6-flash`), so the arm asks for, and is named for, the model that answers. Everything else about
+  the agent is upstream's Gemini 2.5 Pro path: prompts, tools, 1408 px frames, at most 5 plan steps,
+  temperature 0. Two things had to follow the model's name, both in `epic_morph.patch`:
+  - upstream tests `agent_backbone == 'gemini-2.5-pro'` in three places (the client, and the Gemini variant of
+    the frame-search query schema); they now match any Gemini backbone;
+  - the pinned `langchain-google-genai` (2.1.12) forces the function call of a structured output only for
+    models named `gemini-1.5-*` or `gemini-2*`. Left free, 3.6 Flash answered some structured requests in
+    text and the parser returned nothing: 4 of the first 5 questions failed (`'NoneType' object has no
+    attribute 'sql_queries'` / `'mcq_prediction'`). Every Gemini backbone now gets the forced call that
+    2.5 Pro gets; with it the 59 pilot questions parsed.
 - **Both models are being retired** (the providers' deprecation pages, read 2026-11-13):
   - `gemini-2.5-pro`: shutdown **2026-12-01**; from then Google routes requests for it to `gemini-3.8-flash`
     ([Google](https://ai.google.dev/gemini-api/docs/deprecations)). The `gemini25pro` arm refuses to start
@@ -30,7 +45,7 @@ are paid APIs; the embedder (SigLIP 2) is local.
 - **Cost** (estimate, list prices, `batch10_agree2`: 10 videos, 5.66 h, 598 questions; see Cost): about $36
   for the memory, then $160 to $260 for the `gpt41` arm's answers and $180 to $300 for `gemini25pro`'s.
 - **Keys** come from the environment only: `OPENAI_API_KEY` (the memory for both arms, and the `gpt41`
-  agent) and `GEMINI_API_KEY` (the `gemini25pro` agent). A paid stage runs when its key is set and stops
+  agent) and `GEMINI_API_KEY` (the `gemini25pro` and `gemini36flash` agents). A paid stage runs when its key is set and stops
   with exit 3, nothing spent, when it is not. Never put a key in a file, an argument or a log. With
   `OPENROUTER_API_KEY` and no `OPENAI_API_KEY`, the GPT-4.1 calls go through OpenRouter (see Through
   OpenRouter); Gemini is only ever called through Google's API. Each paid script is started without the
@@ -91,9 +106,10 @@ baselines/egagent/egagent checkout .` takes it off again.
 | entity graph | GPT-4.1 (LangChain `LLMGraphTransformer`, then the time-stamper) | OpenAI API (or through OpenRouter) | 2 per 300 s |
 | agent, arm `gpt41` | GPT-4.1 | OpenAI API (or through OpenRouter) | about 12 per question (planner; per step its tools and a grader; answer); a frame search sends up to 50 frames |
 | agent, arm `gemini25pro` | Gemini 2.5 Pro (the paper's best, 57.5% on EgoLifeQA) | Google API | the same |
+| agent, arm `gemini36flash` | Gemini 3.6 Flash (not the paper's: the stand-in for `gemini25pro`) | Google API | measured: 8.9 per question (see Cost) |
 | text queries for frame search | SigLIP 2 text tower | local GPU or CPU | - |
 
-**One memory per video, shared by both arms**: `build` for the second arm copies the first's (from its results
+**One memory per video, shared by every arm**: `build` for another arm copies the first's (from its results
 folder, or from the dataset). Settings are upstream's: 30 s captions at 1 fps, SigLIP 2 giant, at most 5 plan
 steps, top 50 frames per frame search and at most 50 frames per analysis call, temperature 0, LLM transcript
 search.
@@ -110,6 +126,7 @@ export OPENAI_API_KEY=...        # the memory (both arms) and the gpt41 agent
 export GEMINI_API_KEY=...        # the gemini25pro agent
 bash baselines/egagent/docker/run.sh all    P05-20240425-201444 gpt41 batch10_agree2        # prep, build, qa, blind
 bash baselines/egagent/docker/run.sh all    P05-20240425-201444 gemini25pro batch10_agree2  # reuses the memory
+bash baselines/egagent/docker/run.sh qa     P05-20240425-201444 gemini36flash batch10_agree2  # the stand-in: memory from the dataset, GEMINI_API_KEY, no GPU
 bash baselines/egagent/docker/run.sh upload P05-20240425-201444 gpt41                       # HF_TOKEN or `hf auth login`
 bash baselines/egagent/docker/run.sh upload P05-20240425-201444 gemini25pro
 ```
@@ -203,10 +220,33 @@ through OpenRouter, from its `runs.jsonl`; every reply named `openai/gpt-4.1` an
 | the memory | 67 | 1,349,716 | 70,891 | **$3.27** |
 
 That is $7.21 per video-hour, 13% above the estimate's $6.36 (the replies are about twice as long as
-assumed; the frames, most of the cost, are as computed), so `batch10_agree2`'s ten memories come to about $41,
-not $36. OpenRouter charged the list price (tokens x $2 / $8 per million gives the same $3.27; no cached
+assumed; the frames, most of the cost, are as computed). The other nine memories, built the same day on A4000s
+(9.3 GB of GPU memory at most, as on the A5000), cost $37.18 (763 calls, 15.5M input and 0.77M output tokens,
+$7.04 to $7.31 per video-hour), so `batch10_agree2`'s ten memories cost **$40.45**, not the estimated $36.
+With the frames to cut first, a build took 16 to 20 minutes for a 30-minute video on an A4000 (26 for the 55
+minute one). OpenRouter charged the list price (tokens x $2 / $8 per million gives the same $3.27; no cached
 input). The stage took 611 s on an A5000 (about 4 min of embedding with the model's load, 3.5 min of
 captions, 2.7 min of graph), 9.3 GB of GPU memory at most and 6.0 GB of host RAM; the frames before it, 184 s.
+
+**Measured, the stand-in arm's answers on that video** (`gemini36flash`, 2026-11-14, the 59 questions of
+`batch10_agree2`, Gemini 3.6 Flash through Google's API, from its `runs.jsonl` and answers file; every reply
+named `gemini-3.6-flash`, and the arm made no other API call):
+
+| per question | calls | input tokens | output tokens (thinking in it) | at list price |
+|---|---|---|---|---|
+| mean of the 59 | 8.9 | 111,689 | 7,412 (6,212) | $0.112 |
+| all 59 | 524 | 6,589,637 | 437,322 (366,485) | **$6.58** |
+
+- Per question: 1 plan, 1.9 frame searches (a query-writing call, then an analysis call with 50 frames:
+  55.9k tokens, about 1,120 a frame), 1 graph SQL call, 0.2 transcript calls, 1.9 grader calls, 1 answer. The
+  frame analyses are about 95% of the tokens. Every question parsed at the first attempt.
+- Price: $0.75 / $3.75 per million input / output tokens, Google's list price through 2026-12-31 ($1.50 /
+  $7.50 from 2027-01-01); Google reports no charge per call, so the dollars are tokens x list price (no
+  cached input was reported). At this rate the 598 questions of `batch10_agree2` come to about $67.
+- 48 s a question, one at a time (2,898 s for the 59 with the model loaded twice). No GPU: SigLIP 2's text
+  tower ran on a CPU node (4 CPUs, 4.4 GB of RAM used).
+- The first start of this arm, before the function call was forced (Read first), spent $0.63 on 54 calls and
+  answered 3 of 5 questions in two passes; those rows were set aside and are not in the answers file.
 
 ## What comes back (in the Hugging Face dataset)
 
