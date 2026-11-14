@@ -45,7 +45,7 @@ if [ -n "${MERIT_WORK:-}" ]; then   # the shared work folder: WorldMM's own subf
     umask 002; mkdir -p "$MERIT_WORK"; BINDS+=("$(cd -P "$MERIT_WORK" && pwd):/work"); export WORLDMM_WORK=${WORLDMM_WORK:-/work/worldmm}
 fi
 if [ -n "${WORLDMM_MODEL_DIR:-}" ]; then BINDS+=("$(cd -P "$WORLDMM_MODEL_DIR" && pwd):/models:ro"); ENVS+=(WORLDMM_MODEL_DIR=/models); fi
-PASS=(HF_TOKEN MERIT_HF_REPO WORLDMM_TAG WORLDMM_FETCH WORLDMM_EMB_BATCH WORLDMM_MAX_MEMORY MAX_BATCH THREADS
+PASS=(HF_TOKEN MERIT_HF_REPO MERIT_OUTBOX WORLDMM_TAG WORLDMM_FETCH WORLDMM_EMB_BATCH WORLDMM_MAX_MEMORY MAX_BATCH THREADS
       WORLDMM_OUT WORLDMM_WORK)
 if [ "$RUNTIME" = apptainer ]; then
     case $IMAGE in *.sif) ;; *) IMAGE=docker://$IMAGE ;; esac
