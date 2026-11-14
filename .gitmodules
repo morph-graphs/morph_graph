@@ -22,6 +22,9 @@
 [submodule "baselines/vgent/Vgent"]
 	path = baselines/vgent/Vgent
 	url = https://github.com/xiaoqian-shen/Vgent
+[submodule "baselines/egagent/egagent"]
+	path = baselines/egagent/egagent
+	url = https://github.com/facebookresearch/egagent
 [submodule "baselines/egorag/EgoLife"]
 	path = baselines/egorag/EgoLife
 	url = https://github.com/EvolvingLMMs-Lab/EgoLife
