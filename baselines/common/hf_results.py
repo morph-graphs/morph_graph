@@ -13,6 +13,9 @@ set and variant answered from it.
 - With MERIT_OUTBOX=<name> set, `upload` touches nothing remote: it copies the folder to <checkout>/outbox/<name>/
   with an `.upload.json` (written last: the folder is complete), for machines whose jobs cannot reach the dataset
   (Zaratan); `relay --dir <that folder>` uploads it later from a machine that can, exactly as `upload` would.
+- `earlier-answers` prints the answers files the video and arm already have under any bank (epic-morph BANKS, the
+  same variant --suffix): those in the local folder, then the dataset's when its memory is the local one (compared by
+  hash). qa reuses their rows for unchanged questions, so a question is not answered again under another bank.
 - `download` fetches a whole folder (e.g. the batch10 reference) to <dest>/merit/<arm>/<video>/, so
   MERIT_OUT=<dest>/merit lets run_merit.sh use it. The token comes from HF_TOKEN or the cached `hf auth login`; it needs write access
 for upload. MERIT_HF_REPO picks another dataset.
@@ -21,10 +24,13 @@ for upload. MERIT_HF_REPO picks another dataset.
     python baselines/common/hf_results.py fetch-memory --baseline merit --arm m8 --video <V> --dir <local folder>
     python baselines/common/hf_results.py download     --baseline merit --arm m8 --video <V> --dest <local root>
     python baselines/common/hf_results.py relay        --dir <checkout>/outbox/<name>
+    python baselines/common/hf_results.py earlier-answers --baseline merit --arm m8 --video <V> --dir <local folder> \
+        --epic <epic-morph checkout> --suffix=<_tag or empty>
     --memory '{video}_graph.pkl' '{video}_captions.json'   (another baseline's memory files)
     --memory none                                         (a baseline without a memory: baselines/api)
 """
 import argparse
+import hashlib
 import json
 import os
 import random
@@ -59,15 +65,57 @@ def remote_memory(path, video, dest):
         return False
 
 
+def file_hash(p, git=False):
+    """sha256 of a file, or with git=True its git blob id (what the Hub reports for a file not stored in LFS)."""
+    h = hashlib.sha1(b"blob %d\0" % os.path.getsize(p)) if git else hashlib.sha256()
+    with open(p, "rb") as f:
+        for b in iter(lambda: f.read(1 << 20), b""):
+            h.update(b)
+    return h.hexdigest()
+
+
+def same_memory(path, video, local):
+    """True when the dataset's memory for the video is the one in the folder `local` (by hash, nothing downloaded)."""
+    info = {os.path.basename(i.path): i for i in HfApi().get_paths_info(REPO, [f"{path}/{f}" for f in memory_files(video)],
+                                                                          repo_type="dataset")}
+    for f in memory_files(video):
+        p, i = os.path.join(local, f), info.get(f)
+        if not (i and os.path.isfile(p)):
+            return False
+        if (file_hash(p) != i.lfs.sha256) if i.lfs else (file_hash(p, git=True) != i.blob_id):
+            return False
+    return bool(MEMORY)
+
+
+def earlier_answers(path, a):
+    """Paths of this video and arm's answers files under every bank: local ones, then the dataset's."""
+    sys.path.insert(0, os.path.join(a.epic, "v3"))
+    from export_bank import BANKS
+    names = [f"answers_{b}{a.suffix}.json.gz" for b in BANKS]
+    out = [os.path.join(a.dir, n) for n in names if os.path.isfile(os.path.join(a.dir, n))]
+    try:   # optional: without the dataset, only the questions it alone answered are asked again
+        there = {os.path.basename(i.path) for i in HfApi().list_repo_tree(REPO, path_in_repo=path, repo_type="dataset")}
+        remote = [n for n in names if n in there]
+        if remote and same_memory(path, a.video, a.dir):
+            out += [hf_hub_download(REPO, f"{path}/{n}", repo_type="dataset") for n in remote]
+        elif remote:
+            print(f"{REPO}/{path} holds another memory: its answers are not reused", file=sys.stderr)
+    except Exception as e:
+        print(f"earlier answers in {REPO}/{path} not read ({type(e).__name__}: {str(e)[:160]})", file=sys.stderr)
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("action", choices=["upload", "fetch-memory", "download", "relay"])
+    ap.add_argument("action", choices=["upload", "fetch-memory", "download", "relay", "earlier-answers"])
     ap.add_argument("--baseline", default="merit", help="top-level folder in the dataset (merit, worldmm, ...)")
     ap.add_argument("--memory", nargs="+", help="the memory's file names, with {video}; default MERIT's; `none` for a baseline without one")
     ap.add_argument("--arm")
     ap.add_argument("--video")
     ap.add_argument("--dir", help="upload / fetch-memory: the local results folder of this video and arm; relay: an outbox folder")
     ap.add_argument("--dest", help="download: local root; files land in <dest>/merit/<arm>/<video>/")
+    ap.add_argument("--epic", help="earlier-answers: the epic-morph checkout whose v3/export_bank.py BANKS names the banks")
+    ap.add_argument("--suffix", default="", help="earlier-answers: the variant suffix of the answers files (_<tag>, or empty)")
     a = ap.parse_args()
     if a.action == "relay":   # an outbox folder: upload it with the arguments its job's upload was given
         meta = json.load(open(os.path.join(a.dir, ".upload.json")))
@@ -77,7 +125,9 @@ def main():
     if a.memory:   # "none": a baseline with no memory (API models); its folder is answers + runs.jsonl
         MEMORY[:] = [] if a.memory == ["none"] else a.memory
     path = f"{a.baseline}/{a.arm}/{a.video}"
-    if a.action == "fetch-memory":
+    if a.action == "earlier-answers":
+        print("\n".join(earlier_answers(path, a)))
+    elif a.action == "fetch-memory":
         os.makedirs(a.dir, exist_ok=True)
         with tempfile.TemporaryDirectory() as tmp:
             try:

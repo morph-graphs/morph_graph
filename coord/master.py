@@ -10,8 +10,8 @@ else: claims and leases are the workers' business. A task's `pools` says which p
 of tasks.json is the priority. Reassignment is automatic: a claim whose lease lapsed is free again, and a
 task that failed twice is held back and shown as a failure.
 
-`qa` experiments answer a named epic-morph bank: a task per video that has questions in the bank and no
-answers_<bank>.json.gz in the results dataset, depending on the same video's build task while that is pending.
+`qa` experiments answer a named epic-morph bank (one experiment per bank in BANKS): a task per video that has
+questions in the bank and no answers_<bank>.json.gz in the results dataset, depending on the same video's build task while that is pending.
 The bank is generated afresh each cycle (v3/export_bank.py <bank>, deterministic per commit) in the epic-morph
 checkout EPIC_MORPH_DIR, the master's own (not a worker's, which may be reading its bank files). publish stops
 without EPIC_MORPH_DIR: a tasks.json without the qa tasks would drop them from the board.
@@ -47,14 +47,18 @@ M27 = ["wriva", "zaratan", "max", "vatsal"]
 POOLS = {("merit", "m27"): M27 + ["arm00"], ("merit", "m8"): M8,
          ("magic", "m27"): M27, ("magic", "m8"): M8,
          ("worldmm", "m27"): M27, ("worldmm", "m8"): M8}
-BANK = "t2_agree2"   # tranche 2 (epic-morph v3/tranche2.txt)
+# the banks every baseline and arm answers, in priority order: epic-morph tranches 2 and 3 (v3/tranche2.txt,
+# v3/tranche3.txt), disjoint by video; a video's answers under one bank are reused by another (hf_results.py
+# earlier-answers), so a question is never answered twice
+BANKS = ["t2_agree2", "t3_agree2"]
 # Closed-source API models (baselines/api): no GPU and no memory, one qa task per video and config. They need the
 # provider's key (GEMINI_API_KEY / OPENAI_API_KEY in the worker's environment), which only Max's machine has, so no
 # other pool may take them. Listed first: 30 short tasks that should not wait behind the memory builds.
 API_CONFIGS = ["gemini-3.1-flash-lite-high", "gemini-3.6-flash-high", "gpt-5-f1024"]
 EXPERIMENTS = [("api", c, "qa", ["max"], "batch10_agree2") for c in API_CONFIGS] + [
-    (b, arm, stage, POOLS[b, arm], BANK if stage == "qa" else None)
-    for b in ("merit", "magic", "worldmm") for stage in ("build", "qa") for arm in ("m27", "m8")]
+    (b, arm, stage, POOLS[b, arm], bank)
+    for b in ("merit", "magic", "worldmm") for stage in ("build", "qa") for arm in ("m27", "m8")
+    for bank in (BANKS if stage == "qa" else [None])]
 # the file whose presence in <baseline>/<arm>/<video>/ (next to runs.jsonl) means the memory is built: the last
 # one each baseline writes ({v}: the video)
 MEMORY_DONE = {"merit": "{v}_30sec_4_key.json", "magic": "graph.pkl", "worldmm": "{v}_visual.pkl"}

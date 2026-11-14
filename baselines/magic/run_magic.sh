@@ -170,10 +170,14 @@ qa() {
     log "qa $BANK$SUF"; local t=$SECONDS k rc=0
     have_memory || build
     need_clips; bank_file; start_server   # a memory fetched from the dataset comes without the clips
+    # the video's answers under its other banks (same arm, memory and variant): a question they answered is not asked again
+    local earlier
+    earlier=$("$PY" "$M/../common/hf_results.py" earlier-answers --baseline magic --memory "${MEMORY[@]}" --arm "$ARM" \
+        --video "$V" --dir "$OUT" --epic "$EPIC" --suffix="$SUF" | grep -vxF "$OUT/answers_$BANK$SUF.json.gz" || true)
     # each pass answers what has no valid answer yet (MAGIC errors are retried); nothing runs when all are done
     for k in 1 2 3; do
         rc=0; "$PY" "$M/epic/run_qa.py" --video "$V" --bank_file "$BF" --memory "$OUT" --clip_root "$CLIPS" \
-            --answers "$OUT/answers_$BANK$SUF.json.gz" --cache_dir "$WORK/cache/${ARM}_$V" || rc=$?
+            --answers "$OUT/answers_$BANK$SUF.json.gz" --cache_dir "$WORK/cache/${ARM}_$V" --prev $earlier || rc=$?
         [ $rc = 2 ] || break
     done
     [ $rc = 0 ] || { echo "qa did not finish (exit $rc); rerun the same command to retry"; exit 1; }

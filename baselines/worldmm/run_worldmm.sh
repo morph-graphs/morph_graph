@@ -157,11 +157,15 @@ qa() {
     have_memory || build
     [ -s "$SMALL" ] || prep
     qa_file; start_server
+    # the video's answers under its other banks (same arm, memory and variant): a question they answered is not asked again
+    local earlier
+    earlier=$("$PY" "$M/../common/hf_results.py" earlier-answers --baseline worldmm --memory "${MEMORY[@]}" --arm "$ARM" \
+        --video "$V" --dir "$OUT" --epic "$EPIC" --suffix="$SUF" | grep -vxF "$ans" || true)
     # a question that fails (WorldMM's "Error" / "Unable to generate answer") is retried by the next pass
     for k in 1 2 3; do
         client "$M/epic/eval_epic.py" --video "$V" --qa_file "$QA" --memory_dir "$OUT" --video_file "$SMALL" \
             --model "$MODEL" --rows "$WORK/rows/$ARM/$V/$BANK$SUF.jsonl" --out "$ans" \
-            --cache_dir "$WORK/cache/$ARM/$V/$BANK$SUF" && break || echo "pass $k left questions unanswered"
+            --cache_dir "$WORK/cache/$ARM/$V/$BANK$SUF" --prev $earlier && break || echo "pass $k left questions unanswered"
     done
     [ -s "$ans" ] || { echo "still unanswered after 3 passes (rerun the same command to retry)"; exit 1; }
     record "qa $BANK$SUF" $((SECONDS - t))

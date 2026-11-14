@@ -152,14 +152,17 @@ qa() {
     qa_file; mkdir -p "$runs"
     local n; n=$("$PY" -c "import json,sys; print(len(json.load(open(sys.argv[1]))))" "$QA")
     # Question IDs are the bank's keys, and an answer is reused only for an unchanged question (collect_answers.py),
-    # so the answers file of an earlier tranche (or the dataset's) is a source like any run. Pass "full" answers
-    # every question (MERIT resumes it from its temp file if interrupted); later passes, each under a new name so
+    # so the answers file of an earlier tranche (or the dataset's) is a source like any run, and so are the video's
+    # answers under its other banks (same arm, memory and variant): a question they answered is not asked again.
+    # Pass "full" answers every question (MERIT resumes it from its temp file if interrupted); later passes, each under a new name so
     # no earlier answers are overwritten, answer only the IDs with no valid answer yet: new or edited questions,
     # or ones MERIT failed on (it writes "Error"). Nothing runs when all are answered.
-    local ans=$OUT/answers_$BANK$SUF.json.gz
-    collect() { "$PY" "$M/epic/collect_answers.py" --qa_file "$QA" --runs "$runs/*/*_final.json" --prev "$ans" --out "$ans" | tail -1; }
+    local ans=$OUT/answers_$BANK$SUF.json.gz earlier
+    earlier=$("$PY" "$M/../common/hf_results.py" earlier-answers --arm "$ARM" --video "$V" --dir "$OUT" --epic "$EPIC" \
+        --suffix="$SUF" | grep -vxF "$ans" || true)
+    collect() { "$PY" "$M/epic/collect_answers.py" --qa_file "$QA" --runs "$runs/*/*_final.json" --prev "$ans" $earlier --out "$ans" | tail -1; }
     for k in 1 2 3; do
-        if [ -s "$ans" ] || ls "$runs"/*/*_final.json >/dev/null 2>&1; then
+        if [ -s "$ans" ] || [ -n "$earlier" ] || ls "$runs"/*/*_final.json >/dev/null 2>&1; then
             missing=$(collect)
             [ -z "$missing" ] && break
             sel=(--question-ids $missing); name=${ARM}_${V}_${BANK}${SUF}_fill$(date +%m%d%H%M%S)

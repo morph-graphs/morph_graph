@@ -51,12 +51,15 @@ def test_built_from():
 
 
 def test_experiments():
-    """Every baseline on the board has build + qa per arm, qa on the build's pools; arm00 (aarch64) runs MERIT only."""
-    ex = {(b, arm, stage): (pools, bank) for b, arm, stage, pools, bank in M.EXPERIMENTS}
+    """Every baseline on the board has build + qa of every bank per arm, qa on the build's pools; arm00 (aarch64)
+    runs MERIT only."""
+    ex = {(b, arm, stage, bank): pools for b, arm, stage, pools, bank in M.EXPERIMENTS}
+    assert M.BANKS == ["t2_agree2", "t3_agree2"]
     for b in M.MEMORY_DONE:
         for arm in ("m8", "m27"):
-            assert ex[b, arm, "build"] == (M.POOLS[b, arm], None)
-            assert ex[b, arm, "qa"] == (M.POOLS[b, arm], "t2_agree2")
+            assert ex[b, arm, "build", None] == M.POOLS[b, arm]
+            for bank in M.BANKS:
+                assert ex[b, arm, "qa", bank] == M.POOLS[b, arm]
             assert ("arm00" in M.POOLS[b, arm]) == (b == "merit" and arm == "m27")
 
 

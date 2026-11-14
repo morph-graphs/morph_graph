@@ -18,6 +18,8 @@ the model gets from the question and options alone, the no-memory floor of this 
 Rows go to --rows (jsonl, one per answered question, resumable; a failed question is redone on the next run);
 when every question has a valid answer, --out gets them all in bank order (.gz: gzipped), keyed by the bank's
 question key, with the rounds and the retrieved items' time spans (for evidence-retrieval scoring).
+--prev: the video's answers under other banks (same memory): a question with the same key, wording, options, gold
+letter and query time takes its answer from there instead of being asked again.
 """
 import argparse
 import gzip
@@ -25,9 +27,12 @@ import json
 import os
 import re
 import shutil
+import sys
 import time
 
 import wmm_paths  # noqa: F401  (first)
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "common"))
+from earlier import reuse  # noqa: E402
 from wmm_paths import GRANULARITIES
 from eval import build_choices, evaluate_prediction, extract_choice_letter
 from worldmm.embedding import EmbeddingModel
@@ -84,6 +89,7 @@ def main():
     p.add_argument("--max_rounds", type=int, default=5)
     p.add_argument("--max_errors", type=int, default=5)
     p.add_argument("--blind", action="store_true")
+    p.add_argument("--prev", nargs="*", default=[], help="the video's answers files under other banks (same memory)")
     a = p.parse_args()
     v = a.video
 
@@ -95,6 +101,11 @@ def main():
             r = json.loads(line)
             if (r.get("response") or "").strip() not in FAILED:   # failed questions are redone
                 done[r["ID"]] = r
+    if a.prev and not a.blind:
+        want = {r["key"]: (r["question"], build_choices(r), r["answer"], qtime(r)) for r in rows if r.get("key") and r["ID"] not in done}
+        got = reuse(want, a.prev, lambda o: (o.get("question"), o.get("choices"), o.get("answer"), o.get("query_time")), FAILED)
+        done.update({r["ID"]: {**got[r["key"]], "ID": r["ID"]} for r in rows if r.get("key") in got})
+        print(f"{v}: {len(got)} answers reused from other banks", flush=True)
     todo = [r for r in rows if r["ID"] not in done]
     print(f"{v}: {len(rows)} questions, {len(todo)} to answer{' (blind)' if a.blind else ''}", flush=True)
 
