@@ -165,7 +165,7 @@ would drop them from the board), so set it in the cron's script before this reac
 What a worker needs for qa, beyond what builds need:
 - `EPIC_MORPH_DIR`: an epic-morph checkout at a commit whose `v3/export_bank.py` BANKS has the bank, with the
   bank's B2 files (`outputs/v3/b2/<video>/questions_llm/{bank_checked,verify}.jsonl`). For `t2_agree2`: the 20
-  videos of `v3/tranche2.txt`; for `t3_agree2`: the 68 of `v3/tranche3.txt`. `run_merit.sh qa` generates
+  videos of `v3/tranche2.txt`; for `t3_agree2`: the 68 of `v3/tranche3.txt`; for `t4_agree2`: the 8 of `v3/tranche4.txt`. `run_merit.sh qa` generates
   `outputs/v3/banks/<bank>/` there on first use and reuses it after, so after moving the checkout to a newer commit delete that folder to regenerate it.
 - The video itself (as for build): qa cuts the clips and frames if this machine has not, and MERIT reads them.
 - The memory comes from the results dataset (qa runs build, which fetches it; CPU only, seconds): a token that

@@ -54,11 +54,11 @@ M27 = ["wriva", "zaratan", "max", "pulkit", "nexus", "vatsal"]
 POOLS = {("merit", "m27"): M27 + ["arm00"], ("merit", "m8"): M8,
          ("magic", "m27"): M27, ("magic", "m8"): M8,
          ("worldmm", "m27"): M27, ("worldmm", "m8"): M8}
-# the banks every baseline and arm answers, in priority order: batch10 and epic-morph tranches 2 and 3
-# (v3/batch10.txt, v3/tranche2.txt, v3/tranche3.txt), disjoint by video; a video's answers under one bank are reused by
+# the banks every baseline and arm answers, in priority order: batch10 and epic-morph tranches 2, 3 and 4
+# (v3/batch10.txt, v3/tranche2.txt, v3/tranche3.txt, v3/tranche4.txt), disjoint by video; a video's answers under one bank are reused by
 # another (hf_results.py earlier-answers), so a question is never answered twice. A bank a baseline has already
 # answered (MERIT's batch10) lists nothing: its answers are in the dataset
-BANKS = ["batch10_agree2", "t2_agree2", "t3_agree2"]
+BANKS = ["batch10_agree2", "t2_agree2", "t3_agree2", "t4_agree2"]
 # Closed-source API models (baselines/api): no GPU and no memory, one qa task per video and config. They need the
 # provider's key (GEMINI_API_KEY / OPENAI_API_KEY in the worker's environment), which only Max's machine has, so no
 # other pool may take them. Listed first: 30 short tasks that should not wait behind the memory builds.

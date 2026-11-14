@@ -59,7 +59,7 @@ def test_experiments():
     """Every baseline on the board has build + qa of every bank per arm, qa on the build's pools; arm00 (aarch64)
     runs MERIT only."""
     ex = {(b, arm, stage, bank): pools for b, arm, stage, pools, bank in M.EXPERIMENTS}
-    assert M.BANKS == M.REPORTED_BANKS == ["batch10_agree2", "t2_agree2", "t3_agree2"]
+    assert M.BANKS == M.REPORTED_BANKS == ["batch10_agree2", "t2_agree2", "t3_agree2", "t4_agree2"]
     for b in ("merit", "magic", "worldmm"):
         for arm in ("m8", "m27"):
             assert ex[b, arm, "build", None] == M.POOLS[b, arm]
@@ -110,6 +110,7 @@ def test_relay_claims_hold_but_are_not_done(tmp_path, monkeypatch):
 B10 = ["P05-20240425-201444", "P01-20240101-000010"]                      # stand-ins for the two banks' videos
 T2 = ["P01-20240101-000020", "P01-20240101-000021"]
 T3 = ["P01-20240101-000040"]
+T4 = ["P01-20240101-000050"]
 REST = ["P01-20240101-000030"]
 
 
@@ -117,9 +118,9 @@ def board(monkeypatch, tmp_path, experiments=None):
     """The real EXPERIMENTS (or a given list) over a small world: 2 batch10 videos, 2 tranche-2 videos, 1 tranche-3
     video, 1 other."""
     order = tmp_path / "order.txt"
-    order.write_text("\n".join(REST[:1] + T2 + T3 + REST[1:]) + "\n")   # as build_order.txt: tranches 2, 3 in it, batch10 not
+    order.write_text("\n".join(REST[:1] + T2 + T3 + T4 + REST[1:]) + "\n")   # as build_order.txt: tranches 2, 3, 4 in it, batch10 not
     monkeypatch.setattr(M, "BUILD_ORDER", str(order))
-    monkeypatch.setattr(M, "bank_videos", lambda bank: {"batch10_agree2": B10, "t2_agree2": T2, "t3_agree2": T3}[bank])
+    monkeypatch.setattr(M, "bank_videos", lambda bank: {"batch10_agree2": B10, "t2_agree2": T2, "t3_agree2": T3, "t4_agree2": T4}[bank])
     if experiments is not None:
         monkeypatch.setattr(M, "EXPERIMENTS", experiments)
 
@@ -174,7 +175,7 @@ def test_memory_arm(monkeypatch, tmp_path):
     by = {t["id"]: t for t in tasks}
     for b in ("worldmm", "merit"):
         built = [t["video"] for t in tasks if (t["baseline"], t["arm"], t["stage"]) == (b, "g5m", "build")]
-        assert built == [x for x in B10 + T2 + T3 + REST if (b, "g5m", x) not in have]   # all videos, once, in that order
+        assert built == [x for x in B10 + T2 + T3 + T4 + REST if (b, "g5m", x) not in have]   # all videos, once, in that order
     g5m = lambda t: t["arm"].startswith("g5m")
     assert not any(t["stage"] == "build" and t["arm"] != "g5m" for t in tasks if g5m(t))   # answer arms never build
     assert by[f"worldmm-g5m-g5-qa-batch10_agree2-{v}"]["deps"] == [f"worldmm-g5m-build-{v}"]
@@ -186,7 +187,7 @@ def test_memory_arm(monkeypatch, tmp_path):
     kind = [0 if t["baseline"] == "api" else 1 if M.reported(t) else 2 for t in tasks]
     assert kind == sorted(kind) and [t["priority"] for t in tasks] == list(range(len(tasks)))
     rep = [t for t in tasks if g5m(t)]
-    group = [0 if t["video"] in B10 else 1 if t["video"] in T2 else 2 if t["video"] in T3 else 3 for t in rep]
+    group = [0 if t["video"] in B10 else 1 if t["video"] in T2 else 2 if t["video"] in T3 else 3 if t["video"] in T4 else 4 for t in rep]
     assert group == sorted(group)
     assert all(by[d]["priority"] < t["priority"] for t in tasks for d in t["deps"])
     # a memory folder counts as built with its baseline's last memory file; an answer arm's folder never does
@@ -289,7 +290,7 @@ def test_existing_tasks_unchanged(monkeypatch, tmp_path):
     files = {f"magic/m8/{T2[1]}/answers_t2_agree2.json.gz", f"api/gpt-5-f1024/{B10[0]}/answers_batch10_agree2.json.gz"}
     full = list(M.EXPERIMENTS)
     board(monkeypatch, tmp_path, [e for e in full if e not in M.REPORTED + M.PAID])
-    assert len(M.EXPERIMENTS) == len(full) - len(M.REPORTED) - len(M.PAID) == 27
+    assert len(M.EXPERIMENTS) == len(full) - len(M.REPORTED) - len(M.PAID) == 33   # 6 arms x (build + 4 banks) + 3 api
     old = desired_before(have, files)
     strip = lambda ts: [{k: v for k, v in t.items() if k != "needs_env"} for t in ts]
     new = M.desired(have, files)
