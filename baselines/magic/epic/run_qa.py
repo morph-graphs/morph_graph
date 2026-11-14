@@ -12,16 +12,17 @@ choice, query time ceil(t_ask)), plus the bank's stable `key` and a hash of the 
 Hyperparameters are eval/eval_egolife.py's paper defaults (unified graph, chain_mode=facts).
 
 Writes --answers (.json.gz): one row per question in bank order, keyed by `key`, with the chosen option,
-correctness and MAGIC's retrieval rounds (what was retrieved, with its time stamps). Resumes from it: a row
-counts as done when it has a valid answer from this VERSION, this memory (memory_hash) and the same question
-(qhash). With the reported arms (MAGIC_ROLES=1, roles.py) the retriever is the memory role, the search/answer loop
-the control role (the memory role's model unless MAGIC_CONTROLLER=reason), the final answer and the time parser
-the reason role; rows also carry `reason_model` and `control_model` (other ones redo them), and when the answers
-live in another folder than the memory, memory.json there names the memory they were made from. Exit code 2 when
+correctness and MAGIC's retrieval rounds (what was retrieved, with its time stamps). Resumes from it, then from
+--prev (the video's answers under other banks): a row counts as done when it has a valid answer from this VERSION,
+this memory (memory_hash), the same key and question (qhash), gold letter and query time, and the same
+`reason_model` and `control_model`. With the reported arms (MAGIC_ROLES=1, roles.py) the retriever is the memory role,
+the search/answer loop the control role (the memory role's model unless MAGIC_CONTROLLER=reason), the final answer and
+the time parser the reason role; rows also carry those two model names, and when the answers live in another folder
+than the memory, memory.json there names the memory they were made from. Exit code 2 when
 some questions are still unanswered (MAGIC returned an error): run it again to retry them.
 
     python run_qa.py --video <V> --bank_file <V>_questions.json --memory <memory dir> --clip_root <clips> \
-        --answers answers_<bank>.json.gz --cache_dir <dir>
+        --answers answers_<bank>.json.gz --cache_dir <dir> [--prev <other banks' answers files>]
 """
 import argparse
 import gzip
@@ -34,13 +35,14 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path[:0] = [HERE, os.path.join(HERE, "..", "..", "merit", "epic")]
+sys.path[:0] = [HERE, os.path.join(HERE, "..", "..", "merit", "epic"), os.path.join(HERE, "..", "..", "common")]
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("qa")
 
 import roles                                                                       # noqa: E402
 from build_memory import SRC, TAG, TEXT_EMB, VIS_EMB, jload, llm, memory_paths, secs   # noqa: E402
 from chains import ensure_chains                                                   # noqa: E402
+from earlier import reuse                                                          # noqa: E402
 from prepare_epic import convert_questions                                         # noqa: E402
 
 VERSION = "1"   # bump when a change alters answers (prompts, settings, chain building)
@@ -55,6 +57,22 @@ def questions(bank_file, video, end_s):
         r["key"] = q["key"]
         r["qhash"] = hashlib.sha1(json.dumps([q["q"], q["gemini_mcq"]["options"]]).encode()).hexdigest()[:12]
     return rows
+
+
+def until(r):
+    """The question's query time as MAGIC's index takes it (and its answer rows record it)."""
+    return int(r["query_time"]["date"][-1] + r["query_time"]["time"].zfill(8))
+
+
+def done_rows(rows, paths, mh, reason={}):
+    """{key: answer row} reusable from the answer files: this VERSION, memory and reason / control models (`reason`,
+    empty for the local arms), the question unchanged."""
+    models = ("reason_model", "control_model")
+    want = {r["key"]: (VERSION, mh, r["qhash"], r["answer"], until(r), *(reason.get(k) for k in models)) for r in rows}
+    sig = lambda o: (o.get("version"), o.get("memory_hash"), o.get("qhash"), o.get("answer"), o.get("query_time"),
+                     *(o.get(k) for k in models))
+    ids = {r["key"]: r["ID"] for r in rows}
+    return {k: {**o, "ID": ids[k]} for k, o in reuse(want, paths, sig).items()}
 
 
 def memory_hash(mem, video):
@@ -72,6 +90,7 @@ def main():
     ap.add_argument("--clip_root", required=True)
     ap.add_argument("--answers", required=True)
     ap.add_argument("--cache_dir", required=True, help="WorldMM's per-video index cache (not part of the memory)")
+    ap.add_argument("--prev", nargs="*", default=[], help="the video's answers files under other banks (same memory)")
     ap.add_argument("--parallel", type=int, default=8, help="questions in flight per cutoff group (eval_egolife default 8)")
     a = ap.parse_args()
     a.memory, a.answers, a.cache_dir, a.bank_file = map(os.path.abspath, (a.memory, a.answers, a.cache_dir, a.bank_file))
@@ -92,13 +111,7 @@ def main():
         if os.path.dirname(a.answers) != M:      # an answer arm's folder: its "memory" file for upload (a rebuilt
             with open(os.path.join(os.path.dirname(a.answers), "memory.json"), "w") as f:   # memory replaces the answers)
                 json.dump({"memory": os.environ.get("MAGIC_MEMORY_REPO_PATH", M), "memory_hash": mh}, f)
-    done = {}
-    if os.path.exists(a.answers):
-        old = json.load(gzip.open(a.answers, "rt"))
-        qh = {r["key"]: r["qhash"] for r in rows}   # a question edited under the same key is redone
-        done = {r["key"]: r for r in old if r.get("version") == VERSION and r.get("memory_hash") == mh
-                and r.get("qhash") == qh.get(r["key"]) and (r.get("response") or "").strip() not in ("", "Error")
-                and all(r.get(k) == reason.get(k) for k in ("reason_model", "control_model"))}
+    done = done_rows(rows, [a.answers] + a.prev, mh, reason)   # a question edited under the same key is redone
     todo = [r for r in rows if r["key"] not in done]
     log.info(f"{V}: {len(rows)} questions, {len(done)} done, {len(todo)} to answer (memory {mh})")
     os.chdir(a.clip_root)   # the memory's clip paths are relative to it
@@ -138,14 +151,14 @@ def main():
         wm.load_episodic_captions(caption_files={g: os.path.join(M, f"{V}_{g}.json") for g in ["30sec", "3min", "10min", "1h"]})
         wm.load_semantic_triples(data=jload(os.path.join(M, f"semantic_consolidation_results_{TAG}.json")))
         wm.load_visual_clips(embeddings_path=os.path.join(M, "visual_embeddings.pkl"), clips_data=caps30)
-        until = int(grp[0]["query_time"]["date"][-1] + grp[0]["query_time"]["time"].zfill(8))
-        wm.index(until)     # graph filtered to nodes ending <= ceil(t_ask); shared by the group's questions
+        until_t = until(grp[0])
+        wm.index(until_t)     # graph filtered to nodes ending <= ceil(t_ask); shared by the group's questions
 
         def one(r):
             choices = {L: r[f"choice_{L.lower()}"] for L in "ABCD" if r.get(f"choice_{L.lower()}")}
             t0, res, failed = time.time(), None, roles.thread_errors()
             try:
-                res = wm.answer(query=r["question"], choices=choices, until_time=until)
+                res = wm.answer(query=r["question"], choices=choices, until_time=until_t)
                 resp = (res.answer or "").strip() or "Error"
                 if roles.thread_errors() > failed:   # upstream answers on after a failed loop or time-parser call,
                     log.error(f"{r['key']}: {roles.thread_errors() - failed} LLM calls failed or came back empty")
@@ -156,7 +169,7 @@ def main():
             return {"key": r["key"], "qhash": r["qhash"], "ID": r["ID"], "type": r["type"], "question": r["question"],
                     "choices": choices, "answer": r["answer"], "response": resp,
                     "evaluate": evaluate_prediction(resp, r["answer"], choices),
-                    "t_ask": r["meta"]["t_ask"], "query_time": until, "cutoff": cut,
+                    "t_ask": r["meta"]["t_ask"], "query_time": until_t, "cutoff": cut,
                     "num_rounds": res.num_rounds if res else 0, "round_history": res.round_history if res else [],
                     "seconds": round(time.time() - t0, 1), "version": VERSION, "memory_hash": mh, **reason}
         with ThreadPoolExecutor(a.parallel) as ex:

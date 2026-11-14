@@ -204,6 +204,12 @@ qa() {
     have_memory || build
     [ -s "$SMALL" ] || prep
     memory_ref; backends "$MODEL" "$RESPOND"; export WORLDMM_USAGE_FILE=$WORK/usage/$V/qa_${ARM}_$BANK$SUF.json
+    # the video's answers under its other banks (same arm, memory and variant): a question they answered is not asked
+    # again. An answer arm's folder holds its memory as {video}_memory_ref.json (memory_ref), the memory arm's the files
+    local earlier mem=("${MEMORY[@]}")
+    [ "$MEM" = "$ARM" ] || mem=("{video}_memory_ref.json")
+    earlier=$("$PY" "$M/../common/hf_results.py" earlier-answers --baseline worldmm --memory "${mem[@]}" \
+        --arm "$ARM" --video "$V" --dir "$OUT" --epic "$EPIC" --suffix="$SUF" | grep -vxF "$ans" || true)
     # a question that fails (WorldMM's "Error" / "Unable to generate answer") is retried by the next pass; one that
     # still stops on an assertion inside WorldMM in the last pass is kept as "Error" (wrong, with the error in its
     # row), as WorldMM's eval.py records it, so it does not hold back the video's other answers
@@ -212,7 +218,7 @@ qa() {
         [ "$k" = 3 ] && last=--final_pass
         client "$M/epic/eval_epic.py" --video "$V" --qa_file "$QA" --memory_dir "$MOUT" --video_file "$SMALL" \
             --model "$MODEL" --respond_model "$RESPOND" --rows "$WORK/rows/$ARM/$V/$BANK$SUF.jsonl" --out "$ans" \
-            --cache_dir "$WORK/cache/$ARM/$V/$BANK$SUF" $last && break || echo "pass $k left questions unanswered"
+            --cache_dir "$WORK/cache/$ARM/$V/$BANK$SUF" --prev $earlier $last && break || echo "pass $k left questions unanswered"
     done
     [ -s "$ans" ] || { echo "still unanswered after 3 passes (rerun the same command to retry)"; exit 1; }
     record "qa $BANK$SUF" $((SECONDS - t)); unset WORLDMM_USAGE_FILE

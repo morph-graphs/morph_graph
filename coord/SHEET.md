@@ -10,7 +10,10 @@ Rows 1-9 are a header block: A1 the ownership sentinel, then `status` (`OK`, or 
 last run failed; the table below is then the last good run's), the last run time (UTC and US Eastern), the
 results-dataset revision, the epic-morph commit the banks were generated from, the row count, the
 conventions, and the taxonomy leaf names. Row 10 holds the column names, and the table starts at row 11:
-one row per (baseline, arm, bank, tag) that has an answers file.
+one row per (baseline, arm, bank, tag) that has an answers file, then one row per (baseline, arm, tag) with bank
+`all`: the same columns over the questions of every bank (videos counted as `<bank>/<video>`; an unanswered
+question is wrong there too, so a method that has answered one bank shows `partial`). The banks are those the job
+board answers (`coord/master.py` EXPERIMENTS), so a new bank there needs no change here.
 
 | columns | meaning |
 |---|---|
@@ -41,8 +44,8 @@ context) is a row of its own, tag `blind-<tag>`, not a floor.
 ## Adding a method
 
 Add a line to `METHODS` in `coord/sheet_update.py`: `(baseline, arm): (Method, Memory Model, Reasoning Model,
-N. Frames)`, with the names used in the hand tab. A new bank is a name added to `BANKS` (it must be a bank
-`v3/export_bank.py` knows). Nothing else: rows appear when the dataset holds answers.
+N. Frames)`, with the names used in the hand tab. A new bank comes from the master: once `coord/master.py` lists qa
+for it, its rows and its questions in the `all` rows appear. Nothing else: rows appear when the dataset holds answers.
 
 ## Safety
 

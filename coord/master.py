@@ -10,8 +10,9 @@ else: claims and leases are the workers' business. A task's `pools` says which p
 of tasks.json is the priority. Reassignment is automatic: a claim whose lease lapsed is free again, and a
 task that failed twice is held back and shown as a failure.
 
-`qa` experiments answer a named epic-morph bank: a task per video that has questions in the bank and no
-answers_<bank>.json.gz in the results dataset, depending on the same video's build task while that is pending.
+`qa` experiments answer a named epic-morph bank (one experiment per bank in BANKS): a task per video that has
+questions in the bank and no answers_<bank>.json.gz in the results dataset, depending on the same video's build task
+while that is pending.
 The bank is generated afresh each cycle (v3/export_bank.py <bank>, deterministic per commit) in the epic-morph
 checkout EPIC_MORPH_DIR, the master's own (not a worker's, which may be reading its bank files). publish stops
 without EPIC_MORPH_DIR: a tasks.json without the qa tasks would drop them from the board.
@@ -51,7 +52,11 @@ M27 = ["wriva", "zaratan", "max", "vatsal"]
 POOLS = {("merit", "m27"): M27 + ["arm00"], ("merit", "m8"): M8,
          ("magic", "m27"): M27, ("magic", "m8"): M8,
          ("worldmm", "m27"): M27, ("worldmm", "m8"): M8}
-BANK = "t2_agree2"   # tranche 2 (epic-morph v3/tranche2.txt)
+# the banks every baseline and arm answers, in priority order: batch10 and epic-morph tranches 2 and 3
+# (v3/batch10.txt, v3/tranche2.txt, v3/tranche3.txt), disjoint by video; a video's answers under one bank are reused by
+# another (hf_results.py earlier-answers), so a question is never answered twice. A bank a baseline has already
+# answered (MERIT's batch10) lists nothing: its answers are in the dataset
+BANKS = ["batch10_agree2", "t2_agree2", "t3_agree2"]
 # Closed-source API models (baselines/api): no GPU and no memory, one qa task per video and config. They need the
 # provider's key (GEMINI_API_KEY / OPENAI_API_KEY in the worker's environment), which only Max's machine has, so no
 # other pool may take them. Listed first: 30 short tasks that should not wait behind the memory builds.
@@ -70,9 +75,9 @@ NEEDS_ENV = {("api", c): ["GEMINI_API_KEY" if c.startswith("gemini") else "OPENA
     ("worldmm", "g5m"): ["OPENAI_API_KEY"], ("worldmm", "g5m-q8"): ["OPENAI_API_KEY"], ("worldmm", "g5m-g5"): ["OPENAI_API_KEY"],
     ("merit", "g5m"): ["OPENAI_API_KEY"], ("merit", "g5m-g5"): ["OPENAI_API_KEY"]}
 # OpenAI shuts gpt-5 and gpt-5-mini down on 2026-12-11, and a built memory can be reused afterwards: the g5m memories
-# are built for ALL videos (build_order.txt plus the batch10 videos it lacks), batch10's first, then tranche 2's, then
-# the rest; the answer arms answer both banks.
-REPORTED_BANKS = ["batch10_agree2", "t2_agree2"]
+# are built for ALL videos, as every memory is (desired: build_order.txt plus the batch10 videos it lacks, batch10's
+# first, then each bank's of BANKS in order, then the rest); the answer arms answer every one of these banks.
+REPORTED_BANKS = BANKS
 REPORTED = [("worldmm", "g5m", "build", KEY_POOLS, None), ("merit", "g5m", "build", KEY_POOLS, None)] + [
     (b, arm, "qa", pools, bank) for bank in REPORTED_BANKS for b, arm, pools in (
         ("worldmm", "g5m-q8", KEY_POOLS), ("worldmm", "g5m-g5", KEY_POOLS),
@@ -82,8 +87,9 @@ REPORTED = [("worldmm", "g5m", "build", KEY_POOLS, None), ("merit", "g5m", "buil
 # affected). Empty it (a one-line PR) once the pilot's token usage has been read, and the rest is listed.
 PILOT = ["worldmm-g5m-build-P05-20240425-201444"]
 EXPERIMENTS = [("api", c, "qa", KEY_POOLS, "batch10_agree2") for c in API_CONFIGS] + REPORTED + [
-    (b, arm, stage, POOLS[b, arm], BANK if stage == "qa" else None)
-    for b in ("merit", "magic", "worldmm") for stage in ("build", "qa") for arm in ("m27", "m8")]
+    (b, arm, stage, POOLS[b, arm], bank)
+    for b in ("merit", "magic", "worldmm") for stage in ("build", "qa") for arm in ("m27", "m8")
+    for bank in (BANKS if stage == "qa" else [None])]
 # the file whose presence in <baseline>/<arm>/<video>/ (next to runs.jsonl) means the memory is built: the last
 # one each baseline writes ({v}: the video)
 MEMORY_DONE = {"merit": "{v}_30sec_4_key.json", "magic": "graph.pkl", "worldmm": "{v}_visual.pkl"}
@@ -136,12 +142,13 @@ def reported(t):
 
 def desired(have, files):
     order = [v.strip() for v in open(BUILD_ORDER) if v.strip()]
-    videos, group = [], {}   # reported arms: batch10's videos (group 0), then tranche 2's, then the rest of the build order
-    if any(reported(dict(baseline=b, arm=arm)) for b, arm, *_ in EXPERIMENTS):
-        for g, vs in enumerate([bank_videos(bank) for bank in REPORTED_BANKS] + [order]):
-            for v in vs:
-                if group.setdefault(v, g) == g and v not in videos:
-                    videos.append(v)
+    # every memory is built for all videos: each bank's (batch10's first: build_order.txt lacks them, as MERIT built
+    # them before the board), then the rest of the build order; the reported arms are also ranked by that group
+    videos, group = [], {}
+    for g, vs in enumerate([bank_videos(bank) for bank in REPORTED_BANKS] + [order]):
+        for v in vs:
+            if group.setdefault(v, g) == g and v not in videos:
+                videos.append(v)
     tasks, ids = [], set()
     for b, arm, stage, pools, bank in EXPERIMENTS:
         env = {"needs_env": NEEDS_ENV[b, arm]} if (b, arm) in NEEDS_ENV else {}
@@ -150,7 +157,7 @@ def desired(have, files):
         if mem != arm:   # for the worker: the arm whose dataset folder holds this task's memory (worker.py --prefetch)
             env["memory_arm"] = mem
         if stage == "build":
-            for v in videos if (b, arm) in NEEDS_ENV else order:
+            for v in videos:
                 if (b, arm, v) not in have:
                     base = f"{BUILD_ON.get(b)}-{arm}-build-{v}"
                     tasks.append(dict(id=f"{b}-{arm}-build-{v}", baseline=b, arm=arm, stage="build", video=v, bank=None,

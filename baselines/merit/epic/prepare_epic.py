@@ -103,7 +103,8 @@ def row_qhash(r):
 def match_answers(qa_rows, answers):
     """Attach answer rows (MERIT's or blind_qa's, first valid one wins) to the questions of qa_rows:
     {question ID: answer row}, the row's ID set to the question's and key / qhash / pos added. An answer counts
-    only for the same question text, options and gold letter. It is found by ID; an ID not in qa_rows (a
+    only for the same question text, options and gold letter, and query time when the row records one (an answer
+    file of another bank of the video may ask the same key at another time). It is found by ID; an ID not in qa_rows (a
     positional ID from before keys, or a key since dropped) is found by that content instead: the one question
     asked that way, or among several the one at that position (otherwise it is answered again)."""
     sig = lambda r: (row_qhash(r), r.get("answer"))
@@ -116,12 +117,13 @@ def match_answers(qa_rows, answers):
     for r in answers:
         if (r.get("response") or "").strip() in ("", "Error"):
             continue
+        same_time = lambda q: not r.get("query_time") or r["query_time"] == q.get("query_time")
         q = by_id.get(str(r["ID"]))
         if q:
-            q = q if sig(q) == sig(r) else None
+            q = q if sig(q) == sig(r) and same_time(q) else None
         else:   # by content: the only question asked this way, or the one at that position (never a second one,
             # which a copy of this row already matched elsewhere could otherwise also fill)
-            same = by_sig.get(sig(r), [])
+            same = [q for q in by_sig.get(sig(r), []) if same_time(q)]
             q = next((q for q in same if len(same) == 1 or str(pos[str(q["ID"])]) == str(r["ID"])), None)
         if q and str(q["ID"]) not in got:
             i = str(q["ID"])
