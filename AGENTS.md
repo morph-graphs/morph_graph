@@ -19,6 +19,7 @@ each package has its own README (`epic_eval/`, `event_eval/`).
 | `baselines/magic/` | MAGIC-Video memory baseline on EPIC-Morph: run script, Docker images, MAGIC-video fork as a submodule |
 | `baselines/worldmm/` | WorldMM memory baseline on EPIC-Morph: run script, environments, WorldMM fork as a submodule |
 | `baselines/m3agent/` | M3-Agent memory baseline on EPIC-Morph: run script, Docker image, m3-agent fork as a submodule |
+| `baselines/direct/` | plain video model (no memory) on EPIC-Morph: frames before the ask time through MERIT's loader, prompt and scorer |
 | `baselines/vst/` | VST (Video Streaming Thinking, VST-7B) streaming video model on EPIC-Morph: run script, environment, upstream VST as a submodule |
 | `baselines/hippomm/` | HippoMM (hippocampal multimodal memory) on EPIC-Morph, as released (Qwen2.5-VL-7B, ImageBind, Whisper locally; gpt-4o through the OpenAI API, paid): run script, Docker image, upstream HippoMM as a submodule with `HippoMM.patch` applied at run time |
 | `baselines/vgent/` | Vgent graph-RAG baseline on EPIC-Morph, as released (Qwen2.5-VL-7B): run script, environment, upstream Vgent as a submodule |
@@ -26,6 +27,7 @@ each package has its own README (`epic_eval/`, `event_eval/`).
 | `baselines/egorag/` | EgoRAG (EgoLife's EgoButler) on EPIC-Morph, as released (EgoGPT captions; GPT-4o and DeepSeek through paid APIs): run script, Docker image, upstream EgoLife as a submodule plus `EgoLife.patch` |
 | `baselines/api/` | closed-source API models (Gemini, GPT) on EPIC-Morph through `epic_eval`: run script, Docker image, converter to the baselines' result layout |
 | `baselines/egor1/` | Ego-R1 agent baseline on EPIC-Morph (local 3B agent; its tools and memory call paid APIs: GPT-4o, GPT-4.1, Gemini 2.5 Pro): run script, Docker image, upstream Ego-R1 as a submodule plus `epic-morph.patch` |
+| `baselines/rekv/` | ReKV (in-context video KV-cache retrieval) on EPIC-Morph with Qwen3-VL-8B: run script, Docker image, Vatsal's Qwen3-VL port vendored in `vendor/MemStream` (no submodule) |
 | `proj_context/` | design docs, notes; `setup/` holds the container definition + pinned versions |
 
 The repo root is the package (`morph_graph.*` imports), except `epic_eval`, which

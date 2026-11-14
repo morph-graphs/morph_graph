@@ -253,6 +253,11 @@ baselines/worldmm/work/
 !baselines/worldmm/env/
 baselines/worldmm/results/
 
+# Direct (plain video model) runs: results; frames are MERIT's work folder (baselines/direct/run_direct.sh)
+baselines/direct/work/
+!baselines/direct/env/
+baselines/direct/results/
+
 # VST runs: logs, smoke runs; results (baselines/vst/run_vst.sh)
 baselines/vst/work/
 !baselines/vst/env/
@@ -288,6 +293,11 @@ baselines/egorag/results/
 baselines/egor1/work/
 !baselines/egor1/env/
 baselines/egor1/results/
+
+# ReKV runs: smoke job scripts; results (baselines/rekv/run_rekv.sh)
+baselines/rekv/work/
+!baselines/rekv/env/
+baselines/rekv/results/
 
 # coord/sheet_update.py: its default download cache
 .sheet_cache/

@@ -21,15 +21,20 @@
 #   HDEPIC_VIDEOS   videos on the host (default $EPIC_MORPH_DIR/data/HD-EPIC/videos), mounted read-only at /videos
 #   MAGIC_OUT, MAGIC_WORK  optional, paths inside the container (e.g. /repo/baselines/magic/work/check)
 #   passed through when set: HF_TOKEN MERIT_HF_REPO MAGIC_TAG MAGIC_FETCH TOKEN_BUDGET MAX_BATCH MAGIC_PORT
+#   reported arms (oss120, oss120-flash, oss120-q27; README "Reported configuration"): OPENROUTER_API_KEY, the
+#   MAGIC_{CAPTION,MEMORY,REASON}_{MODEL,BASE_URL,KEY_ENV} settings and the key variables those name, MAGIC_CAPTIONS,
+#   MAGIC_CONTROLLER.
+#   Keys go in through the environment like HF_TOKEN, never on a command line.
 set -euo pipefail
 ARM=${3:?usage: run.sh <stage> <video> <arm> [bank]}
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && pwd)
-IMAGE=${MAGIC_IMAGE:-ghcr.io/morph-graphs/magic:$(bash "$REPO/baselines/magic/docker/image_tag.sh" "$ARM")}
+IMG=$(bash "$REPO/baselines/magic/docker/image_tag.sh" "$ARM"); IMG_ARM=${IMG%%-*}   # the reported arms use m8's or m27's image
+IMAGE=${MAGIC_IMAGE:-ghcr.io/morph-graphs/magic:$IMG}
 RUNTIME=${MAGIC_RUNTIME:-${MERIT_RUNTIME:-docker}}
 SIFS=${MAGIC_SIF_DIR:-${MERIT_SIF_DIR:-}}
-if [ "$RUNTIME" = apptainer ] && [ -z "${MAGIC_IMAGE:-}" ] && [ -n "$SIFS" ] && [ -s "$SIFS/magic_$ARM.sif" ]; then
-    IMAGE=$SIFS/magic_$ARM.sif
+if [ "$RUNTIME" = apptainer ] && [ -z "${MAGIC_IMAGE:-}" ] && [ -n "$SIFS" ] && [ -s "$SIFS/magic_$IMG_ARM.sif" ]; then
+    IMAGE=$SIFS/magic_$IMG_ARM.sif
 fi
 HF=${MAGIC_HF_CACHE:-${MERIT_HF_CACHE:-$HOME/.cache/huggingface}}
 for s in baselines/magic/MAGIC-video/src/worldmm baselines/merit/MERIT/eval; do   # MAGIC uses MERIT's prep and captions
@@ -51,7 +56,12 @@ COMMITS=(MAGIC_REPO_COMMIT="$C_REPO" MAGIC_EPIC_COMMIT="$C_EPIC"
          MAGIC_SUBMODULE_COMMIT="${MAGIC_SUBMODULE_COMMIT:-$(rev "$REPO/baselines/magic/MAGIC-video")}"
          MERIT_REPO_COMMIT="$C_REPO" MERIT_EPIC_COMMIT="$C_EPIC"
          MERIT_SUBMODULE_COMMIT="${MERIT_SUBMODULE_COMMIT:-$(rev "$REPO/baselines/merit/MERIT")}")
-PASS=(HF_TOKEN MERIT_HF_REPO MERIT_OUTBOX MAGIC_TAG MAGIC_FETCH MAGIC_OUT MAGIC_WORK TOKEN_BUDGET MAX_BATCH MAGIC_PORT)
+PASS=(HF_TOKEN MERIT_HF_REPO MERIT_OUTBOX MAGIC_TAG MAGIC_FETCH MAGIC_OUT MAGIC_WORK TOKEN_BUDGET MAX_BATCH MAGIC_PORT
+      OPENROUTER_API_KEY MAGIC_CAPTIONS MAGIC_CONTROLLER)
+for r in CAPTION MEMORY REASON; do   # each role's settings, and the key variable its KEY_ENV names
+    PASS+=(MAGIC_${r}_MODEL MAGIC_${r}_BASE_URL MAGIC_${r}_KEY_ENV); k=MAGIC_${r}_KEY_ENV
+    [ -z "${!k:-}" ] || PASS+=("${!k}")
+done
 if [ "$RUNTIME" = apptainer ]; then
     case $IMAGE in *.sif) ;; *) IMAGE=docker://$IMAGE ;; esac
     # through APPTAINERENV_* (the environment), not --env: a command line, token included, is visible in `ps`.
