@@ -42,7 +42,7 @@ BUILD_ORDER = os.path.join(ROOT, "baselines", "merit", "build_order.txt")
 # vulcan-ampere with QoS vulcan-sailon
 # A person's one worker over several queues (worker.py --queues, e.g. Vatsal's `vatsal` on Nexus) is listed for both
 # arms: the worker itself claims only the tasks one of its queues fits, so without an 80 GB queue it never takes a 27B.
-M8 = ["max", "nexus-tron", "nexus-sailon", "nexus-scavenger", "wriva", "vatsal"]
+M8 = ["max", "nexus-tron", "nexus-sailon", "nexus-scavenger", "wriva", "vatsal", "zaratan"]   # zaratan: H100 jobs
 M27 = ["wriva", "zaratan", "max", "vatsal"]
 POOLS = {("merit", "m27"): M27 + ["arm00"], ("merit", "m8"): M8,
          ("magic", "m27"): M27, ("magic", "m8"): M8,

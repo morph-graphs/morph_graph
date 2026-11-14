@@ -18,6 +18,8 @@
 #                   in the checkout), mounted at /work. One folder per cluster, shared by every worker there, so a
 #                   video is cut once (prep holds a per-video lock) and no checkout fills its owner's quota; files
 #                   are made group-writable (umask 002) so the other workers' users can reuse and reset them
+#   MERIT_OUTBOX    optional, upload: put the results in <checkout>/outbox/<this name>/ for a relay instead
+#                   (baselines/common/hf_results.py; the job board's worker --outbox sets it)
 #   MERIT_OUT       optional, a path inside the container (e.g. /repo/baselines/merit/work/check)
 #   MERIT_CONTEXT   optional, blind only: a context file, as a path inside the container (under /repo or /epic-morph); needs MERIT_TAG
 set -euo pipefail
@@ -46,7 +48,7 @@ if [ "$RUNTIME" = apptainer ]; then
     export APPTAINERENV_EPIC_MORPH_DIR=/epic-morph APPTAINERENV_HDEPIC_VIDEOS=/videos APPTAINERENV_HF_HOME=/hf
     export APPTAINERENV_HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-0} "${COMMITS[@]/#/APPTAINERENV_}"
     [ -n "${WORK:-}" ] && export APPTAINERENV_MERIT_WORK=/work
-    for v in HF_TOKEN MERIT_HF_REPO MERIT_TAG MERIT_NO_FRAMES MERIT_FETCH MERIT_OUT MERIT_CONTEXT CUDA_VISIBLE_DEVICES; do
+    for v in HF_TOKEN MERIT_HF_REPO MERIT_OUTBOX MERIT_TAG MERIT_NO_FRAMES MERIT_FETCH MERIT_OUT MERIT_CONTEXT CUDA_VISIBLE_DEVICES; do
         [ -n "${!v:-}" ] && export "APPTAINERENV_$v=${!v}"
     done
     exec apptainer exec --nv --cleanenv --pwd /repo \
@@ -61,7 +63,7 @@ exec docker run --rm --gpus "\"device=$GPU\"" --shm-size 32g --user "$(id -u):$(
     -v "$REPO:/repo" -v "$EPIC:/epic-morph" -v "$HF:/hf" -v "$(cd -P "$VIDEOS" && pwd):/videos:ro" -w /repo \
     ${WORK:+-v "$WORK:/work" -e MERIT_WORK=/work} \
     -e CUDA_VISIBLE_DEVICES="$SEEN" -e EPIC_MORPH_DIR=/epic-morph -e HDEPIC_VIDEOS=/videos -e HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-0}" \
-    ${HF_TOKEN:+-e HF_TOKEN} ${MERIT_HF_REPO:+-e MERIT_HF_REPO} \
+    ${HF_TOKEN:+-e HF_TOKEN} ${MERIT_HF_REPO:+-e MERIT_HF_REPO} ${MERIT_OUTBOX:+-e MERIT_OUTBOX} \
     ${MERIT_TAG:+-e MERIT_TAG} ${MERIT_NO_FRAMES:+-e MERIT_NO_FRAMES} ${MERIT_FETCH:+-e MERIT_FETCH} \
     -e "${COMMITS[0]}" -e "${COMMITS[1]}" -e "${COMMITS[2]}" \
     ${MERIT_OUT:+-e MERIT_OUT="$MERIT_OUT"} ${MERIT_CONTEXT:+-e MERIT_CONTEXT="$MERIT_CONTEXT"} \

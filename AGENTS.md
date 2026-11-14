@@ -23,6 +23,7 @@ each package has its own README (`epic_eval/`, `event_eval/`).
 | `baselines/hippomm/` | HippoMM (hippocampal multimodal memory) on EPIC-Morph, as released (Qwen2.5-VL-7B, ImageBind, Whisper locally; gpt-4o through the OpenAI API, paid): run script, Docker image, upstream HippoMM as a submodule with `HippoMM.patch` applied at run time |
 | `baselines/vgent/` | Vgent graph-RAG baseline on EPIC-Morph, as released (Qwen2.5-VL-7B): run script, environment, upstream Vgent as a submodule |
 | `baselines/api/` | closed-source API models (Gemini, GPT) on EPIC-Morph through `epic_eval`: run script, Docker image, converter to the baselines' result layout |
+| `baselines/egor1/` | Ego-R1 agent baseline on EPIC-Morph (local 3B agent; its tools and memory call paid APIs: GPT-4o, GPT-4.1, Gemini 2.5 Pro): run script, Docker image, upstream Ego-R1 as a submodule plus `epic-morph.patch` |
 | `proj_context/` | design docs, notes; `setup/` holds the container definition + pinned versions |
 
 The repo root is the package (`morph_graph.*` imports), except `epic_eval`, which

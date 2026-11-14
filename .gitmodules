@@ -25,3 +25,6 @@
 [submodule "baselines/hippomm/HippoMM"]
 	path = baselines/hippomm/HippoMM
 	url = https://github.com/linyueqian/HippoMM
+[submodule "baselines/egor1/Ego-R1"]
+	path = baselines/egor1/Ego-R1
+	url = https://github.com/egolife-ai/Ego-R1
