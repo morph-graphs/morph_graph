@@ -16,9 +16,9 @@ merit:<tag>, the tag from baselines/<b>/docker/image_tag.sh <arm>). Every baseli
 worker's MERIT_GPU, MERIT_RUNTIME, MERIT_SIF_DIR, MERIT_HF_CACHE and MERIT_WORK (one shared work folder per cluster),
 so one worker and one environment run them all.
 
-A task that calls a paid API lists the variables it needs (`needs_env`, e.g. OPENAI_API_KEY): the worker takes it
-only when they are set in its own environment, from where the task's container gets the key by name. A key is never
-part of a command, and failure notes are scrubbed of keys before they go to the board.
+A task that calls a paid API lists the variables it needs (`needs_env`, e.g. OPENAI_API_KEY, or "A|B" for either
+of two): the worker takes it only when they are set in its own environment, from where the task's container gets
+the key by name. A key is never part of a command, and failure notes are scrubbed of keys before they go to the board.
 
 Builds need the videos; qa tasks also need EPIC_MORPH_DIR, an epic-morph checkout that has the task's bank (DESIGN.md,
 "Answer (qa) tasks").
@@ -79,10 +79,11 @@ import jobs  # noqa: E402
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # A task's fields go into a shell command, so only these shapes are ever run (anything else is skipped).
 # An arm is m8 / m27 / m3 for the local-model baselines, a reported-configuration arm (g5m, g5m-q8, ...), a paid row's
-# arm (q25vl7b-gpt4o, egogpt_gpt4o) or a config name of baselines/api/configs/ (gpt-5-f1024): lower-case letters and
-# digits in runs joined by one `.`, `-` or `_`, none of which the shell, a Slurm job name or a file pattern reads
-# as anything but itself (no space, quote, `$`, `/`, `*`, and never a leading `-`, so it cannot become an option).
-VALID = dict(baseline=re.compile(r"^(merit|worldmm|magic|m3agent|api|egor1|egagent|egorag|hippomm)$"),
+# arm (q25vl7b-gpt4o, egogpt_gpt4o), a model and frame budget of baselines/direct (qwen3vl-8b-f128) or a config name
+# of baselines/api/configs/ (gpt-5-f1024): lower-case letters and digits in runs joined by one `.`, `-` or `_`, none
+# of which the shell, a Slurm job name or a file pattern reads as anything but itself (no space, quote, `$`, `/`, `*`,
+# and never a leading `-`, so it cannot become an option).
+VALID = dict(baseline=re.compile(r"^(merit|worldmm|magic|m3agent|api|egor1|egagent|egorag|hippomm|direct)$"),
              arm=re.compile(r"^(m(8|27|3)|[a-z0-9]+([._-][a-z0-9]+)*)$"),
              stage=re.compile(r"^(prep|build|qa|blind)$"), video=re.compile(r"^P\d\d-\d{8}-\d{6}$"),
              bank=re.compile(r"^[A-Za-z0-9_]*$"), id=re.compile(r"^[A-Za-z0-9_.-]+$"))
@@ -101,8 +102,9 @@ def scrub(text):
 
 
 def has_env(task):
-    """Does this worker's environment have every variable the task needs (needs_env: an API key, by name)?"""
-    return all(isinstance(e, str) and os.environ.get(e) for e in task.get("needs_env") or [])
+    """Does this worker's environment have every variable the task needs (needs_env: an API key, by name; "A|B" is
+    met by either)?"""
+    return all(isinstance(e, str) and any(os.environ.get(x) for x in e.split("|")) for e in task.get("needs_env") or [])
 
 
 HEARTBEAT_S = 600   # a cycle that changes nothing but leases and the heartbeat commits at most this often
@@ -190,7 +192,8 @@ def submit_copies(task, a, queues, state, sbatch="sbatch"):
         if os.path.exists(p + ext):
             os.remove(p + ext)
     wrap = (f"bash {REPO_ROOT}/coord/slurm_guard.sh {shlex.quote(p + '.ran')} || exit 0; "
-            f"cd {REPO_ROOT} && nvidia-smi -L && ( {inner(task, '', a)} ); echo $? > {p}.rc.tmp && mv {p}.rc.tmp {p}.rc")
+            f"cd {REPO_ROOT} && {{ nvidia-smi -L || true; }} && ( {inner(task, '', a)} ); "   # || true: a CPU queue has none
+            f"echo $? > {p}.rc.tmp && mv {p}.rc.tmp {p}.rc")
     ids = {}
     for n in fitting(task, queues, idle=queues):   # the caller passes the queues chosen for it (a fallback one included)
         r = subprocess.run([sbatch, "--parsable", f"--job-name=board-{tid}", f"--output={p}.log", "--open-mode=append",

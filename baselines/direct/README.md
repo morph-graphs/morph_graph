@@ -13,10 +13,13 @@ where MERIT puts its retrieved context, so MERIT, blind and direct differ only i
 | `run_direct.sh` | one video, one arm, one stage (prep, build, qa, upload, all); `build` does nothing |
 | `../common/hf_results.py` | (shared by all baselines) upload a video's results to the Hugging Face dataset |
 | `env/setup_env.sh` | builds the model's MERIT environment (`baselines/merit/env/`): nothing extra is needed |
+| `docker/run.sh` | the same stages inside MERIT's image of the model's environment (Docker or Apptainer): what the job board runs |
+| `docker/image_tag.sh` | that image's tag for an arm: `merit:m8-<hash>` or `merit:m27-<hash>` |
 
 It uses, from `baselines/merit/` (the MERIT submodule must be checked out): the prep (`epic/prepare_epic.py`:
-1 fps frames, question conversion, `match_answers`), MERIT's Qwen wrapper as the model loader, its final
-answer prompt (`final_qa_egolife`), answer parser and scorer.
+1 fps frames, question conversion, `match_answers`), MERIT's Qwen wrapper as the loader of the two models it
+knows, its final answer prompt (`final_qa_egolife`), answer parser and scorer. The other models are loaded by
+`load_hf` in `epic/direct_qa.py`, set up the same way (local snapshot, bf16, flash-attention, seed 42).
 
 ## Design
 
@@ -48,17 +51,33 @@ setting has its own results folder and its own row in the results table ("N. Fra
 |---|---|---|---|
 | `qwen3vl-8b` | Qwen/Qwen3-VL-8B-Instruct | MERIT m8 (transformers 4.57.3) | measured peak 17.5 GB (N = 32), 20.2 GB (128), 39.2 GB (768): a 24 GB GPU up to N = 128, a 48 GB GPU for 768 |
 | `qwen38-27b` | Qwen/Qwen3.8-27B | MERIT m27 (transformers 5.8.0) | measured on 2x 48 GB at N = 128: peak 28.9 + 30.5 GB; one 80 GB GPU should also do. N = 32 and 768 not run yet (768 not sized) |
+| `qwen35-9b` | Qwen/Qwen3.5-9B | MERIT m27 | measured peak 21.3 GB (N = 32 and 128), 33.9 GB (768): a 24 GB GPU up to N = 128, a 48 GB GPU for 768 |
+| `qwen35-35b-a3b` | Qwen/Qwen3.5-35B-A3B | MERIT m27 | measured on 2x 48 GB: peak 32.4 + 35.7 GB (N = 32), 34.1 + 35.9 GB (128); N = 768 not run yet (70 GB of the 96 are already used at N = 128, so size it first) |
+| `molmo2-8b` | allenai/Molmo2-8B | MERIT m8 (its card names transformers 4.57.1; 4.57.3 runs it) | measured peak 18.5 GB (N = 32), 24.8 GB (128), 42.0 GB (384): a 48 GB GPU. N is at most 384 (below) |
 
-Time per question on RTX A6000s (P05-20240425-201444, a few questions each): Qwen3-VL-8B about 11 s (N = 32),
-14 s (128), 55 s (768); Qwen3.8-27B on two of them about 32 s (N = 128).
+Time per question on RTX A6000s (P05-20240425-201444, a few questions each, the first one of a run takes longer):
 
-Not yet (each resolves on Hugging Face; none is downloaded or wired):
+| model | N = 32 | N = 128 | N = 768 |
+|---|---|---|---|
+| Qwen3-VL-8B | 11 s | 14 s | 55 s |
+| Qwen3.8-27B (2 GPUs) | not run | 32 s | not run |
+| Qwen3.5-9B | 3 s | 11 s | 35 s |
+| Qwen3.5-35B-A3B (2 GPUs) | 8 s | 9 s | not run |
+| Molmo2-8B | 4 s | 11 s | does not fit (N = 384: 37 s) |
 
-| model | what it needs |
-|---|---|
-| Qwen/Qwen3.5-9B (9.7B, `qwen3_5`) | a name in MERIT's wrapper, which picks the model class and instruct mode by name; the m27 environment should do |
-| Qwen/Qwen3.5-35B-A3B (36B, `qwen3_5_moe`) | the same, with its own model class; about 72 GB of weights |
-| allenai/Molmo2-8B (`molmo2`) | its own loader and input format (not a Qwen processor), probably its own environment |
+**The Qwen3.5 models** take exactly the Qwen3-VL-8B input: same processor class, 196 tokens per 2 frames, same
+time stamps, the same messages, instruct mode (`enable_thinking=False`) as Qwen3.8.
+
+**Molmo2 differs**, because its processor and chat template do (we follow its model card):
+1. no system role: MERIT's system text opens the user turn, followed by the same query text;
+2. the chat template puts the video before all text, so nothing sits under "Context:";
+3. every frame is resized to 378 px and costs 81 tokens, with its own time stamp before it (`17.5 `), not one per pair;
+4. its context is 36,864 tokens: N = 768 does not fit (69k tokens; the run stops with that message), N = 384 is its
+   largest setting and leaves room for a short answer only (generation is capped to the room left);
+5. it is loaded in bf16, not the card's float32 (`dtype="auto"`), which needs 46.7 GB at N = 128: on 8 questions
+   the two gave the same option every time;
+6. it answers `A` then `REASONING: ...` without "ANSWER:", so a letter alone on the first line is also read as the answer
+   (for every model; MERIT's scorer already scored it the same way).
 
 ## Running
 
@@ -87,5 +106,21 @@ memory is written as "Error" and retried on the next run.
 [morph-graphs/epic-morph-results](https://huggingface.co/datasets/morph-graphs/epic-morph-results) at
 `direct/<arm>/<video>/` (a member's token with write access: `HF_TOKEN`, or `hf auth login`).
 
-There is no Docker image of its own: the MERIT images (`baselines/merit/docker/`) hold the same two
-environments. Job board entries (`coord/`) come next.
+## From an image, and on the job board
+
+There is no Docker image of its own: the MERIT images (`baselines/merit/docker/`) hold the same two environments,
+and `docker/run.sh` runs `run_direct.sh` in the one of the arm's model, with MERIT's `docker/run.sh` interface:
+
+```bash
+DIRECT_GPU=0 EPIC_MORPH_DIR=<epic-morph checkout> bash baselines/direct/docker/run.sh qa P05-20240425-201444 qwen3vl-8b-f128 batch10_agree2
+DIRECT_GPU=0 EPIC_MORPH_DIR=<epic-morph checkout> bash baselines/direct/docker/run.sh upload P05-20240425-201444 qwen3vl-8b-f128
+```
+
+The image is `ghcr.io/morph-graphs/merit:$(bash baselines/direct/docker/image_tag.sh <arm>)`; with
+`DIRECT_RUNTIME=apptainer` it is MERIT's `merit_m8.sif` / `merit_m27.sif` in `DIRECT_SIF_DIR` (default
+`MERIT_SIF_DIR`). The checkout needs the MERIT submodule (`git submodule update --init baselines/merit/MERIT`).
+The other settings are in the script's header; the `MERIT_*` ones the job board's worker sets are read too.
+
+On the job board (`coord/master.py`, `DIRECT`) every arm above at N = 32, 128 and 768 has one `qa` task per bank and
+video, with no build to wait for; a task is done when `direct/<arm>/<video>/answers_<bank>.json.gz` is in the
+dataset. A worker takes them when started with `direct` in `--baselines`; it needs MERIT's images and nothing else.

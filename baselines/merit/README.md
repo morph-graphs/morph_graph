@@ -108,11 +108,69 @@ reasoning model makes no API call when answering.
 - The key: `OPENAI_API_KEY` in the environment of whoever runs `g5m` build or `g5m-g5` qa, never on a command line
   or in a file. `docker/run.sh` hands it to the container as an environment variable for those two arms only, and
   `run_merit.sh` removes it from every other stage's environment. On the job board those tasks go to pool `max`
-  only and carry `needs_env: [OPENAI_API_KEY]`; a worker without the key leaves them.
+  only and carry `needs_env: [OPENAI_API_KEY]`; a worker without the key leaves them. The `g5m` build accepts
+  either key (`OPENAI_API_KEY|OPENROUTER_API_KEY`) and is also listed for pool `nexus` (`coord/DESIGN.md`).
 - What was spent: each `build` / `qa` line of `runs.jsonl` has `openai`: per role (`captions`, `keys`; `search`,
   `filter`, `answer`) and per model id the API answered with, the calls, input, cached, output and reasoning
   tokens and the service tier. MERIT's reply cache (in the work folder) keeps a rerun from paying twice for the
   same text request; a stage that fails partway keeps its counts for the line written when it finishes.
+
+### Through OpenRouter (our own builds)
+
+With `OPENROUTER_API_KEY` in the environment and `OPENAI_API_KEY` not, the same calls go through OpenRouter, so
+a memory can be built on our cluster without an OpenAI account. Nothing else is set; `epic/openai_usage.py`
+does the switch.
+
+```bash
+export OPENROUTER_API_KEY=...      # typed into the shell (or read -s): never an argument, a file, a log or a commit
+unset OPENAI_API_KEY GOOGLE_API_KEY GEMINI_API_KEY HF_TOKEN       # no other provider's key in the job
+export PY=<m8 environment>/bin/python EPIC_MORPH_DIR=<epic-morph checkout> MERIT_FETCH=0
+bash baselines/merit/run_merit.sh prep  P05-20240425-201444 g5m   # no GPU: ffmpeg clips and 1 fps frames
+bash baselines/merit/run_merit.sh build P05-20240425-201444 g5m   # no GPU: one caption and one key call per 30 s clip
+# upload (no GPU) needs HF_TOKEN back; it makes no API call:  bash baselines/merit/run_merit.sh upload <video> g5m
+```
+For an sbatch job, export the key in the submitting shell and let `sbatch` pass the environment (its default,
+`--export=ALL`); do not write it into the script. `g5m` needs no GPU at any stage (the first keyed build ran on a
+CPU node: the image starts without a GPU, 3 GB of RAM used; ask for 4 CPUs and 8 GB). Answering needs one: `g5m-q8`
+and `g5m-q27` as `m8` / `m27` (no API call), `g5m-g5` one GPU of 16 GB for the embedding model (its gpt-5 calls
+take the same route, as `openai/gpt-5`).
+
+- **What changes in the request.** The endpoint (`https://openrouter.ai/api/v1`; `OPENROUTER_BASE_URL` overrides
+  it, for the stand-in test), the key, the model id (`openai/gpt-5-mini`, `openai/gpt-5`) and one added field,
+  `provider: {"only": ["openai"], "allow_fallbacks": false}`: OpenRouter also lists Azure for these models, and
+  with the pin OpenAI answers or the call fails. Prompts, frames, image size, temperature, seed and
+  reasoning effort (none sent: the model's default, `medium` on both routes) are what the port sends to OpenAI.
+- **What may still differ from the direct API** (OpenRouter's model list and API reference, read 2026-11-14; no
+  call was made, there is no key yet):
+  - the snapshot is not ours to pin: `openai/gpt-5-mini` is OpenRouter's alias, whose `canonical_slug` today is
+    `openai/gpt-5-mini-2025-08-07` (`openai/gpt-5`: `openai/gpt-5-2025-08-07`), the snapshots MERIT pins. The
+    reply's `model` is recorded per call; whether it shows the snapshot or the alias is not known yet;
+  - OpenRouter lists two OpenAI endpoints, standard and `openai/flex` (half price, slower). We send no service
+    tier unless `MERIT_SERVICE_TIER` is set; the tier each reply reports is recorded;
+  - `temperature` is not among the parameters OpenRouter lists for these models and may be dropped before OpenAI
+    sees it. The port sends 1 or nothing, which is the model's only setting, so nothing changes;
+  - image tokens are counted by OpenAI either way (the images are passed on as data URLs), but OpenRouter could
+    re-encode or reject an oversized request before that: compare `input_tokens` of the first clips with the
+    estimate before building many videos;
+  - the price per token is OpenAI's ($0.25 in / $2.00 out per million for gpt-5-mini, $1.25 / $10 for gpt-5);
+    OpenRouter adds its fee when credits are bought, not per call, so `cost` in `runs.jsonl` is before that fee;
+  - both models carry `expiration_date` 2026-12-11 on OpenRouter too: the same shutdown.
+- **What is recorded.** The stage's `runs.jsonl` line says which gateway made the memory: each `openai` row is
+  keyed by the model id the endpoint returned and has `endpoint`, and through OpenRouter also `provider` (who
+  served the call) and `cost` (dollars charged, summed). The memory folder stays `merit/g5m/<video>/`: the same model
+  through another gateway. The reply cache keys on the model id, so a memory started on one gateway and resumed
+  on the other reuses what is already written to its files but not the other gateway's cached replies; its
+  `runs.jsonl` lines then show both.
+- **One gateway per run.** With both keys set OpenAI's is used and `OPENROUTER_API_KEY` is removed from the
+  stage's environment; stages that call no API get neither key.
+- **First keyed build** (2026-11-14, P05-20240425-201444, 55 clips, run by Anubhav's main session, numbers as
+  reported from its `runs.jsonl` and `sacct`): 110 calls, $0.38, provider `OpenAI` in every row. The estimate
+  below gives $0.22 for this video (range $0.13 to $0.40), so reasoning tokens run near the upper assumption: at
+  this rate all 156 memories (5,030 clips) come to about $35, not $20.
+- **Check without a key**: `epic/test_api_arms.py --work <scratch> --gateway openrouter` runs the same test with
+  only `OPENROUTER_API_KEY` set (a dummy) against the stand-in, and asserts the path, the `openai/...` ids, the
+  provider pin and the recorded endpoint, provider and cost; without `--gateway` it asserts that the OpenAI route
+  is what it was (path, snapshots, no `provider` field) even when an OpenRouter key is also set.
 
 ```bash
 export EPIC_MORPH_DIR=<epic-morph checkout> OPENAI_API_KEY=...        # the key only in the environment

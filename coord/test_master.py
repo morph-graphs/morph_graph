@@ -66,6 +66,13 @@ def test_experiments():
             for bank in M.BANKS:
                 assert ex[b, arm, "qa", bank] == M.POOLS[b, arm]
             assert ("arm00" in M.POOLS[b, arm]) == (b == "merit" and arm == "m27")
+    # the plain video model: qa only (no build line), every bank; the 8B on the m8 pools, the 27B on the m27 pools
+    # without arm00, its unsized N = 768 only where an H200 is; no key
+    direct = {(arm, stage, bank) for b, arm, stage, bank in ex if b == "direct"}
+    assert direct == {(arm, "qa", bank) for arm in M.DIRECT for bank in M.BANKS} and len(direct) == 24
+    for arm, pools in M.DIRECT.items():
+        assert pools == (M.M8 if arm.startswith("qwen3vl-8b") else ["nexus", "vatsal"] if arm == "qwen38-27b-f768" else M.M27)
+        assert all(ex["direct", arm, "qa", bank] == pools for bank in M.BANKS) and not M.needs("direct", arm, "qa")
 
 
 def test_build_waits_on_base(monkeypatch, tmp_path):
@@ -125,6 +132,10 @@ def board(monkeypatch, tmp_path, experiments=None):
         monkeypatch.setattr(M, "EXPERIMENTS", experiments)
 
 
+ROUTER = {("merit", "g5m"), ("worldmm", "g5m"), ("worldmm", "g5m-q8"), ("magic", "oss120"), ("magic", "oss120-flash"),
+          ("magic", "oss120-q27")}   # the arms an OpenRouter key alone runs: also for pool nexus
+
+
 def test_needs_env_and_pools(monkeypatch, tmp_path):
     """Every task of a paid-API arm names its key and is for pool max only, and --only-pools never widens that."""
     board(monkeypatch, tmp_path)
@@ -134,9 +145,14 @@ def test_needs_env_and_pools(monkeypatch, tmp_path):
         need = M.needs(t["baseline"], t["arm"], t["stage"])
         assert t.get("needs_env") == need
         if need:
-            assert t["pools"] == ["max"]
+            # our Nexus worker is offered the gpt-5-mini work (MERIT's and WorldMM's g5m builds, WorldMM g5m-q8's
+            # retriever: either key) and MAGIC's oss120 arms; every other keyed task, the gpt-5 answer arms
+            # (g5m-g5) among them, stays Max's with its own key
+            router = (t["baseline"], t["arm"]) in ROUTER
+            assert t["pools"] == (M.KEY_POOLS + ["nexus"] if router else M.KEY_POOLS), t
             if (t["baseline"], t["arm"]) not in {(b, arm) for b, arm, *_ in M.PAID}:
-                assert need == (["GEMINI_API_KEY"] if t["arm"].startswith("gemini") else ["OPENAI_API_KEY"])
+                assert need == (["GEMINI_API_KEY"] if t["arm"].startswith("gemini") else ["OPENAI_API_KEY|OPENROUTER_API_KEY"]
+                                if router else ["OPENAI_API_KEY"])
     by = {(t["baseline"], t["arm"]): t for t in tasks}
     # MERIT's Qwen answer arms call no API: no needs_env, the GPU pools of m8 / m27
     assert by["merit", "g5m-q8"]["pools"] == M.M8 and by["merit", "g5m-q27"]["pools"] == M.POOLS["merit", "m27"]
@@ -147,6 +163,11 @@ def test_needs_env_and_pools(monkeypatch, tmp_path):
     assert all(t["pools"] == ([] if own(t) else ["a-test-pool"]) for t in tasks)
     M.restrict(tasks := M.desired(set(), set()), ["max", "a-test-pool"])
     assert all(t["pools"] == (["max"] if own(t) else ["max", "a-test-pool"]) for t in tasks)
+    M.restrict(tasks := M.desired(set(), set()), ["nexus"])   # a keyed task reaches nexus only where it was listed for it
+    assert {(t["baseline"], t["arm"]) for t in tasks if t.get("needs_env") and t["pools"] == ["nexus"]} == ROUTER
+    assert {t["baseline"] for t in tasks if t["arm"] == "g5m-g5"} == {"merit", "worldmm"}
+    assert all(t["pools"] == [] and t["needs_env"] == ["OPENAI_API_KEY"] for t in tasks if t["arm"] == "g5m-g5")
+    assert all(t["pools"] in ([], ["nexus"]) for t in tasks if t.get("needs_env"))
 
 
 def test_pilot_gate(monkeypatch, tmp_path):
@@ -213,7 +234,7 @@ def test_paid_rows(monkeypatch, tmp_path):
     assert {(t["baseline"], t["arm"]) for t in paid} == rows
     # batch10 only: no other video is built or answered, no other bank; pool max only, with or without a key
     assert {t["video"] for t in paid} == set(B10) and {t["bank"] for t in paid} == {None, "batch10_agree2"}
-    assert all(t["pools"] == ["max"] for t in paid)
+    assert all(t["pools"] == (M.ROUTER_POOLS if t["baseline"] == "magic" else M.KEY_POOLS) for t in paid)
     count = lambda b, arm, stage: sum((t["baseline"], t["arm"], t["stage"]) == (b, arm, stage) for t in paid)
     assert count("egor1", "gemini25pro", "build") == 2 and count("egor1", "gemini25pro", "qa") == 1   # v is answered
     assert count("egagent", "gpt41", "build") == 1 and count("egagent", "gemini25pro", "build") == 0  # w is built
@@ -290,13 +311,19 @@ def test_existing_tasks_unchanged(monkeypatch, tmp_path):
     files = {f"magic/m8/{T2[1]}/answers_t2_agree2.json.gz", f"api/gpt-5-f1024/{B10[0]}/answers_batch10_agree2.json.gz"}
     full = list(M.EXPERIMENTS)
     board(monkeypatch, tmp_path, [e for e in full if e not in M.REPORTED + M.PAID])
-    assert len(M.EXPERIMENTS) == len(full) - len(M.REPORTED) - len(M.PAID) == 33   # 6 arms x (build + 4 banks) + 3 api
+    assert len(M.EXPERIMENTS) == len(full) - len(M.REPORTED) - len(M.PAID) == 57   # 6 arms x (build + 4 banks) + 3 api + 6 direct x 4 banks
     old = desired_before(have, files)
     strip = lambda ts: [{k: v for k, v in t.items() if k != "needs_env"} for t in ts]
     new = M.desired(have, files)
-    assert {t["baseline"] for t in old} == {"api", "merit", "magic", "worldmm"} and strip(new) == old
+    assert {t["baseline"] for t in old} == {"api", "direct", "merit", "magic", "worldmm"} and strip(new) == old
     assert [t.get("needs_env") for t in new] == [M.needs(t["baseline"], t["arm"], t["stage"]) for t in old]
     assert M.gate(new) == (new, 0)                                          # the gate holds none of them back
+    # direct: a task per arm, bank and video unless answered, waiting on nothing, after api and before the memory arms
+    direct = [t for t in M.desired(have, files | {f"direct/qwen3vl-8b-f32/{T2[0]}/answers_t2_agree2.json.gz"}) if t["baseline"] == "direct"]
+    assert len(direct) == 6 * len(B10 + T2 + T3 + T4) - 1 and not any(t["deps"] or t.get("needs_env") for t in direct)
+    assert f"direct-qwen3vl-8b-f32-qa-t2_agree2-{T2[0]}" not in {t["id"] for t in direct}
+    kind = [0 if t["baseline"] == "api" else 1 if t["baseline"] == "direct" else 2 for t in new]
+    assert kind == sorted(kind)
     monkeypatch.setattr(M, "EXPERIMENTS", full)
     noprio = lambda ts: [{k: v for k, v in t.items() if k != "priority"} for t in ts]
     assert noprio(strip(t for t in M.desired(have, files) if not M.reported(t))) == noprio(old)
