@@ -257,6 +257,22 @@ def test_fallback_in_the_loop(tmp):
     assert got[t("m8", 2, 1)["id"]] == ["a6000"]                       # fallback_max reached
 
 
+def test_max_jobs_caps_a_queue(tmp):
+    """With max_jobs 2 on the only queue that fits 27B, a worker with 5 free slots claims only two 27B tasks and
+    gives the rest of its slots to 8B work on the other queues."""
+    q = {"a6000": {"sbatch": "--partition=a", "fits": ["m8"]},
+         "h200": {"sbatch": "--partition=h", "fits": ["m27"], "fallback": ["m8"], "max_jobs": 2}}
+    def t(arm, n, prio):
+        return dict(id=f"merit-{arm}-build-P01-20240101-00000{n}", baseline="merit", arm=arm, stage="build",
+                    video=f"P01-20240101-00000{n}", pools=["p"], priority=prio)
+    tasks = [t("m27", 1, 0), t("m27", 2, 1), t("m27", 3, 2), t("m27", 4, 3), t("m8", 5, 4), t("m8", 6, 5)]
+    got = run_one_cycle(tmp, q, tasks, ["1", "2", "3", "4", "5"])
+    on_h200 = [k for k, v in got.items() if "h200" in v]
+    assert len(on_h200) == 2 and all("m27" in k for k in on_h200)             # the cap
+    assert got[t("m27", 3, 2)["id"]] == [] and got[t("m27", 4, 3)["id"]] == []  # left for other pools
+    assert got[t("m8", 5, 4)["id"]] == ["a6000"] and got[t("m8", 6, 5)["id"]] == ["a6000"]
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_")]
     for n, f in tests:
