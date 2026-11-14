@@ -103,7 +103,7 @@ def main():
     ap.add_argument("--first_turn", action="store_true", help="no paid API: only the agent's first turn per question")
     ap.add_argument("--video_file", help="--first_turn: the mp4, for the video's length when there is no memory yet")
     ap.add_argument("--video_end", help="--first_turn: the video's length in seconds, instead of --video_file (no ffprobe)")
-    ap.add_argument("--limit", type=int, default=0, help="--first_turn: only the first N questions")
+    ap.add_argument("--limit", type=int, default=0, help="only the first N unanswered questions (a smoke test)")
     ap.add_argument("--attempt", type=int, default=0, help="added to the sampling seed: a retry pass draws a new trace")
     a = ap.parse_args()
     a.answers, a.cache_dir, a.clips, a.bank_file = map(os.path.abspath, (a.answers, a.cache_dir, a.clips, a.bank_file))
@@ -165,7 +165,7 @@ def main():
                               "after_streaming_check": err or checked, "seconds": round(time.time() - t0, 1)})
                 break
             info = tools.call(call) if call else ""
-            turns.append({"output": msg, "tool_call": call, "information": info})
+            turns.append({"output": msg, "tool_call": call, "sent": tools.sent if call else None, "information": info})
             user = f"<information>{info}</information>"
         if a.first_turn:
             print(f"{r['key']} @ {cut}s: {json.dumps(first[-1]['tool_call'])[:300]}", flush=True)
@@ -191,7 +191,7 @@ def main():
     missing = [r["key"] for r in rows if r["key"] not in done]
     right = sum(done[k]["evaluate"] for k in done)
     print(f"# {len(done)}/{len(rows)} answered, {right} right, {len(missing)} missing -> {a.answers}", flush=True)
-    sys.exit(2 if missing else 0)
+    sys.exit(2 if missing and not a.limit else 0)
 
 
 if __name__ == "__main__":

@@ -28,7 +28,7 @@ MODELS = {   # role -> model; in the paper / official repo (commit 69177ee) both
     "answer": "gpt-4.1",                 # Ego-R1-Agent/eval/infer_bench_summ.py summ_client
 }
 GEMINI_SHUTDOWN = datetime.date(2026, 12, 1)   # gemini-2.5-pro, Google's deprecation page, read 2026-11-13
-USAGE = None   # path of a jsonl; one line per call made here (tokens), for the real cost of a run
+USAGE = None   # path of a jsonl: one line per API call of this process (track), for the real cost of a run
 
 
 def openai_keys():
@@ -55,10 +55,56 @@ def need(*roles):
         sys.exit(5)
 
 
-def _log(role, model, tin, tout):
+ROLE = None    # the step making the current call (caption, summary, rag, video_llm, vlm, answer)
+
+
+def _log(asked, got, tin, tout, think=0):
     if USAGE:
         with open(USAGE, "a") as f:
-            f.write(json.dumps({"role": role, "model": model, "in": tin, "out": tout, "t": int(time.time())}) + "\n")
+            f.write(json.dumps({"role": ROLE, "asked": asked, "model": got, "in": tin, "out": tout, "thinking": think,
+                                "t": int(time.time())}) + "\n")
+
+
+def track():
+    """Log every chat completion and Gemini generation of this process, upstream's included (their clients are
+    built inside upstream's functions): the model that answered and the tokens, thinking counted apart. A Gemini
+    reply from a model other than the one asked is an error: after its shutdown date gemini-2.5-pro is routed
+    to another model. Wraps the two SDK methods once; changes no request."""
+    from google.genai import models as gm
+    from openai.resources.chat.completions import Completions
+    if getattr(Completions.create, "egor1", False):
+        return
+    chat, gen = Completions.create, gm.Models.generate_content
+
+    def create(self, *a, **k):
+        r = chat(self, *a, **k)
+        _log(k.get("model"), getattr(r, "model", None), r.usage.prompt_tokens, r.usage.completion_tokens)
+        return r
+
+    def generate_content(self, *a, **k):
+        r = gen(self, *a, **k)
+        u = r.usage_metadata
+        _log(k.get("model"), r.model_version, u.prompt_token_count or 0, u.candidates_token_count or 0, u.thoughts_token_count or 0)
+        if not (r.model_version or "").startswith(k.get("model") or ""):
+            raise RuntimeError(f"asked {k.get('model')}, answered by {r.model_version}")
+        return r
+    create.egor1 = True
+    Completions.create, gm.Models.generate_content = create, generate_content
+
+
+def usage_summary(path, offset=0):
+    """{"<role> <model that answered>": {"calls", "in", "out", "thinking"}} of the log lines after byte `offset`."""
+    out = {}
+    if os.path.exists(path):
+        with open(path) as f:
+            f.seek(offset)
+            for line in f:
+                x = json.loads(line)
+                d = out.setdefault(f"{x['role']} {x['model']}", {"calls": 0, "in": 0, "out": 0, "thinking": 0})
+                d["calls"] += 1
+                for k in ("in", "out", "thinking"):
+                    d[k] += x.get(k) or 0
+    return out
 
 
 def gpt41(role, messages, max_tokens, temperature=1.0, top_p=1.0):
@@ -70,15 +116,20 @@ def gpt41(role, messages, max_tokens, temperature=1.0, top_p=1.0):
     else:
         from openai import OpenAI
         client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    global ROLE
+    ROLE = role
+    track()
     r = client.chat.completions.create(model=MODELS[role], messages=messages, max_tokens=max_tokens, temperature=temperature,
                                        top_p=top_p, frequency_penalty=0, presence_penalty=0, stop=None, stream=False)
-    _log(role, MODELS[role], r.usage.prompt_tokens, r.usage.completion_tokens)
     return r.choices[0].message.content or ""
 
 
 def gemini_video(role, path, prompt):
     """Upload one clip and ask Gemini about it (the same calls as egor1_videollm_gemini/video_llm.py)."""
     from google import genai
+    global ROLE
+    ROLE = role
+    track()
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
     f = client.files.upload(file=path)
     t0 = time.time()
@@ -93,8 +144,4 @@ def gemini_video(role, path, prompt):
         r = client.models.generate_content(model=MODELS[role], contents=[f, prompt])
     finally:
         client.files.delete(name=f.name)
-    if not (r.model_version or "").startswith(MODELS[role]):
-        raise RuntimeError(f"asked {MODELS[role]}, answered by {r.model_version}")
-    u = r.usage_metadata
-    _log(role, MODELS[role], u.prompt_token_count, (u.candidates_token_count or 0) + (u.thoughts_token_count or 0))
     return r.text or ""

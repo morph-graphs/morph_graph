@@ -24,22 +24,23 @@ open weights. Every other step calls a paid API, so those stages stop (exit code
 **Gemini 2.5 Pro (`gemini-2.5-pro`) is itself listed for shutdown on 2026-12-01** (Google's deprecation page, read
 2026-11-13); from that day requests are routed to another model. Every Gemini call of one comparison must be made
 before then. From that date the Gemini stages refuse to run, and a caption answered by another model is an error
-(`epic/apis.py`); upstream's `video_llm` cannot check which model answered.
+(`epic/apis.py`, which checks the model id in every Gemini reply, upstream's `video_llm` calls included).
 
 ## Layout
 
 | path | what |
 |---|---|
-| `Ego-R1/` | upstream [egolife-ai/Ego-R1](https://github.com/egolife-ai/Ego-R1) at `69177ee` plus `epic-morph.patch` (to become a fork submodule with that patch as its `epic-morph` branch) |
-| `epic-morph.patch` | our three changes to upstream: `video_llm` takes the Gemini model id from `EGOR1_GEMINI_MODEL` (upstream hard-codes `gemini-1.5-pro`) and no longer prints the tail of the key; `call_gpt4` (rag) and `GPT` (vlm) accept a plain `OPENAI_API_KEY` when no Azure endpoint is set |
+| `Ego-R1/` | submodule: upstream [egolife-ai/Ego-R1](https://github.com/egolife-ai/Ego-R1), pinned at `69177ee` (`git submodule update --init baselines/egor1/Ego-R1`) |
+| `epic-morph.patch` | our three changes to upstream, applied to the submodule's files by `run_egor1.sh` on first use (so `git status` shows the submodule as modified; a morph-graphs fork with this as a branch would be cleaner): `video_llm` takes the Gemini model id from `EGOR1_GEMINI_MODEL` (upstream hard-codes `gemini-1.5-pro`) and no longer prints the tail of the key; `call_gpt4` (rag) and `GPT` (vlm) accept a plain `OPENAI_API_KEY` when no Azure endpoint is set |
 | `epic/prepare_clips.py` | 30 s clips with audio in the EgoLife layout upstream's tools read |
 | `epic/build_memory.py` | the question-independent memory: captions, then 10 min / 1 hour / 1 day summaries, in the format of upstream's released database (`Ego-R1/h-rag_database`) |
 | `epic/tools.py` | the three tools, calling upstream's functions in process, plus the streaming cutoff |
 | `epic/run_qa.py` | the agent loop of `infer_bench_summ.py` on one video's questions of a bank; writes `answers_<bank>.json.gz` |
 | `epic/apis.py` | the model of each step, the key check, and the two API clients upstream has no reusable code for |
 | `epic/plan_cost.py` | calls and cost of a run, from video lengths and a bank; calls nothing |
-| `run_egor1.sh` | one video, one arm, one stage (prep, build, qa, firstturn, upload, all) |
-| `env/` | the environment, pinned: `requirements.txt`, `setup_env.sh` |
+| `run_egor1.sh` | one video, one arm, one stage (prep, build, qa, upload, all; and the check `firstturn`) |
+| `env/` | the environment, pinned: `requirements.txt` (shared by the image and `setup_env.sh`), `setup_env.sh` |
+| `docker/` | the image (`Dockerfile`), `build.sh`, `run.sh` (one job in a container; the job board's entry point), `image_tag.sh` |
 | `../merit/epic/prepare_epic.py` | (reused) MERIT's question conversion: ID = the bank's `key`, asked at floor(t_ask) |
 | `../common/hf_results.py` | (shared) upload a video's results to the Hugging Face dataset, or fetch its memory |
 
@@ -72,9 +73,9 @@ servers (same functions); `rag` failures of the API are detected so the question
 ## Running
 
 ```bash
-bash baselines/egor1/env/setup_env.sh <venv dir>        # Python 3.11 (PYTHON=...), CUDA 12.4 wheels; ffmpeg on PATH
+git submodule update --init baselines/egor1/Ego-R1
+bash baselines/egor1/env/setup_env.sh <venv dir>        # Python 3.11 (PYTHON=...), CUDA 12.4 wheels; ffmpeg and patch on PATH
 export PY=<venv>/bin/python EPIC_MORPH_DIR=<epic-morph checkout>
-git -C baselines/egor1/Ego-R1 apply ../epic-morph.patch      # once, on a fresh clone of upstream at 69177ee
 bash baselines/egor1/run_egor1.sh prep      P05-20240425-201444 gemini25pro                  # CPU
 bash baselines/egor1/run_egor1.sh firstturn P05-20240425-201444 gemini25pro batch10_agree2   # GPU, no API: the local half
 # with the keys in the environment (next section):
@@ -93,6 +94,27 @@ memory nor a key. Every stage skips finished work. Results go to `baselines/egor
 Arm `llava` needs upstream's LLaVA-Video-7B server (`api/visual_tools/egor1_videollm_llava/llava_video.py`,
 LLaVA-NeXT, port 8000) in an environment of its own, given as `EGOR1_LLAVA_PY`; that environment is not set up
 here yet, and the arm has not been run.
+
+**Off our clusters, run only in the Docker image** (rule in `AGENTS.md`): `ghcr.io/morph-graphs/egor1:gemini25pro-<env
+hash>`, built from `docker/Dockerfile` by `.github/workflows/baseline-images.yml`. The code is the mounted checkout
+of `main`; `docker/run.sh` picks the image whose tag matches the checkout's environment files:
+
+```bash
+git submodule update --init baselines/egor1/Ego-R1
+docker pull ghcr.io/morph-graphs/egor1:$(bash baselines/egor1/docker/image_tag.sh gemini25pro)
+export GEMINI_API_KEY OPENAI_API_KEY HF_TOKEN        # already set in this shell; never typed into a command
+export EPIC_MORPH_DIR=<epic-morph checkout>
+bash baselines/egor1/docker/run.sh prep  P05-20240425-201444 gemini25pro
+bash baselines/egor1/docker/run.sh build P05-20240425-201444 gemini25pro
+EGOR1_GPU=0 bash baselines/egor1/docker/run.sh qa P05-20240425-201444 gemini25pro batch10_agree2
+bash baselines/egor1/docker/run.sh upload P05-20240425-201444 gemini25pro
+```
+
+`docker/run.sh` mounts this checkout at `/repo`, the epic-morph checkout at `/epic-morph`, the videos at `/videos`
+and the Hugging Face cache (`EGOR1_HF_CACHE`, default `~/.cache/huggingface`) at `/hf`; the agent's weights
+(`Ego-R1/Ego-R1-Agent-3B`, 13 GB, public) are downloaded there on first use. `EGOR1_RUNTIME=apptainer` runs the same
+image with Apptainer. The job board (`coord/worker.py`) calls it with `MERIT_GPU` / `MERIT_RUNTIME` / `MERIT_SIF_DIR`
+/ `MERIT_HF_CACHE` / `MERIT_WORK`, which `run.sh` takes when the `EGOR1_` ones are unset.
 
 ## Keys, and running the paid stages as job-board tasks
 
@@ -114,20 +136,23 @@ here yet, and the arm has not been run.
 - `build` needs no GPU (ffmpeg, network). `qa` needs one small GPU (the agent, about 8 GB) and network.
 - A stage without its keys exits with code 5 before any call, so a task handed to a pool without keys fails at
   once instead of half-running.
-- The Docker image and the job-board entries (`coord/master.py` `EXPERIMENTS`) do not exist yet.
+- The job-board entries (`coord/master.py` `EXPERIMENTS`) do not exist yet: a paid row needs the board to know
+  which pool holds keys.
+- `docker/run.sh` hands the keys to the container by name (docker `-e NAME`, apptainer `APPTAINERENV_NAME`).
 
 ## What comes back
 
 Per video, at `egor1/<arm>/<video>/`: the four memory files; `cutoffs/c<seconds>/{10min,1hour,1day}.json`;
 `answers_<bank>.json.gz` (one row per question in bank order, keyed by the bank's `key` plus `qhash`, with the
-chosen option, `evaluate`, the cutoff, and `turns`: each turn's agent output, parsed tool call and the returned
-information; `version` and `memory_hash`); `api_usage.jsonl` (tokens of the calls made by `apis.py`: captions,
-summaries, final answers); `runs.jsonl` (commits, the model of each step, GPU, seconds).
+chosen option, `evaluate`, the cutoff, and `turns`: each turn's agent output, parsed tool call, the call as sent on after the streaming check (`sent`) and the
+returned information; `version` and `memory_hash`); `api_usage.jsonl` (one line per API call, upstream's included: the step, the model id asked and the one the API
+answered with, input, output and thinking tokens); `runs.jsonl` (per finished stage: commits, the model of each
+step, GPU, seconds, and `api_usage`: calls and tokens of that stage per step and answering model).
 
 ## Open decisions
 
 - **Gemini 2.5 Pro ends on 2026-12-01.** The whole run (captions of every video, and every `video_llm` call)
   has to fit before that date, or it mixes models.
 - **Caption and summary prompts** are not published; ours could be replaced by the authors' if they share them.
-- **Fork**: `Ego-R1/` is a plain clone with `epic-morph.patch` applied; it becomes a submodule of a morph-graphs
-  fork when that exists.
+- **Fork**: `Ego-R1/` is a submodule of upstream itself, patched in place at run time; a morph-graphs fork with
+  the patch as its `epic-morph` branch would be cleaner.

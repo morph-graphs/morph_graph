@@ -7,10 +7,10 @@
 #          build      the question-independent memory: Gemini 2.5 Pro captions of the clips,
 #                     GPT-4.1 summaries (10 min, 1 hour, 1 day)                              PAID APIs, no GPU
 #          qa         the agent answers every question of <bank> for this video              GPU (8 GB) + PAID APIs
-#          firstturn  only the agent's first turn per question and the parsed tool call:
-#                     the part of qa that needs no API (a check of the local half)           GPU (8 GB)
 #          upload     this video and arm's results folder to the Hugging Face dataset  (needs a write token)
 #          all        prep + build, then qa when a bank is given (no upload)
+#          firstturn  (a check, not a task) only the agent's first turn per question and the parsed tool
+#                     call: the part of qa that needs no API                                 GPU (8 GB)
 #   arm    gemini25pro  the paper's main configuration, with Gemini 2.5 Pro where the paper has the retired
 #                       Gemini 1.5 Pro (the 30 s captions and video_llm)
 #          llava        the paper's tool ablation (Table 4): video_llm = LLaVA-Video-7B, local (EGOR1_LLAVA_PY)
@@ -33,6 +33,7 @@
 #                    each question time), answers_<bank>.json.gz, api_usage.jsonl and runs.jsonl
 #   EGOR1_TAG        a variant name for the answers (answers_<bank>_<tag>.json.gz)
 #   EGOR1_FETCH      0 to never take the memory from the dataset (build normally reuses it when it is there)
+#   EGOR1_LIMIT      qa / firstturn: only the first N unanswered questions (a smoke test)
 # Every step skips finished work, so rerunning the same command resumes.
 set -euo pipefail
 STAGE=${1:?usage: run_egor1.sh <prep|build|qa|firstturn|upload|all> <video> <gemini25pro|llava> [bank]}
@@ -40,20 +41,24 @@ V=${2:?video id}; ARM=${3:?arm gemini25pro or llava}; BANK=${4:-}
 M=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); REPO=$(cd "$M/../.." && pwd); R=$M/Ego-R1   # R: the upstream checkout
 PY=${PY:?set PY to the python of the environment (env/setup_env.sh)}
 EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && pwd)
-[ -f "$R/api/rag/r1rag/ragagent.py" ] || { echo "upstream missing: $R (README.md)"; exit 1; }
-case $ARM in gemini25pro|llava) ;; *) echo "arm must be gemini25pro or llava"; exit 1 ;; esac
-grep -q EGOR1_GEMINI_MODEL "$R/api/visual_tools/egor1_videollm_gemini/video_llm.py" \
-    || { echo "upstream lacks our patch: git -C $R apply ../epic-morph.patch"; exit 1; }
+[ -f "$R/api/rag/r1rag/ragagent.py" ] || { echo "run: git submodule update --init baselines/egor1/Ego-R1"; exit 1; }
 VIDEOS=${HDEPIC_VIDEOS:-$EPIC/data/HD-EPIC/videos}; WORK=${EGOR1_WORK:-$M/work}; OUTROOT=${EGOR1_OUT:-$M/results}
 OUT=$OUTROOT/$ARM/$V; CLIPS=$WORK/clips; VIDEO=$VIDEOS/${V%%-*}/$V.mp4
 TAG=${EGOR1_TAG:-}; SUF=${TAG:+_$TAG}
-mkdir -p "$OUT" "$WORK/logs"
+case $ARM in gemini25pro|llava) ;; *) echo "arm must be gemini25pro or llava"; exit 1 ;; esac
+mkdir -p "$OUT" "$WORK/logs" "$WORK/locks"
+# our three changes to upstream (epic-morph.patch), applied once to the submodule's files; one task at a time
+patched() { grep -q EGOR1_GEMINI_MODEL "$R/api/visual_tools/egor1_videollm_gemini/video_llm.py"; }
+( flock 9; patched || patch -d "$R" -p1 -s --forward --no-backup-if-mismatch < "$M/epic-morph.patch" ) 9>"$WORK/locks/patch.lock"
+patched || { echo "could not apply $M/epic-morph.patch to $R (is the submodule at its pinned commit?)"; exit 1; }
 export EGOR1_SRC=$R
 read -ra MEMORY <<< "$("$PY" "$M/epic/build_memory.py" --memory_files)"
 have_memory() { local f; for f in "${MEMORY[@]}"; do [ -s "$OUT/${f//\{video\}/$V}" ] || return 1; done; }
 log() { echo "=== $V $ARM $1 ($(date '+%F %H:%M'))"; }
-record() {   # one line per finished stage, for the hand-back
-    "$PY" - "$1" "$2" >> "$OUT/runs.jsonl" <<'PYEOF'
+USAGE=$OUT/api_usage.jsonl
+mark() { U0=$( [ -f "$USAGE" ] && wc -c < "$USAGE" || echo 0); }   # where this stage's API calls start in the log
+record() {   # one line per finished stage, for the hand-back: commits, models, and what the APIs were asked
+    "$PY" - "$1" "$2" "$USAGE" "${U0:-0}" >> "$OUT/runs.jsonl" <<'PYEOF'
 import json, os, platform, subprocess, sys, time
 import torch, transformers
 sys.path.insert(0, "baselines/egor1/epic")
@@ -66,7 +71,9 @@ bank = os.environ.get("EGOR1_EPIC_COMMIT") or git("rev-parse", "HEAD", cwd=os.en
 gpus = [torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())]
 models = dict(apis.MODELS, **({"video_llm": "lmms-lab/LLaVA-Video-7B-Qwen2"} if os.environ["ARM"] == "llava" else {}))
 print(json.dumps({"stage": sys.argv[1], "seconds": int(float(sys.argv[2])), "commit": commit, "egor1_commit": up,
-                  "epic_morph_commit": bank, "models": models, "torch": torch.__version__,
+                  "epic_morph_commit": bank, "models": models,
+                  # per "<step> <model id the API answered with>": calls and tokens (thinking apart) of this stage
+                  "api_usage": apis.usage_summary(sys.argv[3], int(sys.argv[4])), "torch": torch.__version__,
                   "transformers": transformers.__version__, "gpus": gpus, "host": platform.node(),
                   "finished": time.strftime("%Y-%m-%dT%H:%M:%S%z")}))
 PYEOF
@@ -77,14 +84,13 @@ cd "$REPO"
 prep() {
     log prep; local t=$SECONDS
     [ -s "$VIDEO" ] || { echo "missing $VIDEO"; exit 1; }
-    mkdir -p "$WORK/locks"
     ( flock 9; "$PY" "$M/epic/prepare_clips.py" --video "$VIDEO" --subject "$V" --clip_root "$CLIPS" --threads "${THREADS:-8}"
     ) 9>"$WORK/locks/prep_$V.lock"
     record prep $((SECONDS - t))
 }
 need_clips() { [ -s "$CLIPS/$V/A1_JAKE/DAY1/_clips.txt" ] || prep; }
 build() {
-    log build; local t=$SECONDS rc
+    log build; local t=$SECONDS rc; mark
     # the memory depends only on the video: take it from the dataset when it is there and no local one is started
     if [ ! -s "$OUT/${V}_30sec.json" ] && [ ! -s "$OUT/${V}_30sec.json.partial" ] && [ "${EGOR1_FETCH:-1}" != 0 ]; then
         rc=0; "$PY" "$M/../common/hf_results.py" fetch-memory --baseline egor1 --memory "${MEMORY[@]}" \
@@ -130,11 +136,12 @@ start_llava() {   # arm llava: upstream's LLaVA-Video-7B server (port 8000 is fi
 qa() {
     log "qa $BANK$SUF"; local t=$SECONDS k rc=0
     have_memory || build
+    mark
     need_clips; bank_file; start_llava
     # each pass answers what has no valid answer yet (a failed API call, no readable letter), with a new sampling seed
     for k in 1 2 3; do
         rc=0; "$PY" "$M/epic/run_qa.py" --video "$V" --arm "$ARM" --bank_file "$BF" --memory "$OUT" --clips "$CLIPS/$V" \
-            --answers "$OUT/answers_$BANK$SUF.json.gz" --cache_dir "$WORK/cache/${ARM}_$V" --attempt $((k - 1)) || rc=$?
+            --answers "$OUT/answers_$BANK$SUF.json.gz" --cache_dir "$WORK/cache/${ARM}_$V" --attempt $((k - 1)) ${EGOR1_LIMIT:+--limit "$EGOR1_LIMIT"} || rc=$?
         [ $rc = 2 ] || break
     done
     [ $rc = 0 ] || { echo "qa did not finish (exit $rc); rerun the same command to retry"; exit $rc; }

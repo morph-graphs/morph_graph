@@ -267,3 +267,8 @@ baselines/api/results/
 baselines/vgent/work/
 !baselines/vgent/env/
 baselines/vgent/results/
+
+# Ego-R1 runs: clips, tool caches, logs; results (baselines/egor1/run_egor1.sh)
+baselines/egor1/work/
+!baselines/egor1/env/
+baselines/egor1/results/

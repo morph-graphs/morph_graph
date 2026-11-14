@@ -136,6 +136,7 @@ class Tools:
         self.video = upstream("api/visual_tools/egor1_videollm_" + ("llava" if arm == "llava" else "gemini"), "video_llm")
         self.image = upstream("api/visual_tools/egor1_vlm", "vlm")
         os.makedirs(os.path.join(cache_dir, "cache"), exist_ok=True)
+        apis.track()
 
     def _quiet(self, fn, *a, **k):
         """Run upstream code in the cache folder (vlm writes ./cache/<stamp>.png) with its prints dropped (they
@@ -151,6 +152,7 @@ class Tools:
     def call(self, call):
         """process.tool_call for one wearer, in process. Returns the text put between <information> tags."""
         call, err = check(call, self.cutoff)
+        self.sent = None if err else call      # what goes on to upstream's tool, after the streaming check
         if call is None:
             return ""
         if err:
@@ -158,6 +160,7 @@ class Tools:
         name, args = str(call["name"]).lower(), call["arguments"]
         if not isinstance(args, dict):     # upstream's parser can hand back a set or a string
             return "Invalid query arguments."
+        apis.ROLE = "rag" if "rag" in name else "video_llm" if "video_llm" in name else "vlm"
         if "rag" in name:
             if any(k not in args for k in ("level", "keywords", "start_time", "query_time")):
                 return "Invalid query arguments."
