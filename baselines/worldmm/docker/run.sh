@@ -20,9 +20,10 @@
 #   HDEPIC_VIDEOS    videos on the host (default $EPIC_MORPH_DIR/data/HD-EPIC/videos), mounted read-only at /videos
 #   WORLDMM_OUT, WORLDMM_WORK  optional, paths inside the container (e.g. /repo/baselines/worldmm/work/check)
 #   passed through when set: HF_TOKEN MERIT_HF_REPO WORLDMM_TAG WORLDMM_FETCH WORLDMM_EMB_BATCH
-#                    WORLDMM_MAX_MEMORY MAX_BATCH THREADS WORLDMM_OPENAI_SERVICE_TIER, and for the official arms
-#                    only OPENAI_API_KEY (by name through the environment, never on a command line) and
-#                    OPENAI_BASE_URL (another endpoint: test_official.sh's stand-in)
+#                    WORLDMM_MAX_MEMORY WORLDMM_SERVER_WAIT MAX_BATCH THREADS WORLDMM_OPENAI_SERVICE_TIER, and for the
+#                    official arms only OPENAI_API_KEY (by name through the environment, never on a command line) and
+#                    OPENAI_BASE_URL (another endpoint: test_official.sh's stand-in); OPENROUTER_API_KEY without
+#                    OPENAI_API_KEY sends the same calls through OpenRouter
 # The job board (coord/worker.py) sets MERIT_GPU / MERIT_RUNTIME for every baseline: read here as fallbacks.
 set -euo pipefail
 ARM=${3:?usage: run.sh <stage> <video> <arm> [bank]}
@@ -30,7 +31,7 @@ REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && pwd)
 IMAGE=${WORLDMM_IMAGE:-ghcr.io/morph-graphs/worldmm:$(bash "$REPO/baselines/worldmm/docker/image_tag.sh" "$ARM")}
 RUNTIME=${WORLDMM_RUNTIME:-${MERIT_RUNTIME:-docker}}
-case $ARM in g5m*) ;; *) unset OPENAI_API_KEY ;; esac   # only the official arms' containers get the key
+case $ARM in g5m*) ;; *) unset OPENAI_API_KEY OPENROUTER_API_KEY ;; esac   # only the official arms' containers get the key
 SIFS=${WORLDMM_SIF_DIR:-${MERIT_SIF_DIR:-}}
 case $ARM in g5m*) ENV=m8 ;; *) ENV=$ARM ;; esac        # the image (environment) the arm runs in, as image_tag.sh
 if [ "$RUNTIME" = apptainer ] && [ -z "${WORLDMM_IMAGE:-}" ] && [ -n "$SIFS" ] && [ -s "$SIFS/worldmm_$ENV.sif" ]; then
@@ -50,8 +51,8 @@ if [ -n "${MERIT_WORK:-}" ]; then   # the shared work folder: WorldMM's own subf
     umask 002; mkdir -p "$MERIT_WORK"; BINDS+=("$(cd -P "$MERIT_WORK" && pwd):/work"); export WORLDMM_WORK=${WORLDMM_WORK:-/work/worldmm}
 fi
 if [ -n "${WORLDMM_MODEL_DIR:-}" ]; then BINDS+=("$(cd -P "$WORLDMM_MODEL_DIR" && pwd):/models:ro"); ENVS+=(WORLDMM_MODEL_DIR=/models); fi
-PASS=(HF_TOKEN MERIT_HF_REPO MERIT_OUTBOX WORLDMM_TAG WORLDMM_FETCH WORLDMM_EMB_BATCH WORLDMM_MAX_MEMORY MAX_BATCH THREADS
-      WORLDMM_OUT WORLDMM_WORK OPENAI_API_KEY OPENAI_BASE_URL WORLDMM_OPENAI_SERVICE_TIER)
+PASS=(HF_TOKEN MERIT_HF_REPO MERIT_OUTBOX WORLDMM_TAG WORLDMM_FETCH WORLDMM_EMB_BATCH WORLDMM_MAX_MEMORY WORLDMM_SERVER_WAIT
+      MAX_BATCH THREADS WORLDMM_OUT WORLDMM_WORK OPENAI_API_KEY OPENAI_BASE_URL OPENROUTER_API_KEY OPENROUTER_BASE_URL WORLDMM_OPENAI_SERVICE_TIER)
 if [ "$RUNTIME" = apptainer ]; then
     case $IMAGE in *.sif) ;; *) IMAGE=docker://$IMAGE ;; esac
     # through APPTAINERENV_* (the environment), not --env: a command line, token included, is visible in `ps`

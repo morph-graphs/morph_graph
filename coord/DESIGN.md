@@ -158,6 +158,20 @@ while the video's build is still on the board the task depends on it (workers ta
 done), and it goes to the same pools as the arm's builds. `publish --dry-run` prints the counts and commits
 nothing.
 
+Stale answers (added 2026-11-14, after epic-morph #19 moved 1,286 tranche-2/3 questions to the video's end): the
+master also lists a video whose answers file exists but leaves some question of the bank unanswered as the bank asks
+it now (`master.unanswered`: the reuse rule's key, wording, options, gold letter and query time, a row's query time
+counting within a second of `t_ask`, since baselines ask at floor(t_ask), MERIT's batch10 at ceil(t_ask)), or holds
+`Error`, or does not parse. Such a task's id is `<task>-redo-<hash of the video's questions>` and it carries
+`stale` (how many questions): the plain id may already be done on a pool, and a done claim holds a task for good.
+The hash changes only with the bank, so a question that fails again is listed again only after the bank changes
+(`publish --dry-run` counts the redo tasks already done and still stale). No redo is listed while the task or a redo
+of it still runs or waits for its relay: a pool could otherwise take it beside that run, in the same work folder. The
+worker's qa reuses the rest of the file and asks only those questions, from its own epic-morph checkout: that checkout has to be at the bank's commit with `outputs/v3/banks/<bank>/`
+regenerated (run_merit.sh reuses an exported bank folder), or it answers the old questions again. The master reads
+every answers file of the board's banks, keeping a summary of each by its content hash (`$HF_HOME/coord/answers/`),
+so a cycle downloads only new or changed files.
+
 What the master needs: `EPIC_MORPH_DIR` set to its own epic-morph checkout that has the bank; it regenerates
 `outputs/v3/banks/<bank>/` there each cycle. Without it `publish` stops (a tasks.json without the qa tasks
 would drop them from the board), so set it in the cron's script before this reaches main.
@@ -165,8 +179,8 @@ would drop them from the board), so set it in the cron's script before this reac
 What a worker needs for qa, beyond what builds need:
 - `EPIC_MORPH_DIR`: an epic-morph checkout at a commit whose `v3/export_bank.py` BANKS has the bank, with the
   bank's B2 files (`outputs/v3/b2/<video>/questions_llm/{bank_checked,verify}.jsonl`). For `t2_agree2`: the 20
-  videos of `v3/tranche2.txt`. `run_merit.sh qa` generates `outputs/v3/banks/<bank>/` there on first use and
-  reuses it after, so after moving the checkout to a newer commit delete that folder to regenerate it.
+  videos of `v3/tranche2.txt`; for `t3_agree2`: the 68 of `v3/tranche3.txt`; for `t4_agree2`: the 8 of `v3/tranche4.txt`. `run_merit.sh qa` generates
+  `outputs/v3/banks/<bank>/` there on first use and reuses it after, so after moving the checkout to a newer commit delete that folder to regenerate it.
 - The video itself (as for build): qa cuts the clips and frames if this machine has not, and MERIT reads them.
 - The memory comes from the results dataset (qa runs build, which fetches it; CPU only, seconds): a token that
   can read it, and HF_HUB_OFFLINE unset.
@@ -174,8 +188,19 @@ What a worker needs for qa, beyond what builds need:
 
 ## Every ready baseline on the board
 
-Added 2026-11-13. `EXPERIMENTS` lists build + qa (`t2_agree2`) for MERIT, MAGIC-Video and WorldMM, both arms each,
-in that order (the order is the priority). Pools per (baseline, arm) are in `master.POOLS`: every m8 needs one GPU
+Added 2026-11-13. `EXPERIMENTS` lists build + qa (one per bank of `master.BANKS`: `batch10_agree2`, tranches
+`t2_agree2` to `t5_agree2`, `rescue_agree2`, `extra_agree2`) for MERIT, MAGIC-Video and WorldMM, both arms each, in
+that order (the order is the priority). Every baseline's memories are built for all 156 videos: each bank's
+(batch10's first: `build_order.txt` lacks them, MERIT having built them before the board), then the rest of `build_order.txt`. A bank already answered lists nothing (MERIT's
+batch10). `first_videos.txt` (batch10, tranche 2, tranche 3) puts those videos' builds and qa ahead of builds of
+videos with no bank yet.
+
+No question is answered twice. The tranches are disjoint by video (`rescue_agree2` and `extra_agree2` are second
+banks of videos that have one, without its questions); beyond that, a qa run first reuses the video's
+answers under every other bank (`hf_results.py earlier-answers`: the local folder's `answers_<bank><suffix>.json.gz`,
+then the dataset's when its memory is the local one), for each question whose key, wording, options, gold letter
+and query time are unchanged (MERIT `prepare_epic.match_answers`, MAGIC and WorldMM `baselines/common/earlier.py`),
+and asks only the rest. Pools per (baseline, arm) are in `master.POOLS`: every m8 needs one GPU
 of 40 GB or more (the Nexus A6000 pools, wriva, max, zaratan); every m27 needs an 80 GB GPU (wriva, max, zaratan), and only
 MERIT's m27 also goes to arm00 (the images are x86; MERIT alone has a native aarch64 environment there). MAGIC's
 build depends on MERIT's build of the same video and arm while that is listed, since it reuses MERIT's captions.
@@ -221,7 +246,8 @@ answered by several reasoning models: `g5m-q8`, `g5m-q27`, `g5m-g5`; each baseli
 
 - `master.NEEDS_ENV` maps (baseline, arm) to the environment variables a worker must have: the `api` configs
   (`GEMINI_API_KEY` or `OPENAI_API_KEY`), WorldMM's `g5m`, `g5m-q8`, `g5m-g5` and MERIT's `g5m`, `g5m-g5`
-  (`OPENAI_API_KEY`). Every task of such an arm carries `needs_env` and is listed for `KEY_POOLS` (`max`) only,
+  (`OPENAI_API_KEY`; for the gpt-5-mini work either that or `OPENROUTER_API_KEY`, see "Either key" below). Every
+  task of such an arm carries `needs_env` and is listed for `KEY_POOLS` (`max`) only (plus `nexus` in that case),
   whatever its `EXPERIMENTS` line says; `--only-pools` can narrow that, never widen it. MERIT's `g5m-q8` and
   `g5m-q27` call nothing at answer time (the memory model is used at build only), so they carry no `needs_env` and
   go to the GPU pools of `m8` / `m27`. WorldMM's answer arms both need the key: its retriever is gpt-5-mini.
@@ -233,9 +259,9 @@ answered by several reasoning models: `g5m-q8`, `g5m-q27`, `g5m-g5`; each baseli
   it is listed. An answer arm's folder in the dataset holds its answers and `<video>_memory_ref.json`, never the
   memory, so only the memory arm's folder can count as built (`MEMORY_DONE`).
 - The `g5m` memories are built for all 156 videos (OpenAI shuts gpt-5 and gpt-5-mini down on 2026-12-11, and a
-  built memory can be reused after that): the videos of `batch10_agree2`, then of `t2_agree2`, then the rest of
+  built memory can be reused after that): the videos of each bank of `master.BANKS` in order, then the rest of
   `build_order.txt`. These tasks come right after the `api` tasks, by video group: batch10's two memories and its
-  answers, then tranche 2's, then the other memories. The local-model tasks keep their order behind them.
+  answers, then tranche 2's, then tranche 3's, then the other memories. The local-model tasks keep their order behind them.
 - `master.PILOT` is a gate: while it lists task ids, those are the only tasks of the reported-configuration arms
   in `tasks.json`; all their other tasks are withheld (`publish --dry-run` prints how many). The `api` tasks and
   the local-model tasks are not affected. Emptying the list, after the pilot's token usage has been read from its
@@ -243,9 +269,71 @@ answered by several reasoning models: `g5m-q8`, `g5m-q27`, `g5m-g5`; each baseli
 - An answer arm's task carries `memory_arm`, so a `--prefetch` worker (#37) downloads the memory arm's folder
   too. With `--outbox`, MERIT's answer arms hand one folder to the relay like any task; WorldMM's answer arms upload
   two folders (the memory's and their own) and need a key anyway, so they run on pool `max`, which uploads itself.
+- **Either key, and our own Nexus worker (2026-11-14).** A `needs_env` name of the form `A|B` is met by either
+  variable. The gpt-5-mini work, MERIT's `g5m` and WorldMM's `g5m` and `g5m-q8` (its retriever), carries
+  `OPENAI_API_KEY|OPENROUTER_API_KEY`: with OpenRouter's key alone the same calls go through OpenRouter (each
+  README, "Through OpenRouter"; the `runs.jsonl` line says which gateway). A task whose every need an OpenRouter
+  key meets (these, and MAGIC's `oss120*`) is listed for `ROUTER_POOLS` = `KEY_POOLS` + `nexus`; every other keyed
+  task stays with `KEY_POOLS`. The gpt-5 answer arms (`g5m-g5` of both) are among those: they stay with Max and
+  `OPENAI_API_KEY` (Anubhav, 2026-11-14), although the baselines' code could send gpt-5 through OpenRouter too. Banks, videos, order and the pilot gate are unchanged. A worker running older code
+  does not know `A|B` and leaves these tasks until it is updated.
+  - The Nexus worker gets the key from a file only its owner reads: `~/.config/openrouter_key` (one bare line,
+    mode 600). `coord/nexus_worker.sbatch` exports it when the file is there (no file: the worker runs as before
+    and leaves the keyed tasks) and unsets the other providers' keys. Started by hand, the same in the shell:
+    `[ -f ~/.config/openrouter_key ] && export OPENROUTER_API_KEY=$(cat ~/.config/openrouter_key)`. Start it with
+    `BASELINES="merit worldmm magic"` in `--export`.
+  - The key travels in the environment only: worker -> `sbatch` (its default exports the submitting environment;
+    the queues' arguments must not set `--export`) -> the task's job -> `docker/run.sh`, which hands it to the
+    container by name for the arms that call the API. It is in no command line, script, state file or board file,
+    and failure notes are scrubbed (`worker.scrub`). Slurm itself keeps a job's environment while the job exists.
+  - Queues (`coord/nexus_queues.json`): MERIT's `g5m` build uses no GPU and goes to the `cpu` queue (4 CPUs,
+    16 GB); WorldMM's `g5m` build and MAGIC's `oss120` / `oss120-flash` need one GPU for the
+    local embedding models (24 GB: WorldMM's ran out of memory on a 16 GB card) and WorldMM's `g5m-q8` 40 GB, so they go to the A6000 queues that are
+    not preemptible by lower tiers (`sailon-a6000`, `tron-a6000`); MAGIC's `oss120-q27` serves the 27B and goes to
+    `h200`. A queue's `fits` names these arms as `baseline/arm`, so no other pool's worker is affected.
 - Another paid-API baseline adds its arms to `NEEDS_ENV` and `MEMORY_ARM` and its lines to `EXPERIMENTS`; the pool
   restriction, the worker's check and the gate then apply to it as they are (the variable may be any name, e.g.
   `OPENROUTER_API_KEY`).
+
+## The other paid rows: batch10 only, pool `max`, behind the gate
+
+Added 2026-11-13. `master.PAID` lists Ego-R1 (`gemini25pro`), EGAgent (`gpt41`, `gemini25pro`), EgoRAG
+(`egogpt_gpt4o`), HippoMM (`q25vl7b-gpt4o`) and MAGIC-Video's reported arms (`oss120`, `oss120-flash`, `oss120-q27`),
+each with the models it was published with, after the g5m lines and before the local-model lines.
+
+- Batch10 only (Anubhav): a `build` line with a bank lists a build for that bank's videos only, here the 10 of
+  `batch10_agree2`, and each `qa` line answers that bank. No tranche, no 156-video builds.
+- Run by Max: every line is for `KEY_POOLS`. `NEEDS_ENV` may be keyed by (baseline, arm, stage) where a baseline's
+  stages need different keys (EgoRAG's build also needs `DEEPSEEK_API_KEY`; HippoMM's build needs none and carries no
+  `needs_env`, but stays on pool `max`: `--only-pools` cannot move a task listed for the key pool only).
+- Shared memories: EGAgent's GPT-4.1 memory is built under `gpt41`, and `gemini25pro`'s `qa` waits for that build and
+  fetches it (`MEMORY_ARM`); MAGIC's `oss120-flash` and `oss120-q27` answer from `oss120`.
+- The gate: `master.GATED` is every arm of the `REPORTED` and `PAID` lines, so a paid baseline is withheld by `PILOT`
+  because it is listed there, not because of its name.
+- Not board stages: Ego-R1's `firstturn`, EGAgent's `check`, HippoMM's `count` and the paid `blind` floors. The worker
+  runs `build` or `qa`, then `upload`, through each baseline's `docker/run.sh`, whose interface is the same as MERIT's.
+- `oss120-q27` serves Qwen3.8-27B and needs an 80 GB GPU: the board cannot say that about one task of a pool, so Max's
+  worker must give those tasks such a slot (or leave `magic` out of `--baselines` on a smaller machine).
+
+## The plain video model (`baselines/direct`): qa tasks with no build
+
+Added 2026-11-14. `master.DIRECT` maps each arm of the no-memory baseline (`<model>-f<N>`: Qwen3-VL-8B and
+Qwen3.8-27B at N = 32, 128 and 768 frames) to its pools, and `EXPERIMENTS` gets one `qa` line per arm and bank of
+`master.BANKS`, after the paid rows and before the memory arms (short tasks, as the `api` ones).
+
+- No build line and no `MEMORY_DONE` entry: a task's `deps` are empty, and it is listed until
+  `direct/<arm>/<video>/answers_<bank>.json.gz` is in the results dataset. No key, no gate.
+- No image of its own: `baselines/direct/docker/run.sh` runs the arm in MERIT's image of the model's environment
+  (`merit:m8-...` for the 8B, `merit:m27-...` for the 27B; with Apptainer `merit_m8.sif` / `merit_m27.sif` of
+  `MERIT_SIF_DIR`). A pool that runs MERIT adds `direct` to `--baselines` and pulls nothing.
+- Pools: the 8B arms go to the `m8` pools (measured peak 39.2 GB at N = 768, so one 48 GB GPU at every N); the 27B
+  at N = 32 and 128 to the `m27` pools without arm00 (measured 2x 48 GB at N = 128; one 80 GB GPU). The 27B at
+  N = 768 is not sized, so it is listed only for the pools whose queues have an H200 (`nexus`, `vatsal`) until it is.
+- Queues: a queue's `fits` names arms, and these arms are not `m8` / `m27`, so `coord/nexus_queues.json` names them:
+  the 8B arms on every 48 GB queue (and as the H200's fallback), the 27B arms on the H200. A person's own copy of
+  that file needs the same names, or the worker leaves the tasks unclaimed.
+- Another model or frame budget (`baselines/direct/README.md`) is one entry in `DIRECT`, its name in the queues it
+  fits, and, for a new model, its environment in `baselines/direct/docker/image_tag.sh`.
 
 ## A worker restart (slurm launcher), and the Hub's rate limit
 

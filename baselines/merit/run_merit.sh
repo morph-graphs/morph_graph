@@ -33,6 +33,7 @@
 #                  empty context, with no search. Needs MERIT_TAG (one per context file); written to blind_<bank>_<tag>.json
 #   MERIT_FETCH    0 to never take the memory from the dataset (build normally reuses it when it is there)
 #   OPENAI_API_KEY g5m build and g5m-g5 qa: the key, from the environment only (never an argument or a file);
+#                  or OPENROUTER_API_KEY alone: the same calls through OpenRouter (README "Through OpenRouter");
 #                  every other arm and stage runs with it removed from its environment
 #   MERIT_SERVICE_TIER  the OpenAI service tier, e.g. flex (half price, slower); default the API's standard tier
 #   MERIT_API_CONCURRENCY  g5m build: captions / keys requested at once (default 8); MERIT_API_THREADS  g5m-g5 qa:
@@ -75,11 +76,13 @@ mkdir -p "$OUT" "$MOUT" "$WORK/logs"
 USAGE=$WORK/usage/$ARM/$V.jsonl; API=
 case $ARM:$STAGE in g5m:build|g5m:all) API=$MODEL ;; g5m-g5:qa|g5m-g5:all) API=$RESPOND ;; esac
 if [ -n "$API" ]; then
-    [ -n "${OPENAI_API_KEY:-}" ] || { echo "$ARM $STAGE calls the OpenAI API ($API): set OPENAI_API_KEY in the environment"; exit 1; }
+    [ -n "${OPENAI_API_KEY:-}${OPENROUTER_API_KEY:-}" ] || { echo "$ARM $STAGE calls the OpenAI API ($API): set OPENAI_API_KEY (or OPENROUTER_API_KEY, to go through OpenRouter) in the environment"; exit 1; }
+    # one gateway per run: OpenAI's key wins, and the stage then has no other provider's key
+    if [ -n "${OPENAI_API_KEY:-}" ]; then unset OPENROUTER_API_KEY; else echo "$API through OpenRouter (openai/$API, provider OpenAI only)"; fi
     mkdir -p "$(dirname "$USAGE")"
     export MERIT_USAGE_LOG=$USAGE MERIT_OPENAI_CACHE=$WORK/openai_cache/${ARM}_$V   # the reply cache: a rerun pays nothing twice
 else
-    unset OPENAI_API_KEY MERIT_USAGE_LOG
+    unset OPENAI_API_KEY OPENROUTER_API_KEY MERIT_USAGE_LOG
 fi
 # eval_egolife.sh calls plain `python`: this environment's first
 export PATH="$(dirname "$PY"):$PATH" PYTHONPATH="$R/src${PYTHONPATH:+:$PYTHONPATH}" PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
@@ -228,14 +231,19 @@ qa() {
     case $RESPOND in gpt-*) merit=("$PY" "$M/epic/openai_usage.py" eval --num-threads "${MERIT_API_THREADS:-4}") ;; esac
     local n; n=$("$PY" -c "import json,sys; print(len(json.load(open(sys.argv[1]))))" "$QA")
     # Question IDs are the bank's keys, and an answer is reused only for an unchanged question (collect_answers.py),
-    # so the answers file of an earlier tranche (or the dataset's) is a source like any run. Pass "full" answers
-    # every question (MERIT resumes it from its temp file if interrupted); later passes, each under a new name so
-    # no earlier answers are overwritten, answer only the IDs with no valid answer yet: new or edited questions,
+    # so the answers file of an earlier tranche (or the dataset's) is a source like any run, and so are the video's
+    # answers under its other banks (same arm, memory and variant): a question they answered is not asked again.
+    # Pass "full" answers every question (MERIT resumes it from its temp file if interrupted); later passes, each
+    # under a new name so no earlier answers are overwritten, answer only the IDs with no valid answer yet: new or edited questions,
     # or ones MERIT failed on (it writes "Error"). Nothing runs when all are answered.
-    local ans=$OUT/answers_$BANK$SUF.json.gz
-    collect() { "$PY" "$M/epic/collect_answers.py" --qa_file "$QA" --runs "$runs/*/*_final.json" --prev "$ans" --out "$ans" | tail -1; }
+    # An answer arm's folder holds its memory as {video}_memory_ref.json (memory_ref), the memory arm's the files.
+    local ans=$OUT/answers_$BANK$SUF.json.gz earlier mem=("{video}_30sec.json" "{video}_30sec_4_key.json")
+    [ "$ARM" = "$MEM" ] || mem=("{video}_memory_ref.json")
+    earlier=$("$PY" "$M/../common/hf_results.py" earlier-answers --memory "${mem[@]}" --arm "$ARM" --video "$V" --dir "$OUT" \
+        --epic "$EPIC" --suffix="$SUF" | grep -vxF "$ans" || true)
+    collect() { "$PY" "$M/epic/collect_answers.py" --qa_file "$QA" --runs "$runs/*/*_final.json" --prev "$ans" $earlier --out "$ans" | tail -1; }
     for k in 1 2 3; do
-        if [ -s "$ans" ] || ls "$runs"/*/*_final.json >/dev/null 2>&1; then
+        if [ -s "$ans" ] || [ -n "$earlier" ] || ls "$runs"/*/*_final.json >/dev/null 2>&1; then
             missing=$(collect)
             [ -z "$missing" ] && break
             sel=(--question-ids $missing); name=${ARM}_${V}_${BANK}${SUF}_fill$(date +%m%d%H%M%S)

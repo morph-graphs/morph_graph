@@ -14,9 +14,9 @@
 #   arm    m8   Qwen3-VL-8B-Instruct for every role (captions, memory, retrieval, answers)   one GPU with >= 40 GB
 #          m27  Qwen3.8-27B (instruct mode) for every role                                  one 80 GB GPU, or 2x 48 GB
 #          WorldMM's published models (README "Official arms"; OpenAI API, paid: OPENAI_API_KEY in the environment):
-#          g5m     the memory, built with gpt-5-mini (build, upload); shared by the two answer arms   one GPU >= 16 GB
+#          g5m     the memory, built with gpt-5-mini (build, upload); shared by the two answer arms   one GPU >= 24 GB
 #          g5m-q8  answers from the g5m memory: retriever gpt-5-mini, respond Qwen3-VL-8B (local)     one GPU >= 40 GB
-#          g5m-g5  answers from the g5m memory: retriever gpt-5-mini, respond gpt-5                   one GPU >= 16 GB
+#          g5m-g5  answers from the g5m memory: retriever gpt-5-mini, respond gpt-5                   one GPU >= 24 GB
 #   bank   a named bank of the epic-morph checkout, e.g. batch10_agree2 (generated there with
 #          v3/export_bank.py <bank> when missing; byte-identical for anyone at that commit)
 #
@@ -34,8 +34,11 @@
 #                    morph-graphs/epic-morph-results at worldmm/<arm>/<video>/)
 #   WORLDMM_TAG      a variant name for the answers (answers_<bank>_<tag>.json.gz), so variants never overwrite
 #   WORLDMM_FETCH    0 to never take the memory from the dataset (build normally reuses it when it is there)
-#   OPENAI_API_KEY   official arms: the key, from the environment only (never an argument or a file)
+#   OPENAI_API_KEY   official arms: the key, from the environment only (never an argument or a file); or
+#                    OPENROUTER_API_KEY alone: the same calls through OpenRouter (README "Through OpenRouter")
 #   WORLDMM_OPENAI_SERVICE_TIER  official arms: e.g. flex (half price, slower); default the API's standard tier
+#   WORLDMM_SERVER_WAIT  minutes to wait for the backbone server to load (default 45: Qwen3.8-27B from a busy
+#                    network filesystem took over 15 min); a server that dies ends the wait at once
 #   WORLDMM_REPO_COMMIT, WORLDMM_SUBMODULE_COMMIT, WORLDMM_EPIC_COMMIT  commits for runs.jsonl when a checkout
 #                    has no .git (a synced copy); read with git otherwise
 # Every step skips finished work, so rerunning the same command resumes. The memory is built once per video
@@ -71,6 +74,7 @@ mkdir -p "$OUT" "$MOUT" "$WORK/logs"
 export TOKENIZERS_PARALLELISM=false PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True MODEL RESPOND EPIC
 export WORLDMM_OPENAI_CACHE=$WORK/openai_cache/$V   # WorldMM's reply cache for its OpenAI calls (a rerun pays nothing twice)
 unset WORLDMM_USAGE_FILE
+[ -z "${OPENAI_API_KEY:-}" ] || unset OPENROUTER_API_KEY   # one gateway per run: OpenAI's key wins
 log() { echo "=== $V $ARM $1 ($(date '+%F %H:%M'))"; }
 have_memory() { local m; for m in "${MEMORY[@]}"; do [ -s "$MOUT/${m//\{video\}/$V}" ] || return 1; done; }
 record() {   # one line per finished stage, for the hand-back: record <stage> <seconds> [results folder, default $OUT]
@@ -116,19 +120,21 @@ start_server() {   # once per invocation, on a node-local unix socket
     SERVER_PID=$!
     trap 'kill $SERVER_PID 2>/dev/null; rm -f $WORLDMM_SERVER /tmp/worldmm_$$.ready' EXIT
     echo "backbone server $MP on GPU(s) $scvd, log $slog"
-    for _ in $(seq 1 180); do
+    local mins=${WORLDMM_SERVER_WAIT:-45}
+    for _ in $(seq 1 $((mins * 12))); do
         [ -f "$ready" ] && return 0
         kill -0 $SERVER_PID 2>/dev/null || { echo "server died:"; tail -20 "$slog"; exit 1; }
         sleep 5
     done
-    echo "server not ready after 15 min"; exit 1
+    echo "server not ready after $mins min (WORLDMM_SERVER_WAIT)"; exit 1
 }
 client() { CUDA_VISIBLE_DEVICES=${G[$((NGPU - 1))]} "$PY" -u "$@"; }
 backends() {   # what a stage's models need: the local server for a Qwen model, the key for an OpenAI one
     local m
     for m in "$@"; do
         case $m in
-            gpt-*) [ -n "${OPENAI_API_KEY:-}" ] || { echo "$ARM calls the OpenAI API ($m): set OPENAI_API_KEY in the environment"; exit 1; } ;;
+            gpt-*) [ -n "${OPENAI_API_KEY:-}${OPENROUTER_API_KEY:-}" ] || { echo "$ARM calls the OpenAI API ($m): set OPENAI_API_KEY (or OPENROUTER_API_KEY, to go through OpenRouter) in the environment"; exit 1; }
+                   [ -n "${OPENAI_API_KEY:-}" ] || echo "$m through OpenRouter (openai/$m, provider OpenAI only)" ;;
             *) start_server ;;
         esac
     done
@@ -204,6 +210,12 @@ qa() {
     have_memory || build
     [ -s "$SMALL" ] || prep
     memory_ref; backends "$MODEL" "$RESPOND"; export WORLDMM_USAGE_FILE=$WORK/usage/$V/qa_${ARM}_$BANK$SUF.json
+    # the video's answers under its other banks (same arm, memory and variant): a question they answered is not asked
+    # again. An answer arm's folder holds its memory as {video}_memory_ref.json (memory_ref), the memory arm's the files
+    local earlier mem=("${MEMORY[@]}")
+    [ "$MEM" = "$ARM" ] || mem=("{video}_memory_ref.json")
+    earlier=$("$PY" "$M/../common/hf_results.py" earlier-answers --baseline worldmm --memory "${mem[@]}" \
+        --arm "$ARM" --video "$V" --dir "$OUT" --epic "$EPIC" --suffix="$SUF" | grep -vxF "$ans" || true)
     # a question that fails (WorldMM's "Error" / "Unable to generate answer") is retried by the next pass; one that
     # still stops on an assertion inside WorldMM in the last pass is kept as "Error" (wrong, with the error in its
     # row), as WorldMM's eval.py records it, so it does not hold back the video's other answers
@@ -212,7 +224,7 @@ qa() {
         [ "$k" = 3 ] && last=--final_pass
         client "$M/epic/eval_epic.py" --video "$V" --qa_file "$QA" --memory_dir "$MOUT" --video_file "$SMALL" \
             --model "$MODEL" --respond_model "$RESPOND" --rows "$WORK/rows/$ARM/$V/$BANK$SUF.jsonl" --out "$ans" \
-            --cache_dir "$WORK/cache/$ARM/$V/$BANK$SUF" $last && break || echo "pass $k left questions unanswered"
+            --cache_dir "$WORK/cache/$ARM/$V/$BANK$SUF" --prev $earlier $last && break || echo "pass $k left questions unanswered"
     done
     [ -s "$ans" ] || { echo "still unanswered after 3 passes (rerun the same command to retry)"; exit 1; }
     record "qa $BANK$SUF" $((SECONDS - t)); unset WORLDMM_USAGE_FILE

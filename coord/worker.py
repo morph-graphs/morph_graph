@@ -16,9 +16,9 @@ merit:<tag>, the tag from baselines/<b>/docker/image_tag.sh <arm>). Every baseli
 worker's MERIT_GPU, MERIT_RUNTIME, MERIT_SIF_DIR, MERIT_HF_CACHE and MERIT_WORK (one shared work folder per cluster),
 so one worker and one environment run them all.
 
-A task that calls a paid API lists the variables it needs (`needs_env`, e.g. OPENAI_API_KEY): the worker takes it
-only when they are set in its own environment, from where the task's container gets the key by name. A key is never
-part of a command, and failure notes are scrubbed of keys before they go to the board.
+A task that calls a paid API lists the variables it needs (`needs_env`, e.g. OPENAI_API_KEY, or "A|B" for either
+of two): the worker takes it only when they are set in its own environment, from where the task's container gets
+the key by name. A key is never part of a command, and failure notes are scrubbed of keys before they go to the board.
 
 Builds need the videos; qa tasks also need EPIC_MORPH_DIR, an epic-morph checkout that has the task's bank (DESIGN.md,
 "Answer (qa) tasks").
@@ -78,9 +78,13 @@ import jobs  # noqa: E402
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # A task's fields go into a shell command, so only these shapes are ever run (anything else is skipped).
-# An arm is m8 / m27 / m3 for the local-model baselines, a reported-configuration arm (g5m, g5m-q8, ...), or a config
-# name of baselines/api/configs/ (gpt-5-f1024).
-VALID = dict(baseline=re.compile(r"^(merit|worldmm|magic|m3agent|api)$"), arm=re.compile(r"^(m(8|27|3)|[a-z0-9]+([.-][a-z0-9]+)*)$"),
+# An arm is m8 / m27 / m3 for the local-model baselines, a reported-configuration arm (g5m, g5m-q8, ...), a paid row's
+# arm (q25vl7b-gpt4o, egogpt_gpt4o), a model and frame budget of baselines/direct (qwen3vl-8b-f128) or a config name
+# of baselines/api/configs/ (gpt-5-f1024): lower-case letters and digits in runs joined by one `.`, `-` or `_`, none
+# of which the shell, a Slurm job name or a file pattern reads as anything but itself (no space, quote, `$`, `/`, `*`,
+# and never a leading `-`, so it cannot become an option).
+VALID = dict(baseline=re.compile(r"^(merit|worldmm|magic|m3agent|api|egor1|egagent|egorag|hippomm|direct)$"),
+             arm=re.compile(r"^(m(8|27|3)|[a-z0-9]+([._-][a-z0-9]+)*)$"),
              stage=re.compile(r"^(prep|build|qa|blind)$"), video=re.compile(r"^P\d\d-\d{8}-\d{6}$"),
              bank=re.compile(r"^[A-Za-z0-9_]*$"), id=re.compile(r"^[A-Za-z0-9_.-]+$"))
 
@@ -98,8 +102,9 @@ def scrub(text):
 
 
 def has_env(task):
-    """Does this worker's environment have every variable the task needs (needs_env: an API key, by name)?"""
-    return all(isinstance(e, str) and os.environ.get(e) for e in task.get("needs_env") or [])
+    """Does this worker's environment have every variable the task needs (needs_env: an API key, by name; "A|B" is
+    met by either)?"""
+    return all(isinstance(e, str) and any(os.environ.get(x) for x in e.split("|")) for e in task.get("needs_env") or [])
 
 
 HEARTBEAT_S = 600   # a cycle that changes nothing but leases and the heartbeat commits at most this often
@@ -128,7 +133,7 @@ def substance(pool_file):
 
 
 def valid(task):
-    return all(VALID[k].match(str(task.get(k) or "")) for k in VALID)
+    return all(VALID[k].fullmatch(str(task.get(k) or "")) for k in VALID)   # fullmatch: `$` alone lets a final newline by
 
 
 def inner(task, gpus, a):
@@ -165,10 +170,12 @@ def names(task, arms):
     return task["arm"] in arms or f"{task['baseline']}/{task['arm']}" in arms
 
 
-def fitting(task, queues, idle=()):
+def fitting(task, queues, idle=(), full=()):
     """The queues whose GPU can run this task: their `fits` names it, or their `fallback` names it and the queue is
-    idle (no task its `fits` names is waiting: an H200 takes 8B work only when no 27B task needs it)."""
-    return [n for n, q in queues.items() if names(task, q["fits"]) or (n in idle and names(task, q.get("fallback", [])))]
+    idle (no task its `fits` names is waiting: an H200 takes 8B work only when no 27B task needs it). A queue in
+    `full` (as many of this worker's tasks on it as its max_jobs) takes no more."""
+    return [n for n, q in queues.items() if n not in full
+            and (names(task, q["fits"]) or (n in idle and names(task, q.get("fallback", []))))]
 
 
 def submit_copies(task, a, queues, state, sbatch="sbatch"):
@@ -185,7 +192,8 @@ def submit_copies(task, a, queues, state, sbatch="sbatch"):
         if os.path.exists(p + ext):
             os.remove(p + ext)
     wrap = (f"bash {REPO_ROOT}/coord/slurm_guard.sh {shlex.quote(p + '.ran')} || exit 0; "
-            f"cd {REPO_ROOT} && nvidia-smi -L && ( {inner(task, '', a)} ); echo $? > {p}.rc.tmp && mv {p}.rc.tmp {p}.rc")
+            f"cd {REPO_ROOT} && {{ nvidia-smi -L || true; }} && ( {inner(task, '', a)} ); "   # || true: a CPU queue has none
+            f"echo $? > {p}.rc.tmp && mv {p}.rc.tmp {p}.rc")
     ids = {}
     for n in fitting(task, queues, idle=queues):   # the caller passes the queues chosen for it (a fallback one included)
         r = subprocess.run([sbatch, "--parsable", f"--job-name=board-{tid}", f"--output={p}.log", "--open-mode=append",
@@ -418,6 +426,10 @@ def main():
                 if not any(names(x, queues[n]["fits"]) and claimable(x) for x in tasks)
                 and not any(tid in by_id and names(by_id[tid], queues[n]["fits"]) for tid in active)
                 and fallback_used[n] < queues[n].get("fallback_max", 1)}
+        # a queue's max_jobs (e.g. 2: QoS vulcan-high-h200 runs two jobs per user): once that many of this worker's
+        # tasks have a live copy on it, it takes no more, so tasks only it fits are left for other pools
+        used = {n: sum(on_queue(tid, n) for tid in active) for n, q in (queues or {}).items() if q.get("max_jobs")}
+        full = {n for n in used if used[n] >= queues[n]["max_jobs"]}
         # tasks only the scarce queues fit (27B) first, so cheaper work cannot use up the free slots ahead of them
         scarce = [q["fits"] for q in (queues or {}).values() if q.get("fallback")]
         start = []
@@ -432,7 +444,7 @@ def main():
                 continue
             if a.pool not in task.get("pools", []) and "*" not in task.get("pools", []):
                 continue
-            if queues and not fitting(task, queues, idle):   # none of this worker's GPUs can run it (e.g. 27B, no 80 GB queue)
+            if queues and not fitting(task, queues, idle, full):   # none of this worker's GPUs can run it now (e.g. 27B, no 80 GB queue)
                 continue
             if task["baseline"] not in a.baselines:   # this worker has no image (or setup) for it
                 continue
@@ -444,7 +456,11 @@ def main():
             claims[tid] = dict(status="running", host=host, node=socket.gethostname(), slot=slot,
                                gpu="(scheduler)" if a.launcher == "slurm" else gpu_name(slot), claimed=jobs.iso(),
                                started=jobs.iso(), started_t=t, lease_until=t + jobs.LEASE_S)
-            qs = fitting(task, queues, idle) if queues else []
+            qs = fitting(task, queues, idle, full) if queues else []
+            for n in [n for n in qs if n in used]:
+                used[n] += 1
+                if used[n] >= queues[n]["max_jobs"]:
+                    full.add(n)
             for n in [n for n in qs if n in idle and not names(task, queues[n]["fits"])]:   # a fallback copy used
                 fallback_used[n] += 1
                 if fallback_used[n] >= queues[n].get("fallback_max", 1):

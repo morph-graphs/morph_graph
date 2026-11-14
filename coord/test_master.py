@@ -1,4 +1,5 @@
-"""master.desired: qa tasks only where the bank has questions and the dataset lacks answers; they wait on a listed build.
+"""master.desired: qa tasks only where the bank has questions and the dataset lacks answers, or holds stale ones; they
+wait on a listed build.
 Paid-API arms: needs_env, pool max only, the pilot gate, answer arms waiting on their memory arm's build.
 
     python coord/test_master.py      (or pytest coord/test_master.py)
@@ -23,6 +24,7 @@ def test_qa_tasks(tmp_path, monkeypatch):
     monkeypatch.setenv("EPIC_MORPH_DIR", str(tmp_path))
     monkeypatch.setattr(M, "BUILD_ORDER", str(order))
     monkeypatch.setattr(M, "EXPERIMENTS", [("merit", "m8", "build", ["p"], None), ("merit", "m8", "qa", ["p"], "tb")])
+    monkeypatch.setattr(M, "REPORTED_BANKS", [])   # builds: the build order only
     have = {("merit", "m8", "P01-20240101-000001"), ("merit", "m8", "P01-20240101-000004")}
     files = {"merit/m8/P01-20240101-000004/answers_tb.json.gz"}
     tasks = {t["id"]: t for t in M.desired(have, files)}
@@ -55,13 +57,24 @@ def test_built_from():
 
 
 def test_experiments():
-    """Every baseline on the board has build + qa per arm, qa on the build's pools; arm00 (aarch64) runs MERIT only."""
-    ex = {(b, arm, stage): (pools, bank) for b, arm, stage, pools, bank in M.EXPERIMENTS}
-    for b in M.MEMORY_DONE:
+    """Every baseline on the board has build + qa of every bank per arm, qa on the build's pools; arm00 (aarch64)
+    runs MERIT only."""
+    ex = {(b, arm, stage, bank): pools for b, arm, stage, pools, bank in M.EXPERIMENTS}
+    assert M.BANKS == M.REPORTED_BANKS == ["batch10_agree2", "t2_agree2", "t3_agree2", "t4_agree2", "t5_agree2",
+                                           "rescue_agree2", "extra_agree2"]
+    for b in ("merit", "magic", "worldmm"):
         for arm in ("m8", "m27"):
-            assert ex[b, arm, "build"] == (M.POOLS[b, arm], None)
-            assert ex[b, arm, "qa"] == (M.POOLS[b, arm], "t2_agree2")
+            assert ex[b, arm, "build", None] == M.POOLS[b, arm]
+            for bank in M.BANKS:
+                assert ex[b, arm, "qa", bank] == M.POOLS[b, arm]
             assert ("arm00" in M.POOLS[b, arm]) == (b == "merit" and arm == "m27")
+    # the plain video model: qa only (no build line), every bank; the 8B on the m8 pools, the 27B on the m27 pools
+    # without arm00, its unsized N = 768 only where an H200 is; no key
+    direct = {(arm, stage, bank) for b, arm, stage, bank in ex if b == "direct"}
+    assert direct == {(arm, "qa", bank) for arm in M.DIRECT for bank in M.BANKS} and len(direct) == len(M.DIRECT) * len(M.BANKS)
+    for arm, pools in M.DIRECT.items():
+        assert pools == (M.M8 if arm.startswith("qwen3vl-8b") else ["nexus", "vatsal"] if arm == "qwen38-27b-f768" else M.M27)
+        assert all(ex["direct", arm, "qa", bank] == pools for bank in M.BANKS) and not M.needs("direct", arm, "qa")
 
 
 def test_build_waits_on_base(monkeypatch, tmp_path):
@@ -70,6 +83,7 @@ def test_build_waits_on_base(monkeypatch, tmp_path):
     order.write_text("P01-20240101-000001\nP01-20240101-000002\n")
     monkeypatch.setattr(M, "BUILD_ORDER", str(order))
     monkeypatch.setattr(M, "EXPERIMENTS", [("merit", "m8", "build", ["p"], None), ("magic", "m8", "build", ["p"], None)])
+    monkeypatch.setattr(M, "REPORTED_BANKS", [])
     tasks = {t["id"]: t for t in M.desired({("merit", "m8", "P01-20240101-000001")}, set())}
     assert tasks["magic-m8-build-P01-20240101-000001"]["deps"] == []   # MERIT's memory exists
     assert tasks["magic-m8-build-P01-20240101-000002"]["deps"] == ["merit-m8-build-P01-20240101-000002"]
@@ -104,39 +118,61 @@ def test_relay_claims_hold_but_are_not_done(tmp_path, monkeypatch):
 
 B10 = ["P05-20240425-201444", "P01-20240101-000010"]                      # stand-ins for the two banks' videos
 T2 = ["P01-20240101-000020", "P01-20240101-000021"]
+T3 = ["P01-20240101-000040"]
+T4 = ["P01-20240101-000050"]
+T5 = ["P01-20240101-000060"]
 REST = ["P01-20240101-000030"]
+BANK_VIDEOS = {"batch10_agree2": B10, "t2_agree2": T2, "t3_agree2": T3, "t4_agree2": T4, "t5_agree2": T5,
+               "rescue_agree2": T2[:1], "extra_agree2": T3}   # the last two: second banks of videos that have one
 
 
 def board(monkeypatch, tmp_path, experiments=None):
-    """The real EXPERIMENTS (or a given list) over a small world: 2 batch10 videos, 2 tranche-2 videos, 1 other."""
+    """The real EXPERIMENTS (or a given list) over a small world: 2 batch10 videos, 2 tranche-2 videos, 1 video each of
+    tranches 3, 4 and 5, 1 other; the rescue and extra banks ask videos of tranches 2 and 3 again."""
     order = tmp_path / "order.txt"
-    order.write_text("\n".join(REST[:1] + T2 + REST[1:]) + "\n")   # as build_order.txt: tranche 2 in it, batch10 not
+    order.write_text("\n".join(REST[:1] + T2 + T3 + T4 + T5 + REST[1:]) + "\n")   # as build_order.txt: the tranches in it, batch10 not
     monkeypatch.setattr(M, "BUILD_ORDER", str(order))
-    monkeypatch.setattr(M, "bank_videos", lambda bank: {"batch10_agree2": B10, "t2_agree2": T2}[bank])
+    monkeypatch.setattr(M, "bank_videos", lambda bank: BANK_VIDEOS[bank])
     if experiments is not None:
         monkeypatch.setattr(M, "EXPERIMENTS", experiments)
+
+
+ROUTER = {("merit", "g5m"), ("worldmm", "g5m"), ("worldmm", "g5m-q8"), ("magic", "oss120"), ("magic", "oss120-flash"),
+          ("magic", "oss120-q27")}   # the arms an OpenRouter key alone runs: also for pool nexus
 
 
 def test_needs_env_and_pools(monkeypatch, tmp_path):
     """Every task of a paid-API arm names its key and is for pool max only, and --only-pools never widens that."""
     board(monkeypatch, tmp_path)
     tasks = M.desired(set(), set())
-    assert {(t["baseline"], t["arm"]) for t in tasks if t.get("needs_env")} == set(M.NEEDS_ENV)
+    assert {(t["baseline"], t["arm"]) for t in tasks if t.get("needs_env")} == {k[:2] for k in M.NEEDS_ENV}
     for t in tasks:
-        need = M.NEEDS_ENV.get((t["baseline"], t["arm"]))
+        need = M.needs(t["baseline"], t["arm"], t["stage"])
         assert t.get("needs_env") == need
         if need:
-            assert t["pools"] == ["max"]
-            assert need == (["GEMINI_API_KEY"] if t["arm"].startswith("gemini") else ["OPENAI_API_KEY"])
+            # our Nexus worker is offered the gpt-5-mini work (MERIT's and WorldMM's g5m builds, WorldMM g5m-q8's
+            # retriever: either key) and MAGIC's oss120 arms; every other keyed task, the gpt-5 answer arms
+            # (g5m-g5) among them, stays Max's with its own key
+            router = (t["baseline"], t["arm"]) in ROUTER
+            assert t["pools"] == (M.KEY_POOLS + ["nexus"] if router else M.KEY_POOLS), t
+            if (t["baseline"], t["arm"]) not in {(b, arm) for b, arm, *_ in M.PAID}:
+                assert need == (["GEMINI_API_KEY"] if t["arm"].startswith("gemini") else ["OPENAI_API_KEY|OPENROUTER_API_KEY"]
+                                if router else ["OPENAI_API_KEY"])
     by = {(t["baseline"], t["arm"]): t for t in tasks}
     # MERIT's Qwen answer arms call no API: no needs_env, the GPU pools of m8 / m27
     assert by["merit", "g5m-q8"]["pools"] == M.M8 and by["merit", "g5m-q27"]["pools"] == M.POOLS["merit", "m27"]
     assert set(M.NEEDS_ENV) >= {("api", c) for c in M.API_CONFIGS} | {
         ("worldmm", "g5m"), ("worldmm", "g5m-q8"), ("worldmm", "g5m-g5"), ("merit", "g5m"), ("merit", "g5m-g5")}
+    own = lambda t: t.get("needs_env") or (t["baseline"], t["stage"]) == ("hippomm", "build")   # keyless, but Max's
     M.restrict(tasks, ["a-test-pool"])
-    assert all(t["pools"] == ([] if t.get("needs_env") else ["a-test-pool"]) for t in tasks)
+    assert all(t["pools"] == ([] if own(t) else ["a-test-pool"]) for t in tasks)
     M.restrict(tasks := M.desired(set(), set()), ["max", "a-test-pool"])
-    assert all(t["pools"] == (["max"] if t.get("needs_env") else ["max", "a-test-pool"]) for t in tasks)
+    assert all(t["pools"] == (["max"] if own(t) else ["max", "a-test-pool"]) for t in tasks)
+    M.restrict(tasks := M.desired(set(), set()), ["nexus"])   # a keyed task reaches nexus only where it was listed for it
+    assert {(t["baseline"], t["arm"]) for t in tasks if t.get("needs_env") and t["pools"] == ["nexus"]} == ROUTER
+    assert {t["baseline"] for t in tasks if t["arm"] == "g5m-g5"} == {"merit", "worldmm"}
+    assert all(t["pools"] == [] and t["needs_env"] == ["OPENAI_API_KEY"] for t in tasks if t["arm"] == "g5m-g5")
+    assert all(t["pools"] in ([], ["nexus"]) for t in tasks if t.get("needs_env"))
 
 
 def test_pilot_gate(monkeypatch, tmp_path):
@@ -165,8 +201,9 @@ def test_memory_arm(monkeypatch, tmp_path):
     by = {t["id"]: t for t in tasks}
     for b in ("worldmm", "merit"):
         built = [t["video"] for t in tasks if (t["baseline"], t["arm"], t["stage"]) == (b, "g5m", "build")]
-        assert built == [x for x in B10 + T2 + REST if (b, "g5m", x) not in have]   # all videos, once, in that order
-    assert not any(t["stage"] == "build" and t["arm"] != "g5m" for t in tasks if M.reported(t))   # answer arms never build
+        assert built == [x for x in B10 + T2 + T3 + T4 + T5 + REST if (b, "g5m", x) not in have]   # all videos, once, in that order
+    g5m = lambda t: t["arm"].startswith("g5m")
+    assert not any(t["stage"] == "build" and t["arm"] != "g5m" for t in tasks if g5m(t))   # answer arms never build
     assert by[f"worldmm-g5m-g5-qa-batch10_agree2-{v}"]["deps"] == [f"worldmm-g5m-build-{v}"]
     assert by[f"worldmm-g5m-q8-qa-batch10_agree2-{w}"]["deps"] == []       # that memory exists
     assert by[f"merit-g5m-q27-qa-t2_agree2-{T2[0]}"]["deps"] == [f"merit-g5m-build-{T2[0]}"]
@@ -175,8 +212,9 @@ def test_memory_arm(monkeypatch, tmp_path):
     # order: the API tasks, then the reported arms by video group (a batch10 answer before any tranche-2 build), then the rest
     kind = [0 if t["baseline"] == "api" else 1 if M.reported(t) else 2 for t in tasks]
     assert kind == sorted(kind) and [t["priority"] for t in tasks] == list(range(len(tasks)))
-    rep = [t for t in tasks if M.reported(t)]
-    group = [0 if t["video"] in B10 else 1 if t["video"] in T2 else 2 for t in rep]
+    rep = [t for t in tasks if g5m(t)]
+    group = [0 if t["video"] in B10 else 1 if t["video"] in T2 else 2 if t["video"] in T3 else 3 if t["video"] in T4
+             else 4 if t["video"] in T5 else 5 for t in rep]
     assert group == sorted(group)
     assert all(by[d]["priority"] < t["priority"] for t in tasks for d in t["deps"])
     # a memory folder counts as built with its baseline's last memory file; an answer arm's folder never does
@@ -186,9 +224,71 @@ def test_memory_arm(monkeypatch, tmp_path):
     assert done == {("worldmm", "g5m", v), ("merit", "g5m", v)}
 
 
+def test_paid_rows(monkeypatch, tmp_path):
+    """The other paid rows: batch10 only (builds too), pool max only, each stage's own keys, shared memories, after the
+    g5m lines and before the local-model lines, and all of them behind the pilot gate."""
+    board(monkeypatch, tmp_path)
+    v, w = B10
+    have = {("egagent", "gpt41", w)}                                       # one EGAgent memory already in the dataset
+    files = {f"egor1/gemini25pro/{v}/answers_batch10_agree2.json.gz"}      # one Ego-R1 video already answered
+    tasks = M.desired(have, files)
+    by = {t["id"]: t for t in tasks}
+    rows = {(b, arm) for b, arm, *_ in M.PAID}
+    paid = [t for t in tasks if (t["baseline"], t["arm"]) in rows]
+    assert rows == {("egor1", "gemini25pro"), ("egagent", "gpt41"), ("egagent", "gemini25pro"), ("egorag", "egogpt_gpt4o"),
+                    ("hippomm", "q25vl7b-gpt4o"), ("magic", "oss120"), ("magic", "oss120-flash"), ("magic", "oss120-q27")}
+    assert {(t["baseline"], t["arm"]) for t in paid} == rows
+    # batch10 only: no other video is built or answered, no other bank; pool max only, with or without a key
+    assert {t["video"] for t in paid} == set(B10) and {t["bank"] for t in paid} == {None, "batch10_agree2"}
+    assert all(t["pools"] == (M.ROUTER_POOLS if t["baseline"] == "magic" else M.KEY_POOLS) for t in paid)
+    count = lambda b, arm, stage: sum((t["baseline"], t["arm"], t["stage"]) == (b, arm, stage) for t in paid)
+    assert count("egor1", "gemini25pro", "build") == 2 and count("egor1", "gemini25pro", "qa") == 1   # v is answered
+    assert count("egagent", "gpt41", "build") == 1 and count("egagent", "gemini25pro", "build") == 0  # w is built
+    assert count("magic", "oss120", "build") == 2 and count("magic", "oss120-flash", "build") == 0
+    need = lambda tid: by[tid].get("needs_env")
+    assert need(f"egor1-gemini25pro-build-{v}") == ["GEMINI_API_KEY", "OPENAI_API_KEY"] == need(f"egor1-gemini25pro-qa-batch10_agree2-{w}")
+    assert need(f"egagent-gpt41-build-{v}") == ["OPENAI_API_KEY"] == need(f"egagent-gpt41-qa-batch10_agree2-{v}")
+    assert need(f"egagent-gemini25pro-qa-batch10_agree2-{v}") == ["GEMINI_API_KEY", "OPENAI_API_KEY"]
+    assert need(f"egorag-egogpt_gpt4o-build-{v}") == ["OPENAI_API_KEY", "DEEPSEEK_API_KEY"]
+    assert need(f"egorag-egogpt_gpt4o-qa-batch10_agree2-{v}") == ["OPENAI_API_KEY"]
+    assert need(f"hippomm-q25vl7b-gpt4o-build-{v}") is None and "needs_env" not in by[f"hippomm-q25vl7b-gpt4o-build-{v}"]
+    assert need(f"hippomm-q25vl7b-gpt4o-qa-batch10_agree2-{v}") == ["OPENAI_API_KEY"]
+    assert all(need(f"magic-{arm}-{x}-{v}") == ["OPENROUTER_API_KEY"]
+               for arm, x in (("oss120", "build"), ("oss120-flash", "qa-batch10_agree2"), ("oss120-q27", "qa-batch10_agree2")))
+    # shared memories: the answer arm waits on the memory arm's build while it is listed, and says where the memory is
+    assert by[f"egagent-gemini25pro-qa-batch10_agree2-{v}"]["deps"] == [f"egagent-gpt41-build-{v}"]
+    assert by[f"egagent-gemini25pro-qa-batch10_agree2-{w}"]["deps"] == []          # that memory exists
+    assert by[f"egagent-gemini25pro-qa-batch10_agree2-{v}"]["memory_arm"] == "gpt41"
+    assert by[f"magic-oss120-q27-qa-batch10_agree2-{v}"]["deps"] == [f"magic-oss120-build-{v}"]
+    assert by[f"magic-oss120-build-{v}"]["deps"] == []                             # no MERIT oss120 captions to wait for
+    assert by[f"hippomm-q25vl7b-gpt4o-qa-batch10_agree2-{v}"]["deps"] == [f"hippomm-q25vl7b-gpt4o-build-{v}"]
+    # order: api, the g5m arms, the paid rows, the local-model arms
+    kind = [0 if t["baseline"] == "api" else 1 if t["arm"].startswith("g5m") else 2 if t in paid else 3 for t in tasks]
+    assert kind == sorted(kind) and set(kind) == {0, 1, 2, 3}
+    assert all(by[d]["priority"] < t["priority"] for t in paid for d in t["deps"])
+    # the gate withholds every one of them, and --only-pools moves none of them (the keyless HippoMM build either)
+    assert all(M.reported(t) for t in paid) and M.GATED == rows | {(b, arm) for b, arm, *_ in M.REPORTED}
+    listed, withheld = M.gate(tasks)
+    assert not [t for t in listed if t in paid] and withheld == sum(M.reported(t) for t in tasks) - 1
+    M.restrict(tasks, ["a-test-pool"])
+    assert all(t["pools"] == [] for t in paid)
+    monkeypatch.setattr(M, "PILOT", [])
+    assert len(M.gate(tasks)[0]) == len(tasks)
+    # built: each baseline's last memory file, next to runs.jsonl
+    done, _ = M.built_from({f"{b}/{arm}/{v}/{f}" for b, arm, last in (
+        ("egor1", "gemini25pro", f"{v}_1day.json"), ("egagent", "gpt41", f"{v}_graph.json"),
+        ("egorag", "egogpt_gpt4o", f"{v}_l3_day.json"), ("hippomm", "q25vl7b-gpt4o", f"{v}_memory.json"),
+        ("magic", "oss120", "graph.pkl")) for f in ("runs.jsonl", last)} | {f"egorag/egogpt_gpt4o/{w}/runs.jsonl",
+                                                                           f"egorag/egogpt_gpt4o/{w}/{w}_30sec.json"})
+    assert done == {("egor1", "gemini25pro", v), ("egagent", "gpt41", v), ("egorag", "egogpt_gpt4o", v),
+                    ("hippomm", "q25vl7b-gpt4o", v), ("magic", "oss120", v)}
+
+
 def desired_before(have, files):
-    """master.desired as it was before the reported arms (origin/main 4c57eb0), for the comparison below."""
-    order = [v.strip() for v in open(M.BUILD_ORDER) if v.strip()]
+    """master.desired as it was before the reported arms (origin/main 4c57eb0), for the comparison below, except that
+    builds now cover every video: each bank's (batch10's, missing from build_order.txt, first), then the build order."""
+    order = list(dict.fromkeys([v for bank in M.BANKS for v in M.bank_videos(bank)]
+                               + [v.strip() for v in open(M.BUILD_ORDER) if v.strip()]))
     tasks = []
     for b, arm, stage, pools, bank in M.EXPERIMENTS:
         if stage == "build":
@@ -216,19 +316,128 @@ def test_existing_tasks_unchanged(monkeypatch, tmp_path):
     have = {("merit", "m8", T2[0]), ("worldmm", "m27", REST[0])}
     files = {f"magic/m8/{T2[1]}/answers_t2_agree2.json.gz", f"api/gpt-5-f1024/{B10[0]}/answers_batch10_agree2.json.gz"}
     full = list(M.EXPERIMENTS)
-    board(monkeypatch, tmp_path, [e for e in full if e not in M.REPORTED])
-    assert len(M.EXPERIMENTS) == len(full) - len(M.REPORTED) == 15
+    board(monkeypatch, tmp_path, [e for e in full if e not in M.REPORTED + M.PAID])
+    assert len(M.EXPERIMENTS) == len(full) - len(M.REPORTED) - len(M.PAID) == 6 * (1 + len(M.BANKS)) + 3 + 6 * len(M.BANKS)   # 6 arms x (build + banks) + 3 api + 6 direct x banks
     old = desired_before(have, files)
     strip = lambda ts: [{k: v for k, v in t.items() if k != "needs_env"} for t in ts]
     new = M.desired(have, files)
-    assert {t["baseline"] for t in old} == {"api", "merit", "magic", "worldmm"} and strip(new) == old
-    assert [t.get("needs_env") for t in new] == [M.NEEDS_ENV.get((t["baseline"], t["arm"])) for t in old]
+    assert {t["baseline"] for t in old} == {"api", "direct", "merit", "magic", "worldmm"} and strip(new) == old
+    assert [t.get("needs_env") for t in new] == [M.needs(t["baseline"], t["arm"], t["stage"]) for t in old]
     assert M.gate(new) == (new, 0)                                          # the gate holds none of them back
+    # direct: a task per arm, bank and video unless answered, waiting on nothing, after api and before the memory arms
+    direct = [t for t in M.desired(have, files | {f"direct/qwen3vl-8b-f32/{T2[0]}/answers_t2_agree2.json.gz"}) if t["baseline"] == "direct"]
+    assert len(direct) == 6 * sum(len(v) for v in BANK_VIDEOS.values()) - 1 and not any(t["deps"] or t.get("needs_env") for t in direct)
+    assert f"direct-qwen3vl-8b-f32-qa-t2_agree2-{T2[0]}" not in {t["id"] for t in direct}
+    kind = [0 if t["baseline"] == "api" else 1 if t["baseline"] == "direct" else 2 for t in new]
+    assert kind == sorted(kind)
     monkeypatch.setattr(M, "EXPERIMENTS", full)
     noprio = lambda ts: [{k: v for k, v in t.items() if k != "priority"} for t in ts]
     assert noprio(strip(t for t in M.desired(have, files) if not M.reported(t))) == noprio(old)
     listed, _ = M.gate(M.desired(have, files))                             # as published now: main's tasks + the pilot
     assert noprio(strip(t for t in listed if t["id"] not in M.PILOT)) == noprio(old)
+
+
+def bank_q(key, t, gold=1):
+    return {"key": key, "q": f"Where is the {key}?", "form": "f", "streaming": True, "t_ask": t,
+            "gemini_mcq": {"options": ["sink", "table"], "answer_index": gold}}
+
+
+def merit_rows(tmp_path, v, qs, end):
+    """MERIT's answer rows for these bank questions (prepare_epic.convert_questions: asked at floor(t_ask), or at the
+    video's end for a t_ask in its last second), as collect_answers keeps them."""
+    from prepare_epic import convert_questions
+    f = tmp_path / "q.json"
+    f.write_text(json.dumps({"questions": qs}))
+    return [{k: x for k, x in r.items() if not k.startswith("choice_")} | {
+        "choices": {"A": r["choice_a"], "B": r["choice_b"]}, "response": "ANSWER: B\nREASONING: ..."}
+        for r in convert_questions(str(f), v, end)]
+
+
+def test_stale_answers(tmp_path, monkeypatch):
+    """A qa task is listed when the answers file is missing or stale (a question moved, an Error, a file that does not
+    parse), under a -redo- id when the file exists; current answers list nothing, also batch10's from before keys,
+    asked at ceil(t_ask)."""
+    V = [f"P01-20240101-00010{i}" for i in range(6)]
+    qs = [bank_q("k1", 100.4), bank_q("k2", 1734.9)]   # k2: the end-of-video t_ask of a moved question
+    d = tmp_path / "outputs/v3/banks/tb"
+    d.mkdir(parents=True)
+    for v in V:
+        (d / f"{v}_questions.json").write_text(json.dumps({"questions": qs}))
+    (tmp_path / "v3").mkdir()
+    (tmp_path / "v3/export_bank.py").write_text("")
+    (tmp_path / "order.txt").write_text("")
+    monkeypatch.setenv("EPIC_MORPH_DIR", str(tmp_path))
+    monkeypatch.setattr(M, "BUILD_ORDER", str(tmp_path / "order.txt"))
+    monkeypatch.setattr(M, "EXPERIMENTS", [("merit", "m8", "qa", ["p"], "tb")])
+    monkeypatch.setattr(M, "REPORTED_BANKS", [])
+    M.exported.cache_clear()
+    rows = {V[0]: merit_rows(tmp_path, V[0], qs, 1735),                          # current: k2 asked at the end (1735 s)
+            V[1]: merit_rows(tmp_path, V[1], [qs[0], bank_q("k2", 900.0)], 1800),  # k2 answered at its old t_ask
+            V[3]: merit_rows(tmp_path, V[3], qs, 1800)}
+    rows[V[3]][0]["response"] = "Error"                                           # k1 failed
+    old = merit_rows(tmp_path, V[5], qs, 1800)                                    # batch10 before keys: positional ID,
+    for i, r in enumerate(old, 1):                                                # no key or qhash, asked at ceil(t_ask)
+        r.update(ID=str(i), query_time={"date": "DAY1", "time": ["00014100", "00285500"][i - 1]})
+        del r["key"], r["qhash"]
+    rows[V[5]] = old
+    path = lambda v: f"merit/m8/{v}/answers_tb.json.gz"
+    answers = {path(v): M.summary(r) for v, r in rows.items()} | {path(V[4]): None}   # V[4]: does not parse
+    files = set(answers)                                                           # V[2]: no answers file
+    have = {("merit", "m8", v) for v in V}
+    tasks = {t["video"]: t for t in M.desired(have, files, answers)}
+    assert sorted(tasks) == [V[1], V[2], V[3], V[4]]
+    assert tasks[V[2]]["id"] == f"merit-m8-qa-tb-{V[2]}" and "stale" not in tasks[V[2]]
+    assert [tasks[v]["stale"] for v in (V[1], V[3], V[4])] == [1, 1, 2]
+    redo = tasks[V[1]]["id"]
+    assert redo.startswith(f"merit-m8-qa-tb-{V[1]}-redo-") and redo == M.desired(have, files, answers)[0]["id"]
+    # the hash follows the bank: the same questions keep the id (a done redo stays done), a changed bank gets a new one
+    assert M.redo_id("x", qs) == M.redo_id("x", list(reversed(qs))) != M.redo_id("x", [qs[0], bank_q("k2", 1730.0)])
+    assert M.unanswered([bank_q("k1", 100.4, gold=0)], answers[path(V[0])]) == ["k1"]   # another gold letter
+    import worker
+    assert all(worker.valid(t) for t in tasks.values())                            # the worker runs the -redo- id
+    # not while the first run is still going (or its results wait for the relay): its upload may be current
+    assert V[1] not in {t["video"] for t in M.desired(have, files, answers, busy={f"merit-m8-qa-tb-{V[1]}"})}
+    # without summaries the files are not read: the board as before
+    assert sorted(t["video"] for t in M.desired(have, files)) == [V[2]]
+
+
+def test_ask_time_formats():
+    """Each baseline's record of when a question was asked, in seconds: MERIT's query_time, MAGIC / WorldMM's int,
+    the API's and the paid rows' t_ask; none for a row that records none."""
+    assert M.ask_time({"query_time": {"date": "DAY1", "time": "00285400"}}) == 1734
+    assert M.ask_time({"query_time": 100285400}) == 1734
+    assert M.ask_time({"t_ask": 1734.9, "cutoff": 1734.9}) == 1734.9
+    assert M.ask_time({"t_ask": 1734.9, "query_time": {"date": "DAY1", "time": "10285400"}}) == 1734.9   # EgoRAG's clock
+    assert M.ask_time({"response": "A"}) is None
+
+
+def test_read_answers_downloads_changed_only(tmp_path, monkeypatch):
+    """Summaries are cached by content hash: a second cycle downloads nothing, a changed file downloads again, two
+    identical files download once, and a file that does not parse summarises as None."""
+    import gzip
+    p1, p2, p3 = "merit/m8/V1/answers_tb.json.gz", "merit/m8/V2/answers_tb.json.gz", "merit/m27/V1/answers_tb.json.gz"
+    body = {p1: gzip.compress(json.dumps([{"key": "k1", "qhash": "h", "answer": "B", "response": "B", "t_ask": 1.5}]).encode()),
+            p2: b"not gzip"}
+    body[p3] = body[p1]
+    got = []
+
+    def download(repo, path, repo_type, revision, local_dir):
+        got.append(path)
+        f = os.path.join(local_dir, path)
+        os.makedirs(os.path.dirname(f), exist_ok=True)
+        open(f, "wb").write(body[path])
+        return f
+    monkeypatch.setattr(M, "hf_hub_download", download)
+    monkeypatch.setattr(M, "ANSWERS_CACHE", str(tmp_path / "cache"))
+    monkeypatch.setattr(M, "EXPERIMENTS", [("merit", "m8", "qa", ["p"], "tb")])
+    files = {p1: "sha1", p2: "sha2", p3: "sha1", "merit/m8/V1/runs.jsonl": "sha3", "merit/m8/V1/answers_tb_ctx.json.gz": "sha4"}
+    first = M.read_answers("c0", files)
+    assert len(got) == 2 and p2 in got and first == {p1: [["k1", "h", "B", 1.5]], p2: None, p3: [["k1", "h", "B", 1.5]]}
+    got.clear()
+    assert M.read_answers("c1", files) == first and got == []
+    files[p1] = "sha5"
+    M.read_answers("c2", files)
+    assert got == [p1]
 
 
 if __name__ == "__main__":

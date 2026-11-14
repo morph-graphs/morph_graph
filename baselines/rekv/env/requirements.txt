@@ -1,0 +1,17 @@
+# ReKV on Qwen3-VL: the versions of the environment the vendored port (vendor/MemStream) was developed in
+# (memstream_qwen3_cu126), as a virtualenv. Python 3.11, CUDA 12.6; torch 2.6.0 / torchvision 0.21.0 come first,
+# from setup_env.sh (triton 3.2.0, which the port's attention kernel uses, comes with torch).
+transformers==5.0.0
+huggingface-hub==1.8.0
+tokenizers==0.22.2
+accelerate==1.11.0
+safetensors==0.6.2
+numpy==1.26.4
+scipy==1.15.2
+pillow==11.0.0
+einops==0.8.1
+logzero==1.7.0
+EzColorLog==1.0.3
+qwen-vl-utils==0.0.14
+av==16.0.1
+tqdm==4.67.1
