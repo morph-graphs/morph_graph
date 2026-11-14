@@ -179,7 +179,15 @@ def test_pilot_gate(monkeypatch, tmp_path):
     """While PILOT is non-empty, the only listed tasks of the reported arms are PILOT's; the rest are untouched."""
     board(monkeypatch, tmp_path)
     everything = M.desired(set(), set())
-    assert M.PILOT == ["worldmm-g5m-build-P05-20240425-201444"]
+    # as published: the gate is open, and only HELD (WorldMM's g5m builds, running off the board) is withheld; the qa
+    # tasks that read those memories stay listed and keep waiting on them
+    assert M.PILOT == [] and M.HELD == {("worldmm", "g5m", "build")}
+    listed, withheld = M.gate(everything)
+    held = [t for t in everything if (t["baseline"], t["arm"], t["stage"]) in M.HELD]
+    assert listed == [t for t in everything if t not in held] and withheld == len(held) > 0
+    assert all(t["deps"] == [f"worldmm-g5m-build-{t['video']}"] for t in listed if (t["baseline"], t["arm"]) == ("worldmm", "g5m-q8"))
+    monkeypatch.setattr(M, "HELD", set())
+    monkeypatch.setattr(M, "PILOT", ["worldmm-g5m-build-P05-20240425-201444"])
     listed, withheld = M.gate(everything)
     assert [t["id"] for t in listed if M.reported(t)] == M.PILOT
     assert [t for t in listed if not M.reported(t)] == [t for t in everything if not M.reported(t)]
@@ -266,8 +274,10 @@ def test_paid_rows(monkeypatch, tmp_path):
     kind = [0 if t["baseline"] == "api" else 1 if t["arm"].startswith("g5m") else 2 if t in paid else 3 for t in tasks]
     assert kind == sorted(kind) and set(kind) == {0, 1, 2, 3}
     assert all(by[d]["priority"] < t["priority"] for t in paid for d in t["deps"])
-    # the gate withholds every one of them, and --only-pools moves none of them (the keyless HippoMM build either)
+    # a non-empty PILOT withholds every one of them, and --only-pools moves none of them (the keyless HippoMM build either)
     assert all(M.reported(t) for t in paid) and M.GATED == rows | {(b, arm) for b, arm, *_ in M.REPORTED}
+    monkeypatch.setattr(M, "HELD", set())
+    monkeypatch.setattr(M, "PILOT", ["worldmm-g5m-build-P05-20240425-201444"])
     listed, withheld = M.gate(tasks)
     assert not [t for t in listed if t in paid] and withheld == sum(M.reported(t) for t in tasks) - 1
     M.restrict(tasks, ["a-test-pool"])
@@ -333,8 +343,8 @@ def test_existing_tasks_unchanged(monkeypatch, tmp_path):
     monkeypatch.setattr(M, "EXPERIMENTS", full)
     noprio = lambda ts: [{k: v for k, v in t.items() if k != "priority"} for t in ts]
     assert noprio(strip(t for t in M.desired(have, files) if not M.reported(t))) == noprio(old)
-    listed, _ = M.gate(M.desired(have, files))                             # as published now: main's tasks + the pilot
-    assert noprio(strip(t for t in listed if t["id"] not in M.PILOT)) == noprio(old)
+    listed, _ = M.gate(M.desired(have, files))                             # as published now: main's tasks + the gated arms
+    assert noprio(strip(t for t in listed if not M.reported(t))) == noprio(old)
 
 
 def bank_q(key, t, gold=1):

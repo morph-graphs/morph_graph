@@ -265,7 +265,10 @@ answered by several reasoning models: `g5m-q8`, `g5m-q27`, `g5m-g5`; each baseli
 - `master.PILOT` is a gate: while it lists task ids, those are the only tasks of the reported-configuration arms
   in `tasks.json`; all their other tasks are withheld (`publish --dry-run` prints how many). The `api` tasks and
   the local-model tasks are not affected. Emptying the list, after the pilot's token usage has been read from its
-  `runs.jsonl`, releases the rest at the next publish.
+  `runs.jsonl`, releases the rest at the next publish. Emptied 2026-11-14 (the pilot cost $2.71).
+- `master.HELD` withholds (baseline, arm, stage) lines whatever `PILOT` says: work running off the board that a
+  board copy would pay for twice (2026-11-14: WorldMM's `g5m` builds, built by Slurm arrays on Nexus). The qa tasks
+  that read those memories stay listed and wait until the memory is in the dataset.
 - An answer arm's task carries `memory_arm`, so a `--prefetch` worker (#37) downloads the memory arm's folder
   too. With `--outbox`, MERIT's answer arms hand one folder to the relay like any task; WorldMM's answer arms upload
   two folders (the memory's and their own) and need a key anyway, so they run on pool `max`, which uploads itself.
