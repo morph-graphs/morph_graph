@@ -5,7 +5,8 @@
 # /models. The stage `models` downloads the models into M3AGENT_MODELS first (fetch_models.sh; no GPU).
 #   M3AGENT_MODELS=<dir> bash baselines/m3agent/docker/run.sh models
 #   M3AGENT_GPU=0 M3AGENT_MODELS=<dir> EPIC_MORPH_DIR=<epic-morph checkout> bash baselines/m3agent/docker/run.sh <stage> <video> <m3|m3api> [bank]
-# The job board (coord/worker.py) sets MERIT_GPU / MERIT_RUNTIME / MERIT_SIF_DIR, read here as fallbacks.
+# The job board (coord/worker.py) sets MERIT_GPU / MERIT_RUNTIME / MERIT_SIF_DIR / MERIT_HF_CACHE / MERIT_WORK, read
+# here when the M3AGENT_ ones are unset; M3AGENT_MODELS has no such fallback and must be in the worker's environment.
 #   M3AGENT_RUNTIME  docker (default) or apptainer (clusters without Docker: the same image, run with
 #                    `apptainer exec`; GPUs are the ones the scheduler gave the job, so M3AGENT_GPU is not needed)
 #   M3AGENT_GPU      docker: GPU index(es) for this job: one >= 40 GB GPU for build, 2x 48 GB (or one 80 GB with
@@ -20,9 +21,10 @@
 #   M3AGENT_IMAGE    image (default ghcr.io/morph-graphs/m3agent:m3-<env hash>, from image_tag.sh); for
 #                    apptainer, a .sif built once with `apptainer pull m3agent_m3.sif docker://<that image>`
 #   M3AGENT_SIF_DIR  apptainer: a folder of such files; uses <dir>/m3agent_m3.sif when it exists and M3AGENT_IMAGE is unset
-#   M3AGENT_HF_CACHE Hugging Face cache on the host (default ~/.cache/huggingface), mounted at /hf
+#   M3AGENT_HF_CACHE Hugging Face cache on the host (default MERIT_HF_CACHE, else ~/.cache/huggingface), mounted at /hf
 #   HDEPIC_VIDEOS    videos on the host (default $EPIC_MORPH_DIR/data/HD-EPIC/videos)
 #   M3AGENT_WORK     optional, a host folder for clips, intermediate outputs and control runs (default
+#                    $MERIT_WORK/m3agent when the cluster's shared work folder MERIT_WORK is set, else
 #                    baselines/m3agent/work in the checkout), mounted at /work; files made group-writable (umask 002)
 #   passed through when set: M3AGENT_GEMINI_MODEL M3AGENT_TAG M3AGENT_FETCH M3AGENT_TP M3AGENT_GPU_UTIL M3AGENT_MAX_LEN
 #                    M3AGENT_EMBED_DEVICE M3AGENT_MEM_RETRIES THREADS MERIT_HF_REPO M3AGENT_OUT (a path inside the container)
@@ -33,7 +35,7 @@ IMAGE=${M3AGENT_IMAGE:-ghcr.io/morph-graphs/m3agent:$(bash "$REPO/baselines/m3ag
 SIF_DIR=${M3AGENT_SIF_DIR:-${MERIT_SIF_DIR:-}}
 [ -z "${M3AGENT_IMAGE:-}" ] && [ -n "$SIF_DIR" ] && [ -s "$SIF_DIR/m3agent_m3.sif" ] && IMAGE=$SIF_DIR/m3agent_m3.sif
 RUNTIME=${M3AGENT_RUNTIME:-${MERIT_RUNTIME:-docker}}
-HF=${M3AGENT_HF_CACHE:-$HOME/.cache/huggingface}
+HF=${M3AGENT_HF_CACHE:-${MERIT_HF_CACHE:-$HOME/.cache/huggingface}}
 umask 002; mkdir -p "$HF" "${M3AGENT_MODELS:?set M3AGENT_MODELS to the models folder on the host}"
 BINDS=("$REPO:/repo" "$HF:/hf" "$(cd -P "$M3AGENT_MODELS" && pwd):/models")
 ENVS=(HF_HOME=/hf HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-0}" M3AGENT_MODELS=/models)
@@ -52,8 +54,9 @@ else
     ENVS+=(EPIC_MORPH_DIR=/epic-morph HDEPIC_VIDEOS=/videos
            M3AGENT_REPO_COMMIT="$(git -C "$REPO" rev-parse HEAD)" M3AGENT_EPIC_COMMIT="$(git -C "$EPIC" rev-parse HEAD)"
            M3AGENT_SUBMODULE_COMMIT="$(git -C "$REPO/baselines/m3agent/m3-agent" rev-parse HEAD)")
-    if [ -n "${M3AGENT_WORK:-}" ]; then
-        mkdir -p "$M3AGENT_WORK"; BINDS+=("$(cd -P "$M3AGENT_WORK" && pwd):/work"); ENVS+=(M3AGENT_WORK=/work)
+    WORK=${M3AGENT_WORK:-${MERIT_WORK:+$MERIT_WORK/m3agent}}
+    if [ -n "$WORK" ]; then
+        mkdir -p "$WORK"; BINDS+=("$(cd -P "$WORK" && pwd):/work"); ENVS+=(M3AGENT_WORK=/work)
     fi
     CMD=(bash baselines/m3agent/run_m3agent.sh "$@")
 fi

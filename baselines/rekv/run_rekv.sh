@@ -11,8 +11,8 @@
 #          blind  the same answer prompt with no video: the no-memory floor                         GPU
 #          upload this video and arm's results folder to the Hugging Face dataset  (needs a write token)
 #          all    qa + blind for the given bank (no upload)
-#   arm    m8   Qwen/Qwen3-VL-8B-Instruct: 48 GB of GPU memory (one 48 GB GPU, or two 24 GB) and about 40 GB of
-#               host RAM for a 30 min video
+#   arm    m8   Qwen/Qwen3-VL-8B-Instruct: 48 GB of GPU memory (one 48 GB GPU, or two 24 GB) and host RAM that
+#               grows with the video (18 GB for a 27 min video, 36 GB for a 75 min one)
 #          (m27, Qwen3.8-27B, is not ported: the ReKV code is written against Qwen3-VL's decoder)
 #   bank   a named bank of the epic-morph checkout, e.g. batch10_agree2
 #

@@ -8,8 +8,12 @@ can write morph-graphs/epic-morph-jobs and morph-graphs/epic-morph-results (HF_T
     python coord/worker.py --pool nexus-scavenger --launcher local --slots 0 --max-tasks 1
     python coord/worker.py --pool max --launcher slurm --runtime apptainer --slots 1 2 3 4 \
         --sbatch "--partition=gpu --gres=gpu:1 -c 8 --mem=64G --time=8:00:00"        # a cluster: up to 4 jobs at once
+    python coord/worker.py --pool pulkit --launcher docker --slots 0 0 1 1 2 2 3 3 --arms m8 \
+        --until $(date -d +8hours +%s) --baselines merit magic worldmm   # inside one 4-GPU allocation: two 8B tasks per
+        # GPU, one model, only tasks whose p90 runtime on the board ends before the allocation does; the worker
+        # exits once it has nothing left to start and its tasks are finished
 
-A worker takes only the baselines named by --baselines (default merit api; api tasks go to the max pool only): name one only once this machine has its
+A worker takes only the baselines named by --baselines (default merit api; api tasks go to the max and pulkit pools only): name one only once this machine has its
 images (docker pull, or the SIFs, below), or every task of it would fail here. With --runtime apptainer, set
 MERIT_SIF_DIR to a folder of <baseline>_<arm>.sif files (apptainer pull merit_m8.sif docker://ghcr.io/morph-graphs/
 merit:<tag>, the tag from baselines/<b>/docker/image_tag.sh <arm>). Every baseline's docker/run.sh also reads the
@@ -41,13 +45,14 @@ coord/nexus_worker.sbatch the job that runs it on Nexus):
 
     python coord/worker.py --pool vatsal --launcher slurm --queues coord/nexus_queues.json --slots 1 2 3 4 5 6 7 8
 
-The file names each queue's sbatch arguments and the arms its GPU fits ("m8", "m27", or "magic/m27" for one
-baseline). The worker claims only tasks some queue fits, and submits each task to every fitting queue at once, under
-one job name. The first copy to start runs it (coord/slurm_guard.sh: an atomic marker <task>.ran, then it cancels
-the pending copies); a copy starting later exits without work. Each cycle one squeue shows which copies are still
-queued: the task is done when the copy that ran wrote its exit code (<task>.rc), and failed when every copy left the
-queue without one (seen on two cycles in a row, for a slow NFS). The state folder must be on a filesystem the GPU
-nodes share. Slots count tasks, not copies.
+The file names each queue's sbatch arguments and the arms its GPU fits ("m8", "m27", "magic/m27" for one
+baseline, or "m3agent/m3/qa" for one stage of it; a plain "m8" names every baseline's m8). The worker claims only
+tasks some queue fits, and submits each task to every fitting queue at once, under one job name. The first copy to
+start runs it (coord/slurm_guard.sh: an atomic marker <task>.ran, then it cancels the pending copies); a copy
+starting later exits without work. Each cycle one squeue shows which copies are still queued: the task is done when
+the copy that ran wrote its exit code (<task>.rc), and failed when every copy left the queue without one (seen on
+two cycles in a row, for a slow NFS). The state folder must be on a filesystem the GPU nodes share. Slots count
+tasks, not copies.
 
 Each cycle (every --every seconds): read the board, mark finished tasks done/failed with their runtime and
 GPU, renew the leases of running ones, claim the highest-priority free tasks for free slots (one commit to
@@ -63,6 +68,7 @@ leases and the heartbeat commits every 10 minutes at most, and when the Hub refu
 network is down) the worker waits for the time it names, or a few minutes, and goes on. It never stops for that.
 """
 import argparse
+import collections
 import getpass
 import json
 import re
@@ -83,7 +89,7 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # of baselines/api/configs/ (gpt-5-f1024): lower-case letters and digits in runs joined by one `.`, `-` or `_`, none
 # of which the shell, a Slurm job name or a file pattern reads as anything but itself (no space, quote, `$`, `/`, `*`,
 # and never a leading `-`, so it cannot become an option).
-VALID = dict(baseline=re.compile(r"^(merit|worldmm|magic|m3agent|api|egor1|egagent|egorag|hippomm|direct)$"),
+VALID = dict(baseline=re.compile(r"^(merit|worldmm|magic|m3agent|api|egor1|egagent|egorag|hippomm|direct|rekv)$"),
              arm=re.compile(r"^(m(8|27|3)|[a-z0-9]+([._-][a-z0-9]+)*)$"),
              stage=re.compile(r"^(prep|build|qa|blind)$"), video=re.compile(r"^P\d\d-\d{8}-\d{6}$"),
              bank=re.compile(r"^[A-Za-z0-9_]*$"), id=re.compile(r"^[A-Za-z0-9_.-]+$"))
@@ -157,7 +163,7 @@ def command(task, gpus, a, log):
 
 
 def load_queues(path):
-    """--queues file: {name: {"sbatch": "<sbatch args>", "fits": ["m8", "magic/m27", ...]}}."""
+    """--queues file: {name: {"sbatch": "<sbatch args>", "fits": ["m8", "magic/m27", "m3agent/m3/qa", ...]}}."""
     queues = json.load(open(path))
     for n, q in queues.items():
         if not (VALID["id"].match(n) and q.get("sbatch") and q.get("fits")):
@@ -166,8 +172,10 @@ def load_queues(path):
 
 
 def names(task, arms):
-    """Whether a queue's list of arms (m8) or baseline/arms (magic/m27) names this task."""
-    return task["arm"] in arms or f"{task['baseline']}/{task['arm']}" in arms
+    """Whether a queue's list of arms (m8), baseline/arms (magic/m27) or baseline/arm/stages (m3agent/m3/qa) names
+    this task."""
+    full = f"{task['baseline']}/{task['arm']}"
+    return task["arm"] in arms or full in arms or f"{full}/{task.get('stage')}" in arms
 
 
 def fitting(task, queues, idle=(), full=()):
@@ -261,6 +269,22 @@ def slurm_job_state(submit_log, run=subprocess.run):
     return "failed", f"Slurm job {jid} ended {state or '?'} {code}"
 
 
+def kind(tid):
+    """<baseline>-<arm>-<stage> of a task id (master.py: <baseline>-<arm>-<stage>-[<bank>-]<video>[-redo-<hash>])."""
+    m = re.match(r"^(.+?-(?:build|qa|prep|blind))-", tid)
+    return m.group(1) if m else tid
+
+
+def runtimes(pools):
+    """p90 seconds per task kind, over every pool's finished claims (done or waiting for the relay)."""
+    secs = collections.defaultdict(list)
+    for p in pools.values():
+        for tid, c in p.get("claims", {}).items():
+            if c.get("status") in ("done", "relay") and c.get("seconds"):
+                secs[kind(tid)].append(c["seconds"])
+    return {k: sorted(v)[-(-9 * len(v) // 10) - 1] for k, v in secs.items()}   # nearest rank: 3 runs give the longest
+
+
 def alive(pidfile):
     """Is the task's process (pid kept in a local file, since claims are re-read from the board) still there?"""
     try:
@@ -301,7 +325,13 @@ def main():
     ap.add_argument("--sbatch", default="", help="slurm: resources and queue for each task's job, e.g. '--partition=gpu --gres=gpu:1 -c 8 --mem=64G --time=8:00:00'")
     ap.add_argument("--queues", help="slurm, instead of --sbatch: a JSON file of queues {name: {sbatch, fits}}; each task goes "
                                      "to every queue that fits its arm at once and runs on the first to start (coord/nexus_queues.json)")
-    ap.add_argument("--slots", nargs="+", required=True, help="GPU ids per task slot: '0 1' = two one-GPU slots, '0,1' = one two-GPU slot")
+    ap.add_argument("--slots", nargs="+", required=True, help="GPU ids per task slot: '0 1' = two one-GPU slots, '0,1' = one two-GPU slot, "
+                    "'0 0 1 1' = two tasks on each of GPUs 0 and 1 (a GPU with room for several)")
+    ap.add_argument("--arms", nargs="+", default=None, help="take only these arms (m8, magic/m27, as in a queues file), e.g. one "
+                    "model per allocation")
+    ap.add_argument("--until", type=int, default=0, help="unix time this worker's allocation ends: claim only tasks whose p90 "
+                    "runtime on the board (all pools' finished claims of the same baseline, arm and stage) ends before it")
+    ap.add_argument("--unmeasured-h", type=float, default=8, help="--until: hours a task kind with no finished claim yet is assumed to take")
     ap.add_argument("--baselines", nargs="+", default=["merit", "api"],   # api: only Max's pool gets those tasks
                     help="baselines this worker takes (it needs each one's image or SIF for every arm it may get): "
                          "e.g. merit magic worldmm")
@@ -401,8 +431,14 @@ def main():
                         break
                 if how or note:
                     c["note"] = f"{how}: {note}" if how and note and a.launcher == "slurm" else how or note
-        busy = {c["slot"] for c in claims.values() if c["status"] == "running" and here(c)}
-        free = [s for s in a.slots if s not in busy]
+        busy = collections.Counter(c["slot"] for c in claims.values() if c["status"] == "running" and here(c))
+        free = []
+        for s in a.slots:   # a slot id listed n times runs n tasks at once
+            if busy[s]:
+                busy[s] -= 1
+            else:
+                free.append(s)
+        p90 = runtimes(pools) if a.until else {}
         held = jobs.taken(pools, t)
         fails = jobs.failures(pools)
         done = {tid for tid, (_, c) in held.items() if c["status"] == "done"}
@@ -447,6 +483,10 @@ def main():
             if queues and not fitting(task, queues, idle, full):   # none of this worker's GPUs can run it now (e.g. 27B, no 80 GB queue)
                 continue
             if task["baseline"] not in a.baselines:   # this worker has no image (or setup) for it
+                continue
+            if a.arms and not names(task, a.arms):
+                continue
+            if a.until and t + p90.get(kind(tid), a.unmeasured_h * 3600) > a.until:   # would not finish in this allocation
                 continue
             if not has_env(task):   # a paid-API task and no key here: claiming it would only fail it
                 continue
@@ -508,6 +548,9 @@ def main():
         running = sum(1 for c in claims.values() if c["status"] == "running" and here(c))
         if a.max_tasks and claimed_total >= a.max_tasks and running == 0:
             print(f"{jobs.iso()} done: {claimed_total} task(s) claimed and finished", flush=True)
+            return
+        if a.until and running == 0 and not start:   # an allocation with nothing left that fits: give the GPUs back
+            print(f"{jobs.iso()} done: no task fits before --until; {claimed_total} task(s) claimed and finished", flush=True)
             return
         time.sleep(a.every)
 
