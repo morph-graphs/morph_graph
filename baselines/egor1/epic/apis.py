@@ -40,7 +40,7 @@ MODELS = {   # role -> model; in the paper / official repo (commit 69177ee) both
 }
 DEFAULT = dict(MODELS)
 ARMS = {   # arm -> the roles whose model differs from DEFAULT
-    "gemini25pro": {},
+    "gemini25pro": {}, "llava": {},      # llava: its video_llm is local (run_egor1.sh); the captions stay the default's
     "gemini36flash": {"caption": "gemini-3.6-flash", "video_llm": "gemini-3.6-flash"},
     "gemini36flash-gpt41": {"caption": "gemini-3.6-flash", "video_llm": "gemini-3.6-flash", "rag": "gpt-4.1", "vlm": "gpt-4.1"},
 }
@@ -51,8 +51,10 @@ PROVIDER = {"only": ["openai"], "allow_fallbacks": False}   # OpenAI itself answ
 
 
 def use_arm(arm):
-    """Set the models of the arm's steps (arm llava keeps the defaults for all but its local video_llm)."""
-    MODELS.update(DEFAULT, **ARMS.get(arm, {}))
+    """Set the models of the arm's steps. An arm that is not in ARMS is an error, not the default models."""
+    if arm not in ARMS:
+        sys.exit(f"unknown arm {arm!r}: one of {', '.join(ARMS)}")
+    MODELS.update(DEFAULT, **ARMS[arm])
 
 
 def openai_keys():

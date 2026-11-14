@@ -94,7 +94,7 @@ def final_answer(history_text, question):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--video", required=True)
-    ap.add_argument("--arm", required=True, choices=[*apis.ARMS, "llava"])
+    ap.add_argument("--arm", required=True, choices=list(apis.ARMS))
     ap.add_argument("--bank_file", required=True, help="epic-morph outputs/v3/banks/<bank>/<video>_questions.json")
     ap.add_argument("--memory", help="the memory folder (build_memory.py --out)")
     ap.add_argument("--clips", required=True, help="<clip_root>/<video> (prepare_clips.py)")
