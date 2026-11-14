@@ -422,8 +422,9 @@ What this adds:
 - A waiter's pid counts only on the machine that started it (`node` in the claim): after a move, a process of the
   new machine with the same number is not mistaken for it. The docker and local launchers are otherwise unchanged:
   a worker there looks after the claims of its own `--host` only.
-- Rate limit: a cycle that changes nothing but leases and the heartbeat commits every 10 minutes at most (leases
-  last 30), so an idle or merely waiting worker makes 6 commits an hour instead of one per cycle; every real change
+- Rate limit: a cycle that changes nothing but leases and the heartbeat commits every 20 minutes at most (leases
+  last 30; 10 minutes until 2026-11-14, when Pulkit's pool grew to up to 10 workers), so an idle or merely waiting
+  worker makes 3 commits an hour instead of one per cycle; every real change
   (a claim, a finished task, a queue, a wait counter) is still committed at once. When the Hub refuses a read or a
   commit (429, or the network), the worker waits for `Retry-After`, or 5 minutes (2 for other errors), and goes on;
   nothing is started from a cycle whose commit failed.
