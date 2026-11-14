@@ -257,6 +257,26 @@ answered by several reasoning models: `g5m-q8`, `g5m-q27`, `g5m-g5`; each baseli
   restriction, the worker's check and the gate then apply to it as they are (the variable may be any name, e.g.
   `OPENROUTER_API_KEY`).
 
+## The other paid rows: batch10 only, pool `max`, behind the gate
+
+Added 2026-11-13. `master.PAID` lists Ego-R1 (`gemini25pro`), EGAgent (`gpt41`, `gemini25pro`), EgoRAG
+(`egogpt_gpt4o`), HippoMM (`q25vl7b-gpt4o`) and MAGIC-Video's reported arms (`oss120`, `oss120-flash`, `oss120-q27`),
+each with the models it was published with, after the g5m lines and before the local-model lines.
+
+- Batch10 only (Anubhav): a `build` line with a bank lists a build for that bank's videos only, here the 10 of
+  `batch10_agree2`, and each `qa` line answers that bank. No tranche, no 156-video builds.
+- Run by Max: every line is for `KEY_POOLS`. `NEEDS_ENV` may be keyed by (baseline, arm, stage) where a baseline's
+  stages need different keys (EgoRAG's build also needs `DEEPSEEK_API_KEY`; HippoMM's build needs none and carries no
+  `needs_env`, but stays on pool `max`: `--only-pools` cannot move a task listed for the key pool only).
+- Shared memories: EGAgent's GPT-4.1 memory is built under `gpt41`, and `gemini25pro`'s `qa` waits for that build and
+  fetches it (`MEMORY_ARM`); MAGIC's `oss120-flash` and `oss120-q27` answer from `oss120`.
+- The gate: `master.GATED` is every arm of the `REPORTED` and `PAID` lines, so a paid baseline is withheld by `PILOT`
+  because it is listed there, not because of its name.
+- Not board stages: Ego-R1's `firstturn`, EGAgent's `check`, HippoMM's `count` and the paid `blind` floors. The worker
+  runs `build` or `qa`, then `upload`, through each baseline's `docker/run.sh`, whose interface is the same as MERIT's.
+- `oss120-q27` serves Qwen3.8-27B and needs an 80 GB GPU: the board cannot say that about one task of a pool, so Max's
+  worker must give those tasks such a slot (or leave `magic` out of `--baselines` on a smaller machine).
+
 ## A worker restart (slurm launcher), and the Hub's rate limit
 
 Added 2026-11-13, after a restart recorded three finished and uploaded tasks as failed, and after workers stopped on
