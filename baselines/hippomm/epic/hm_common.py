@@ -18,7 +18,11 @@ SRC = os.environ.get("HIPPOMM_SRC") or os.path.join(HERE, "..", "HippoMM")   # t
 sys.path.insert(0, SRC)
 
 VLM = "Qwen/Qwen2.5-VL-7B-Instruct"     # frame captions and summaries (served locally)
-REASONING = "gpt-4o"                    # upstream's reasoning model (OpenAI API)
+# the arm's reasoning model (run_hippomm.sh sets it; OpenAI API): gpt-4o is upstream's, gpt-4.1 stands in for it
+REASONING = os.environ.get("HIPPOMM_REASONING") or "gpt-4o"
+# the name upstream's token counter is given (its 120k-token context cap): tiktoken 0.9.0 cannot map gpt-4.1, and
+# upstream's TokenCount then has no encoding at all; gpt-4.1's encoding is gpt-4o's (o200k_base)
+TOKENIZER = "gpt-4o"
 # the gateway: OpenRouter's key without OpenAI's sends the gpt-4o calls to OpenRouter (README "Through OpenRouter")
 OPENROUTER = bool(os.environ.get("OPENROUTER_API_KEY")) and not os.environ.get("OPENAI_API_KEY")
 OPENROUTER_URL = os.environ.get("OPENROUTER_BASE_URL") or "https://openrouter.ai/api/v1"
@@ -38,7 +42,8 @@ def memory_paths(out, video):
 def config(store, qwen_url=None):
     """Upstream's default config with our paths. The OpenAI key (or OpenRouter's, when it is the only one) is read
     from the environment here and only lives in this dict (never in a file or on a command line). The model
-    name stays upstream's: its tokenizer is chosen by it; run_qa.meter sends the calls to the gateway."""
+    name is TOKENIZER: upstream picks its token counter by it; run_qa asks for REASONING (QARecallSystem's
+    reasoning_model) and its meter sends the calls to the gateway."""
     import yaml
     c = yaml.safe_load(open(os.path.join(SRC, "config", "default_config.yaml")))
     c["storage"]["base_dir"] = store
@@ -48,7 +53,7 @@ def config(store, qwen_url=None):
     c["api"]["qwen"] = {"base_url": url, "api_key": "EMPTY", "model_name": VLM}
     c["api"]["frame_processing"] = {"base_urls": [url], "api_key": "EMPTY"}
     c["api"]["reasoning"] = {"api_key": os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENROUTER_API_KEY", ""),
-                           "model_name": REASONING}
+                           "model_name": TOKENIZER}
     return c
 
 

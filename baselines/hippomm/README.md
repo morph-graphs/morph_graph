@@ -25,7 +25,8 @@ around them), then a reflection step that reconciles the two answers.
   the patch to the submodule checkout before every stage (once; it stops if the patch does not apply cleanly), so
   `git status` shows the submodule as modified after a run. A fork under morph-graphs with the patch as a commit,
   like the other baselines, would be cleaner.
-- **One arm, `q25vl7b-gpt4o`**, named after the paper's configuration. There is no m8 / m27 variant.
+- **Two arms, one memory.** `q25vl7b-gpt4o` is the paper's configuration. `q25vl7b-gpt41` answers from the same
+  memory with `gpt-4.1` in place of `gpt-4o` (see "Arms"). There is no m8 / m27 variant.
 
 **The models are those of the paper and official code, not our local Qwen arms:**
 
@@ -34,10 +35,29 @@ around them), then a reflection step that reconciles the two answers.
 | frame captions, summaries, caption digests | `Qwen/Qwen2.5-VL-7B-Instruct` | locally, served by vLLM as upstream does |
 | frame, audio and query features | ImageBind-Huge (weights are CC BY-NC-SA 4.0) | locally |
 | speech | Whisper `distil-large-v3` (faster-whisper) | locally |
-| reasoning: question type, direct answer, search query, frame selection, final answer, reflection | `gpt-4o` | **OpenAI API (paid)** |
+| reasoning: question type, direct answer, search query, frame selection, final answer, reflection | `gpt-4o` (arm `q25vl7b-gpt41`: `gpt-4.1`) | **OpenAI API (paid)** |
 
-So `prep`, `build` and `count` need no API. `qa` and `blind` call gpt-4o and refuse to start without
+So `prep`, `build` and `count` need no API. `qa` and `blind` call the reasoning model and refuse to start without
 `OPENAI_API_KEY` or `OPENROUTER_API_KEY`; `count` says beforehand how many calls and tokens a bank needs.
+
+## Arms
+
+| arm | reasoning model | memory | what it is |
+|---|---|---|---|
+| `q25vl7b-gpt4o` | `gpt-4o` | its own folder | the published setting |
+| `q25vl7b-gpt41` | `gpt-4.1` | `q25vl7b-gpt4o`'s | **GPT-4.1 stands in for gpt-4o**, because the machines that run this row have no GPT-4o (Anubhav's decision, 2026-11-14). Not the paper's model: report it under this name |
+
+- The memory does not depend on the reasoning model (Qwen2.5-VL, ImageBind and Whisper make it), so there is one,
+  in `results/q25vl7b-gpt4o/<video>/` (the dataset's `hippomm/q25vl7b-gpt4o/<video>/`), with `summaries.json`
+  (Qwen2.5-VL's summary per question cutoff) beside it. `q25vl7b-gpt41` has no `prep`, and its `build` only takes
+  that memory from the dataset: build it with `q25vl7b-gpt4o`. Its own folder holds `count_<bank>.json` (at
+  GPT-4.1 prices), the answers, `runs.jsonl` and `<video>_memory_ref.json`, the hashes of the memory files its
+  answers were made from.
+- Everything but the model id of the request is the same: prompts, `temperature=0`, the paths through upstream's
+  code. Upstream's token counter (its 120k-token cap on a prompt's context) is still given the name `gpt-4o`:
+  tiktoken 0.9.0, upstream's pin, cannot map `gpt-4.1`, and upstream's `TokenCount` would then have no encoding;
+  both models use the encoding `o200k_base`.
+- Both arms run in the one image (`hippomm:q25vl7b-gpt4o-<env hash>`, `hippomm_q25vl7b-gpt4o.sif`).
 
 ## Layout
 
@@ -112,12 +132,20 @@ bash baselines/hippomm/docker/run.sh count P05-20240425-201444 $ARM batch10_agre
 export OPENAI_API_KEY    # set in the shell beforehand; it reaches the container by name only
 bash baselines/hippomm/docker/run.sh qa    P05-20240425-201444 $ARM batch10_agree2   # paid (gpt-4o)
 bash baselines/hippomm/docker/run.sh upload P05-20240425-201444 $ARM
+# the gpt-4.1 arm, from the same memory (fetched from the dataset when it is not on this machine):
+bash baselines/hippomm/docker/run.sh count  P05-20240425-201444 q25vl7b-gpt41 batch10_agree2
+bash baselines/hippomm/docker/run.sh qa     P05-20240425-201444 q25vl7b-gpt41 batch10_agree2   # paid (gpt-4.1)
+bash baselines/hippomm/docker/run.sh upload P05-20240425-201444 q25vl7b-gpt41
 ```
+`OPENAI_BASE_URL`, when set, is passed to the container too: the OpenAI client then talks to that
+OpenAI-compatible endpoint (a gateway) with `OPENAI_API_KEY`, and `runs.jsonl` records it as `endpoint`.
 
 `docker/run.sh` mounts this checkout at `/repo`, the epic-morph checkout at `/epic-morph`, the videos at `/videos`
 and the Hugging Face cache (`HIPPOMM_HF_CACHE`, default `~/.cache/huggingface`) at `/hf`. The first `build`
 downloads into that cache: Qwen2.5-VL-7B-Instruct (16 GB), the Whisper model (1.5 GB) and
-`imagebind/imagebind_huge.pth` (4.5 GB). One GPU with 48 GB, 64 GB of RAM. `HIPPOMM_RUNTIME=apptainer` runs the
+`imagebind/imagebind_huge.pth` (4.5 GB). One GPU with 48 GB, 64 GB of RAM. The image has `gcc`: vLLM 0.8.5 compiles
+at start-up (torch.compile; triton builds a small C module) and stops with "Failed to find C compiler" without
+one, which is how the first published image (`q25vl7b-gpt4o-9d3b512389c7`) failed. `HIPPOMM_RUNTIME=apptainer` runs the
 same image with Apptainer; the job board (`coord/worker.py`) calls it with `MERIT_GPU` / `MERIT_RUNTIME` /
 `MERIT_SIF_DIR` / `MERIT_HF_CACHE` / `MERIT_WORK`, which `run.sh` takes when the `HIPPOMM_` ones are unset.
 
@@ -154,7 +182,9 @@ the frames, so a memory fetched from the dataset answers without them.
 
 ### What `count` reports
 
-Per question, upstream makes between 2 and 7 gpt-4o calls. Every question gets the classification and the
+`count` prices the arm's model at list price ($2.50 in / $10 out per million tokens for gpt-4o, $2 / $8 for
+gpt-4.1; the cached-input discount is not counted) and writes the model and prices into `count_<bank>.json`.
+Per question, upstream makes between 2 and 7 calls to it. Every question gets the classification and the
 direct answer, whose prompt holds the summary and all key-frame captions up to `t_ask`. `low` is that pair
 (the direct answer was confident). `high` adds the search query, the frame selection over all captions (when
 ImageBind similarity is under 0.4), the final answer over all captions, and both reflection calls: the caption
@@ -189,7 +219,8 @@ bash baselines/hippomm/docker/run.sh qa P05-20240425-201444 q25vl7b-gpt4o batch1
 
 ## What comes back
 
-Per video, in `results/q25vl7b-gpt4o/<video>/` (the dataset's `hippomm/q25vl7b-gpt4o/<video>/` after `upload`):
+Per video, in `results/<arm>/<video>/` (the dataset's `hippomm/<arm>/<video>/` after `upload`; the memory and
+`summaries.json` only in `q25vl7b-gpt4o`'s, `q25vl7b-gpt41`'s has `<video>_memory_ref.json` instead):
 - the memory: `<video>_memory.json` (key frames, times, captions, segments with their Whisper text, the
   whole-audio transcription, the summary, the settings) and `<video>_features.npz` (ImageBind `vision` features of
   every extracted frame with `vision_times`; `audio`, `audio_times`);
@@ -200,14 +231,15 @@ Per video, in `results/q25vl7b-gpt4o/<video>/` (the dataset's `hippomm/q25vl7b-g
   how much memory was visible (`indexed`), upstream's question type, confidence, reasoning, whether the direct
   answer or the reflection was used, the retrieved time spans, `version` and `memory_hash`;
 - `blind_<bank>.json.gz`: the same rows for the no-memory prompt;
-- `runs.jsonl`: one line per finished stage (commits, the patch's hash, models, vLLM and torch versions, GPU,
+- `runs.jsonl`: one line per finished stage (commits, the patch's hash, models, the memory arm, vLLM and torch versions, GPU,
   seconds); for `qa` and `blind` also `api`: the model asked for, the endpoint, the model ids the API returned, the
   number of calls and questions, and input, cached, output and reasoning tokens as the API reported them (through
   OpenRouter also `providers` and `cost`). Each answer row has the same counts for its question (`api`).
 
 ## Open points
 
-- **gpt-4o is not replaced and not called without a key.** Budget from `count` before running `qa`.
+- **No call is made without a key**, and gpt-4o is replaced only in the arm named for it (`q25vl7b-gpt41`).
+  Budget from `count` before running `qa`.
 - The three kept upstream behaviours above change what the method can do on audio and which frames detailed
   recall looks at; fixing them would depart from the released code.
 - Measured on P05-20240425-201444 (27 min, one RTX A6000, 4 CPUs): prep 8 min, build 19 min of which 7.5 min is

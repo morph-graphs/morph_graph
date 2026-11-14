@@ -41,7 +41,8 @@ import hm_common as hm
 
 VERSION = "1"   # bump when a change alters answers (prompts, cutoff rule, question format)
 LETTERS = "ABCD"
-USD_PER_M = {"input": 2.50, "output": 10.00}   # gpt-4o list price per million tokens, as assumed here: check before budgeting
+# list prices per million tokens, as assumed here: check before budgeting
+USD_PER_M = {"gpt-4o": {"input": 2.50, "output": 10.00}, "gpt-4.1": {"input": 2.00, "output": 8.00}}
 log = logging.getLogger("qa")
 
 
@@ -88,10 +89,12 @@ def count(rows, J, F):
     three times: direct answer, frame selection, final answer). Templates are counted as fixed token sizes
     measured from upstream's prompt strings; upstream caps a prompt's context at 120k tokens."""
     import tiktoken
-    enc = tiktoken.encoding_for_model(hm.REASONING)
+    enc = tiktoken.encoding_for_model(hm.TOKENIZER)
     n = lambda s: len(enc.encode(s))
     cap_tok = [n(c) for c in J["frame_captions"]]
-    tot = {"questions": len(rows), "low_calls": 2 * len(rows), "high_calls": 7 * len(rows), "low_in": 0, "high_in": 0}
+    usd = USD_PER_M[hm.REASONING]
+    tot = {"model": hm.REASONING, "usd_per_m": usd, "questions": len(rows), "low_calls": 2 * len(rows),
+           "high_calls": 7 * len(rows), "low_in": 0, "high_in": 0}
     for r in rows:
         m = hm.at_cutoff(J, F, r["cutoff"])
         C = min(sum(cap_tok[:m["nk"]]) + m["nk"], 120000)
@@ -101,7 +104,7 @@ def count(rows, J, F):
         tot["high_in"] += r["count"]["high_in"]
     tot["low_out"], tot["high_out"] = 20 * len(rows), 400 * len(rows)
     for k in ("low", "high"):
-        tot[f"{k}_usd"] = round((tot[f"{k}_in"] * USD_PER_M["input"] + tot[f"{k}_out"] * USD_PER_M["output"]) / 1e6, 2)
+        tot[f"{k}_usd"] = round((tot[f"{k}_in"] * usd["input"] + tot[f"{k}_out"] * usd["output"]) / 1e6, 2)
     return tot
 
 
@@ -220,7 +223,7 @@ def main():
         return out
 
     if todo and not (os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENROUTER_API_KEY")):
-        sys.exit(f"answering needs OPENAI_API_KEY (or OPENROUTER_API_KEY) in the environment: upstream's reasoning model is {hm.REASONING} "
+        sys.exit(f"answering needs OPENAI_API_KEY (or OPENROUTER_API_KEY) in the environment: the arm's reasoning model is {hm.REASONING} "
                  "(run with --count for the number of calls and tokens)")
     cfg = hm.config(os.path.abspath(a.store or "."))
     from hippomm.core.hippocampal_memory import HippocampalMemory, QARecallSystem
@@ -251,6 +254,7 @@ def main():
         mem = HippocampalMemory(cfg)   # ImageBind, Whisper, the Qwen2.5-VL client
         mem.video_index[V] = {"metadata": {"path": os.path.abspath(a.video_file), "duration": J["duration"]}}
         qa = QARecallSystem(mem, cfg)
+        qa.reasoning_model = hm.REASONING   # the arm's model; the config named hm.TOKENIZER for upstream's token counter
         tot = meter(qa.thinking_client, usage)
         spath = os.path.join(a.memory, "summaries.json")
         summaries = json.load(open(spath)) if os.path.exists(spath) else {}

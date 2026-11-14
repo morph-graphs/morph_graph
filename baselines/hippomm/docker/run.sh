@@ -4,17 +4,19 @@
 # dataset), the epic-morph checkout at /epic-morph (the banks). The Hugging Face token: HF_TOKEN, or
 # `hf auth login` on the host (the cache, with its token, is mounted).
 #   HIPPOMM_GPU=0 EPIC_MORPH_DIR=<epic-morph checkout> bash baselines/hippomm/docker/run.sh <stage> <video> <arm> [bank]
-#   OPENAI_API_KEY   for qa and blind (gpt-4o, upstream's reasoning model). Export it in the shell: it is handed
-#                    to the container by name, so it never appears on a command line, in a file or in the image.
-#                    OPENROUTER_API_KEY instead (without OPENAI_API_KEY): the same calls through OpenRouter
+#   OPENAI_API_KEY   for qa and blind (the arm's reasoning model: gpt-4o, or gpt-4.1 for q25vl7b-gpt41). Export it in
+#                    the shell: it is handed to the container by name, so it never appears on a command line, in a
+#                    file or in the image. OPENAI_BASE_URL (passed the same way) names another OpenAI-compatible
+#                    endpoint. OPENROUTER_API_KEY instead (without OPENAI_API_KEY): the same calls through OpenRouter
 #   HIPPOMM_RUNTIME  docker (default) or apptainer (clusters without Docker: the same image, run with
 #                    `apptainer exec`; the GPU is the one the scheduler gave the job, so HIPPOMM_GPU is not needed)
 #   HIPPOMM_GPU      docker: the GPU index for this job (one GPU with 48 GB)
 #   EPIC_MORPH_DIR   the epic-morph checkout (required)
-#   HIPPOMM_IMAGE    image (default ghcr.io/morph-graphs/hippomm:<arm>-<env hash>, from image_tag.sh); for
-#                    apptainer, a .sif built once with `apptainer pull hippomm_<arm>.sif docker://<that image>`
-#   HIPPOMM_SIF_DIR  apptainer: a folder of such files (default MERIT_SIF_DIR); uses <dir>/hippomm_<arm>.sif when
-#                    it exists and HIPPOMM_IMAGE is unset, so one board worker runs every baseline and arm
+#   HIPPOMM_IMAGE    image (default ghcr.io/morph-graphs/hippomm:q25vl7b-gpt4o-<env hash>, from image_tag.sh: one
+#                    image for both arms); for apptainer, a .sif built once with
+#                    `apptainer pull hippomm_q25vl7b-gpt4o.sif docker://<that image>`
+#   HIPPOMM_SIF_DIR  apptainer: a folder of such files (default MERIT_SIF_DIR); uses <dir>/hippomm_q25vl7b-gpt4o.sif
+#                    when it exists and HIPPOMM_IMAGE is unset, so one board worker runs every baseline and arm
 #   HIPPOMM_HF_CACHE Hugging Face cache on the host (default MERIT_HF_CACHE, else ~/.cache/huggingface), mounted
 #                    at /hf: Qwen2.5-VL-7B-Instruct, the Whisper model, and imagebind/imagebind_huge.pth (4.5 GB,
 #                    downloaded there on first use) and the tokenizer file of gpt-4o
@@ -32,8 +34,9 @@ EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && p
 IMAGE=${HIPPOMM_IMAGE:-ghcr.io/morph-graphs/hippomm:$(bash "$REPO/baselines/hippomm/docker/image_tag.sh" "$ARM")}
 RUNTIME=${HIPPOMM_RUNTIME:-${MERIT_RUNTIME:-docker}}
 SIFS=${HIPPOMM_SIF_DIR:-${MERIT_SIF_DIR:-}}
-if [ "$RUNTIME" = apptainer ] && [ -z "${HIPPOMM_IMAGE:-}" ] && [ -n "$SIFS" ] && [ -s "$SIFS/hippomm_$ARM.sif" ]; then
-    IMAGE=$SIFS/hippomm_$ARM.sif
+ENV=q25vl7b-gpt4o   # the image (environment) every arm runs in
+if [ "$RUNTIME" = apptainer ] && [ -z "${HIPPOMM_IMAGE:-}" ] && [ -n "$SIFS" ] && [ -s "$SIFS/hippomm_$ENV.sif" ]; then
+    IMAGE=$SIFS/hippomm_$ENV.sif
 fi
 HF=${HIPPOMM_HF_CACHE:-${MERIT_HF_CACHE:-$HOME/.cache/huggingface}}
 [ -f "$REPO/baselines/hippomm/HippoMM/hippomm/core/hippocampal_memory.py" ] || { echo "run: git submodule update --init baselines/hippomm/HippoMM"; exit 1; }
@@ -53,7 +56,7 @@ if [ -n "${MERIT_WORK:-}" ]; then   # the shared work folder: HippoMM's own subf
     umask 002; mkdir -p "$MERIT_WORK"; BINDS+=("$(cd -P "$MERIT_WORK" && pwd):/work"); export HIPPOMM_WORK=${HIPPOMM_WORK:-/work/hippomm}
 fi
 # every one of these, the key included, goes in by name: the value stays out of `ps`, files and logs
-PASS=(OPENAI_API_KEY OPENROUTER_API_KEY OPENROUTER_BASE_URL HF_TOKEN MERIT_HF_REPO HIPPOMM_TAG HIPPOMM_FETCH HIPPOMM_LIMIT HIPPOMM_VLLM_MEM HIPPOMM_VLM_URL
+PASS=(OPENAI_API_KEY OPENAI_BASE_URL OPENROUTER_API_KEY OPENROUTER_BASE_URL HF_TOKEN MERIT_HF_REPO HIPPOMM_TAG HIPPOMM_FETCH HIPPOMM_LIMIT HIPPOMM_VLLM_MEM HIPPOMM_VLM_URL
       HIPPOMM_OUT HIPPOMM_WORK)
 if [ "$RUNTIME" = apptainer ]; then
     case $IMAGE in *.sif) ;; *) IMAGE=docker://$IMAGE ;; esac

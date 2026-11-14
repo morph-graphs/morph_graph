@@ -15,6 +15,8 @@
 #          all    prep + build, then count when a bank is given (never qa or blind: they cost money)
 #   arm    q25vl7b-gpt4o   the paper's configuration: Qwen2.5-VL-7B-Instruct (captions, summaries; local),
 #                          ImageBind-Huge, Whisper distil-large-v3 (local), gpt-4o (reasoning; OpenAI API)
+#          q25vl7b-gpt41   the same memory (q25vl7b-gpt4o's: it does not depend on the reasoning model), answered
+#                          with gpt-4.1 in place of gpt-4o (README "Arms"). Stages count, qa, blind, upload
 #   bank   a named bank of the epic-morph checkout, e.g. batch10_agree2
 #
 # Environment (see README.md):
@@ -43,12 +45,20 @@ M=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); REPO=$(cd "$M/../.." && pwd); R
 PY=${PY:?set PY to the python of the client environment}
 EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && pwd)
 [ -f "$R/hippomm/core/hippocampal_memory.py" ] || { echo "submodule missing: git submodule update --init baselines/hippomm/HippoMM"; exit 1; }
-[ "$ARM" = q25vl7b-gpt4o ] || { echo "arm must be q25vl7b-gpt4o (the paper's configuration)"; exit 1; }
+# REASON answers (upstream's gpt-4o calls). MEM is the arm whose folder holds the memory: an answer arm (ARM != MEM)
+# reads it from there and keeps only its count, answers and runs in its own folder.
+case $ARM in
+    q25vl7b-gpt4o) REASON=gpt-4o ;;
+    q25vl7b-gpt41) REASON=gpt-4.1; MEM=q25vl7b-gpt4o ;;
+    *) echo "arm must be q25vl7b-gpt4o (the paper's configuration) or q25vl7b-gpt41 (gpt-4.1 in place of gpt-4o)"; exit 1 ;;
+esac
+MEM=${MEM:-$ARM}
+case $ARM:$STAGE in q25vl7b-gpt41:prep|q25vl7b-gpt41:all) echo "$ARM answers from the $MEM memory: run $STAGE with $MEM"; exit 1 ;; esac
 VLM=Qwen/Qwen2.5-VL-7B-Instruct
 VIDEOS=${HDEPIC_VIDEOS:-$EPIC/data/HD-EPIC/videos}; VIDEO=$VIDEOS/${V%%-*}/$V.mp4
-WORK=${HIPPOMM_WORK:-$M/work}; OUTROOT=${HIPPOMM_OUT:-$M/results}; OUT=$OUTROOT/$ARM/$V; STORE=$WORK/store
+WORK=${HIPPOMM_WORK:-$M/work}; OUTROOT=${HIPPOMM_OUT:-$M/results}; OUT=$OUTROOT/$ARM/$V; MOUT=$OUTROOT/$MEM/$V; STORE=$WORK/store
 TAG=${HIPPOMM_TAG:-}; SUF=${TAG:+_$TAG}
-mkdir -p "$OUT" "$WORK/logs" "$WORK/locks" "$STORE"
+mkdir -p "$OUT" "$MOUT" "$WORK/logs" "$WORK/locks" "$STORE"
 # The submodule is upstream as released; HippoMM.patch (what it needs to run, and the question-time cutoff) is
 # applied to the checkout here, once. Anything else (another upstream commit, local edits) stops the run.
 ( flock 9
@@ -61,7 +71,7 @@ mkdir -p "$OUT" "$WORK/logs" "$WORK/locks" "$STORE"
 PATCH=$( { sha256sum 2>/dev/null || shasum -a 256; } < "$M/HippoMM.patch" | cut -c1-12)
 HF=${HF_HOME:-$HOME/.cache/huggingface}
 export HIPPOMM_IMAGEBIND=${HIPPOMM_IMAGEBIND:-$HF/imagebind} TIKTOKEN_CACHE_DIR=${TIKTOKEN_CACHE_DIR:-$HF/tiktoken}
-export HIPPOMM_SRC=$R NO_PROXY=127.0.0.1,localhost no_proxy=127.0.0.1,localhost
+export HIPPOMM_SRC=$R HIPPOMM_REASONING=$REASON NO_PROXY=127.0.0.1,localhost no_proxy=127.0.0.1,localhost
 # upstream writes fixed-name temporary frames and audio: one folder per run, so jobs on a node do not collide
 export TMPDIR=$(mktemp -d "${TMPDIR:-/tmp}/hippomm_${V}_XXXXXX")
 SPID=
@@ -69,7 +79,7 @@ trap '[ -n "$SPID" ] && kill $SPID 2>/dev/null; rm -rf "$TMPDIR"' EXIT
 # ctranslate2 (Whisper) loads the cuDNN 8 and cuBLAS that the torch 2.1.2 wheel carries in torch/lib
 export LD_LIBRARY_PATH=$("$PY" -c "import os, torch; print(os.path.join(os.path.dirname(torch.__file__), 'lib'))")${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
 read -ra MEMORY <<< "$("$PY" "$M/epic/build_memory.py" --memory_files)"
-have_memory() { local f; for f in "${MEMORY[@]}"; do [ -s "$OUT/${f//\{video\}/$V}" ] || return 1; done; }
+have_memory() { local f; for f in "${MEMORY[@]}"; do [ -s "$MOUT/${f//\{video\}/$V}" ] || return 1; done; }
 log() { echo "=== $V $ARM $1 ($(date '+%F %H:%M'))"; }
 record() {   # one line per finished stage, for the hand-back
     "$PY" - "$1" "$2" "${3:-}" >> "$OUT/runs.jsonl" <<'EOF'
@@ -83,6 +93,7 @@ bank = os.environ.get("HIPPOMM_EPIC_COMMIT") or git("rev-parse", "HEAD", cwd=os.
 gpus = [torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())]
 row = {"stage": sys.argv[1], "seconds": int(float(sys.argv[2])), "commit": commit, "hippomm_commit": sub,
        "hippomm_patch": os.environ.get("PATCH"), "epic_morph_commit": bank, "vlm": os.environ.get("VLM"),
+       "reasoning": os.environ.get("HIPPOMM_REASONING"), "memory_arm": os.environ.get("MEM"),
        "vllm": os.environ.get("VLLM_VERSION"), "torch": torch.__version__, "faster_whisper": faster_whisper.__version__,
        "gpus": gpus, "host": platform.node(), "finished": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
 if sys.argv[3] and os.path.exists(sys.argv[3]):   # qa, blind: the model asked for, the endpoint, the model ids the API
@@ -90,7 +101,7 @@ if sys.argv[3] and os.path.exists(sys.argv[3]):   # qa, blind: the model asked f
 print(json.dumps(row))
 EOF
 }
-export EPIC VLM PATCH
+export EPIC VLM PATCH MEM
 cd "$REPO"
 
 start_vlm() {   # Qwen2.5-VL-7B-Instruct behind an OpenAI-compatible endpoint, as upstream serves it (vLLM)
@@ -137,20 +148,23 @@ build() {
     # the memory depends only on the video and the models: take it from the dataset when it is there
     if ! have_memory && [ "${HIPPOMM_FETCH:-1}" != 0 ]; then
         rc=0; "$PY" "$M/../common/hf_results.py" fetch-memory --baseline hippomm --memory "${MEMORY[@]}" \
-            --arm "$ARM" --video "$V" --dir "$OUT" || rc=$?
+            --arm "$MEM" --video "$V" --dir "$MOUT" || rc=$?
         case $rc in
-            0) rm -f "$OUT"/answers_*.json.gz "$OUT"/count_*.json "$OUT/summaries.json" ;;   # made from an earlier memory
+            0) rm -f "$OUT"/answers_*.json.gz "$OUT"/count_*.json "$MOUT/summaries.json" ;;   # made from an earlier memory
             3) echo "no HippoMM memory in the dataset yet: building it here" ;;
             *) echo "could not reach the dataset; HIPPOMM_FETCH=0 builds the memory here instead"; exit 1 ;;
         esac
     fi
+    if ! have_memory && [ "$ARM" != "$MEM" ]; then   # an answer arm never writes the memory: that is the memory arm's build
+        echo "no finished $MEM memory of $V here or in the dataset: build it first (run_hippomm.sh build $V $MEM)"; exit 1
+    fi
     if ! have_memory; then
         [ -s "$STORE/frames/$V/metadata.yaml" ] || prep
         imagebind; start_vlm
-        "$PY" "$M/epic/build_memory.py" --stage build --video "$V" --video_file "$VIDEO" --store "$STORE" --out "$OUT"
+        "$PY" "$M/epic/build_memory.py" --stage build --video "$V" --video_file "$VIDEO" --store "$STORE" --out "$MOUT"
         rm -f "$STORE"/checkpoints/checkpoint_"${V}"_*.json   # upstream's segment checkpoint (large); the memory replaces it
     fi
-    have_memory || { echo "memory for $V is incomplete in $OUT"; exit 1; }
+    have_memory || { echo "memory for $V is incomplete in $MOUT"; exit 1; }
     record build $((SECONDS - t))
 }
 bank_file() {   # this bank's questions for the video (banks are generated in epic-morph, not committed)
@@ -167,21 +181,28 @@ count() {
     log "count $BANK"
     have_memory || build
     bank_file
-    "$PY" "$M/epic/run_qa.py" --count --video "$V" --bank_file "$BF" --memory "$OUT" --answers "$OUT/count_$BANK.json"
+    "$PY" "$M/epic/run_qa.py" --count --video "$V" --bank_file "$BF" --memory "$MOUT" --answers "$OUT/count_$BANK.json"
+}
+memory_ref() {   # an answer arm's folder names the memory its answers were made from, by file hashes
+    [ "$ARM" != "$MEM" ] || return 0
+    "$PY" -c 'import hashlib, json, os, sys
+print(json.dumps({"memory_arm": sys.argv[1], "sha256": {os.path.basename(f): hashlib.sha256(open(f, "rb").read()).hexdigest()
+                                                         for f in sys.argv[2:]}}, sort_keys=True))' \
+        "$MEM" "${MEMORY[@]//\{video\}/$MOUT/$V}" > "$OUT/${V}_memory_ref.json"
 }
 need_key() {
-    [ -n "${OPENAI_API_KEY:-}${OPENROUTER_API_KEY:-}" ] || { echo "$STAGE calls gpt-4o (upstream's reasoning model): set OPENAI_API_KEY (or OPENROUTER_API_KEY, to go through OpenRouter) in the environment; \`count\` gives the calls and tokens first"; exit 1; }
+    [ -n "${OPENAI_API_KEY:-}${OPENROUTER_API_KEY:-}" ] || { echo "$STAGE calls $REASON (the reasoning model): set OPENAI_API_KEY (or OPENROUTER_API_KEY, to go through OpenRouter) in the environment; \`count\` gives the calls and tokens first"; exit 1; }
     # one gateway per run: OpenAI's key wins, and the stage then has no other provider's key
-    if [ -n "${OPENAI_API_KEY:-}" ]; then unset OPENROUTER_API_KEY; else echo "gpt-4o through OpenRouter (openai/gpt-4o, provider OpenAI only)"; fi
+    if [ -n "${OPENAI_API_KEY:-}" ]; then unset OPENROUTER_API_KEY; else echo "$REASON through OpenRouter (openai/$REASON, provider OpenAI only)"; fi
 }
 qa() {
     log "qa $BANK$SUF"; local t=$SECONDS rc=0
     need_key
     have_memory || build
     [ -s "$VIDEO" ] || { echo "missing $VIDEO"; exit 1; }
-    bank_file; imagebind; start_vlm
+    memory_ref; bank_file; imagebind; start_vlm
     rm -f "$TMPDIR/usage.json"
-    "$PY" "$M/epic/run_qa.py" --video "$V" --bank_file "$BF" --memory "$OUT" --video_file "$VIDEO" --store "$STORE" \
+    "$PY" "$M/epic/run_qa.py" --video "$V" --bank_file "$BF" --memory "$MOUT" --video_file "$VIDEO" --store "$STORE" \
         --answers "$OUT/answers_$BANK$SUF.json.gz" --usage "$TMPDIR/usage.json" --limit "${HIPPOMM_LIMIT:-0}" || rc=$?
     record "qa $BANK$SUF" $((SECONDS - t)) "$TMPDIR/usage.json"   # also when it stopped early: the calls were made
     [ $rc = 0 ] || { echo "qa did not finish (exit $rc); rerun the same command to retry"; exit 1; }
@@ -197,6 +218,11 @@ blind() {
 }
 upload() {   # only a finished memory: a half-built folder would overwrite a good one in the dataset
     log upload
+    if [ "$ARM" != "$MEM" ]; then   # an answer arm: its count, answers and runs, and the reference to their memory
+        [ -s "$OUT/${V}_memory_ref.json" ] || { echo "no answers in $OUT: run qa first"; exit 1; }
+        "$PY" "$M/../common/hf_results.py" upload --baseline hippomm --memory '{video}_memory_ref.json' --arm "$ARM" --video "$V" --dir "$OUT"
+        return 0
+    fi
     have_memory || { echo "no finished memory in $OUT: run build first"; exit 1; }
     "$PY" "$M/../common/hf_results.py" upload --baseline hippomm --memory "${MEMORY[@]}" --arm "$ARM" --video "$V" --dir "$OUT"
 }
