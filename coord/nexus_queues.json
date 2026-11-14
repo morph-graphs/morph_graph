@@ -1,7 +1,9 @@
 {
- "sailon-a6000": {"fits": ["m8", "qwen3vl-8b-f32", "qwen3vl-8b-f128", "qwen3vl-8b-f768"], "note": "vulcan-ampere caps non-H200 GPUs at 4 CPU / 48G each; 48 GPUs per user",
+ "cpu":          {"fits": ["merit/g5m"], "max_jobs": 2, "note": "MERIT's gpt-5-mini memory: API calls and ffmpeg only, no GPU. QoS vulcan-cpu runs 4 jobs per user, the board worker's own job among them",
+                  "sbatch": "--partition=vulcan-cpu --account=vulcan-abhinav --qos=vulcan-cpu -c 4 --mem=16G --time=8:00:00 --requeue"},
+ "sailon-a6000": {"fits": ["m8", "qwen3vl-8b-f32", "qwen3vl-8b-f128", "qwen3vl-8b-f768", "worldmm/g5m", "worldmm/g5m-q8", "magic/oss120", "magic/oss120-flash"], "note": "vulcan-ampere caps non-H200 GPUs at 4 CPU / 48G each; 48 GPUs per user. The keyed arms (taken only by a worker that has the key): local embedding models, 24 GB; worldmm/g5m-q8 also the 8B server, 40 GB",
                   "sbatch": "--partition=vulcan-ampere --account=vulcan-abhinav --qos=vulcan-sailon --gres=gpu:rtxa6000:1 -c 4 --mem=40G --time=4:00:00 --requeue"},
- "h200":         {"fits": ["m27", "qwen38-27b-f32", "qwen38-27b-f128", "qwen38-27b-f768"], "fallback": ["m8", "qwen3vl-8b-f32", "qwen3vl-8b-f128", "qwen3vl-8b-f768"], "max_jobs": 2, "note": "vulcan46; QoS vulcan-high-h200 runs 2 jobs per user, 1.5 days max; 8B only while no 27B task is waiting",
+ "h200":         {"fits": ["m27", "qwen38-27b-f32", "qwen38-27b-f128", "qwen38-27b-f768", "magic/oss120-q27"], "fallback": ["m8", "qwen3vl-8b-f32", "qwen3vl-8b-f128", "qwen3vl-8b-f768"], "max_jobs": 2, "note": "vulcan46; QoS vulcan-high-h200 runs 2 jobs per user, 1.5 days max; 8B only while no 27B task is waiting",
                   "sbatch": "--partition=vulcan-ampere --account=vulcan-abhinav --qos=vulcan-high-h200 --gres=gpu:h200-sxm:1 -c 8 --mem=96G --time=12:00:00 --requeue"},
  "scav-a6000":   {"fits": ["m8", "qwen3vl-8b-f32", "qwen3vl-8b-f128", "qwen3vl-8b-f768"], "note": "preemptible (tier 0): --requeue, and every stage resumes",
                   "sbatch": "--partition=scavenger --account=scavenger --qos=scavenger --gres=gpu:rtxa6000:1 -c 4 --mem=40G --time=4:00:00 --requeue"},
@@ -9,6 +11,6 @@
                   "sbatch": "--partition=scavenger --account=scavenger --qos=scavenger --gres=gpu:l40s:1 -c 4 --mem=40G --time=4:00:00 --requeue"},
  "cml-scav-a6000": {"fits": ["m8", "qwen3vl-8b-f32", "qwen3vl-8b-f128", "qwen3vl-8b-f768"], "note": "preemptible (tier 1); 24 GPUs across all of a user's cml-scavenger jobs",
                   "sbatch": "--partition=cml-scavenger --account=cml-scavenger --qos=cml-scavenger --gres=gpu:rtxa6000:1 -c 4 --mem=40G --time=4:00:00 --requeue"},
- "tron-a6000":   {"fits": ["m8", "qwen3vl-8b-f32", "qwen3vl-8b-f128", "qwen3vl-8b-f768"], "note": "QoS high: 1 day max, not preemptible",
+ "tron-a6000":   {"fits": ["m8", "qwen3vl-8b-f32", "qwen3vl-8b-f128", "qwen3vl-8b-f768", "worldmm/g5m", "worldmm/g5m-q8", "magic/oss120", "magic/oss120-flash"], "note": "QoS high: 1 day max, not preemptible",
                   "sbatch": "--partition=tron --account=nexus --qos=high --gres=gpu:rtxa6000:1 -c 4 --mem=40G --time=4:00:00"}
 }
