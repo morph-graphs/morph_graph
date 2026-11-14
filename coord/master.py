@@ -24,10 +24,10 @@ checkout EPIC_MORPH_DIR, the master's own (not a worker's, which may be reading 
 without EPIC_MORPH_DIR: a tasks.json without the qa tasks would drop them from the board.
 
 Arms that call a paid API (NEEDS_ENV) carry `needs_env`, the variables a worker must have set to take them ("A|B":
-either one), and go to pool `max` only, or also to `nexus` when an OpenRouter key is all they need (ROUTER_POOLS).
+either one), and go to pools `max` and `pulkit` only (ROUTER_POOLS once also took `nexus` for OpenRouter-only arms).
 The reported-configuration arms (REPORTED: a gpt-5-mini memory per video, answered by several models) are listed right after the API tasks, and while PILOT is non-empty only the tasks it names are listed.
 The other paid rows (PAID: Ego-R1, EGAgent, EgoRAG, HippoMM and MAGIC-Video with their published models) follow the
-reported-configuration arms, for batch10 only, on pool `max` only, behind the same PILOT gate.
+reported-configuration arms, for batch10 only, on pools `max` and `pulkit` only, behind the same PILOT gate.
 """
 import argparse
 import functools
@@ -64,9 +64,18 @@ FAILED = ("", "Error", "Unable to generate answer")   # no answer: earlier.reuse
 # A person's one worker over several queues (worker.py --queues: Anubhav's `nexus`, Vatsal's `vatsal`, both on Nexus)
 # is listed for both arms: the worker itself claims only the tasks one of its queues fits, so it takes a 27B only
 # through an 80 GB queue (the H200). nexus-tron, nexus-sailon and nexus-scavenger are the per-queue workers `nexus`
-# replaces; they stay listed until their last claims are finished.
-M8 = ["max", "pulkit", "nexus", "nexus-tron", "nexus-sailon", "nexus-scavenger", "wriva", "vatsal", "zaratan"]   # zaratan: H100 jobs
-M27 = ["wriva", "zaratan", "max", "pulkit", "nexus", "vatsal"]
+# replaces.
+# Since 2026-11-14 (Anubhav) the Qwen work leaves Nexus, to free it for other research: Max and Pulkit (NVIDIA,
+# GB200/GB300) take it first, Zaratan, wriva and arm00 help; Molmo2-8B (a public download) goes the same way. Claims
+# already running on Nexus finish: a worker renews its claims whatever the task's pools say.
+# Leftovers (Anubhav, 2026-11-14): Nexus should not sit idle, so a task no pool has held for LEFTOVER_H hours (since it
+# was listed, or since a claim on it ended) is offered to LEFTOVER_POOLS too (our worker and Vatsal's, each over all of
+# its queues); new work goes to the pools below first. Not a keyed task, nor one listed for KEY_POOLS only (Max's and
+# Pulkit's paid rows).
+LEFTOVER_POOLS = ["nexus", "vatsal"]
+LEFTOVER_H = 2
+M8 = ["max", "pulkit", "wriva", "zaratan"]   # zaratan: H100 jobs
+M27 = ["wriva", "zaratan", "max", "pulkit"]
 POOLS = {("merit", "m27"): M27 + ["arm00"], ("merit", "m8"): M8,
          ("magic", "m27"): M27, ("magic", "m8"): M8,
          ("worldmm", "m27"): M27, ("worldmm", "m8"): M8}
@@ -93,11 +102,11 @@ MEMORY_ARM = {("worldmm", "g5m-q8"): "g5m", ("worldmm", "g5m-g5"): "g5m",
 KEY_POOLS = ["max", "pulkit"]   # Max and Pulkit (NVIDIA) run with their own API keys
 # A name of the form "A|B" is met by either variable. MERIT's and WorldMM's gpt-5-mini calls go to OpenAI with
 # OPENAI_API_KEY, or through OpenRouter with OPENROUTER_API_KEY alone (each README, "Through OpenRouter").
-# A task whose every need an OpenRouter key meets is also offered to our own Nexus worker (ROUTER_POOLS), which has
-# that key and no other; the worker still takes it only with the key in its environment. The gpt-5 answer arms
+# ROUTER_POOLS once also offered a task whose every need an OpenRouter key meets to our own Nexus worker, which has
+# that key and no other; since 2026-11-14 it is KEY_POOLS alone (the Qwen work left Nexus). The gpt-5 answer arms
 # (g5m-g5) stay with Max and OpenAI's key (Anubhav, 2026-11-14), although the code could route them too.
 GPT = "OPENAI_API_KEY|OPENROUTER_API_KEY"
-ROUTER_POOLS = KEY_POOLS + ["nexus"]
+ROUTER_POOLS = KEY_POOLS   # was + ["nexus"]: the OpenRouter arm left is WorldMM's g5m-q8, a Qwen model, so off Nexus (2026-11-14)
 NEEDS_ENV = {("api", c): ["GEMINI_API_KEY" if c.startswith("gemini") else "OPENAI_API_KEY"] for c in API_CONFIGS} | {
     ("worldmm", "g5m"): [GPT], ("worldmm", "g5m-q8"): [GPT], ("worldmm", "g5m-g5"): ["OPENAI_API_KEY"],
     ("merit", "g5m"): [GPT], ("merit", "g5m-g5"): ["OPENAI_API_KEY"]}
@@ -114,10 +123,10 @@ REPORTED = [("worldmm", "g5m", "build", KEY_POOLS, None), ("merit", "g5m", "buil
 # (the API tasks and the local-model tasks are not affected). Empty it (a one-line PR) once the pilot's token usage has
 # been read, and the rest is listed.
 PILOT = []   # emptied 2026-11-14 (Anubhav): the pilot, worldmm-g5m-build-P05-20240425-201444, cost $2.71 through OpenRouter
-# Withheld whatever PILOT says: work that is running off the board, which a board copy would pay for twice. WorldMM's
-# gpt-5-mini memories are being built by Slurm arrays on Nexus (2026-11-14: 70 of 156 in the dataset). A qa task
-# keeps its wait on such a build until the memory is uploaded. Empty this when the arrays are done.
-HELD = {("worldmm", "g5m", "build")}
+# Withheld whatever PILOT says: (baseline, arm, stage) lines whose work is running off the board, which a board copy
+# would pay for twice. A qa task keeps its wait on such a build until the memory is uploaded. Empty since 2026-11-14:
+# WorldMM's gpt-5-mini memories, built by Slurm arrays on Nexus, are in the dataset for all 156 videos.
+HELD = set()
 # The other paid rows of the sheet, each baseline with the models it was published with (baselines/<b>/README.md).
 # Decided by Anubhav: batch10 only (a build line with a bank builds only that bank's videos: 10 memories, no tranche,
 # no 156-video builds), and run by Max: every line is for KEY_POOLS, also a stage that calls no API (HippoMM's build,
@@ -155,25 +164,39 @@ GATED = {(b, arm) for b, arm, *_ in REPORTED + PAID}
 # Nothing is built, so a task waits on nothing and is done when its answers_<bank>.json.gz is in the dataset. It runs
 # in MERIT's image of the model's environment, so the pools are those of that arm: the 8B fits a 48 GB GPU at every N
 # (measured peak 39.2 GB at N = 768); the 27B needs what MERIT's m27 does at N = 32 and 128 (2x 48 GB or one 80 GB GPU).
-# Its N = 768 is not sized yet (75k video tokens), so only the pools with an H200 (141 GB) queue get it. Listed after
+# Its N = 768 is not sized yet (75k video tokens), so only Pulkit's GB200/GB300 pool gets it. Listed after
 # the paid rows and before the memory arms: short tasks that should not wait behind the memory builds.
 DIRECT = {"qwen3vl-8b-f32": M8, "qwen3vl-8b-f128": M8, "qwen3vl-8b-f768": M8,
-          "qwen38-27b-f32": M27, "qwen38-27b-f128": M27, "qwen38-27b-f768": ["nexus", "vatsal"],
+          "qwen38-27b-f32": M27, "qwen38-27b-f128": M27, "qwen38-27b-f768": ["pulkit"],   # N = 768 unsized: a GB200/GB300 (186/288 GB) GPU
           # Qwen3.5-9B and Molmo2-8B fit a 48 GB GPU like the 8B (the 9B runs in the m27 image); Qwen3.5-35B-A3B needs
           # the 27B pools' GPUs, and its N = 768 is not sized, so it is not listed
           "qwen35-9b-f32": M8, "qwen35-9b-f128": M8, "qwen35-9b-f768": M8,
           "molmo2-8b-f32": M8, "molmo2-8b-f128": M8, "molmo2-8b-f384": M8,
           "qwen35-35b-a3b-f32": M27, "qwen35-35b-a3b-f128": M27}
+# ReKV (baselines/rekv, arm m8: Qwen3-VL-8B through the vendored port; it has no m27 arm): qa lines only, every bank.
+# Its memory is the video's KV-cache, held in host RAM while qa runs and never stored, so nothing is built: as with the
+# plain video model, a task waits on nothing and is done when its answers_<bank>.json.gz is in the dataset. No key.
+# One 48 GB GPU and up to 36 GB of host RAM (the cache grows with the video; measured on the longest one), so the
+# m8 pools, and a queues file's plain m8 names it too. After the plain video model's short tasks.
+# M3-Agent (baselines/m3agent, arm m3: the published checkpoints with local ASR and embeddings, no key): its two
+# stages need different GPUs, so its lines differ in pools. build (the memory graph, every video) fits one GPU of
+# 40 GB or more: the m8 pools. qa serves the 32.8B control model: 2x 48 GB or one 80 GB GPU, the m27 pools (a queues
+# file names the stages: m3agent/m3/build, m3agent/m3/qa). Listed last. Its arm m3api calls paid APIs (Gemini speech
+# segments, OpenAI embeddings) and is not listed: it would be a paid row (PAID, NEEDS_ENV).
+M3AGENT = {"build": M8, "qa": M27}
 EXPERIMENTS = [("api", c, "qa", KEY_POOLS, "batch10_agree2") for c in API_CONFIGS] + REPORTED + PAID + [
     ("direct", arm, "qa", pools, bank) for bank in BANKS for arm, pools in DIRECT.items()] + [
+    ("rekv", "m8", "qa", M8, bank) for bank in BANKS] + [
     (b, arm, stage, POOLS[b, arm], bank)
     for b in ("merit", "magic", "worldmm") for stage in ("build", "qa") for arm in ("m27", "m8")
+    for bank in (BANKS if stage == "qa" else [None])] + [
+    ("m3agent", "m3", stage, pools, bank) for stage, pools in M3AGENT.items()
     for bank in (BANKS if stage == "qa" else [None])]
 # the file whose presence in <baseline>/<arm>/<video>/ (next to runs.jsonl) means the memory is built: the last
 # one each baseline writes ({v}: the video)
 MEMORY_DONE = {"merit": "{v}_30sec_4_key.json", "magic": "graph.pkl", "worldmm": "{v}_visual.pkl",
                "egor1": "{v}_1day.json", "egagent": "{v}_graph.json", "egorag": "{v}_l3_day.json",
-               "hippomm": "{v}_memory.json"}
+               "hippomm": "{v}_memory.json", "m3agent": "{v}_m3graph.pkl"}
 # a build that starts from another baseline's memory waits for that build while it is listed: MAGIC's 30 s captions
 # are MERIT's (same backbone), fetched from the dataset; without the wait it would caption the video itself
 BUILD_ON = {"magic": "merit"}
@@ -391,6 +414,21 @@ def gate(tasks):
     return keep, len(tasks) - len(keep)
 
 
+def leftovers(tasks, old, now, claimed=()):
+    """Add LEFTOVER_POOLS to a task nobody has held for LEFTOVER_H hours. listed_t, carried over from the previous
+    tasks.json, is when it was last free: reset while a pool holds it (claimed: the ids running or waiting for a
+    relay), so a claim that lapses or fails gives the other pools another LEFTOVER_H hours first."""
+    since = {t.get("id"): t.get("listed_t") for t in old}
+    n = 0
+    for t in tasks:
+        t["listed_t"] = now if t["id"] in claimed else since.get(t["id"]) or now
+        if (t["pools"] and t["pools"] != KEY_POOLS and not t.get("needs_env")
+                and now - t["listed_t"] >= LEFTOVER_H * 3600):
+            t["pools"] = t["pools"] + [p for p in LEFTOVER_POOLS if p not in t["pools"]]
+            n += 1
+    return n
+
+
 def restrict(tasks, only_pools):
     """--only-pools (a test): every task to these pools, except that a task needing a key, or listed for the key
     pool only, never leaves its own."""
@@ -436,6 +474,7 @@ def main():
                                       not reported(t) and t["video"] not in a.first, t["priority"]))
         for i, t in enumerate(tasks):
             t["priority"] = i
+        left = leftovers(tasks, old, int(jobs.now()), {tid for tid, (_, c) in held.items() if c["status"] != "done"})
         if a.only_pools is not None:
             restrict(tasks, a.only_pools)
         if a.dry_run:
@@ -451,7 +490,8 @@ def main():
                   "done already and still stale (the worker's bank is older than the master's, or the questions failed again)")
             print(f"gate: {withheld} tasks withheld (PILOT: the reported-configuration and paid-row arms; HELD: {sorted(HELD)})"
                   + (f"; listed of them: {[t['id'] for t in tasks if reported(t)]}" if PILOT else " (PILOT is empty)"))
-            print(f"need a key (pool {', '.join(KEY_POOLS)} only; nexus too where an OpenRouter key is enough): "
+            print(f"leftovers: {left} tasks listed {LEFTOVER_H} h or more ago, offered to {', '.join(LEFTOVER_POOLS)} too")
+            print(f"need a key (pool {', '.join(KEY_POOLS)} only): "
                   f"{sum(1 for t in tasks if t.get('needs_env'))} tasks")
             print(f"dry run, nothing committed: {len(tasks)} tasks, {len(have)} memories already built; "
                   f"first: {[t['id'] for t in tasks[:5]]}")

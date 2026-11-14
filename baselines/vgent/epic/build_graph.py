@@ -98,6 +98,10 @@ def construct(vg, frames, nodes, write):
         k = (i[0], len(video_input)); i[0] += 1
         if k not in nodes:
             t0 = time.time()
+            # the backbone samples (its generation_config: do_sample, temperature 1e-6), so a tie between the two
+            # best bf16 logits is broken by the RNG: seed per chunk, so a chunk's extraction does not depend on how
+            # many calls came before it (a build resumed from the cache, a cut for a question)
+            torch.manual_seed(k[0])
             e, a, s = gen(prompt, video_input, max_new_tokens)
             nodes[k] = {"chunk": k[0], "frames": k[1], "entities": e, "actions": a, "scenes": s,
                         "seconds": round(time.time() - t0, 1)}

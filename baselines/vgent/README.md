@@ -111,7 +111,23 @@ about 10 s each) and 54 with the graph (7 calls and about 36 s for an ordinary q
 the failed sub-question attempts above; 22 calls and about 160 s for the 3 the rules verify); blind 41 s. Peak
 GPU memory 24.3 GB. Of the 156 HD-EPIC videos (41.3 h), 116 are shorter than 1280 s, so as released Vgent
 builds a graph for 40 of them. The same build on an L40S gave a different graph (62 entity keys, other chunk
-texts) and some different answers: the extraction depends on the GPU model, so a table needs one GPU family.
+texts) and some different answers: the extraction depends on the GPU model, so a table needs one GPU model.
+
+Why (measured 2026-11-14, 4 chunks of the same video, each extracted twice per GPU): the backbone *samples*, as
+upstream leaves it (Qwen2.5-VL's `generation_config`: `do_sample`, temperature 1e-6, top_k 50, repetition
+penalty 1.05). That is greedy except where the two best scores (bf16 logits after the penalty) are equal, which
+happens about once in 100 tokens, and there the RNG picks. On one GPU the forward pass is bit-identical from call
+to call, but a second extraction of the same chunk in the same process differed in 2 of 4 chunks on each GPU,
+each time at such a tie. Between an A6000 and an L40S the logits themselves differ in the last bf16 bit (470 of
+796 steps of the shared prefix), which moves ties and near-ties. `build` therefore seeds each chunk's call by its
+index, so a chunk's extraction depends only on its frames and the GPU model, not on how many calls ran before it
+(a resumed build, a question's cut); the GPU model still matters, and an A6000 and an L40S do not give the same
+memory. Checked 2026-11-14 on P05-20240425-201444 (26 chunks) with the seed: on one GPU a second build in the same
+process, a build resumed from half the cache, and a second job (two A6000 jobs, byte-identical outputs) all give the
+same 26 extractions and graph; an A6000 and an L40S differ in 19 of 26 chunks (59 vs 58 entity keys). Pure greedy
+decoding (do_sample off) would change 7 of 8 chunks against the seeded default, and would not remove the GPU
+dependence either (greedy A6000 vs L40S: 5 of 8 chunks differ), so the released settings stay. Both A6000 jobs ran on
+one node (clip13); another A6000 node was not compared.
 
 ## What comes back (in the Hugging Face dataset)
 

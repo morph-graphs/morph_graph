@@ -49,7 +49,8 @@ def task(b="merit", arm="m8"):
 
 
 def test_fitting():
-    """m8 goes to every 48 GB+ queue; m27 only where 80 GB (or MERIT's 2x48 GB) fits; a person with no 80 GB queue gets no 27B."""
+    """m8 goes to every 48 GB+ queue; m27 only where 80 GB (or MERIT's 2x48 GB) fits; a person with no 80 GB queue gets no 27B.
+    A queue may also name one stage of an arm (m3agent/m3/qa)."""
     assert W.fitting(task(arm="m8"), QUEUES) == ["a6000", "h200", "broken"]
     assert W.fitting(task(arm="m27"), QUEUES) == ["h200", "pair48"]
     assert W.fitting(task("magic", "m27"), QUEUES) == ["h200"]         # MAGIC's 27B does not fit 2x48 GB
@@ -57,6 +58,12 @@ def test_fitting():
     shipped = W.load_queues(os.path.join(HERE, "nexus_queues.json"))   # the example file for Nexus users
     assert W.fitting(task(arm="m27"), shipped) == ["h200"]
     assert len(W.fitting(task(arm="m8"), shipped)) == len(shipped) - 2 == 5   # not the CPU queue; the H200 only when idle (fallback)
+    # ReKV's m8 is named by the plain m8, as every baseline's: it fits those queues' GPU and RAM
+    assert W.fitting(task("rekv", "m8"), shipped) == W.fitting(task(arm="m8"), shipped)
+    # a stage of an arm (baseline/arm/stage): M3-Agent's build fits one 48 GB GPU, its qa (a 32.8B model) the H200 only
+    m3 = lambda stage: dict(task("m3agent", "m3"), stage=stage)
+    assert W.fitting(m3("qa"), shipped) == ["h200"] and W.fitting(m3("build"), shipped, idle=shipped) == W.fitting(task(arm="m8"), shipped)
+    assert W.fitting(m3("build"), {"q": {"fits": ["m3agent/m3/qa"]}}) == []   # another stage of the arm is not named
     # the keyed arms: MERIT's gpt-5-mini memory needs no GPU; the others one GPU, on the queues nobody preempts
     assert W.fitting(task("merit", "g5m"), shipped) == ["cpu"]
     for b, arm in (("worldmm", "g5m"), ("worldmm", "g5m-q8"), ("magic", "oss120"), ("magic", "oss120-flash")):
