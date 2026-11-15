@@ -179,7 +179,9 @@ For an sbatch job, read the key into the job's environment inside the job and do
   of every usage row says which gateway it was. A gateway that answers with its deployment's own label:
   `OPENAI_MODEL_ALIASES="gpt-4.1=<label>"` counts that label as GPT-4.1 (the label is what gets recorded, so
   pass it through; never rewrite it to `gpt-4.1`). `OPENAI_PROVIDER_NOTE` (e.g. "azure-openai, via local
-  relay") is recorded in every GPT usage row as `provider_note`, with the replies' `system_fingerprints`.
+  relay") is recorded in every GPT usage row as `provider_note`, with the replies' `system_fingerprints`. A
+  gateway that names the model differently (NVIDIA's: `azure/openai/gpt-4.1`; `gpt-4.1` gets a 403):
+  `EGAGENT_GPT_PREFIX=azure/openai/` is put before every GPT model id the port asks for.
 - **Check without a key**: `epic/stub_check.py ... --gateway openrouter` runs the paid scripts against the
   fake APIs with only an OpenRouter key set and checks, on every GPT request, the host, the `openai/gpt-4.1`
   id, the provider pin and the key used, and that the usage rows hold the endpoint, provider and cost; without

@@ -72,9 +72,13 @@ have_memory() { local m; for m in "${MEMORY[@]}"; do [ -s "$OUT/${m//\{video\}/$
 [ -f "$R/egagent/langgraph_agent.py" ] || { echo "upstream missing: git submodule update --init baselines/egagent/egagent"; exit 1; }
 patched() { grep -q "def build_app" "$R/egagent/run_egagent_on_videomme.py" && grep -q EGAGENT_BACKBONE "$R/egagent/langgraph_agent.py" \
             && grep -q "startswith('gemini-')" "$R/egagent/langgraph_agent.py" \
-            && grep -q EGAGENT_DB_ROOT "$R/paths.py" && grep -q "def get_api_key" "$R/utils.py" && grep -q OPENROUTER "$R/utils.py"; }
+            && grep -q EGAGENT_DB_ROOT "$R/paths.py" && grep -q "def get_api_key" "$R/utils.py" && grep -q EGAGENT_GPT_PREFIX "$R/utils.py"; }
 if ! patched; then
     ( if command -v flock >/dev/null; then flock 9; fi
+      if ! patched && grep -q OPENROUTER "$R/utils.py"; then   # an earlier epic_morph.patch: upstream's files back first
+          git -C "$R" checkout -- . || { echo "an earlier epic_morph.patch is applied to $R: run git -C $R checkout -- ."; exit 1; }
+          echo "restored upstream in $R (an earlier epic_morph.patch was applied)"
+      fi
       # from outside any repository, so it behaves the same in a clone, a container and a synced copy
       patched || (cd / && git apply --unsafe-paths --whitespace=nowarn --directory="$R" "$M/epic_morph.patch")
     ) 9>"$WORK/.patch.lock" || true
