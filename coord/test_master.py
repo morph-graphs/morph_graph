@@ -357,7 +357,7 @@ def test_paid_rows(monkeypatch, tmp_path):
                 and (t["baseline"], t["arm"], t["stage"]) != ("magic", "m27", "build") and (t["baseline"], t["arm"]) != ("merit", "m27")]
     assert M.gate([t for t in tasks if not prio(t)])[1] == 0   # the priority rows done: everything else is listed
     # answering frozen for four baselines: none of their qa tasks is listed, with or without PRIORITY; their builds are
-    assert QA_FROZEN == {"magic"}                                      # as published: only MAGIC-Video is still frozen
+    assert QA_FROZEN == set()                                          # as published: nothing is frozen
     QA4 = {"magic", "worldmm", "egagent", "m3agent"}                   # the rule, with the four it was made for
     monkeypatch.setattr(M, "QA_FROZEN", QA4)
     frozen = lambda t: t["stage"] == "qa" and t["baseline"] in QA4

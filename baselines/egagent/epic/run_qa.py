@@ -177,7 +177,7 @@ def main():
             from run_egagent_on_videomme import build_app, run_agentic_inference
             from langgraph_agent import TRACE
             app = build_app(a.tscript_search)
-    name = None
+    name = last_error = None
     for r in todo:
         t0 = time.time()
         cut = hhmmss(r["cutoff"])
@@ -211,6 +211,7 @@ def main():
             row["evaluate"] = row["pred"] == r["answer"]
         except Exception as e:
             row["error"] = f"{type(e).__name__}: {str(e)[:300]}"
+            last_error = row["error"]
         row["seconds"] = round(time.time() - t0, 1)
         open(a.rows, "a").write(json.dumps(row) + "\n")
         if row.get("pred") in list(LETTERS):   # the same test as on resume
@@ -221,6 +222,7 @@ def main():
     out = [done.get(r["key"] or r["ID"]) for r in (order if a.limit else qs)]
     if not all(out):
         print(f"{sum(o is None for o in out)} questions unanswered")
+        eg_paths.failed(f"{sum(o is None for o in out)} questions unanswered" + (f"; last error {last_error}" if last_error else ""))
         raise SystemExit(2)
     k = sum(o["evaluate"] for o in out)
     print(f"accuracy {k}/{len(out)} = {k / len(out):.4f}")
