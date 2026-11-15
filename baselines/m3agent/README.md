@@ -233,3 +233,8 @@ Checked (2026-11-13):
   `clips.json` identical to the checked run's. On an RTX A5000: flash-attn, faster-whisper (CTranslate2 on the
   GPU), the Qwen3-Embedding helper, cupy and a vLLM engine all run. `fetch_models.sh` gives the same files and
   sizes as the checked models folder. Not yet run: `docker build` itself, and `build` / `qa` inside the image.
+- `build` inside the image (2026-11-15, Apptainer, RTX A6000): every video failed in its first clip with an empty
+  `RuntimeError` from the audio encoder's `conv1d`. The image's CUDA base has its own cuDNN, and the Whisper loader
+  (`local_backends.transcribe`) also loaded torch's pip copies, so two copies of cuDNN's sub-libraries were in the
+  process; after that every torch GPU convolution failed (fp32 too; CPU or cuDNN off worked). The loader now skips
+  the pip copies when the system has the same major version. Same image, fixed code: the build runs through.
