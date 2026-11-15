@@ -37,6 +37,8 @@
 #   DEEPSEEK_BASE_URL      default https://api.deepseek.com, with DEEPSEEK_API_KEY: an OpenAI-compatible gateway
 #                          that has the model takes these three. runs.jsonl records the ids asked for and, per
 #                          call, the id the API returned and the endpoint
+#   EGORAG_DEEPSEEK_MAX_TOKENS  default upstream's 2048 for the hour summaries; a reasoning model's reasoning counts
+#                          against it (README.md, "DeepSeek's reasoning and max_tokens")
 #   EGORAG_EGOGPT    default lmms-lab/EgoGPT-7b-EgoIT-EgoLife (Hugging Face cache), or a local copy
 #   EGORAG_WORK      default baselines/egorag/work: clips, the Chroma index, upstream's events_diary
 #   EGORAG_OUT       default baselines/egorag/results: per <arm>/<video> the memory, answers_<bank>.json.gz,
@@ -97,6 +99,8 @@ for u in (json.loads(l) for l in open(log)) if os.path.exists(log) else []:
         tokens = ("prompt_tokens", "cached_tokens", "completion_tokens", "reasoning_tokens")
         a = api.setdefault(f"{u['call']}:{u['model']}", {"calls": 0, **dict.fromkeys(tokens, 0)})
         a["calls"] += 1
+        if u.get("finish_reason") == "length":   # replies cut by max_tokens (a reasoning model's reasoning counts)
+            a["cut_by_max_tokens"] = a.get("cut_by_max_tokens", 0) + 1
         for k in tokens:
             a[k] += u.get(k) or 0
         a.update({k: u[k] for k in ("endpoint", "provider") if u.get(k)})

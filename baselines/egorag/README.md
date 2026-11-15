@@ -43,9 +43,14 @@ What differs from the release, all of it:
    `deepseek-flash` (DeepSeek-V4.1-Flash) and `deepseek-v4-pro` (DeepSeek-V4-Pro), both thinking by default;
    neither `deepseek-reasoner` nor R1 is named. The hour summaries therefore ask for `deepseek-v4-pro`
    (`EGORAG_DEEPSEEK_MODEL` changes it; with upstream's Azure variables, `DEPLOYMENT_NAME`, default
-   `DeepSeek-R1`). **This is a model substitution we could not avoid on a plain DeepSeek key**, and it has not
-   been called yet: whether `max_tokens=2048` (upstream's) leaves room for the answer after the model's
-   reasoning is unknown. `runs.jsonl` records the model id the API returned. Model and endpoint are set by the
+   `DeepSeek-R1`). **This is a model substitution we could not avoid on a plain DeepSeek key.** `runs.jsonl`
+   records the model id the API returned. **DeepSeek's reasoning and max_tokens:** the reasoning counts against
+   upstream's `max_tokens=2048`, and on one hour of our summaries it ran 1.6k and 3.9k tokens in two calls
+   (2026-11-15). When it uses all 2048 the reply has empty content (finish_reason `length`); upstream keeps that
+   as no summary for the hour, and the patch instead retries it and, after three tries, fails the build with
+   `EmptyReply: empty content ... (finish_reason=..., completion_tokens=..., reasoning ...)` in the note. A reply
+   cut after some text is kept, cut, as upstream would (`runs.jsonl` counts them as `cut_by_max_tokens`).
+   `EGORAG_DEEPSEEK_MAX_TOKENS` raises the cap; the default stays upstream's. Model and endpoint are set by the
    environment, for both arms: `EGORAG_DEEPSEEK_MODEL` (the id asked for), `DEEPSEEK_BASE_URL` (any
    OpenAI-compatible endpoint; default `https://api.deepseek.com`) and `DEEPSEEK_API_KEY` (that endpoint's key).
    Whether the gateway that runs `egogpt_gpt41` serves a DeepSeek model is not known yet: what it asks instead,
