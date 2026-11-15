@@ -26,8 +26,9 @@ CLIP_S = 30                                          # caption window (paper: 30
 
 
 # a returned model id that counts as the model asked for: the name itself or one of its dated snapshots
-# (OpenRouter returns GPT-4.1's as openai/gpt-4.1...)
-SAME_MODEL = {"gpt-4.1": r"(openai/)?gpt-4\.1(-\d{4}-\d{2}-\d{2})?", "gemini-2.5-pro": r"(models/)?gemini-2\.5-pro(-\d[\w.-]*)?",
+# (OpenRouter returns GPT-4.1's as openai/gpt-4.1..., an OpenAI-compatible gateway serving it from Azure OpenAI
+# as azure/openai/gpt-4.1; the endpoint is recorded with each call)
+SAME_MODEL = {"gpt-4.1": r"(azure/)?(openai/)?gpt-4\.1(-\d{4}-\d{2}-\d{2})?", "gemini-2.5-pro": r"(models/)?gemini-2\.5-pro(-\d[\w.-]*)?",
               "gemini-3.6-flash": r"(models/)?gemini-3\.6-flash(-\d[\w.-]*)?"}
 FIELDS = ("calls", "input_tokens", "cached_tokens", "output_tokens", "reasoning_tokens")
 

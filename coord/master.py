@@ -143,11 +143,13 @@ PILOT = []   # emptied 2026-11-14 (Anubhav): the pilot, worldmm-g5m-build-P05-20
 # The three GPT-5 rows were held here on 2026-11-14 for want of GPT-5 access; since 2026-11-15 they run on stand-ins
 # (API_CONFIGS above), so nothing is held.
 HELD = set()
-# Baselines whose answering is frozen, every arm and bank (Anubhav, 2026-11-14): traversal logic is being added to the
-# inference of MAGIC-Video, WorldMM, EGAgent and M3-Agent in another PR, and answers given before it would be redone.
-# Their qa tasks are withheld until that PR is merged (then empty this set); their memory builds are listed as usual.
-# A qa claim already running finishes, and its answers are then replaced by the redone ones.
-QA_FROZEN = {"magic", "worldmm", "egagent", "m3agent"}
+# Baselines whose answering is frozen, every arm and bank: their qa tasks are withheld, their memory builds are listed as
+# usual, and a qa claim already running finishes. First used (Anubhav, 2026-11-14) while the walk through the memory
+# was being logged for MAGIC-Video, WorldMM, EGAgent and M3-Agent (#73, merged 2026-11-15; answers without a trace are
+# redone: TRACED). Since then WorldMM, EGAgent and M3-Agent answer again. MAGIC-Video stays frozen until the two things
+# #73 found are checked: an entity node's time span runs to its last sighting in the whole memory, so it can extend
+# past a question's t_ask, and the time parser sometimes searches a window after t_ask (answers could use the future).
+QA_FROZEN = {"magic"}
 # The other paid rows of the sheet (baselines/<b>/README.md). Max and Pulkit run them through their gateway, which has
 # GPT-4.1, GPT-5-mini, Gemini 3.6 Flash and DeepSeek but no GPT-4o and no Gemini 2.5 Pro, so each row is listed with a
 # stand-in arm it can run (Anubhav, 2026-11-14). The published arms' code stays in each baseline; their lines are off
@@ -221,6 +223,11 @@ DIRECT = {"qwen3vl-8b-f768": M8, "qwen38-27b-f768": M27,
 # file names the stages: m3agent/m3/build, m3agent/m3/qa). Listed last. Its arm m3api calls paid APIs (Gemini speech
 # segments, OpenAI embeddings) and is not listed: it would be a paid row (PAID, NEEDS_ENV).
 M3AGENT = {"build": M8, "qa": M27}
+# Baselines whose answering is never listed without its memory (Anubhav, 2026-11-15): a qa task of one is listed only
+# when the video's memory is in the dataset, or its build task is listed too (the qa then waits on it: deps). For the
+# other baselines a qa task with neither builds the memory itself first; M3-Agent's qa job is sized for the control
+# model (the m27 pools), not for building a memory, so it must never do that.
+NEEDS_MEMORY = {"m3agent"}
 # Urgent (Anubhav, 2026-11-14): MAGIC-Video's memories (its graph.pkl) are what the structure matching of the memory
 # evaluation (M3) needs first, so its builds go right after the API tasks, ahead of everything else, 8B then 27B, and
 # to the Nexus pools at once as well (no LEFTOVER_H wait).
@@ -449,6 +456,8 @@ def desired(have, files, answers=None, busy=()):
             # wait for the video's build task (its memory arm's) while it is listed; a memory already built (on the
             # board or off it) needs no wait, and with neither, qa builds the memory itself first
             build = f"{b}-{mem}-build-{v}"
+            if b in NEEDS_MEMORY and (b, mem, v) not in have and build not in ids:
+                continue                         # no memory and no build to wait on: not listed
             tasks.append(dict(id=tid, baseline=b, arm=arm, stage=stage, video=v, bank=bank,
                               pools=pools, deps=[build] if build in ids else [], **env, **stale))
             ids.add(tasks[-1]["id"])

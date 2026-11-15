@@ -349,14 +349,15 @@ def test_paid_rows(monkeypatch, tmp_path):
     assert not [t for t in listed if t["arm"] in ("m8", "m27", "oss120-q27", "q25vl7b-gpt41") or t["arm"].startswith(("qwen35", "molmo2"))]
     assert M.gate([t for t in tasks if (t["baseline"], t["arm"]) not in PRIORITY])[1] == 0   # the priority rows done: everything else is listed
     # answering frozen for four baselines: none of their qa tasks is listed, with or without PRIORITY; their builds are
-    monkeypatch.setattr(M, "QA_FROZEN", QA_FROZEN)
-    assert QA_FROZEN == {"magic", "worldmm", "egagent", "m3agent"}
-    frozen = lambda t: t["stage"] == "qa" and t["baseline"] in QA_FROZEN
+    assert QA_FROZEN == {"magic"}                                      # as published: only MAGIC-Video is still frozen
+    QA4 = {"magic", "worldmm", "egagent", "m3agent"}                   # the rule, with the four it was made for
+    monkeypatch.setattr(M, "QA_FROZEN", QA4)
+    frozen = lambda t: t["stage"] == "qa" and t["baseline"] in QA4
     listed, withheld = M.gate(tasks)
     assert not any(map(frozen, listed)) and withheld == len(tasks) - len(listed)
-    assert {(t["baseline"], t["arm"]) for t in listed if t["baseline"] in QA_FROZEN} == {
+    assert {(t["baseline"], t["arm"]) for t in listed if t["baseline"] in QA4} == {
         ("magic", "oss120"), ("worldmm", "g5m"), ("egagent", "gpt41"), ("m3agent", "m3")}
-    assert all(t["stage"] == "build" for t in listed if t["baseline"] in QA_FROZEN)
+    assert all(t["stage"] == "build" for t in listed if t["baseline"] in QA4)
     monkeypatch.setattr(M, "PRIORITY", set())
     listed, withheld = M.gate(tasks)
     assert listed == [t for t in tasks if not frozen(t)] and withheld == sum(map(frozen, tasks)) > 0
@@ -444,6 +445,13 @@ def test_existing_tasks_unchanged(monkeypatch, tmp_path):
     assert sum(t["baseline"] == "m3agent" and t["stage"] == "build" for t in new) == len(B10 + T2 + T3 + T4 + T5 + REST)
     assert by[f"m3agent-m3-qa-t2_agree2-{T2[0]}"]["deps"] == [f"m3agent-m3-build-{T2[0]}"]
     assert by[f"m3agent-m3-build-{T2[0]}"]["pools"] == M.M8 and by[f"m3agent-m3-qa-t2_agree2-{T2[0]}"]["pools"] == M.M27
+    # M3-Agent's qa is never listed without its memory: with no build line to wait on, only the built videos' qa is
+    was = M.EXPERIMENTS
+    monkeypatch.setattr(M, "EXPERIMENTS", [e for e in was if e[:3] != ("m3agent", "m3", "build")])
+    only = [t for t in M.desired(have | {("m3agent", "m3", T2[0])}, files) if t["baseline"] == "m3agent"]
+    assert only and {t["video"] for t in only} == {T2[0]} and not any(t["deps"] or t["stage"] != "qa" for t in only)
+    assert M.NEEDS_MEMORY == {"m3agent"} and not [t for t in M.desired(have, files) if t["baseline"] == "m3agent"]
+    monkeypatch.setattr(M, "EXPERIMENTS", was)
     monkeypatch.setattr(M, "EXPERIMENTS", full)
     noprio = lambda ts: [{k: v for k, v in t.items() if k != "priority"} for t in ts]
     assert noprio(strip(t for t in M.desired(have, files) if not M.reported(t))) == noprio(old)
