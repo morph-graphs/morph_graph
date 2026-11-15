@@ -47,6 +47,7 @@
 #   EGORAG_FETCH     0 to never take the memory from the dataset (build normally reuses it when it is there)
 # Every step skips finished work, so rerunning the same command resumes.
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/../common/single_process_env.sh"   # never a torch.distributed job: drop torchrun's variables
 STAGE=${1:?usage: run_egorag.sh <prep|build|qa|upload|all> <video> <egogpt_gpt4o|egogpt_gpt41> [bank]}
 V=${2:?video id}; ARM=${3:?arm egogpt_gpt4o or egogpt_gpt41}; BANK=${4:-}
 M=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); REPO=$(cd "$M/../.." && pwd); R=$M/EgoLife   # R: the submodule (upstream)

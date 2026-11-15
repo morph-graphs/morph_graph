@@ -30,6 +30,7 @@
 #   VST_LIMIT        smoke test: only the first N cutoffs of the bank (answers_<bank>_limit<N>.json.gz)
 # Every step skips finished work, so rerunning the same command resumes.
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/../common/single_process_env.sh"   # never a torch.distributed job: drop torchrun's variables
 STAGE=${1:?usage: run_vst.sh <prep|build|qa|blind|upload|all> <video> <vst7b> [bank]}
 V=${2:?video id}; ARM=${3:?arm vst7b}; BANK=${4:-}
 M=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); REPO=$(cd "$M/../.." && pwd); R=$M/VST   # R: the submodule

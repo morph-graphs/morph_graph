@@ -39,6 +39,7 @@
 #   HIPPOMM_LIMIT    qa: only the first N unanswered questions (smoke tests)
 # Every step skips finished work, so rerunning the same command resumes.
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/../common/single_process_env.sh"   # never a torch.distributed job: drop torchrun's variables
 STAGE=${1:?usage: run_hippomm.sh <prep|build|count|qa|blind|upload|all> <video> <arm> [bank]}
 V=${2:?video id}; ARM=${3:?arm q25vl7b-gpt4o}; BANK=${4:-}
 M=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); REPO=$(cd "$M/../.." && pwd); R=$M/HippoMM   # R: the submodule (upstream)
