@@ -35,6 +35,8 @@ on:
       - baselines/egor1/docker/**
       - baselines/rekv/env/**
       - baselines/rekv/docker/**
+      - baselines/vst/env/**
+      - baselines/vst/docker/**
       - baselines/common/docker/**
       - .github/workflows/baseline-images.yml
   workflow_dispatch:
@@ -68,6 +70,7 @@ jobs:
           - {baseline: egorag, arm: egogpt_gpt4o}   # EgoGPT + EgoRAG in one Python (torch 2.1.2, CUDA 12.1)
           - {baseline: egor1, arm: gemini25pro}   # the 3B agent's torch stack + API clients; nothing compiled
           - {baseline: rekv, arm: m8}   # transformers 5.0 over the CUDA 12.6 runtime base; nothing compiled
+          - {baseline: vst, arm: vst7b}   # transformers 4.52 + a prebuilt flash-attn wheel over the CUDA 12.4 runtime base; nothing compiled
     env:
       PUBLISH: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
       TAGS: baselines/${{ matrix.baseline }}/docker/image_tag.sh

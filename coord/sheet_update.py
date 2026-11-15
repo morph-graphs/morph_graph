@@ -83,6 +83,7 @@ METHODS = {
     ("api", "gemini-3.6-flash-high"): ("Gemini 3.6-Flash", "--", "Gemini 3.6-Flash", "video, 1 fps"),
     ("api", "gemini-3.8-flash-high"): ("Gemini 3.8-Flash (bank verifier: score inflated)", "--", "Gemini 3.8-Flash", "video, 1 fps"),
     ("api", "gpt-5-f1024"): ("GPT-5", "--", "GPT-5", 1024),
+    ("vst", "vst7b"): ("VST", "Qwen2.5-VL-7B", "Qwen2.5-VL-7B", "2 fps (max 384 frames)"),
 }
 COLS = ["row_key", "method", "memory_model", "reasoning_model", "n_frames", "baseline", "arm", "bank", "tag",
         "videos_done", "videos_started", "videos_in_bank", "q_answered", "q_in_bank", "n_right",
