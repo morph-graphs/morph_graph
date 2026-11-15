@@ -342,6 +342,195 @@ def test_max_jobs_caps_a_queue(tmp):
     assert got[t("m8", 5, 4)["id"]] == ["a6000"] and got[t("m8", 6, 5)["id"]] == ["a6000"]
 
 
+def test_job_start(tmp):
+    """--auto-slots reads from the cycle's one squeue whether a task's job still waits, or when it started."""
+    env = fake_slurm(tmp)
+    os.environ.update(FAKE=env["FAKE"], PATH=env["PATH"])
+    open(f"{tmp}/queue", "w").write("101|PENDING|N/A\n102|PENDING|2026-11-15T12:00:00\n103|RUNNING|2026-11-15T08:44:16\n")
+    view = W.queue_view()
+    assert view == {"101": ("PENDING", "N/A"), "102": ("PENDING", "2026-11-15T12:00:00"), "103": ("RUNNING", "2026-11-15T08:44:16")}
+    assert W.my_jobs() == {"101", "102", "103"}
+    p = f"{tmp}/t"
+    assert W.job_start(p, view) is None                             # nothing submitted
+    open(p + ".log.submit", "w").write("102;zaratan\n")            # --sbatch: the one job (a pending job's %S is an estimate)
+    assert W.job_ids(p) == ["102"] and W.job_start(p, view) == "pending"
+    open(p + ".log.submit", "w").write("103\n")
+    assert W.time.strftime("%H:%M:%S", W.time.localtime(W.job_start(p, view))) == "08:44:16"
+    assert W.job_start(p, {}) == 0                                  # came and went between two cycles
+    open(p + ".log.submit", "w").write("sbatch: error: invalid partition\n")
+    assert W.job_start(p, view) is None
+    open(p + ".jobs", "w").write("101 a\n102 b\n")                  # --queues: waiting while every copy in the queue is
+    assert W.job_start(p, view) == "pending" and W.job_start(p, {"101": ("PENDING", "N/A")}) == "pending"
+    assert W.job_start(p, {}) is None                               # every copy gone and none ran: not a start
+    running = W.job_start(p, dict(view, **{"101": ("RUNNING", "2026-11-15T08:44:16")}))   # 101 started, its marker not yet seen:
+    assert W.time.strftime("%H:%M", W.time.localtime(running)) == "08:44"   # its start, not pending 102's estimate
+    open(p + ".ran", "w").write("102\n")
+    assert W.job_start(p, view) == os.path.getmtime(p + ".ran")     # also once the winner is requeued and pending again
+    # the measurements never cause a commit by themselves
+    pool = {"claims": {"x": {"status": "running", "lease_until": 1}}}
+    assert W.substance(pool) == W.substance({"auto": {"pending": 3}, "claims": {"x": {"status": "running", "lease_until": 2, "wait": 28}}})
+
+
+def test_auto_slots_rule():
+    """`waiting` tasks may wait while the last job to start was fast; one once it was slow or a task has waited over
+    2 F, and then the others that have are released; groups are sized apart."""
+    F, t = 300, 10000
+    c = lambda claimed, wait=None: dict(status="running", started_t=claimed, **({} if wait is None else {"wait": wait}))
+    g = lambda tid: tid[0]
+    assert W.auto_slots({}, set(), g, t, F, 4) == ({}, [])                              # nothing known: the loop allows `waiting`
+    fast = {"a1": c(t - 5000, 900), "a2": dict(c(t - 500, 28), status="done")}          # the last to start was fast
+    assert W.auto_slots(fast, set(), g, t, F, 4) == ({"a": 4}, [])
+    assert W.auto_slots(dict(fast, a3=c(t - 100), a4=c(t - 400)), {"a3", "a4"}, g, t, F, 4) == ({"a": 2}, [])   # under 2 F: kept
+    # the last job to start had waited longer than F: one task may wait (the probe), whatever started before it
+    slow = dict(fast, a5=c(t - 450, 400))
+    assert W.auto_slots(slow, set(), g, t, F, 4) == ({"a": 1}, [])
+    assert W.auto_slots(dict(slow, a6=c(t - 60)), {"a6"}, g, t, F, 4) == ({"a": 0}, [])
+    assert W.auto_slots(dict(slow, a6=c(t - 60, 30)), set(), g, t, F, 4) == ({"a": 4}, [])   # it started fast: room again
+    # tasks waiting longer than 2 F: all of them but the oldest are released, the young one may still start
+    stuck = dict(fast, a6=c(t - 900), a7=c(t - 700), a8=c(t - 650), a9=c(t - 100), b1=c(t - 50, 10))
+    room, release = W.auto_slots(stuck, {"a6", "a7", "a8", "a9"}, g, t, F, 4)
+    assert release == ["a7", "a8"] and room == {"a": -1, "b": 4}
+    # groups are the queues a task's kind fits
+    q = {"a6000": {"sbatch": "x", "fits": ["m8"]}, "h200": {"sbatch": "y", "fits": ["m27", "m3agent/m3/qa"], "fallback": ["m8"]}}
+    assert W.queue_group("merit-m8-build-P01-20240101-000001", q) == ("a6000",)
+    assert W.queue_group("worldmm-g5m-q27-qa-t2_agree2-P01-20240101-000001", {"h": {"fits": ["worldmm/g5m-q27"]}}) == ("h",)
+    assert W.queue_group("m3agent-m3-qa-b-P01-20240101-000001", q) == ("h200",) and W.queue_group("odd", q) == ()
+    assert W.queue_group("merit-m8-build-P01-20240101-000001", None) == ()
+
+
+# Zaratan, 2026-11-15 (sacct -X -o Submit,Start,End of the 25 board-* jobs the worker, --slots 25, submitted at 08:43:48-50;
+# read at 16:10, when 11 of its tasks were pending with reason QOSMaxGRESPerUser, two of these 25 among them): QoS
+# gpu-h100 allows a user 16 H100s and two other jobs of ours held 2, so 14 started at once and 9 more only as 9 ended.
+ZARATAN = """08:43:48 08:44:16 08:51:12|08:43:48 08:44:16 09:07:47|08:43:48 08:44:16 09:07:49|08:43:48 08:44:16 -
+08:43:49 08:44:16 08:51:12|08:43:49 08:44:16 08:53:51|08:43:49 08:44:16 08:56:08|08:43:49 08:44:16 08:58:30
+08:43:49 08:44:16 09:00:09|08:43:49 08:44:16 09:09:08|08:43:49 08:44:16 -|08:43:49 08:44:16 -|08:43:49 08:44:16 -
+08:43:49 08:44:16 -|08:43:49 08:51:22 -|08:43:49 08:51:22 -|08:43:50 08:53:54 -|08:43:50 08:56:26 -|08:43:50 08:58:58 -
+08:43:50 09:00:30 -|08:43:50 09:08:06 -|08:43:50 09:08:06 -|08:43:50 09:09:33 -|08:43:50 - -|08:43:50 - -"""
+
+
+def replay(policy, hours=7, every=300, ceiling=25):
+    """The worker's cycles against a queue rebuilt from the trace: as many GPUs as started at once (14), a free one
+    taken 28 s after a job asks (the trace's delay), the n-th job to start runs as long as the trace's n-th did (the
+    ones still running then: for good), and there is always another task to claim. policy: ("slots",) today's fixed
+    --slots; ("waiting", k) a fixed budget of k waiting tasks; ("auto", F minutes, k) worker.auto_slots.
+    Returns the limit and one (minute, running, waiting, released) per cycle."""
+    sec = lambda s: sum(int(x) * m for x, m in zip(s.split(":"), (3600, 60, 1)))
+    rows = [r.split() for r in ZARATAN.replace("\n", "|").split("|")]
+    first = min(sec(r[1]) for r in rows if r[1] != "-")
+    cap, delay = sum(sec(r[1]) == first for r in rows if r[1] != "-"), first - sec(rows[0][0])
+    lasts = [sec(r[2]) - sec(r[1]) if r[2] != "-" else None for r in rows]
+    claims, queue, running, started, out, n = {}, [], {}, 0, [], 0   # queue: waiting tasks, oldest first; running: {tid: end}
+    for now in range(0, hours * 3600 + 1):
+        for tid in [x for x, end in running.items() if end is not None and end <= now]:
+            del running[tid]
+            claims[tid]["status"] = "done"
+        while queue and len(running) < cap and claims[queue[0]]["started_t"] + delay <= now:
+            tid = queue.pop(0)
+            running[tid] = now + lasts[started] if started < len(lasts) and lasts[started] else None
+            claims[tid]["wait"] = now - claims[tid]["started_t"]
+            started += 1
+        if now % every:
+            continue
+        released = 0
+        want = ceiling - len(running) - len(queue)
+        if policy[0] == "waiting":
+            want = min(want, policy[1] - len(queue))
+        if policy[0] == "auto":
+            room, release = W.auto_slots(claims, set(queue), lambda tid: (), now, policy[1] * 60, policy[2])
+            for tid in release:
+                queue.remove(tid)
+                del claims[tid]
+            released, want = len(release), min(want, room.get((), policy[2]))
+        for _ in range(max(0, want)):
+            n += 1
+            claims[f"t{n:04d}"] = dict(status="running", started_t=now)
+            queue.append(f"t{n:04d}")
+        out.append((now // 60, len(running), len(queue), released))
+    return cap, out
+
+
+def test_auto_slots_zaratan_replay():
+    """The real Zaratan morning through the rules, 7 hours as on the day. Fixed 25 slots is what happened: 14 running
+    and 11 tasks claimed but waiting at the limit all day. --auto-slots 5 has the same 14 GPUs busy within 30 minutes,
+    gives back what waits over 10 minutes and holds one task at the limit. A fixed budget of waiting tasks without the
+    release cannot do both: 2 take an hour to fill the GPUs (the jobs that end meanwhile use up the claims), 5 fill
+    them and leave 5 waiting."""
+    show = {}
+    for name, policy in (("--slots 25", ("slots",)), ("2 waiting", ("waiting", 2)), ("5 waiting", ("waiting", 5)),
+                         ("--auto-slots 5", ("auto", 5, 4))):
+        cap, out = replay(policy)
+        show[name] = dict(full=next(m for m, run, _, _ in out if run == cap),             # first cycle that sees every GPU busy
+                          idle=sum(cap - run for _, run, _, _ in out) * 5,                # GPU-minutes, at 5 min a cycle
+                          stranded=sum(w for _, run, w, _ in out if run == cap) * 5 / 60,   # task-hours waiting at the limit
+                          end=out[-1][1:3], released=sum(o[3] for o in out), out=out)
+        r = show[name]
+        print(f"   {name:15s} {cap} GPUs busy from minute {r['full']:2d}; idle {r['idle']:3d} GPU-min; at the limit, claimed and "
+              f"waiting: {r['stranded']:4.1f} task-hours in 7 h; ends {out[-1][1]} running + {out[-1][2]} waiting; released {r['released']}")
+        print("                   running+waiting per 5-min cycle, first hour: " + " ".join(f"{run}+{w}" for _, run, w, _ in out[:13]))
+    fixed, two, five, auto = (show[k] for k in ("--slots 25", "2 waiting", "5 waiting", "--auto-slots 5"))
+    assert cap == 14 and fixed["end"] == (14, 11)                    # as squeue showed at 16:10: 14 running, 11 pending
+    assert auto["end"] == (14, 1) and two["end"] == (14, 2) and five["end"] == (14, 5)
+    assert [run + w for _, run, w, _ in auto["out"][:4]] == [4, 8, 11, 14] and auto["full"] <= 30 < two["full"]
+    assert max(w for m, _, w, _ in auto["out"] if m >= 60) == 1      # one probe at the limit, for good: no flapping
+    assert auto["released"] <= 4 and auto["stranded"] < fixed["stranded"] / 8 and auto["stranded"] < five["stranded"] / 4
+
+
+def test_auto_slots_in_the_loop(tmp):
+    """worker.main --auto-slots with --queues on a fake board and clock: --waiting 2 of five tasks are claimed while
+    five slots are free; one starts and one more is claimed; when two have waited over 2 F the newer one is released
+    (its claim dropped, then its pending job cancelled) and nothing more is claimed while the older one waits."""
+    env = fake_slurm(tmp)
+    os.environ.update(FAKE=env["FAKE"], PATH=env["PATH"])
+    qf = f"{tmp}/queues.json"
+    open(qf, "w").write(json.dumps({"a6000": QUEUES["a6000"]}))
+    def t(n):
+        return dict(id=f"merit-m8-build-P01-20240101-00000{n}", baseline="merit", arm="m8", stage="build",
+                    video=f"P01-20240101-00000{n}", pools=["p"], priority=n)
+    tasks, pools, commits, cycle, clock, refused = [t(n) for n in range(1, 6)], {}, [], [0], [1000000.0], []
+
+    def commit(files, head, msg):
+        if len(commits) == 2 and not refused:   # the commit that drops the claim is refused once (someone else committed):
+            refused.append(lines(f"{tmp}/scancel.log"))   # nothing may have been cancelled for it
+            return False
+        commits.append(json.loads(json.dumps(files["pools/p.json"])))
+        pools["p"] = commits[-1]
+        return True
+
+    class Stop(Exception):
+        pass
+
+    def sleep(_):
+        cycle[0] += 1
+        clock[0] += 300
+        if cycle[0] == 1:   # the first job started; the second waits
+            open(f"{tmp}/state/{tasks[0]['id']}.ran", "w").write("101")
+            os.utime(f"{tmp}/state/{tasks[0]['id']}.ran", (clock[0] - 270, clock[0] - 270))
+            open(f"{tmp}/queue", "w").write("101|RUNNING|x\n102|PENDING|N/A\n")
+        elif cycle[0] == 2:   # the third waits too
+            open(f"{tmp}/queue", "w").write("101|RUNNING|x\n102|PENDING|N/A\n103|PENDING|N/A\n")
+        elif cycle[0] == 5:   # 103 was cancelled
+            open(f"{tmp}/queue", "w").write("101|RUNNING|x\n102|PENDING|N/A\n")
+        elif cycle[0] == 6:
+            raise Stop
+    saved = (W.jobs.read, W.jobs.commit, W.jobs.now, W.time.sleep, sys.argv)
+    W.jobs.read, W.jobs.commit, W.time.sleep = (lambda: ("h", tasks, json.loads(json.dumps(pools)))), commit, sleep
+    W.jobs.now = lambda: clock[0]
+    sys.argv = ["worker.py", "--pool", "p", "--launcher", "slurm", "--queues", qf, "--slots", "1", "2", "3", "4", "5",
+                "--auto-slots", "5", "--waiting", "2", "--state", f"{tmp}/state"]
+    try:
+        W.main()
+    except Stop:
+        pass
+    finally:
+        W.jobs.read, W.jobs.commit, W.jobs.now, W.time.sleep, sys.argv = saved
+    ids = [x["id"] for x in tasks]
+    assert list(commits[0]["claims"]) == ids[:2]                                   # two may wait, though five slots are free
+    assert list(commits[1]["claims"]) == ids[:3] and commits[1]["claims"][ids[0]]["wait"] == 30   # one started (fast): one more
+    assert list(commits[2]["claims"]) == ids[:2]                                   # minute 20: 103 (15 min > 2 F) goes, the older 102 stays
+    assert refused == [[]] and lines(f"{tmp}/scancel.log") == ["--state=PENDING", "103"]   # cancelled once, after the commit
+    assert len(commits) == 3 and commits[2]["auto"]["pending"] == 1                # then nothing claimed, nothing to commit
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_")]
     for n, f in tests:

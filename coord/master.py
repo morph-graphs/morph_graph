@@ -223,10 +223,17 @@ DIRECT = {"qwen3vl-8b-f768": M8, "qwen38-27b-f768": M27,
 # file names the stages: m3agent/m3/build, m3agent/m3/qa). Listed last. Its arm m3api calls paid APIs (Gemini speech
 # segments, OpenAI embeddings) and is not listed: it would be a paid row (PAID, NEEDS_ENV).
 M3AGENT = {"build": M8, "qa": M27}
+# Baselines whose answering is never listed without its memory (Anubhav, 2026-11-15): a qa task of one is listed only
+# when the video's memory is in the dataset, or its build task is listed too (the qa then waits on it: deps). For the
+# other baselines a qa task with neither builds the memory itself first; M3-Agent's qa job is sized for the control
+# model (the m27 pools), not for building a memory, so it must never do that.
+NEEDS_MEMORY = {"m3agent"}
 # Urgent (Anubhav, 2026-11-14): MAGIC-Video's memories (its graph.pkl) are what the structure matching of the memory
 # evaluation (M3) needs first, so its builds go right after the API tasks, ahead of everything else, 8B then 27B, and
 # to the Nexus pools at once as well (no LEFTOVER_H wait).
-URGENT = [("magic", arm, "build", POOLS["magic", arm] + LEFTOVER_POOLS, None) for arm in ("m8", "m27")]
+# The 27B memories still missing (8 of 156 on 2026-11-15) go to Pulkit first (Anubhav, 2026-11-15: his GB200/GB300
+# pool, on priority); after LEFTOVER_H hours unclaimed they are offered to the Nexus pools too, like any task.
+URGENT = [("magic", "m8", "build", POOLS["magic", "m8"] + LEFTOVER_POOLS, None), ("magic", "m27", "build", ["pulkit"], None)]
 # The rows to finish first (Anubhav, 2026-11-14: time and compute are short). While a task of one of these arms is
 # listed, the tasks of every other arm are withheld from tasks.json (gate()); a claim already running on a withheld
 # task finishes, since a worker renews its claims whatever is listed. Results-sheet rows (tab `Epic Morph Results`):
@@ -240,7 +247,8 @@ PRIORITY = {("api", c) for c in API_CONFIGS} | {
     ("egor1", "gemini36flash"), ("egor1", "gemini36flash-gpt41"), ("egorag", "egogpt_gpt41"),
     ("merit", "g5m"), ("merit", "g5m-q8"), ("merit", "g5m-g51"), ("m3agent", "m3"),
     ("worldmm", "g5m"), ("worldmm", "g5m-q8"), ("worldmm", "g5m-g51"),
-    ("egagent", "gpt41"), ("egagent", "gemini36flash"), ("magic", "oss120"), ("magic", "oss120-flash")}
+    ("egagent", "gpt41"), ("egagent", "gemini36flash"), ("magic", "oss120"), ("magic", "oss120-flash"),
+    ("magic", "m27", "build")}   # a (baseline, arm, stage) entry: that stage only (MAGIC-Video's 27B memories, not its answers)
 EXPERIMENTS = [("api", c, "qa", KEY_POOLS, bank) for bank in BANKS for c in API_CONFIGS] + URGENT + REPORTED + PAID + [
     ("direct", arm, "qa", pools, bank) for bank in BANKS for arm, pools in DIRECT.items()] + [
     ("rekv", "m8", "qa", M8, bank) for bank in BANKS] + [
@@ -451,6 +459,8 @@ def desired(have, files, answers=None, busy=()):
             # wait for the video's build task (its memory arm's) while it is listed; a memory already built (on the
             # board or off it) needs no wait, and with neither, qa builds the memory itself first
             build = f"{b}-{mem}-build-{v}"
+            if b in NEEDS_MEMORY and (b, mem, v) not in have and build not in ids:
+                continue                         # no memory and no build to wait on: not listed
             tasks.append(dict(id=tid, baseline=b, arm=arm, stage=stage, video=v, bank=bank,
                               pools=pools, deps=[build] if build in ids else [], **env, **stale))
             ids.add(tasks[-1]["id"])
@@ -475,7 +485,7 @@ def gate(tasks):
     keep = [t for t in tasks if (t["baseline"], t["arm"], t["stage"]) not in HELD
             and not (t["stage"] == "qa" and t["baseline"] in QA_FROZEN)
             and (not PILOT or not reported(t) or t["id"] in PILOT)]
-    first = [t for t in keep if (t["baseline"], t["arm"]) in PRIORITY]
+    first = [t for t in keep if (t["baseline"], t["arm"]) in PRIORITY or (t["baseline"], t["arm"], t["stage"]) in PRIORITY]
     return first or keep, len(tasks) - len(first or keep)
 
 

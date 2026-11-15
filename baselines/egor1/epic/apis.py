@@ -140,7 +140,8 @@ def track():
         _log(k.get("model"), getattr(r, "model", None), u.prompt_tokens if u else 0, u.completion_tokens if u else 0,
              cached=getattr(getattr(u, "prompt_tokens_details", None), "cached_tokens", 0) or 0, endpoint=endpoint,
              provider=(getattr(r, "model_extra", None) or {}).get("provider"),      # OpenRouter reports both
-             cost=(getattr(u, "model_extra", None) or {}).get("cost"))
+             cost=(getattr(u, "model_extra", None) or {}).get("cost"),
+             provider_note=os.environ.get("OPENAI_PROVIDER_NOTE") or None, system_fingerprint=getattr(r, "system_fingerprint", None))
         return r
 
     def generate_content(self, *a, **k):
@@ -162,7 +163,8 @@ def usage_summary(path, run=None):
     """{"<role> <model that answered>": {"calls", "in", "out", "thinking"}} of the log's lines (of one stage's
     run id, EGOR1_RUN, when given: jobs of one video can share the log). Chat completions also have "cached"
     (input tokens billed as cached) and "endpoint"; through OpenRouter "provider" (who served the calls) and
-    "cost" (dollars charged, summed)."""
+    "cost" (dollars charged, summed); behind another OpenAI-compatible gateway "provider_note"
+    (OPENAI_PROVIDER_NOTE) and "system_fingerprints" (the distinct ones the replies carried)."""
     out = {}
     if os.path.exists(path):
         with open(path) as f:
@@ -177,8 +179,11 @@ def usage_summary(path, run=None):
                 if x.get("endpoint"):
                     d["cached"] = d.get("cached", 0) + (x.get("cached") or 0)
                     d["endpoint"] = x["endpoint"]
-                if x.get("provider"):
-                    d["provider"] = x["provider"]
+                for k in ("provider", "provider_note"):
+                    if x.get(k):
+                        d[k] = x[k]
+                if x.get("system_fingerprint") and x["system_fingerprint"] not in d.setdefault("system_fingerprints", []):
+                    d["system_fingerprints"].append(x["system_fingerprint"])
                 if x.get("cost") is not None:
                     d["cost"] = round(d.get("cost", 0) + x["cost"], 6)
     return out

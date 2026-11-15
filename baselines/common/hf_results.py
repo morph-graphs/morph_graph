@@ -154,8 +154,9 @@ def main():
             dest, tmp = os.path.join(OUTBOX, name), os.path.join(OUTBOX, f".{name}.tmp")
             shutil.rmtree(tmp, ignore_errors=True)
             os.makedirs(tmp)
-            for f in files:
-                shutil.copy(os.path.join(a.dir, f), os.path.join(tmp, f))
+            for f in files:   # a subfolder too (VST's thoughts/): upload_folder takes it as it is
+                src = os.path.join(a.dir, f)
+                (shutil.copytree if os.path.isdir(src) else shutil.copy)(src, os.path.join(tmp, f))
             json.dump(dict(baseline=a.baseline, arm=a.arm, video=a.video, memory=MEMORY or ["none"]),
                       open(os.path.join(tmp, ".upload.json"), "w"))
             shutil.rmtree(dest, ignore_errors=True)   # an earlier run of the same task: this one replaces it

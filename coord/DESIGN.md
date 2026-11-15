@@ -453,3 +453,63 @@ What this adds:
   (a claim, a finished task, a queue, a wait counter) is still committed at once. When the Hub refuses a read or a
   commit (429, or the network), the worker waits for `Retry-After`, or 5 minutes (2 for other errors), and goes on;
   nothing is started from a cycle whose commit failed.
+
+## A worker sizes its own slot count (`--auto-slots`)
+
+Added 2026-11-15, off by default. `--slots` was set by hand (Zaratan 25, Nexus 24). Too few leaves free GPUs idle; too
+many leaves tasks claimed but waiting in a cluster's queue, where no other pool can run them. On Zaratan on
+2026-11-15 the worker held 25 tasks: 14 ran (QoS `gpu-h100` allows a user 16 H100s, and two other jobs of ours held
+2) and 11 waited with reason `QOSMaxGRESPerUser` for more than 7 hours.
+
+The rule (`worker.auto_slots`), with `--auto-slots F` minutes and `--waiting K` (default 4); `--slots` is the ceiling:
+
+- A task whose job runs keeps its slot. What is sized is how many claimed tasks may wait in the queue at once.
+- While the last job to start did so within F minutes of its claim, K tasks may wait. Once it took longer, one may:
+  the probe that shows when there is room again. So the worker grows by K a cycle while jobs start fast and stops
+  growing when they do not.
+- Tasks that have waited longer than 2 F are released, all but the oldest: their claims are dropped from the pool
+  file in the cycle's one commit, and once that commit is made their pending jobs are cancelled
+  (`scancel --state=PENDING`; a commit that fails cancels nothing, and the next cycle decides again). Another pool can
+  take them at its next cycle. A released task is not a failure and can be claimed again by anyone, this worker
+  included. A job that started in the seconds between the cycle's `squeue` and the cancel runs on unclaimed, as a
+  task taken over by another pool does.
+- With `--queues`, each group of tasks that fit the same queues is sized by itself (27B tasks that only the H200
+  queue takes do not hold back 8B claims); a queue's `max_jobs` and `fallback` work as before.
+
+What it reads: the cycle's one `squeue` (now with each job's state and start time), and `wait` in each claim, the
+seconds from claim to job start, written once. `wait` and the pool file's `auto` (how many wait, how many more each
+group may claim) are left out of the "did anything change" comparison, so they go out with the commits that happen
+anyway and cause none. Nothing else is kept, so a restarted worker decides as the old one would have. A per-user
+limit is not configured or read from `sacctmgr`: what a limit leaves us depends on our other jobs (14 of 16 that
+day), and it shows as tasks that wait.
+
+Measured (sacct, `board-*` jobs, 2026-11-13 to 15):
+
+| cluster | queue wait | F |
+|---|---|---|
+| Zaratan `gpu-h100`, 1,207 jobs that started | 1,002 under 2 min, 19 in 2-5, 50 in 5-10, 105 in 10-30, 30 longer: at once under the limit, long at it | 5 |
+| Nexus, per task (first copy to start), 2026-11-15, 320 tasks | 3% under 5 min, 32% under 10, 75% under 15, 87% under 30; median 11 min | 15 |
+| Nexus, 2026-11-14, 127 tasks | median 191 min | (one task waits, the rest go back) |
+
+Replayed on that Zaratan morning (`test_worker.py`, `test_auto_slots_zaratan_replay`: 14 GPUs, the real jobs' run
+times, 7 hours): 25 fixed slots end with 14 running and 11 waiting, as it happened (77 task-hours claimed and
+waiting); `--auto-slots 5` has the 14 GPUs busy by minute 30 (25 fixed slots: at once), releases 2 tasks and holds
+one waiting task from minute 45 on (7 task-hours).
+
+Considered and not done:
+- A fixed number of waiting tasks, without the release. It strands that many at a limit for as long as the limit
+  lasts, and it has to be large enough to refill the GPUs each cycle: in the replay 2 take an hour to fill 14 GPUs
+  (12 task-hours waiting), 5 fill them in 20 minutes and leave 5 waiting (34 task-hours).
+- A slot count that doubles while jobs start fast and halves when they wait (the first proposal), and a budget of
+  one plus the fast starts of the last 2 F minutes. In simulation both forget what they learnt when jobs end in
+  waves and over-claim again at each ramp (10-23% of GPU time idle with 5-30 minute jobs at the limit, against 2-6%
+  for this rule), and the first needs state that survives a restart.
+- Releasing at once when squeue's reason names a limit (`QOSMaxGRESPerUser`). At a limit with jobs ending every few
+  minutes, the waiting tasks are what keeps the GPUs busy until the next cycle; they start within F and stay.
+
+Limits: K caps how many jobs can start per cycle (4 per 5 minutes on Zaratan: enough for 14-16 GPUs of jobs that
+run 20 minutes or more; raise `--waiting` for shorter ones). The first claims after a start wait one probe when the
+last job before them was slow. A released job loses its age in the queue; the oldest, kept, does not.
+
+Start it by adding `--auto-slots 5` to a `--sbatch` worker's command (Zaratan), or `AUTO_SLOTS=15` to the
+`--export` list of `coord/nexus_worker.sbatch` (Nexus).

@@ -72,9 +72,13 @@ have_memory() { local m; for m in "${MEMORY[@]}"; do [ -s "$OUT/${m//\{video\}/$
 [ -f "$R/egagent/langgraph_agent.py" ] || { echo "upstream missing: git submodule update --init baselines/egagent/egagent"; exit 1; }
 patched() { grep -q "def build_app" "$R/egagent/run_egagent_on_videomme.py" && grep -q EGAGENT_BACKBONE "$R/egagent/langgraph_agent.py" \
             && grep -q "startswith('gemini-')" "$R/egagent/langgraph_agent.py" \
-            && grep -q EGAGENT_DB_ROOT "$R/paths.py" && grep -q "def get_api_key" "$R/utils.py" && grep -q OPENROUTER "$R/utils.py"; }
+            && grep -q EGAGENT_DB_ROOT "$R/paths.py" && grep -q "def get_api_key" "$R/utils.py" && grep -q EGAGENT_GPT_PREFIX "$R/utils.py"; }
 if ! patched; then
     ( if command -v flock >/dev/null; then flock 9; fi
+      if ! patched && grep -q OPENROUTER "$R/utils.py"; then   # an earlier epic_morph.patch: upstream's files back first
+          git -C "$R" checkout -- . || { echo "an earlier epic_morph.patch is applied to $R: run git -C $R checkout -- ."; exit 1; }
+          echo "restored upstream in $R (an earlier epic_morph.patch was applied)"
+      fi
       # from outside any repository, so it behaves the same in a clone, a container and a synced copy
       patched || (cd / && git apply --unsafe-paths --whitespace=nowarn --directory="$R" "$M/epic_morph.patch")
     ) 9>"$WORK/.patch.lock" || true
@@ -117,7 +121,8 @@ if os.path.exists(os.environ["EGAGENT_USAGE"]):
             for m, c in u["models"].items():   # counts, tokens and cost summed; endpoint and provider kept
                 a = api.setdefault(m, {})
                 for k, v in c.items():
-                    a[k] = v if isinstance(v, str) else round(a.get(k, 0) + v, 6)
+                    a[k] = (v if isinstance(v, str) else sorted(set(a.get(k, [])) | set(v)) if isinstance(v, list)
+                            else round(a.get(k, 0) + v, 6))
 print(json.dumps({"stage": sys.argv[1], "seconds": int(float(sys.argv[2])), "commit": commit,
                   "egagent_commit": up, "epic_morph_commit": bank, "agent_model": os.environ.get("BACKBONE"),
                   "memory_models": ["gpt-4.1", "google/siglip2-giant-opt-patch16-384"], "api": api,

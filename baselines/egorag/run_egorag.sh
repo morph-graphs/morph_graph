@@ -64,6 +64,8 @@ mkdir -p "$OUT" "$WORK/locks"
 ( flock 9
   cd "$R"
   if ! patch -p1 -R -s -f --dry-run < "$M/EgoLife.patch" >/dev/null 2>&1; then
+      # an earlier EgoLife.patch (util.py the only change): upstream's file back first, then this one
+      [ "$(git status --porcelain -uno 2>/dev/null)" != " M EgoRAG/egorag/utils/util.py" ] || git checkout -- EgoRAG/egorag/utils/util.py
       patch -p1 -s < "$M/EgoLife.patch" || { echo "EgoLife.patch does not apply to $R (is the submodule at the pinned commit?)"; exit 1; }
       echo "applied EgoLife.patch to $R"
   fi
