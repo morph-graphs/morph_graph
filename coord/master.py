@@ -28,7 +28,8 @@ either one), and go to pools `max` and `pulkit` only (ROUTER_POOLS once also too
 The reported-configuration arms (REPORTED: a gpt-5-mini memory per video, answered by several models) are listed right after the API tasks, and while PILOT is non-empty only the tasks it names are listed.
 The other paid rows (PAID: Ego-R1, EGAgent, EgoRAG, HippoMM and MAGIC-Video, with the models Max's and Pulkit's
 gateway serves) follow the reported-configuration arms, for every bank of BANKS, on pools `max` and `pulkit` only,
-behind the same PILOT gate.
+behind the same PILOT gate (MAGIC-Video's OpenRouter arms also on `nexus`: ALSO_POOLS).
+While a task of a PRIORITY arm is listed, the tasks of every other arm are withheld (gate()).
 """
 import argparse
 import functools
@@ -89,7 +90,8 @@ POOLS = {("merit", "m27"): M27 + ["arm00"], ("merit", "m8"): M8,
 BANKS = ["batch10_agree2", "t2_agree2", "t3_agree2", "t4_agree2", "t5_agree2", "rescue_agree2", "extra_agree2"]
 # Closed-source API models (baselines/api): no GPU and no memory, one qa task per video and config. They need the
 # provider's key (GEMINI_API_KEY / OPENAI_API_KEY in the worker's environment), which only Max's machine has, so no
-# other pool may take them. Listed first: 30 short tasks that should not wait behind the memory builds.
+# other pool may take them. Listed first: short tasks that should not wait behind the memory builds. Every bank since
+# 2026-11-14 (Anubhav; batch10 only before).
 API_CONFIGS = ["gemini-3.1-flash-lite-high", "gemini-3.6-flash-high", "gpt-5-f1024"]
 # The reported-configuration arms (baselines/<b>/README.md): g5m is the memory written by gpt-5-mini, once per video;
 # the g5m-* arms answer from it with another reasoning model and keep answers plus a reference to that memory
@@ -127,7 +129,14 @@ PILOT = []   # emptied 2026-11-14 (Anubhav): the pilot, worldmm-g5m-build-P05-20
 # Withheld whatever PILOT says: (baseline, arm, stage) lines whose work is running off the board, which a board copy
 # would pay for twice. A qa task keeps its wait on such a build until the memory is uploaded. Empty since 2026-11-14:
 # WorldMM's gpt-5-mini memories, built by Slurm arrays on Nexus, are in the dataset for all 156 videos.
-HELD = set()
+# Since 2026-11-14 (Anubhav) also the three GPT-5 rows (sheet rows 7, 25, 36): no pool has GPT-5 through an OpenAI key
+# (Max's and Pulkit's gateway serves it from Azure only). Take them out when Max or Pulkit confirms access.
+HELD = {("api", "gpt-5-f1024", "qa"), ("merit", "g5m-g5", "qa"), ("worldmm", "g5m-g5", "qa")}
+# Baselines whose answering is frozen, every arm and bank (Anubhav, 2026-11-14): traversal logic is being added to the
+# inference of MAGIC-Video, WorldMM, EGAgent and M3-Agent in another PR, and answers given before it would be redone.
+# Their qa tasks are withheld until that PR is merged (then empty this set); their memory builds are listed as usual.
+# A qa claim already running finishes, and its answers are then replaced by the redone ones.
+QA_FROZEN = {"magic", "worldmm", "egagent", "m3agent"}
 # The other paid rows of the sheet (baselines/<b>/README.md). Max and Pulkit run them through their gateway, which has
 # GPT-4.1, GPT-5-mini, Gemini 3.6 Flash and DeepSeek but no GPT-4o and no Gemini 2.5 Pro, so each row is listed with a
 # stand-in arm it can run (Anubhav, 2026-11-14). The published arms' code stays in each baseline; their lines are off
@@ -137,8 +146,9 @@ HELD = set()
 # build, local on a 48 GB GPU), which gets no needs_env but still goes nowhere else.
 #   egor1    gemini36flash: Gemini 3.6 Flash captions + GPT-4.1 summaries (build). gemini36flash-gpt41 answers from that
 #            memory: video_llm Gemini 3.6 Flash; rag, vlm and the answer GPT-4.1 (qa)
-#   egagent  one GPT-4.1 memory, built under gpt41 and answered by the GPT-4.1 agent; gemini36flash's qa (a Gemini 3.6
-#            Flash agent) takes that memory from the dataset and keeps a copy with its answers
+#   egagent  one GPT-4.1 memory, built under gpt41; gemini36flash's qa (a Gemini 3.6 Flash agent) takes that memory
+#            from the dataset and keeps a copy with its answers. The GPT-4.1 agent's answer row is off the board
+#            (Anubhav, 2026-11-14: reasoning with Gemini 3.6 Flash only, for now)
 #   egorag   egogpt_gpt41: local EgoGPT captions (48 GB GPU), then GPT-4.1 and DeepSeek summaries (build); GPT-4.1 (qa)
 #   hippomm  the memory is local (Qwen2.5-VL-7B, ImageBind, Whisper), built under the published arm q25vl7b-gpt4o;
 #            q25vl7b-gpt41 answers from it with gpt-4.1
@@ -148,7 +158,7 @@ HELD = set()
 # (checks without an API), HippoMM's `count` (a cost count, part of `all`), and the paid `blind` floors.
 PAID_BANKS = BANKS
 # (baseline, the arm that builds the memory, the arms that answer from it)
-PAID_ROWS = [("egor1", "gemini36flash", ["gemini36flash-gpt41"]), ("egagent", "gpt41", ["gemini36flash", "gpt41"]),
+PAID_ROWS = [("egor1", "gemini36flash", ["gemini36flash-gpt41"]), ("egagent", "gpt41", ["gemini36flash"]),
              ("egorag", "egogpt_gpt41", ["egogpt_gpt41"]), ("hippomm", "q25vl7b-gpt4o", ["q25vl7b-gpt41"]),
              ("magic", "oss120", ["oss120-flash", "oss120-q27"])]
 PAID = [line for b, mem, answer in PAID_ROWS for line in
@@ -164,6 +174,9 @@ NEEDS_ENV |= {
     ("hippomm", "q25vl7b-gpt41"): ["OPENAI_API_KEY"],
     ("magic", "oss120"): ["OPENROUTER_API_KEY"], ("magic", "oss120-flash"): ["OPENROUTER_API_KEY"],
     ("magic", "oss120-q27"): ["OPENROUTER_API_KEY"]}
+# Pools added to an arm's key pools: MAGIC-Video's Qwen3.5-Flash row calls OpenRouter only, a key that Max's and
+# Pulkit's gateway does not have and our Nexus worker does (Anubhav, 2026-11-14)
+ALSO_POOLS = {("magic", "oss120"): ["nexus"], ("magic", "oss120-flash"): ["nexus"]}
 # The arms behind the pilot gate: every arm of the REPORTED and PAID lines. A new paid baseline joins the gate by
 # being listed in one of them, not by its name.
 GATED = {(b, arm) for b, arm, *_ in REPORTED + PAID}
@@ -171,10 +184,10 @@ GATED = {(b, arm) for b, arm, *_ in REPORTED + PAID}
 # Nothing is built, so a task waits on nothing and is done when its answers_<bank>.json.gz is in the dataset. It runs
 # in MERIT's image of the model's environment, so the pools are those of that arm: the 8B fits a 48 GB GPU at every N
 # (measured peak 39.2 GB at N = 768); the 27B needs what MERIT's m27 does at N = 32 and 128 (2x 48 GB or one 80 GB GPU).
-# Its N = 768 is not sized yet (75k video tokens), so only Pulkit's GB200/GB300 pool gets it. Listed after
-# the paid rows and before the memory arms: short tasks that should not wait behind the memory builds.
-DIRECT = {"qwen3vl-8b-f32": M8, "qwen3vl-8b-f128": M8, "qwen3vl-8b-f768": M8,
-          "qwen38-27b-f32": M27, "qwen38-27b-f128": M27, "qwen38-27b-f768": ["pulkit"],   # N = 768 unsized: a GB200/GB300 (186/288 GB) GPU
+# Qwen3-VL-8B and Qwen3.8-27B are run at N = 768 only (Anubhav, 2026-11-14: no 32- and 128-frame rows for them; what
+# was answered at those budgets stays in the dataset). The 27B's N = 768 (75k video tokens) is not sized yet. Listed
+# after the paid rows and before the memory arms: short tasks that should not wait behind the memory builds.
+DIRECT = {"qwen3vl-8b-f768": M8, "qwen38-27b-f768": M27,
           # Qwen3.5-9B and Molmo2-8B fit a 48 GB GPU like the 8B (the 9B runs in the m27 image); Qwen3.5-35B-A3B needs
           # the 27B pools' GPUs, and its N = 768 is not sized, so it is not listed
           "qwen35-9b-f32": M8, "qwen35-9b-f128": M8, "qwen35-9b-f768": M8,
@@ -201,7 +214,21 @@ M3AGENT = {"build": M8, "qa": M27}
 # evaluation (M3) needs first, so its builds go right after the API tasks, ahead of everything else, 8B then 27B, and
 # to the Nexus pools at once as well (no LEFTOVER_H wait).
 URGENT = [("magic", arm, "build", POOLS["magic", arm] + LEFTOVER_POOLS, None) for arm in ("m8", "m27")]
-EXPERIMENTS = [("api", c, "qa", KEY_POOLS, "batch10_agree2") for c in API_CONFIGS] + URGENT + REPORTED + PAID + [
+# The rows to finish first (Anubhav, 2026-11-14: time and compute are short). While a task of one of these arms is
+# listed, the tasks of every other arm are withheld from tasks.json (gate()); a claim already running on a withheld
+# task finishes, since a worker renews its claims whatever is listed. Results-sheet rows (tab `Epic Morph Results`):
+# 4, 6, 7 the API models; 12, 14 Qwen3-VL-8B and Qwen3.8-27B from 768 frames; 18 VST; 22 Ego-R1; 23 EgoRAG; 24, 25
+# MERIT on the gpt-5-mini memory, answered by Qwen 8B and by GPT-5; 34 M3-Agent; 35, 36 WorldMM likewise; 39 EGAgent
+# (Gemini 3.6 Flash agent); 40 MAGIC-Video (Qwen3.5-Flash); with the arms that build their memories. The GPT-5 rows
+# (7, 25, 36) are in the set but withheld for now (HELD), so the other rows do not wait for them. Empty the set to
+# list everything again.
+PRIORITY = {("api", c) for c in API_CONFIGS} | {
+    ("direct", "qwen3vl-8b-f768"), ("direct", "qwen38-27b-f768"), ("vst", "vst7b"),
+    ("egor1", "gemini36flash"), ("egor1", "gemini36flash-gpt41"), ("egorag", "egogpt_gpt41"),
+    ("merit", "g5m"), ("merit", "g5m-q8"), ("merit", "g5m-g5"), ("m3agent", "m3"),
+    ("worldmm", "g5m"), ("worldmm", "g5m-q8"), ("worldmm", "g5m-g5"),
+    ("egagent", "gpt41"), ("egagent", "gemini36flash"), ("magic", "oss120"), ("magic", "oss120-flash")}
+EXPERIMENTS = [("api", c, "qa", KEY_POOLS, bank) for bank in BANKS for c in API_CONFIGS] + URGENT + REPORTED + PAID + [
     ("direct", arm, "qa", pools, bank) for bank in BANKS for arm, pools in DIRECT.items()] + [
     ("rekv", "m8", "qa", M8, bank) for bank in BANKS] + [
     ("vst", "vst7b", "qa", M8, bank) for bank in BANKS] + [
@@ -386,7 +413,7 @@ def desired(have, files, answers=None, busy=()):
     tasks, ids = [], set()
     for b, arm, stage, pools, bank in EXPERIMENTS:
         env = {"needs_env": needs(b, arm, stage)} if needs(b, arm, stage) else {}
-        pools = key_pools(env["needs_env"]) if env else pools
+        pools = key_pools(env["needs_env"]) + ALSO_POOLS.get((b, arm), []) if env else pools
         mem = MEMORY_ARM.get((b, arm), arm)
         if mem != arm:   # for the worker: the arm whose dataset folder holds this task's memory (worker.py --prefetch)
             env["memory_arm"] = mem
@@ -429,10 +456,12 @@ def desired(have, files, answers=None, busy=()):
 
 def gate(tasks):
     """(tasks to list, how many are withheld): of the gated arms (GATED) only PILOT's tasks, while it is non-empty,
-    and none of HELD."""
+    none of HELD and no qa of a QA_FROZEN baseline; then, while a task of a PRIORITY arm is among them, only those."""
     keep = [t for t in tasks if (t["baseline"], t["arm"], t["stage"]) not in HELD
+            and not (t["stage"] == "qa" and t["baseline"] in QA_FROZEN)
             and (not PILOT or not reported(t) or t["id"] in PILOT)]
-    return keep, len(tasks) - len(keep)
+    first = [t for t in keep if (t["baseline"], t["arm"]) in PRIORITY]
+    return first or keep, len(tasks) - len(first or keep)
 
 
 def leftovers(tasks, old, now, claimed=()):
@@ -511,7 +540,8 @@ def main():
             print(f"stale answers: {sum(redo.values())} tasks listed again, {sum(qs.values())} questions to ask again; "
                   f"{sum(held.get(t['id'], (0, {}))[1].get('status') == 'done' for t in tasks if 'stale' in t)} of them "
                   "done already and still stale (the worker's bank is older than the master's, or the questions failed again)")
-            print(f"gate: {withheld} tasks withheld (PILOT: the reported-configuration and paid-row arms; HELD: {sorted(HELD)})"
+            print(f"gate: {withheld} tasks withheld (PRIORITY: every arm but the {len(PRIORITY)} priority ones while they have tasks; "
+                  f"PILOT: the reported-configuration and paid-row arms; HELD: {sorted(HELD)}; qa frozen: {sorted(QA_FROZEN)})"
                   + (f"; listed of them: {[t['id'] for t in tasks if reported(t)]}" if PILOT else " (PILOT is empty)"))
             print(f"leftovers: {left} tasks listed {LEFTOVER_H} h or more ago, offered to {', '.join(LEFTOVER_POOLS)} too")
             print(f"need a key (pool {', '.join(KEY_POOLS)} only): "
