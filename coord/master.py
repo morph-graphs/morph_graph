@@ -14,7 +14,8 @@ task that failed twice is held back and shown as a failure.
 questions in the bank and no answers_<bank>.json.gz in the results dataset, or one that is stale, depending on the same
 video's build task while that is pending. A file is stale when some question of the bank has no answer in it as the
 bank asks it now (unanswered(): the reuse rule's key, wording, options, gold letter and query time), e.g. after the bank
-moved a question's t_ask, or when it holds an "Error" or does not parse. A stale file's task gets the id
+moved a question's t_ask, or when it holds an "Error" or does not parse, or (TRACED baselines) when an answer row
+has no `trace`. A stale file's task gets the id
 <task>-redo-<hash of the video's questions>, since the plain id may already be done on a pool (held for good): it is
 listed once per state of the bank, so an answer that fails again is not retried every cycle, and not while the task
 or a redo of it still runs or waits for its relay (what it uploads may be current). The master reads the
@@ -53,9 +54,12 @@ from prepare_epic import LETTERS, qhash, row_qhash  # noqa: E402
 
 RESULTS = os.environ.get("MERIT_HF_REPO", "morph-graphs/epic-morph-results")
 BUILD_ORDER = os.path.join(ROOT, "baselines", "merit", "build_order.txt")
-# summaries of the answers files read (summary()), one per content hash: <hash>.json
-ANSWERS_CACHE = os.path.join(constants.HF_HOME, "coord", "answers")
+# summaries of the answers files read (summary()), one per content hash: <hash>.json. "answers-v2": since its rows
+# record whether the answer row carries a `trace`; a v1 summary (without that) would hide a file that needs a redo
+ANSWERS_CACHE = os.path.join(constants.HF_HOME, "coord", "answers-v2")
 FAILED = ("", "Error", "Unable to generate answer")   # no answer: earlier.reuse's failures, and WorldMM's own
+# baselines whose answer rows record how they walked their memory (`trace`): a row without one is answered again
+TRACED = {"magic", "worldmm", "egagent", "m3agent"}
 
 # (baseline, arm, stage, pools that may run it, bank; a build line: None, or the banks whose videos it builds). A qa task answers its bank on the build's GPU family, so it
 # takes the build's pools. Every baseline's m8 needs one GPU of 40 GB or more. m27: MERIT one 80 GB GPU (H100 / H200 /
@@ -261,8 +265,8 @@ def ask_time(r):
 
 
 def summary(rows):
-    """[key, qhash, gold letter, ask time] of each row of an answers file that has an answer (response, or EGAgent's
-    pred, not one of FAILED); a field the row does not record is None."""
+    """[key, qhash, gold letter, ask time, has a trace] of each row of an answers file that has an answer (response, or
+    EGAgent's pred, not one of FAILED); a field the row does not record is None."""
     out = []
     for r in rows:
         if not isinstance(r, dict) or str(r.get("response", r.get("pred")) or "").strip() in FAILED:
@@ -272,22 +276,23 @@ def summary(rows):
             h = row_qhash(r)
         elif not h and "question" in r and "options" in r:
             h = qhash(r["question"], r["options"])
-        out.append([r.get("key"), h, r.get("answer"), ask_time(r)])
+        out.append([r.get("key"), h, r.get("answer"), ask_time(r), "trace" in r])
     return out
 
 
-def unanswered(questions, rows):
+def unanswered(questions, rows, trace=False):
     """Keys of the bank questions that no answer (summary() rows; None: the file did not parse) answers as the bank asks
     them now, by the reuse rule (hf_results.py earlier-answers, prepare_epic.match_answers): the same key (a row from
     before keys: the same wording, options and gold letter), wording and options, gold letter, and query time. A
     baseline asks at a whole second, floor(t_ask) since #16 and ceil(t_ask) before (MERIT's batch10), or at the video's
     end, ceil(duration), for a t_ask in its last second: a row within a second of t_ask counts. A field the row does
-    not record is not compared."""
+    not record is not compared. trace=True (a TRACED baseline): a row without a trace does not count."""
     out = []
     for q in questions:
         k, h, gold, t = asked(q)
         if not any((rk == k or (rk is None and rh == h)) and rh in (h, None) and rg in (gold, None)
-                   and (rt is None or t is None or abs(rt - t) < 1) for rk, rh, rg, rt in rows or []):
+                   and (rt is None or t is None or abs(rt - t) < 1) and (not trace or bool(tr and tr[0]))
+                   for rk, rh, rg, rt, *tr in rows or []):
             out.append(k)
     return out
 
@@ -395,7 +400,8 @@ def desired(have, files, answers=None, busy=()):
         for v in bank_videos(bank):
             tid, f, stale = f"{b}-{arm}-{stage}-{bank}-{v}", f"{b}/{arm}/{v}/answers_{bank}.json.gz", {}
             if f in files:
-                todo = unanswered(bank_questions(bank)[v], answers[f]) if f in answers and tid not in busy else []
+                todo = (unanswered(bank_questions(bank)[v], answers[f], trace=b in TRACED)
+                        if f in answers and tid not in busy else [])
                 if not todo:
                     continue
                 tid, stale = redo_id(tid, bank_questions(bank)[v]), {"stale": len(todo)}   # questions to ask again

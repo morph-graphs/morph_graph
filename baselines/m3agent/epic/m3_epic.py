@@ -8,7 +8,9 @@
             0 .. floor(t / 30) - 1, as upstream's M3-Bench annotations); a question that is not streaming sees
             the whole video
   collect   control output (jsonl) -> answers file, one row per bank question keyed by its `key`, with the
-            chosen option, correctness and the clips each search returned (with times, for evidence scoring);
+            chosen option, correctness and the clips each search returned (with times, for evidence scoring),
+            and `trace`: per search the memory-graph walk (entry entity nodes, ranked text nodes with their clip
+            and seconds, clip scores, node-entity edges; capped in the fork's retrieve.walk_trace);
             prints a summary line (stderr), then the keys still unanswered (stdout; empty line when none)
 """
 import argparse
@@ -84,6 +86,12 @@ def questions(a):
     print(f"{len(qa_list)} questions -> {a.out}; before_clip {sorted(set(r['before_clip'] for r in qa_list), key=lambda b: -1 if b is None else b)}")
 
 
+def timed(walk, clip_rows):
+    """A search's graph walk (the fork's retrieve.walk_trace) with each text node's clip as [start, end] seconds."""
+    span = lambda c: [clip_rows[c]["start"], clip_rows[c]["end"]] if c in clip_rows else None
+    return {**walk, "nodes": [{**n, "t": span(n["clip"])} for n in walk.get("nodes", [])]}
+
+
 def collect(a):
     want = json.load(open(a.questions))
     (video, v), = want.items()
@@ -105,11 +113,14 @@ def collect(a):
         retrieved = [{"round": i + 1, "query": s.get("query"), "mem_wise": s.get("mem_wise", False),
                       "clips": [{"clip": c, "start": clip_rows[c]["start"], "end": clip_rows[c]["end"]} for c in s.get("clips", [])]}
                      for i, s in enumerate(r.get("rounds", [])) if s["action"] == "search"]
+        trace = [{"step": i + 1, "query": s.get("query"), "mem_wise": s.get("mem_wise", False), **timed(s["trace"], clip_rows)}
+                 for i, s in enumerate(r.get("rounds", [])) if s["action"] == "search" and s.get("trace")]
         rows.append({"key": q["key"], "ID": q["ID"], "question": q["question"], "options": q["options"],
                      "answer": q["answer"], "chosen": r.get("chosen"), "correct": bool(r.get("correct")),
                      "parse": r.get("parse"), "answered_in_loop": r.get("answered_in_loop", r.get("finish")),
                      "response": r.get("response"), "t_ask": q["t_ask"],
                      "before_clip": q["before_clip"], "n_rounds": len(r.get("rounds", [])), "retrieved": retrieved,
+                     **({"trace": trace} if r.get("traced") else {}),   # none for a row from before the trace
                      "conversations": r.get("conversations"), "memory_sha256_16": sha, "adapter_version": VERSION,
                      "meta": q["meta"]})
     with (gzip.open(a.out, "wt") if a.out.endswith(".gz") else open(a.out, "w")) as f:

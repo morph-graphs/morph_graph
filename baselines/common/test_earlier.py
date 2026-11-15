@@ -57,10 +57,13 @@ def magic_q(key, qhash, t="00100000", gold="A"):
 def test_magic_reuses_other_bank(tmp_path):
     rows = [magic_q("k1", "h1"), magic_q("k2", "h2x"), magic_q("k3", "h3", t="00200000"), magic_q("k4", "h4")]
     ans = lambda k, h, mh="M": {"key": k, "ID": "9", "qhash": h, "answer": "A", "query_time": run_qa.until(magic_q(k, h)),
-                                "response": "A", "version": run_qa.VERSION, "memory_hash": mh}
-    prev = gz(tmp_path / "answers_A.json.gz", [ans("k1", "h1"), ans("k2", "h2"), ans("k3", "h3"), ans("k4", "h4", mh="other")])
+                                "response": "A", "version": run_qa.VERSION, "memory_hash": mh, "trace": []}
+    untraced = {k: v for k, v in ans("k5", "h5").items() if k != "trace"}
+    rows.append(magic_q("k5", "h5"))
+    prev = gz(tmp_path / "answers_A.json.gz", [ans("k1", "h1"), ans("k2", "h2"), ans("k3", "h3"), ans("k4", "h4", mh="other"),
+                                               untraced])
     got = run_qa.done_rows(rows, [str(tmp_path / "answers_B.json.gz"), prev], "M")
-    # k2 edited, k3 asked later, k4 answered from another memory: all asked again
+    # k2 edited, k3 asked later, k4 answered from another memory, k5 answered before rows carried a trace: asked again
     assert sorted(got) == ["k1"] and got["k1"]["ID"] == "1"
     # a reported arm (other reason / control models) redoes what the local arm answered
     assert run_qa.done_rows(rows, [prev], "M", {"reason_model": "qwen3.8-27b", "control_model": "gpt-oss-120b"}) == {}

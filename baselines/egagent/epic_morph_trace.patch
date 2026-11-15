@@ -1,0 +1,81 @@
+diff --git a/egagent/langgraph_agent.py b/egagent/langgraph_agent.py
+index 0230cca..d46fe5d 100644
+--- a/egagent/langgraph_agent.py
++++ b/egagent/langgraph_agent.py
+@@ -48,6 +48,12 @@ CONTEXT_WINDOW_SIZE = 1e9 # GPT 4.1, Gemini 2.5 Pro
+ ****************   Tools   ****************   
+ """
+ 
++# EPIC-Morph port (logging only): each tool step of the current question, in order (the caller clears it per
++# question; the graph runs one question at a time). Lists are capped at TRACE_MAX entries, task texts at TRACE_TEXT.
++TRACE = []
++TRACE_MAX, TRACE_TEXT = 50, 200
++_last_frames = []   # the last frame search's (path, score), for retrieve_frames_sql's trace step
++
+ @tool
+ def frame_retriever_sql(start_t, end_t, selected_video: str, queries: list[str], topk: int = 5) -> list[str]:
+     """
+@@ -65,6 +71,7 @@ def frame_retriever_sql(start_t, end_t, selected_video: str, queries: list[str],
+     query_emb = embed_texts_batch(queries, device) # (N_q, 1152)
+     results = search_sql(conn, selected_video, start_t, end_t, query_emb, topk, dataset)
+     retrieved_frame_filepaths = [e[0] for e in results][:MAX_FRAMES_FOR_MLLM]
++    _last_frames[:] = [(e[0], float(e[1])) for e in results][:MAX_FRAMES_FOR_MLLM]
+     return retrieved_frame_filepaths
+ 
+ 
+@@ -597,6 +604,7 @@ def planner_node(state):
+         state['total_tokens'].append({'planner' : list(cb.usage_metadata.values())[0]['total_tokens']})
+         plan_steps = [step.model_dump() for step in resp.steps]
+         plan = [s["task"] for s in plan_steps]
++        TRACE.append({"tool": "plan", "steps": [{"task": s["task"][:TRACE_TEXT], "tools": s.get("tools")} for s in plan_steps]})
+         for i, s in enumerate(plan_steps):
+             logger.debug(f'{i+1}. {s["task"]} -> tools={s["tools"]}')
+ 
+@@ -648,7 +656,11 @@ def retrieve_frames_sql(state):
+     end_t = retrieval_params.end_t # hardcode to 2359 to remove time filtering
+     logger.debug("text_queries=%s start_t=%s end_t=%s", text_queries, start_t, end_t)
+ 
++    _last_frames.clear()
+     retrieved_image_paths = frame_retriever_sql.invoke({"selected_video": state["selected_video"], "queries": text_queries, "topk": 50, "start_t": start_t, "end_t": end_t})
++    TRACE.append({"tool": "visual", "task": str(state["current_task"])[:TRACE_TEXT], "queries": list(text_queries),
++                  "start_t": start_t, "end_t": end_t,
++                  "frames": [[os.path.basename(p)[:-4], round(sc, 4)] for p, sc in _last_frames[:TRACE_MAX]]})
+ 
+     return {"relevant_frame_paths": retrieved_image_paths, "retriever_queries": text_queries}
+ 
+@@ -672,6 +684,7 @@ def retrieve_transcripts(state):
+     relevant_transcripts = tscript_retriever_oneshot.invoke({"current_task": current_task, "working_memory": state["working_memory"], "audio_transcripts": audio_transcripts}, config={"callbacks": [cb]})
+     state['total_tokens'].append({'retrieve_transcripts_llm' : list(cb.usage_metadata.values())[0]['total_tokens']})
+     working_memory += 'Transcript_Search: ' + relevant_transcripts.relevance + '\n'
++    TRACE.append({"tool": "audio", "task": current_task[:TRACE_TEXT]})
+     logger.debug("RELEVANT CONTEXT: %s", working_memory)
+     return {"working_memory": working_memory}
+ 
+diff --git a/egagent/run_egagent_on_egolife.py b/egagent/run_egagent_on_egolife.py
+index 24a85f8..ef3d723 100644
+--- a/egagent/run_egagent_on_egolife.py
++++ b/egagent/run_egagent_on_egolife.py
+@@ -78,16 +78,22 @@ def search_entity_graph(state):
+     cursor = conn_eg.cursor()
+     
+     logger.debug('CURRENT STEP: %s', current_task)
+-    for q in entity_graph_params.sql_queries:
++    used = None   # EPIC-Morph port (trace): the query whose rows were kept
++    for i, q in enumerate(entity_graph_params.sql_queries):
+         logger.debug(q)
+         try: # just ignore if llm doesn't output valid sql query
+             cursor.execute(q)
+             results = cursor.fetchall()
++            used = i
+             if len(results) > 3:
+                 break
+         except Exception as e:
+             pass
+     eg_query_results = get_eg_query_results(results) if len(results) > 0 else "NONE"
++    # EPIC-Morph port (logging only): the SQL the agent wrote, which one was kept, and its rows as graph edges
++    # [start_t, end_t, source_id, source_type, rel_type, target_id, target_type]
++    TRACE.append({"tool": "eg", "task": current_task[:TRACE_TEXT], "sql": list(entity_graph_params.sql_queries), "used": used,
++                  "n_rows": len(results), "rows": [[r[2], r[3], r[5], r[6], r[9], r[7], r[8]] for r in list(results)[:TRACE_MAX]]})
+     working_memory += 'EntityGraph_Search: ' + str(eg_query_results) + '\n'
+     logger.debug("RELEVANT CONTEXT: %s", working_memory)
+     return {"working_memory": working_memory}

@@ -80,6 +80,16 @@ if ! patched; then
     patched || { echo "epic_morph.patch does not apply to $R (is the submodule at its pinned commit, unmodified?)"; exit 1; }
     echo "applied epic_morph.patch to $R"
 fi
+# then epic_morph_trace.patch (logging only: each question's tool steps, run_qa.py's `trace`), on its own so a
+# copy patched before it existed takes just this one
+traced() { grep -q "^TRACE = \[\]" "$R/egagent/langgraph_agent.py"; }
+if ! traced; then
+    ( if command -v flock >/dev/null; then flock 9; fi
+      traced || (cd / && git apply --unsafe-paths --whitespace=nowarn --directory="$R" "$M/epic_morph_trace.patch")
+    ) 9>"$WORK/.patch.lock" || true
+    traced || { echo "epic_morph_trace.patch does not apply to $R"; exit 1; }
+    echo "applied epic_morph_trace.patch to $R"
+fi
 
 paid() {   # $1: the model, $2: its key's name, $3: its shutdown date, $4: what would be called
     if [ "$(date -u +%F)" \> "$3" ] || [ "$(date -u +%F)" = "$3" ]; then
@@ -177,7 +187,8 @@ run_qa() { "${agent_only[@]}" "$PY" -u "$M/epic/run_qa.py" --video "$V" --bank_f
                --db_root "$WORK/dbs/${ARM}_${V}_$$" "$@"; }
 qa() {
     log "qa $BANK$SUF"; local t=$SECONDS k rc=0 ans=$OUT/answers_$BANK$SUF.json.gz
-    [ -s "$ans" ] && { echo "done: $ans"; return 0; }
+    # answers from before rows carried a trace are not done: their questions are asked again
+    [ -s "$ans" ] && "$PY" "$M/../common/earlier.py" traced "$ans" && { echo "done: $ans"; return 0; }
     have_memory || build
     need_frames; bank_file
     paid "$BACKBONE" "$KEY" "$END" "the EGAgent workflow with $BACKBONE for every question of $BANK (about 12 calls per question, up to 50 frames per frame search)"

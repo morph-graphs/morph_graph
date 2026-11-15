@@ -15,7 +15,9 @@ and the graph chunks that end <= cutoff are written to upstream's two tables und
 cutoff, so no tool can return anything later; the tables are deleted after the cutoff's questions. HD-EPIC
 has no transcript: the transcript tool gets upstream's "NO TRANSCRIPTS AVAILABLE".
 Rows are appended to --rows as they finish (resume); --out is written when every question has an answer
-(exit 2 otherwise, so the run script retries).
+(exit 2 otherwise, so the run script retries). Each answered row has `trace`: the agent's steps in order (the plan
+with each step's tools; per entity-graph search the SQL written, the one kept and its rows as edges; per frame
+search the text queries, time window and frames found with their scores; transcript searches), times in seconds.
 """
 import argparse
 import gzip
@@ -56,6 +58,21 @@ def seconds(ts):
         return int(h) * 3600 + int(m) * 60 + float(s)
     except Exception:
         return None
+
+
+def trace_secs(trace):
+    """The agent's tool steps (the patch's langgraph_agent.TRACE) with times in seconds of the video: the frames
+    found (named HHMMSS00) and the entity-graph rows' start and end."""
+    hms = lambda f: int(f[:2]) * 3600 + int(f[2:4]) * 60 + int(f[4:6])
+    out = []
+    for st in trace:
+        st = dict(st)
+        if st["tool"] == "visual":
+            st["frames"] = [[hms(f), sc] for f, sc in st["frames"]]
+        elif st["tool"] == "eg":
+            st["rows"] = [[seconds(r[0]), seconds(r[1]), *r[2:]] for r in st["rows"]]
+        out.append(st)
+    return out
 
 
 def write_tables(db_root, name, cutoff, embs, frames_dir, files, graph):
@@ -147,7 +164,7 @@ def main():
     done = {}
     if os.path.exists(a.rows):
         for r in map(json.loads, open(a.rows)):
-            if r.get("pred") in list(LETTERS):
+            if r.get("pred") in list(LETTERS) and (a.blind or "trace" in r):   # a row from before the trace: asked again
                 done[r["key"] or r["ID"]] = r
     todo = [r for r in order if (r["key"] or r["ID"]) not in done]
     print(f"{len(qs)} questions, {len(done)} answered, {len(todo)} to do ({a.backbone}{', blind' if a.blind else ''})", flush=True)
@@ -158,6 +175,7 @@ def main():
             from langgraph_agent import generate_finalanswer
         else:
             from run_egagent_on_videomme import build_app, run_agentic_inference
+            from langgraph_agent import TRACE
             app = build_app(a.tscript_search)
     name = None
     for r in todo:
@@ -177,6 +195,7 @@ def main():
                                        write_tables(a.db_root, new, r["cutoff"], embs, a.frames_dir, files, graph)))
                     name = new
                 row["indexed"] = indexed
+                TRACE.clear()
                 # upstream's prepare_videomme_example, with the question's cutoff as the video's end; the time is
                 # HHMMSScc (EgoLife's form), which upstream's time formatter prints whole
                 value = run_agentic_inference(app, r["question"], r["candidates"], "000001", cut, "NO TRANSCRIPTS AVAILABLE ",
@@ -184,6 +203,10 @@ def main():
                                               name, "")
                 ans = value["answer"]
                 row.update(plan=value["plan"], working_memory=value["working_memory"], total_tokens=value["total_tokens"])
+                try:   # logging must never cost an answer
+                    row["trace"] = trace_secs(TRACE)
+                except Exception as e:
+                    row["trace"] = [{"error": f"{type(e).__name__}: {e}"[:200]}]
             row.update(pred=ans.mcq_prediction, justification=ans.justification)
             row["evaluate"] = row["pred"] == r["answer"]
         except Exception as e:

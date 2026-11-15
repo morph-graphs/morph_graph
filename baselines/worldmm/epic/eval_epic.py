@@ -17,7 +17,9 @@ the model gets from the question and options alone, the no-memory floor of this 
 
 Rows go to --rows (jsonl, one per answered question, resumable; a failed question is redone on the next run);
 when every question has a valid answer, --out gets them all in bank order (.gz: gzipped), keyed by the bank's
-question key, with the rounds and the retrieved items' time spans (for evidence-retrieval scoring).
+question key, with the rounds and the retrieved items' time spans (for evidence-retrieval scoring), and `trace`: per
+search the memory walk (the fork's WorldMemory._walk_step: HippoRAG's PPR seeds, facts and ranked captions per
+granularity, the semantic triples PPR ranked, the visual clips; ids, seconds and scores, capped).
 --prev: the video's answers under other banks (same memory): a question with the same key, wording, options, gold
 letter and query time takes its answer from there instead of being asked again.
 """
@@ -106,11 +108,13 @@ def main():
     if os.path.exists(a.rows):
         for line in open(a.rows):
             r = json.loads(line)
-            if (r.get("response") or "").strip() not in FAILED or r.get("error_final"):   # failed questions are redone
+            # failed questions are redone, and (not blind) one answered before rows carried a trace
+            if ((r.get("response") or "").strip() not in FAILED or r.get("error_final")) and (a.blind or "trace" in r):
                 done[r["ID"]] = r
     if a.prev and not a.blind:
         want = {r["key"]: (r["question"], build_choices(r), r["answer"], qtime(r)) for r in rows if r.get("key") and r["ID"] not in done}
-        got = reuse(want, a.prev, lambda o: (o.get("question"), o.get("choices"), o.get("answer"), o.get("query_time")), FAILED)
+        got = reuse(want, a.prev, lambda o: (o.get("question"), o.get("choices"), o.get("answer"), o.get("query_time")), FAILED,
+                    need=("trace",))
         done.update({r["ID"]: {**got[r["key"]], "ID": r["ID"]} for r in rows if r.get("key") in got})
         print(f"{v}: {len(got)} answers reused from other banks", flush=True)
     todo = [r for r in rows if r["ID"] not in done]
@@ -140,11 +144,11 @@ def main():
             until = qtime(row)
             try:
                 res = wm.answer(query=row["question"], choices=choices, until_time=None if a.blind else until)
-                response, hist, nr = res.answer, res.round_history, res.num_rounds
+                response, hist, nr, trace = res.answer, res.round_history, res.num_rounds, res.trace
             except Exception as e:
                 scrub = lambda x: re.sub(r"sk-[A-Za-z0-9_*.-]+", "sk-...", x)   # an API error can quote the key
                 print(f"ERROR on {row['ID']}: {type(e).__name__}: {scrub(str(e))}\n{scrub(traceback.format_exc())[-1200:]}", flush=True)
-                response, hist, nr = "Error", [], 0
+                response, hist, nr, trace = "Error", [], 0, []
                 err = scrub(f"{type(e).__name__}: {e}")[:300]
                 final = a.final_pass and isinstance(e, AssertionError)
             else:
@@ -153,7 +157,7 @@ def main():
             rec = {"key": row.get("key"), "ID": row["ID"], "video": v, "type": row["type"], "question": row["question"],
                    "choices": choices, "answer": row["answer"], "response": response,
                    "pred": extract_choice_letter(response or ""), "evaluate": ok, "t_ask": row["t_ask"],
-                   "query_time": until, "num_rounds": nr, "retrieved": retrieved(hist), "round_history": hist,
+                   "query_time": until, "num_rounds": nr, "retrieved": retrieved(hist), "round_history": hist, "trace": trace,
                    "sec": round(time.time() - t0, 1)}
             if not a.blind:
                 rec["indexed"] = ({g: len(wm.episodic_memory.indexed_entries[g]) for g in GRANULARITIES}
