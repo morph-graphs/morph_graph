@@ -129,7 +129,9 @@ PILOT = []   # emptied 2026-11-14 (Anubhav): the pilot, worldmm-g5m-build-P05-20
 # Withheld whatever PILOT says: (baseline, arm, stage) lines whose work is running off the board, which a board copy
 # would pay for twice. A qa task keeps its wait on such a build until the memory is uploaded. Empty since 2026-11-14:
 # WorldMM's gpt-5-mini memories, built by Slurm arrays on Nexus, are in the dataset for all 156 videos.
-HELD = set()
+# Since 2026-11-14 (Anubhav) also the three GPT-5 rows (sheet rows 7, 25, 36): no pool has GPT-5 through an OpenAI key
+# (Max's and Pulkit's gateway serves it from Azure only). Take them out when Max or Pulkit confirms access.
+HELD = {("api", "gpt-5-f1024", "qa"), ("merit", "g5m-g5", "qa"), ("worldmm", "g5m-g5", "qa")}
 # Baselines whose answering is frozen, every arm and bank (Anubhav, 2026-11-14): traversal logic is being added to the
 # inference of MAGIC-Video, WorldMM, EGAgent and M3-Agent in another PR, and answers given before it would be redone.
 # Their qa tasks are withheld until that PR is merged (then empty this set); their memory builds are listed as usual.
@@ -212,8 +214,8 @@ URGENT = [("magic", arm, "build", POOLS["magic", arm] + LEFTOVER_POOLS, None) fo
 # 4, 6, 7 the API models; 12, 14 Qwen3-VL-8B and Qwen3.8-27B from 768 frames; 18 VST; 22 Ego-R1; 23 EgoRAG; 24, 25
 # MERIT on the gpt-5-mini memory, answered by Qwen 8B and by GPT-5; 34 M3-Agent; 35, 36 WorldMM likewise; 39 EGAgent
 # (Gemini 3.6 Flash agent); 40 MAGIC-Video (Qwen3.5-Flash); with the arms that build their memories. The GPT-5 rows
-# (7, 25, 36) stay listed although no pool has taken them yet: whoever has an OpenAI key with GPT-5 can. Empty the
-# set to list everything again.
+# (7, 25, 36) are in the set but withheld for now (HELD), so the other rows do not wait for them. Empty the set to
+# list everything again.
 PRIORITY = {("api", c) for c in API_CONFIGS} | {
     ("direct", "qwen3vl-8b-f768"), ("direct", "qwen38-27b-f768"), ("vst", "vst7b"),
     ("egor1", "gemini36flash"), ("egor1", "gemini36flash-gpt41"), ("egorag", "egogpt_gpt41"),

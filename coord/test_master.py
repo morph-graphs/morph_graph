@@ -143,7 +143,7 @@ BANK_VIDEOS = {"batch10_agree2": B10, "t2_agree2": T2, "t3_agree2": T3, "t4_agre
                "rescue_agree2": T2[:1], "extra_agree2": T3}   # the last two: second banks of videos that have one
 
 
-PRIORITY, QA_FROZEN = set(M.PRIORITY), set(M.QA_FROZEN)
+PRIORITY, QA_FROZEN, HELD = set(M.PRIORITY), set(M.QA_FROZEN), set(M.HELD)
 
 
 def board(monkeypatch, tmp_path, experiments=None):
@@ -155,6 +155,7 @@ def board(monkeypatch, tmp_path, experiments=None):
     monkeypatch.setattr(M, "bank_videos", lambda bank: BANK_VIDEOS[bank])
     monkeypatch.setattr(M, "PRIORITY", set())   # the tests below are of the whole list; test_paid_rows puts both back
     monkeypatch.setattr(M, "QA_FROZEN", set())
+    monkeypatch.setattr(M, "HELD", set())
     if experiments is not None:
         monkeypatch.setattr(M, "EXPERIMENTS", experiments)
 
@@ -358,6 +359,17 @@ def test_paid_rows(monkeypatch, tmp_path):
     assert listed == [t for t in tasks if not frozen(t)] and withheld == sum(map(frozen, tasks)) > 0
     monkeypatch.setattr(M, "QA_FROZEN", set())
     monkeypatch.setattr(M, "PRIORITY", set())
+    # as published, the three GPT-5 rows are held: none of their tasks is listed, and the priority rows do not wait for them
+    assert HELD == {("api", "gpt-5-f1024", "qa"), ("merit", "g5m-g5", "qa"), ("worldmm", "g5m-g5", "qa")}
+    monkeypatch.setattr(M, "HELD", HELD)
+    held = lambda t: (t["baseline"], t["arm"], t["stage"]) in HELD
+    listed, withheld = M.gate(tasks)
+    assert withheld == sum(map(held, tasks)) > 0 and not any(map(held, listed))
+    monkeypatch.setattr(M, "PRIORITY", PRIORITY)
+    rest = [t for t in tasks if (t["baseline"], t["arm"]) not in PRIORITY]
+    assert M.gate(rest + [t for t in tasks if held(t)])[0] == rest      # only held tasks left of the priority arms: the rest is listed
+    monkeypatch.setattr(M, "PRIORITY", set())
+    monkeypatch.setattr(M, "HELD", set())
     # built: each baseline's last memory file, next to runs.jsonl
     done, _ = M.built_from({f"{b}/{arm}/{v}/{f}" for b, arm, last in (
         ("egor1", "gemini36flash", f"{v}_1day.json"), ("egagent", "gpt41", f"{v}_graph.json"),
