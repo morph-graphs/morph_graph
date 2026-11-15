@@ -12,6 +12,8 @@
 # Paid-API tasks (MERIT / WorldMM g5m*, MAGIC oss120*: BASELINES="merit worldmm magic") are taken only with an
 # OpenRouter key: one bare line in ~/.config/openrouter_key, mode 600. It is read into this job's environment below
 # and reaches each task's job through sbatch's exported environment, never a command line, a script or the board.
+# AUTO_SLOTS=15 (minutes; worker.py --auto-slots, DESIGN.md "A worker sizes its own slot count"): SLOTS becomes the
+# ceiling, a few claimed tasks wait in the queues at once, and those that wait over 30 minutes go back to the board.
 # Optional: QUEUES (default $W/mg/coord/nexus_queues.json; copy it to drop or add queues), BASELINES (default merit),
 # PY (a Python with huggingface_hub). Check it with `tail -f $W/logs/board-worker-<id>.out` and `squeue -u $USER`.
 #SBATCH --job-name=board-worker
@@ -45,4 +47,5 @@ export HDEPIC_VIDEOS=$P/datasets/HD-EPIC/videos
 cd "$W/mg"
 # SLOTS = how many tasks at once (each has one copy pending per fitting queue until one starts)
 exec "$PY" coord/worker.py --pool "$POOL" --launcher slurm --runtime apptainer --queues "$QUEUES" \
-    --slots $(seq 1 "${SLOTS:-4}") --baselines ${BASELINES:-merit} --every 120 --state "$W/state-$POOL"
+    --slots $(seq 1 "${SLOTS:-4}") --baselines ${BASELINES:-merit} --every 120 --state "$W/state-$POOL" \
+    ${AUTO_SLOTS:+--auto-slots "$AUTO_SLOTS"}
