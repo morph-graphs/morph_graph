@@ -125,14 +125,20 @@ def main():
             break
     paid_api(deepseek=True)
     del agent
-    from egorag.utils.gen_event import gen_event
-    try:
-        gen_event(V, "events_diary")   # resumes per level; a level it fails on is missing or empty below
-    except Exception as e:   # after a failed hour level upstream's day level raises from its own error handler
-        print(f"gen_event stopped: {type(e).__name__}: {e}", file=sys.stderr)
-    for n, k in enumerate(levels):
+    from egorag.utils import util
+    from egorag.utils.gen_event import get_event_day, get_event_hour, get_event_min
+    # upstream's gen_event, one level at a time (each resumes), stopping at the first level that failed: upstream
+    # goes on and pays for summaries of its own "error" texts. The API's reason goes last, where the board's note
+    # (the log's tail) keeps it.
+    for n, (k, step) in enumerate(zip(levels, [get_event_min, get_event_hour, get_event_day])):
+        try:
+            step(V, "events_diary")
+        except Exception as e:
+            print(f"gen_event stopped at {k}: {type(e).__name__}: {e}", file=sys.stderr)
         if failed(n):
-            sys.exit(f"{k} summaries missing or failed ({src(k)}): rerun to retry")
+            why = "; ".join(f"{f} {m}" for f, m in util.LAST_ERROR.items()) or "none (see the log above)"
+            print(f"{k} summaries missing or failed: {src(k)}", file=sys.stderr)
+            sys.exit(f"{k} failed, rerun to retry. Last API error: {why[:220]}")   # short: the note keeps ~400 chars
         shutil.copy(src(k), files[k])
         print(f"{k}: {len(json.load(open(src(k))))} summaries -> {files[k]}")
 
