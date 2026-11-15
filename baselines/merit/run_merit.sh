@@ -17,6 +17,7 @@
 #          g5m-q8   answers from the g5m memory with Qwen3-VL-8B (qa, upload); no API call                    as m8
 #          g5m-q27  answers from the g5m memory with Qwen3.8-27B (qa, upload); no API call                    as m27
 #          g5m-g5   answers from the g5m memory with gpt-5 (qa, upload), top-k 10 as published      one GPU >= 16 GB
+#          g5m-g51  the same with gpt-5.1, a stand-in where gpt-5 cannot be reached (qa, upload)     one GPU >= 16 GB
 #   bank   a named bank of the epic-morph checkout, e.g. batch10_agree2 (generated there with
 #          v3/export_bank.py <bank> when missing; byte-identical for anyone at that commit)
 #
@@ -42,8 +43,8 @@
 # Every step skips finished work, so rerunning the same command resumes. The memory is built once per video
 # and arm and shared by every bank, probe set and variant.
 set -euo pipefail
-STAGE=${1:?usage: run_merit.sh <prep|build|qa|blind|upload|all> <video> <m8|m27|g5m|g5m-q8|g5m-q27|g5m-g5> [bank]}
-V=${2:?video id}; ARM=${3:?arm m8, m27, g5m, g5m-q8, g5m-q27 or g5m-g5}; BANK=${4:-}
+STAGE=${1:?usage: run_merit.sh <prep|build|qa|blind|upload|all> <video> <m8|m27|g5m|g5m-q8|g5m-q27|g5m-g5|g5m-g51> [bank]}
+V=${2:?video id}; ARM=${3:?arm m8, m27, g5m, g5m-q8, g5m-q27, g5m-g5 or g5m-g51}; BANK=${4:-}
 M=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); REPO=$(cd "$M/../.." && pwd); R=$M/MERIT   # R: the MERIT submodule
 PY=${PY:?set PY to the python of the $ARM environment}
 EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && pwd)
@@ -57,7 +58,8 @@ case $ARM in
     g5m-q8) MEM=g5m; MODEL=gpt-5-mini; RESPOND=qwen3vl-8b ;;
     g5m-q27) MEM=g5m; MODEL=gpt-5-mini; RESPOND=qwen38-27b ;;
     g5m-g5) MEM=g5m; MODEL=gpt-5-mini; RESPOND=gpt-5; TOPK=10 ;;   # top-k 10 with GPT-5, 5 with Qwen3-VL-8B (paper, Table 7)
-    *) echo "arm must be m8, m27, g5m, g5m-q8, g5m-q27 or g5m-g5"; exit 1 ;;
+    g5m-g51) MEM=g5m; MODEL=gpt-5-mini; RESPOND=gpt-5.1; TOPK=10 ;;   # GPT-5.1 in GPT-5's place, its top-k
+    *) echo "arm must be m8, m27, g5m, g5m-q8, g5m-q27, g5m-g5 or g5m-g51"; exit 1 ;;
 esac
 MEM=${MEM:-$ARM}; RESPOND=${RESPOND:-$MODEL}
 case $ARM:$STAGE in
@@ -74,7 +76,7 @@ mkdir -p "$OUT" "$MOUT" "$WORK/logs"
 # The OpenAI API: only a stage whose model is gpt-* keeps the key (g5m: writing the memory; g5m-g5: answering).
 # Every call is counted in USAGE (epic/openai_usage.py) and goes into the stage's runs.jsonl line.
 USAGE=$WORK/usage/$ARM/$V.jsonl; API=
-case $ARM:$STAGE in g5m:build|g5m:all) API=$MODEL ;; g5m-g5:qa|g5m-g5:all) API=$RESPOND ;; esac
+case $ARM:$STAGE in g5m:build|g5m:all) API=$MODEL ;; g5m-g5:qa|g5m-g5:all|g5m-g51:qa|g5m-g51:all) API=$RESPOND ;; esac
 if [ -n "$API" ]; then
     [ -n "${OPENAI_API_KEY:-}${OPENROUTER_API_KEY:-}" ] || { echo "$ARM $STAGE calls the OpenAI API ($API): set OPENAI_API_KEY (or OPENROUTER_API_KEY, to go through OpenRouter) in the environment"; exit 1; }
     # one gateway per run: OpenAI's key wins, and the stage then has no other provider's key

@@ -44,7 +44,7 @@ Qwen3.8 in instruct mode, MERIT's `ANSWER: X` parser and scorer. Three differenc
 2. the system prompt still speaks of "retrieved memory context", which here is the video;
 3. `Query Time` is written as MERIT writes it (`DAY1 00:27:04`), while the frames' stamps are in seconds.
 
-**Arms.** `<model>-f<N>`, e.g. `qwen3vl-8b-f128`; the settings we run are N = 32, 128 and 768. The model and frame setting are the arm, so each
+**Arms.** `<model>-f<N>`, e.g. `qwen3vl-8b-f128`; the settings are N = 32, 128 and 768 (since 2026-11-14 the board lists Qwen3-VL-8B and Qwen3.8-27B at N = 768 only). The model and frame setting are the arm, so each
 setting has its own results folder and its own row in the results table ("N. Frames" = N).
 
 | model | Hugging Face id | environment | GPU |

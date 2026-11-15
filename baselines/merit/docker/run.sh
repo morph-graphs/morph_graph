@@ -26,13 +26,13 @@
 #                   as an environment variable only (never on a command line); no other arm's container gets it.
 #                   OPENROUTER_API_KEY instead (without OPENAI_API_KEY): the same calls through OpenRouter
 #                   MERIT_SERVICE_TIER, MERIT_API_CONCURRENCY, MERIT_API_THREADS, MERIT_TOP_K: see run_merit.sh
-# The g5m arms run in the existing images: g5m, g5m-q8 and g5m-g5 in m8's, g5m-q27 in m27's.
+# The g5m arms run in the existing images: g5m, g5m-q8, g5m-g5 and g5m-g51 in m8's, g5m-q27 in m27's.
 set -euo pipefail
 ARM=${3:?usage: run.sh <stage> <video> <arm> [bank]}
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && pwd)
 case $ARM in g5m-q27) ENV=m27 ;; g5m*) ENV=m8 ;; *) ENV=$ARM ;; esac   # the image (environment) the arm runs in
-case $ARM in g5m|g5m-g5) ;; *) unset OPENAI_API_KEY OPENROUTER_API_KEY ;; esac             # only the arms that call the API keep the key
+case $ARM in g5m|g5m-g5|g5m-g51) ;; *) unset OPENAI_API_KEY OPENROUTER_API_KEY ;; esac             # only the arms that call the API keep the key
 IMAGE=${MERIT_IMAGE:-ghcr.io/morph-graphs/merit:$(bash "$REPO/baselines/merit/docker/image_tag.sh" "$ENV")}
 if [ -z "${MERIT_IMAGE:-}" ] && [ -n "${MERIT_SIF_DIR:-}" ] && [ -s "$MERIT_SIF_DIR/merit_$ENV.sif" ]; then
     IMAGE=$MERIT_SIF_DIR/merit_$ENV.sif

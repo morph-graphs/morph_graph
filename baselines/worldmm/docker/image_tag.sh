@@ -6,9 +6,9 @@
 set -euo pipefail
 ARM=${1:?m8 or m27}; M=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 case $ARM in
-    m8|g5m|g5m-q8|g5m-g5) ARM=m8; ENVS=(client) ;;
+    m8|g5m|g5m-q8|g5m-g5|g5m-g51) ARM=m8; ENVS=(client) ;;
     m27) ENVS=(client server27) ;;
-    *) echo "arm must be m8, m27, g5m, g5m-q8 or g5m-g5" >&2; exit 1 ;;
+    *) echo "arm must be m8, m27, g5m, g5m-q8, g5m-g5 or g5m-g51" >&2; exit 1 ;;
 esac
 X=; A=; [ "${IMAGE_ARCH:-}" = arm64 ] && { X=-arm64; A=arm64-; }
 FILES=(docker/Dockerfile${X/-/.} env/install_requirements.sh env/setup_env.sh)

@@ -12,5 +12,9 @@
  "cml-scav-a6000": {"fits": ["m8", "merit/g5m-q8", "qwen3vl-8b-f32", "qwen3vl-8b-f128", "qwen3vl-8b-f768", "qwen35-9b-f32", "qwen35-9b-f128", "qwen35-9b-f768", "molmo2-8b-f32", "molmo2-8b-f128", "molmo2-8b-f384", "m3agent/m3/build"], "note": "preemptible (tier 1); 24 GPUs across all of a user's cml-scavenger jobs",
                   "sbatch": "--partition=cml-scavenger --account=cml-scavenger --qos=cml-scavenger --gres=gpu:rtxa6000:1 -c 4 --mem=40G --time=4:00:00 --requeue"},
  "tron-a6000":   {"fits": ["m8", "merit/g5m-q8", "qwen3vl-8b-f32", "qwen3vl-8b-f128", "qwen3vl-8b-f768", "qwen35-9b-f32", "qwen35-9b-f128", "qwen35-9b-f768", "molmo2-8b-f32", "molmo2-8b-f128", "molmo2-8b-f384", "m3agent/m3/build", "worldmm/g5m", "worldmm/g5m-q8", "magic/oss120", "magic/oss120-flash"], "note": "QoS high: 1 day max, not preemptible",
-                  "sbatch": "--partition=tron --account=nexus --qos=high --gres=gpu:rtxa6000:1 -c 4 --mem=40G --time=4:00:00"}
+                  "sbatch": "--partition=tron --account=nexus --qos=high --gres=gpu:rtxa6000:1 -c 4 --mem=40G --time=4:00:00"},
+ "scav-a5000-64g": {"fits": ["vst/vst7b"], "note": "VST-7B: a 24 GB GPU is enough (peak 18.7 GiB), but the job needs 64G of RAM: more than the m8 queues' 40G, and than the 48G per GPU of vulcan-ampere (so no sailon queue). Preemptible (tier 0); qa resumes from its cached thoughts",
+                  "sbatch": "--partition=scavenger --account=scavenger --qos=scavenger --gres=gpu:rtxa5000:1 -c 4 --mem=64G --time=8:00:00 --requeue"},
+ "tron-a5000-64g": {"fits": ["vst/vst7b"], "note": "QoS high: 1 day max, not preemptible",
+                  "sbatch": "--partition=tron --account=nexus --qos=high --gres=gpu:rtxa5000:1 -c 4 --mem=64G --time=8:00:00"}
 }
