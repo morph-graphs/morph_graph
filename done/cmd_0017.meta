@@ -1,0 +1,8 @@
+claimed=2026-11-15T08:32:04Z
+host=compute-a8-1.zaratan.umd.edu
+executor=runner (compute node)
+finished=2026-11-15T08:32:21Z
+exit=0
+kind=read-only inventory (no sbatch/scancel/git/downloads)
+spend=0 SU
+results=1 file(s): bridge_reports/board_inventory/inventory.txt (92 lines)
