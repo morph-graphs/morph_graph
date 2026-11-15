@@ -235,7 +235,7 @@
     <p class="jb-callout">Accuracy on answered questions of a partial run is not an estimate for the whole bank: the videos answered first are not a random sample, so compare runs only once both are complete, or read "Of all" as a lower bound. And a floor below chance is not a bug: questions that text-only models could answer were removed from this benchmark, so by construction the no-context floor can sit below chance.</p>
 
     <h2>Where does each method gain or lose?</h2>
-    <p class="jb-note">The same counted answers, split by one property of the question. A cell is the percentage right, then right / answered and a 95% Wilson interval that this page computes from those two counts (questions pooled, not resampled by video, so it is not the interval of the table above). A question can carry two taxonomy leaves and then counts in both rows. A cell with fewer than <b data-draw="acc-small">—</b> answered questions is greyed and shows its counts only: too few to read.</p>
+    <p class="jb-note">The same counted answers, split by one property of the question. A cell is the percentage right, then right / answered and a 95% Wilson interval that this page computes from those two counts (questions pooled, not resampled by video, so it is not the interval of the table above). A question can carry two taxonomy leaves and then counts in both rows. Under All questions, a video's row adds up its questions in every bank. A cell with fewer than <b data-draw="acc-small">—</b> answered questions is greyed and shows its counts only: too few to read.</p>
     <div class="jb-filters">
       <select class="dash-select" id="acc-dim" aria-label="Split by">
         <option value="leaf">Question type (taxonomy leaf)</option>
@@ -251,7 +251,7 @@
         <tbody data-draw="acc-bd-rows"></tbody>
       </table>
     </div>
-    <p class="jb-note" id="acc-bd-empty" hidden>No rows for this choice. Videos are listed per bank, not under All questions: choose a bank above.</p>
+    <p class="jb-note" id="acc-bd-empty" hidden>No rows for this choice.</p>
     <button class="jb-more" id="acc-bd-more" type="button">Show more rows</button>
     <p class="jb-note">Source: accuracy.json, written by coord/sheet_update.py --json on Nexus (cron, every 30 minutes) in the pass that fills the results sheet's tab "Auto: EPIC-Morph", and read by the board's collector. Scored <span data-draw="acc-prov-when" data-source="accuracy" data-field="scored_at" data-row="0">—</span>; results dataset revision <span class="jb-mono" data-draw="acc-prov-rev" data-source="accuracy" data-field="dataset_revision" data-row="0">—</span>; banks from epic-morph commit <span class="jb-mono" data-draw="acc-prov-bank" data-source="accuracy" data-field="bank_commit" data-row="0">—</span>.</p>
   </section>
@@ -635,10 +635,18 @@ const accCut = () => {
   const b = dash.data('accuracy_breakdown'), runs = accRuns();
   if (b.status !== 'ok' || !runs) return null;
   const bank = accBank(runs), cols = runs.filter((r) => r.bank === bank), cats = new Map();
+  // the scorer writes no video rows for `all` (they are its banks' rows): there a video's row adds up its banks' rows,
+  // each under the `all` run of the same method, model, tag and asked
+  const sum = bank === 'all' && accView.dim === 'video', of = (r) => sum ? [r.baseline, r.arm, r.tag || '', r.asked || ''].join('|') : r.row_key;
+  const col = new Map(cols.map((c) => [of(c), c.row_key])), run = new Map(runs.map((r) => [r.row_key, of(r)]));
   for (const r of b.data) {
-    if (r.bank !== bank || r.dimension !== accView.dim) continue;
-    if (!cats.has(r.category)) cats.set(r.category, {category: r.category, label: r.label, n: +r.n_in_bank || 0, by: {}});
-    cats.get(r.category).by[r.run] = r;
+    if (r.dimension !== accView.dim || !(sum ? r.bank !== 'all' : r.bank === bank)) continue;
+    const key = col.get(run.get(r.run));   // only the runs shown: the questions asked at the chosen time
+    if (!key) continue;
+    if (!cats.has(r.category)) cats.set(r.category, {category: r.category, label: r.label, n: 0, banks: new Set(), by: {}});
+    const c = cats.get(r.category), x = c.by[key] || (c.by[key] = {n_answered: 0, n_right: 0});
+    if (!c.banks.has(r.bank)) { c.banks.add(r.bank); c.n += +r.n_in_bank || 0; }
+    x.n_answered += +r.n_answered || 0; x.n_right += +r.n_right || 0;
   }
   const rows = [...cats.values()].sort((x, y) => accView.dim === 'form' ? y.n - x.n || d3.ascending(x.category, y.category) : d3.ascending(x.category, y.category));
   return {cols, rows};
