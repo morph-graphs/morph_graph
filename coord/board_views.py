@@ -351,9 +351,10 @@ def update(out, raw, live, nxq, built_src):
         # the headline in natural units: videos with a memory, questions with a valid answer (task counts stay as detail)
         bq = (raw.get("bank_questions") or {}).get(bank or "", {})
         e["held"] = (b, arm, stage) in held
-        if stage == "build" and (b, arm) in targets:   # out of the videos it is meant to cover, not done + open
+        if stage == "build" and (b, arm) in targets:   # out of the videos it is meant to cover, not done + open;
+            # a memory built for a video outside them (off the board: magic/oss120 beyond its pilot line) counts too
             mine = {k[2] for k in built if k[0] == b and k[1] == arm}
-            e["unit"], e["n"], e["of"] = "videos", len(mine & targets[b, arm]), len(targets[b, arm])
+            e["unit"], e["n"], e["of"] = "videos", len(mine), len(mine | targets[b, arm])
         elif stage == "build" or not bq:
             e["unit"], e["n"], e["of"] = "videos", e["done"], e["total"]
         else:
