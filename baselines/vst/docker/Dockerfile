@@ -22,9 +22,10 @@ ENV DEBIAN_FRONTEND=noninteractive PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 TOKENIZ
 RUN test "$ARM" = vst7b || { echo "build with --build-arg ARM=vst7b" >&2; exit 1; } \
     && python -c "import sys; assert sys.version_info[:2] == (3, 11), sys.version"
 
-# git for runs.jsonl's commits, util-linux for flock (bank generation). The video is read by decord and PyAV,
-# whose wheels carry their own FFmpeg libraries
-RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates util-linux \
+# git for runs.jsonl's commits, util-linux for flock (bank generation), gcc for Triton, which compiles a small C
+# helper the first time it runs a kernel (the runtime base has no compiler: every task failed with "Failed to find
+# C compiler", 2026-11-15). The video is read by decord and PyAV, whose wheels carry their own FFmpeg libraries
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates util-linux gcc libc6-dev \
     && rm -rf /var/lib/apt/lists/* \
     && git config --system --add safe.directory '*'
 
