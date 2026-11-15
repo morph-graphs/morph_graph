@@ -213,9 +213,12 @@ the key only for chains that are not built yet).
 `retrieve_by_time` returns captions by time instead of searching. It compares the parsed seconds with the captions'
 `HHMMSSFF` stamps read as plain numbers (its MM-Lifelong captions are in seconds; the EgoLife layout used here is
 not), so it returns the video's first clips whatever time was asked: in the `m8` run on P05 a query about 00:17:11
-got the clip at 00:00:00. It also applies no cutoff of its own, but a clip after the question would need a query
-about a time a hundred times later than the clip, so nothing after `t_ask` is shown in practice. We run it as
-released, in every arm.
+got the clip at 00:00:00, and nearly any time query also gets the first 3 min summary (its stamps read as 0 to
+30000). It applies no cutoff of its own either, so a question asked before those first items ended was shown
+them: with the 3 min summary, any question asked in the video's first 3 minutes whose search named a time (1 of
+batch10's 598 questions is asked that early; 91 of the 6,927 in the eight banks exported on 2026-11-15).
+`run_qa.py` therefore loads, per cutoff, only the captions and summaries that ended by it; the lookup itself runs
+as released, in every arm.
 
 ## Test without API calls
 

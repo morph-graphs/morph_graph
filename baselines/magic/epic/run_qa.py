@@ -151,7 +151,12 @@ def main():
         wm.chain_topic_sim = wm.chain_event_sim = 0.7
         wm.chain_event_min_hits, wm.chain_event_granularities = 1, ("30sec", "3min")
         wm.set_retrieval_top_k(episodic=3, semantic=10, visual=3)
-        wm.load_episodic_captions(caption_files={g: os.path.join(M, f"{V}_{g}.json") for g in ["30sec", "3min", "10min", "1h"]})
+        # only the captions that ended by the cutoff: upstream's retrieve_by_time (a search query that names a time)
+        # reads this list with no cutoff of its own, and compares seconds with HHMMSSFF stamps, so nearly any time
+        # query returned the first 30 s clip and the first 3 min summary, also to a question asked before they ended.
+        # The unified graph (wm.index) does not read this list.
+        wm.load_episodic_captions(caption_data={g: [c for c in jload(os.path.join(M, f"{V}_{g}.json")) if secs(c["end_time"]) <= cut]
+                                                for g in ["30sec", "3min", "10min", "1h"]})
         wm.load_semantic_triples(data=jload(os.path.join(M, f"semantic_consolidation_results_{TAG}.json")))
         wm.load_visual_clips(embeddings_path=os.path.join(M, "visual_embeddings.pkl"), clips_data=caps30)
         until_t = until(grp[0])
