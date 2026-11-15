@@ -101,6 +101,10 @@ def _wrap(client):
         setattr(completions, name, counted)
 
 
+# A stand-in for a published reasoning model that no pool can reach (Anubhav, 2026-11-15: Max's and Pulkit's gateway
+# has no gpt-5 but serves GPT-5.1): the id is sent as it is, with no snapshot to pin.
+openai_gpt.MODEL_DICT.setdefault("gpt-5.1", "gpt-5.1")
+
 _init = openai_gpt.OpenAIModel.__init__
 
 

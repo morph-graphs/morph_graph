@@ -17,6 +17,7 @@
 #          g5m     the memory, built with gpt-5-mini (build, upload); shared by the two answer arms   one GPU >= 24 GB
 #          g5m-q8  answers from the g5m memory: retriever gpt-5-mini, respond Qwen3-VL-8B (local)     one GPU >= 40 GB
 #          g5m-g5  answers from the g5m memory: retriever gpt-5-mini, respond gpt-5                   one GPU >= 24 GB
+#          g5m-g51 the same with respond gpt-5.1, a stand-in where gpt-5 cannot be reached            one GPU >= 24 GB
 #   bank   a named bank of the epic-morph checkout, e.g. batch10_agree2 (generated there with
 #          v3/export_bank.py <bank> when missing; byte-identical for anyone at that commit)
 #
@@ -45,8 +46,8 @@
 # and arm and shared by every bank and variant. g5m-q8 and g5m-g5 share the g5m memory (<out>/g5m/<video>/;
 # `build` with either name builds or fetches it) and keep their answers in their own folders.
 set -euo pipefail
-STAGE=${1:?usage: run_worldmm.sh <prep|build|qa|blind|upload|all> <video> <m8|m27|g5m|g5m-q8|g5m-g5> [bank]}
-V=${2:?video id}; ARM=${3:?arm m8, m27, g5m, g5m-q8 or g5m-g5}; BANK=${4:-}
+STAGE=${1:?usage: run_worldmm.sh <prep|build|qa|blind|upload|all> <video> <m8|m27|g5m|g5m-q8|g5m-g5|g5m-g51> [bank]}
+V=${2:?video id}; ARM=${3:?arm m8, m27, g5m, g5m-q8, g5m-g5 or g5m-g51}; BANK=${4:-}
 M=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); REPO=$(cd "$M/../.." && pwd); R=$M/WorldMM   # R: the submodule
 PY=${PY:?set PY to the python of the WorldMM client environment}
 EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && pwd)
@@ -54,10 +55,10 @@ EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && p
 case $ARM in
     m8)  MODEL=qwen3vl-8b; HF=Qwen/Qwen3-VL-8B-Instruct; SERVER_PY=${SERVER_PY:-$PY} ;;
     m27) MODEL=qwen38-27b; HF=Qwen/Qwen3.8-27B; SERVER_PY=${SERVER_PY:?m27: set SERVER_PY to the python of env/setup_env.sh server27} ;;
-    g5m|g5m-q8|g5m-g5)   # WorldMM's published setting: memory and retriever gpt-5-mini; the respond model per arm
+    g5m|g5m-q8|g5m-g5|g5m-g51)   # WorldMM's published setting: memory and retriever gpt-5-mini; the respond model per arm
         MEM=g5m; MODEL=gpt-5-mini; HF=Qwen/Qwen3-VL-8B-Instruct; SERVER_PY=${SERVER_PY:-$PY}
-        case $ARM in g5m-q8) RESPOND=qwen3vl-8b ;; g5m-g5) RESPOND=gpt-5 ;; esac ;;
-    *) echo "arm must be m8, m27, g5m, g5m-q8 or g5m-g5"; exit 1 ;;
+        case $ARM in g5m-q8) RESPOND=qwen3vl-8b ;; g5m-g5) RESPOND=gpt-5 ;; g5m-g51) RESPOND=gpt-5.1 ;; esac ;;
+    *) echo "arm must be m8, m27, g5m, g5m-q8, g5m-g5 or g5m-g51"; exit 1 ;;
 esac
 # MODEL builds the memory and is the retriever; RESPOND decides the searches and answers (the same model for m8, m27).
 # MEM is the arm whose folder holds the memory (the arm itself, except for the answer arms of g5m).
