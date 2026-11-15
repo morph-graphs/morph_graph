@@ -20,9 +20,10 @@ is not empty or "Error". The answers files are small and cached (only changed on
 import gzip
 import json
 import os
+import shutil
 import sys
 
-from huggingface_hub import HfApi, hf_hub_download, snapshot_download
+from huggingface_hub import HfApi, hf_hub_download
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import jobs  # noqa: E402
@@ -52,11 +53,21 @@ for bank in sorted(os.listdir(banks_dir)) if os.path.isdir(banks_dir) else []:
 answered_q = []
 mine = [a for a in answered if a[3] in keys and a[2] in keys[a[3]]]   # variants (answers_<bank>_<tag>) are not the bank
 if mine:
-    d = snapshot_download(master.RESULTS, repo_type="dataset",
-                          allow_patterns=[f"{b}/{arm}/{v}/answers_{bank}.json.gz" for b, arm, v, bank in mine])
+    # Only answer files that changed are downloaded: each is kept under its blob id, which a listing of the dataset
+    # gives in a few requests. A snapshot of all of them (~1,700 files) at every new dataset commit spent the
+    # account's Hugging Face API limit (1,000 requests per 5 min, shared with the workers; 429s on 2026-11-15).
+    blob = {f.path: f.blob_id for f in HfApi().list_repo_tree(master.RESULTS, repo_type="dataset", recursive=True)
+            if f.path.endswith(".json.gz") and "/answers_" in f.path and getattr(f, "blob_id", None)}
+    cache = os.path.join(os.environ.get("HF_HOME", os.path.expanduser("~/.cache/huggingface")), "board_answers")
+    os.makedirs(cache, exist_ok=True)
     for b, arm, v, bank in mine:
+        path = f"{b}/{arm}/{v}/answers_{bank}.json.gz"
+        local = os.path.join(cache, f"{blob.get(path, 'none')}.json.gz")
         try:
-            rows = json.load(gzip.open(os.path.join(d, b, arm, v, f"answers_{bank}.json.gz"), "rt"))
+            if not os.path.exists(local):
+                shutil.copyfile(hf_hub_download(master.RESULTS, path, repo_type="dataset"), local + ".tmp")
+                os.replace(local + ".tmp", local)
+            rows = json.load(gzip.open(local, "rt"))
         except Exception:
             continue
         rows = rows.values() if isinstance(rows, dict) else rows
