@@ -402,6 +402,31 @@ gets a `build` line (every video) and a `qa` line per bank, after the other memo
   `NEEDS_ENV` (`build`: `GEMINI_API_KEY` and `OPENAI_API_KEY`; `qa`: `OPENAI_API_KEY`) and wait behind the gate. The
   `blind` floors of both baselines are not board stages.
 
+## VST: thoughts made in qa, and a job that needs 64G of RAM
+
+Added 2026-11-14. One more local-model baseline with no key and no gate (`baselines/vst`, arm `vst7b`: the released
+Catalan258/VST-7B, Qwen2.5-VL-7B weights). `EXPERIMENTS` gets one `qa` line per bank of `master.BANKS`, after ReKV's.
+
+- No build line and no `MEMORY_DONE` entry, as for `direct` and ReKV: VST's memory is its own streaming thoughts, and
+  where they fall depends on where the video is cut, so `qa` makes them per question cutoff (and keeps them in
+  `thoughts/` next to the answers). A task's `deps` are empty, and it is listed until
+  `vst/vst7b/<video>/answers_<bank>.json.gz` is in the results dataset.
+- Pools: the `m8` pools. One GPU with 24 GB or more (peak 18.7 GiB) and **64 GB of host RAM for the job** (peak
+  54.4 GiB: the loader holds the sampled source frames as floats while it resizes them).
+- Queues: the arm is not `m8`, so a queues file must name it, as `vst/vst7b` (or `vst7b`), and only on a queue whose
+  job has 64G. `coord/nexus_queues.json` has two such queues, `scav-a5000-64g` and `tron-a5000-64g`; none on
+  vulcan-ampere, whose non-H200 GPUs get 48G each. A worker without a queues file (`--launcher docker`, a slot per
+  GPU) cannot tell: start it with `vst` only on a host that has 64 GB of RAM free for each slot. A worker started
+  with `--arms m8` leaves the tasks: add `vst/vst7b` to `--arms`.
+- What a worker needs: `vst` in `--baselines`; the image `ghcr.io/morph-graphs/vst:vst7b-<env hash>` (with Apptainer
+  `vst_vst7b.sif` in `MERIT_SIF_DIR`); the submodule (`git submodule update --init baselines/vst/VST`); and the model
+  in `MERIT_HF_CACHE` (a public download, 16.6 GB, fetched on first use unless `HF_HUB_OFFLINE=1`) or a local copy in
+  `VST_MODEL_DIR`. The image is x86-64 only: an aarch64 host (GH200, GB200, GB300) cannot run it, and
+  `docker/image_tag.sh` says so there instead of naming an image.
+- Not run yet: a task inside the image (it is built once this is on `main`; `baselines/vst/README.md`, "On the job
+  board"). A pool's first task is that check: start with one video (`--max-tasks 1`).
+- The `blind` floor is not a board stage.
+
 ## A worker restart (slurm launcher), and the Hub's rate limit
 
 Added 2026-11-13, after a restart recorded three finished and uploaded tasks as failed, and after workers stopped on

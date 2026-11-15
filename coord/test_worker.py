@@ -57,9 +57,13 @@ def test_fitting():
     assert W.fitting(task(arm="m27"), {"a6000": QUEUES["a6000"]}) == []
     shipped = W.load_queues(os.path.join(HERE, "nexus_queues.json"))   # the example file for Nexus users
     assert W.fitting(task(arm="m27"), shipped) == ["h200"]
-    assert len(W.fitting(task(arm="m8"), shipped)) == len(shipped) - 2 == 5   # not the CPU queue; the H200 only when idle (fallback)
+    assert len(W.fitting(task(arm="m8"), shipped)) == len(shipped) - 4 == 5   # not the CPU queue or VST's two; the H200 only when idle (fallback)
     # ReKV's m8 is named by the plain m8, as every baseline's: it fits those queues' GPU and RAM
     assert W.fitting(task("rekv", "m8"), shipped) == W.fitting(task(arm="m8"), shipped)
+    # VST needs 64G of RAM, which the m8 queues (40G) do not have: named as vst/vst7b, on its own 64G queues only
+    vst = W.fitting(task("vst", "vst7b"), shipped, idle=shipped)
+    assert vst == ["scav-a5000-64g", "tron-a5000-64g"] and all("--mem=64G" in shipped[n]["sbatch"] for n in vst)
+    assert W.valid(dict(task("vst", "vst7b"), stage="qa", bank="batch10_agree2", id="vst-vst7b-qa-batch10_agree2-P01-20240101-000001"))
     # a stage of an arm (baseline/arm/stage): M3-Agent's build fits one 48 GB GPU, its qa (a 32.8B model) the H200 only
     m3 = lambda stage: dict(task("m3agent", "m3"), stage=stage)
     assert W.fitting(m3("qa"), shipped) == ["h200"] and W.fitting(m3("build"), shipped, idle=shipped) == W.fitting(task(arm="m8"), shipped)

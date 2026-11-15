@@ -16,9 +16,9 @@ upstream's own inference code; no other model, API or extra input is involved.
 | `../common/hf_results.py` | (shared by all baselines) upload a video's results to the Hugging Face dataset |
 | `run_vst.sh` | one video, one arm, one stage (prep, build, qa, blind, upload, all) |
 | `env/` | the environment, pinned: `wheels-vst7b.txt`, `requirements-vst7b.txt`, `install_requirements.sh`, `setup_env.sh` |
+| `docker/` | the image (`Dockerfile`), `build.sh`, `run.sh` (one job in a container; the job board's entry point), `image_tag.sh` |
 
-No Docker image and no job-board entry yet (`docker/` as in `baselines/merit`, an `EXPERIMENTS` row in
-`coord/master.py`): until then this runs by hand on our clusters only.
+Arm `vst7b` = Catalan258/VST-7B: one GPU with 24 GB or more, and 64 GB of host RAM for the job ("Measured").
 
 ## How VST runs here
 
@@ -69,6 +69,26 @@ question stays unanswered and is retried.
 
 ## Running
 
+**Off our clusters, run only in the Docker image** (rule in `AGENTS.md`): `ghcr.io/morph-graphs/vst:vst7b-<env
+hash>`, built from `docker/Dockerfile` by `.github/workflows/baseline-images.yml` (x86-64 only; there is no arm64
+image). It holds the environment; the code is the mounted checkout of `main` with the submodule
+(`git submodule update --init baselines/vst/VST`), and `docker/run.sh` picks the image whose tag matches the
+checkout's environment files:
+
+```bash
+docker pull ghcr.io/morph-graphs/vst:$(bash baselines/vst/docker/image_tag.sh vst7b)
+VST_GPU=0 EPIC_MORPH_DIR=<epic-morph checkout> bash baselines/vst/docker/run.sh qa P05-20240425-201444 vst7b batch10_agree2
+VST_GPU=0 EPIC_MORPH_DIR=<epic-morph checkout> bash baselines/vst/docker/run.sh blind P05-20240425-201444 vst7b batch10_agree2
+VST_GPU=0 EPIC_MORPH_DIR=<epic-morph checkout> bash baselines/vst/docker/run.sh upload P05-20240425-201444 vst7b
+```
+
+The model, `Catalan258/VST-7B` (16.6 GB, public: no token or licence step), is downloaded on first use into the
+mounted Hugging Face cache (`VST_HF_CACHE`, default `~/.cache/huggingface`); `VST_MODEL_DIR=<dir>` mounts a local
+copy instead (`<dir>/VST-7B`). Only `upload` needs a token, with write access to the results dataset (`HF_TOKEN`).
+`VST_RUNTIME=apptainer` runs the same image with Apptainer; the job board (`coord/worker.py`) calls `run.sh` with
+`MERIT_GPU` / `MERIT_RUNTIME` / `MERIT_SIF_DIR` / `MERIT_HF_CACHE`, which it takes when the `VST_` ones are unset.
+On our own clusters, a virtualenv:
+
 ```bash
 bash baselines/vst/env/setup_env.sh vst7b <venv dir>          # Python 3.11, CUDA 12.4 wheels
 export PY=<venv dir>/bin/python EPIC_MORPH_DIR=<epic-morph checkout>
@@ -89,6 +109,22 @@ Per video, in `results/vst7b/<video>/` (not committed), and after `upload` in th
   response, `pred`, `evaluate`, the cutoff, frames, input tokens, seconds);
 - `runs.jsonl`: one line per finished stage (commits, model, torch and transformers versions, GPU, seconds).
 
+## On the job board
+
+`coord/master.py` lists one `qa` task per bank of its `BANKS` and video (`vst-vst7b-qa-<bank>-<video>`), with no
+build to wait for (the thoughts are made in `qa`): a task is done when `vst/vst7b/<video>/answers_<bank>.json.gz` is
+in the dataset. `blind` is not a board stage. A worker takes the tasks when started with `vst` in `--baselines`; it
+needs this baseline's image (with Apptainer, `vst_vst7b.sif` in `MERIT_SIF_DIR`), the submodule in its checkout, and
+the model in `MERIT_HF_CACHE` (downloaded on first use). In a worker's queues file the arm is named `vst/vst7b`, on
+a queue whose job has 64G of RAM: the plain `m8` does not name it, since an `m8` queue may have 40G
+(`coord/nexus_queues.json`: `scav-a5000-64g`, `tron-a5000-64g`). A Docker worker with a slot per GPU needs 64 GB of
+RAM free per slot.
+
+**Not run in the image yet.** The image is built by the workflow once this is on `main`; until a first task has run
+in it (`--max-tasks 1`), only the virtualenv path below is measured. Checked without the image: `docker/run.sh`
+with Apptainer and another baseline's image as a stand-in, stages `prep` and `build` (mounts, environment,
+commits).
+
 ## Measured (one video, 2026-11-13)
 
 `P05-20240425-201444` (27 min, 1408x1408), `batch10_agree2`, first 6 of its 7 cutoffs (18 questions) on one
@@ -98,6 +134,12 @@ seeks in the full-resolution source); thinking 31-37 s. Per question 3.1 s (abou
 Peak GPU memory 18.7 GiB; peak RAM 50.6-54.4 GiB (the loader holds the 384 source frames as floats while resizing),
 so ask for 64 GB. Decoding is most of the time: a prep stage that stores the 2 fps frames once would remove it,
 at the price of not reading the source exactly as upstream does.
+
+**The whole video, as a board task would run it (2026-11-14, virtualenv, one RTX A5000, 4 CPUs, a job with 64G).**
+`run_vst.sh qa` on the same video and bank: 7 cutoffs, 59 of 59 questions answered, 13 right (22%; guessing
+expects 15.5), in 23.6 min (decoding 58-196 s and thinking 31-36 s per cutoff). Peak GPU memory 18.7 GiB; the
+process peaked at 48.6 GiB of RAM, and Slurm's MaxRSS for the job, which also counts cached file pages, reached the
+job's 64G without the job being killed. So 64G is the smallest size tried that works, not a roomy one.
 
 **Blind accuracy can sit below chance, by construction of the bank.** On this video the blind stage got 7 of
 59 right where guessing expects 15.5. The option order and gold letters in the rows match the bank file (0

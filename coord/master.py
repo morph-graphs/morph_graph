@@ -198,6 +198,12 @@ DIRECT = {"qwen3vl-8b-f768": M8, "qwen38-27b-f768": M27,
 # plain video model, a task waits on nothing and is done when its answers_<bank>.json.gz is in the dataset. No key.
 # One 48 GB GPU and up to 36 GB of host RAM (the cache grows with the video; measured on the longest one), so the
 # m8 pools, and a queues file's plain m8 names it too. After the plain video model's short tasks.
+# VST (baselines/vst, arm vst7b: the released Catalan258/VST-7B, Qwen2.5-VL-7B weights, a public download; no key): qa
+# lines only, every bank. Its memory is its own streaming thoughts, which depend on where the video is cut: they are
+# made in qa per question cutoff and kept with the answers (thoughts/), so nothing is built and there is no
+# MEMORY_DONE entry, as for direct and ReKV. One GPU with >= 24 GB (measured peak 18.7 GiB) and 64 GB of host RAM
+# (measured peak 54.4 GiB: the loader holds the sampled source frames as floats), so the m8 pools' GPUs fit it; a
+# queues file names it vst/vst7b, on a queue with 64G (the plain m8 does not name it: those queues may have 40G).
 # M3-Agent (baselines/m3agent, arm m3: the published checkpoints with local ASR and embeddings, no key): its two
 # stages need different GPUs, so its lines differ in pools. build (the memory graph, every video) fits one GPU of
 # 40 GB or more: the m8 pools. qa serves the 32.8B control model: 2x 48 GB or one 80 GB GPU, the m27 pools (a queues
@@ -225,6 +231,7 @@ PRIORITY = {("api", c) for c in API_CONFIGS} | {
 EXPERIMENTS = [("api", c, "qa", KEY_POOLS, bank) for bank in BANKS for c in API_CONFIGS] + URGENT + REPORTED + PAID + [
     ("direct", arm, "qa", pools, bank) for bank in BANKS for arm, pools in DIRECT.items()] + [
     ("rekv", "m8", "qa", M8, bank) for bank in BANKS] + [
+    ("vst", "vst7b", "qa", M8, bank) for bank in BANKS] + [
     (b, arm, stage, POOLS[b, arm], bank)
     for b in ("merit", "magic", "worldmm") for stage in ("build", "qa") for arm in ("m27", "m8")
     for bank in (BANKS if stage == "qa" else [None]) if (b, stage) != ("magic", "build")] + [

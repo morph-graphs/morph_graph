@@ -90,6 +90,9 @@ def test_experiments():
     assert lines("rekv") == {("m8", "qa", bank): M.M8 for bank in M.BANKS} and "rekv" not in M.MEMORY_DONE
     assert lines("m3agent") == {("m3", "build", None): M.M8} | {("m3", "qa", bank): M.M27 for bank in M.BANKS}
     assert not any(M.needs(b, arm, stage) or (b, arm) in M.GATED for b, arm, stage, _ in ex if b in ("rekv", "m3agent"))
+    # VST: qa only, every bank, on the m8 pools; its thoughts are made in qa per cutoff, so no build and no key
+    assert lines("vst") == {("vst7b", "qa", bank): M.M8 for bank in M.BANKS} and "vst" not in M.MEMORY_DONE
+    assert not M.needs("vst", "vst7b", "qa") and ("vst", "vst7b") not in M.GATED and ("vst", "vst7b") not in M.MEMORY_ARM
     import worker   # a baseline or arm the worker does not know would make every task of it malformed there
     assert all(worker.VALID["baseline"].fullmatch(b) and worker.VALID["arm"].fullmatch(arm) for b, arm, *_ in ex)
 
@@ -413,11 +416,11 @@ def test_existing_tasks_unchanged(monkeypatch, tmp_path):
     files = {f"magic/m8/{T2[1]}/answers_t2_agree2.json.gz", f"api/gpt-5-f1024/{B10[0]}/answers_batch10_agree2.json.gz"}
     full = list(M.EXPERIMENTS)
     board(monkeypatch, tmp_path, [e for e in full if e not in M.REPORTED + M.PAID])
-    assert len(M.EXPERIMENTS) == len(full) - len(M.REPORTED) - len(M.PAID) == 6 * (1 + len(M.BANKS)) + 3 * len(M.BANKS) + len(M.DIRECT) * len(M.BANKS) + len(M.BANKS) + 1 + len(M.BANKS)   # 6 arms x (build + banks) + 3 api x banks + the direct arms x banks + rekv's banks + m3agent's build + banks
+    assert len(M.EXPERIMENTS) == len(full) - len(M.REPORTED) - len(M.PAID) == 6 * (1 + len(M.BANKS)) + 3 * len(M.BANKS) + len(M.DIRECT) * len(M.BANKS) + 2 * len(M.BANKS) + 1 + len(M.BANKS)   # 6 arms x (build + banks) + 3 api x banks + the direct arms x banks + rekv's and vst's banks + m3agent's build + banks
     old = desired_before(have, files)
     strip = lambda ts: [{k: v for k, v in t.items() if k != "needs_env"} for t in ts]
     new = M.desired(have, files)
-    assert {t["baseline"] for t in old} == {"api", "direct", "rekv", "merit", "magic", "worldmm", "m3agent"} and strip(new) == old
+    assert {t["baseline"] for t in old} == {"api", "direct", "rekv", "vst", "merit", "magic", "worldmm", "m3agent"} and strip(new) == old
     assert [t.get("needs_env") for t in new] == [M.needs(t["baseline"], t["arm"], t["stage"]) for t in old]
     assert M.gate(new) == (new, 0)                                          # the gate holds none of them back
     # direct: a task per arm, bank and video unless answered, waiting on nothing, after api and before the memory arms
@@ -425,12 +428,17 @@ def test_existing_tasks_unchanged(monkeypatch, tmp_path):
     assert len(direct) == len(M.DIRECT) * sum(len(v) for v in BANK_VIDEOS.values()) - 1 and not any(t["deps"] or t.get("needs_env") for t in direct)
     assert f"direct-qwen3vl-8b-f768-qa-t2_agree2-{T2[0]}" not in {t["id"] for t in direct}
     kind = [0 if t["baseline"] == "api" else 1 if urgent(t) else 2 if t["baseline"] == "direct" else 3 if t["baseline"] == "rekv"
-            else 5 if t["baseline"] == "m3agent" else 4 for t in new]
-    assert kind == sorted(kind) and set(kind) == {0, 1, 2, 3, 4, 5}
+            else 4 if t["baseline"] == "vst" else 6 if t["baseline"] == "m3agent" else 5 for t in new]
+    assert kind == sorted(kind) and set(kind) == {0, 1, 2, 3, 4, 5, 6}
     # ReKV: as direct, a task per bank and video, waiting on nothing; M3-Agent: a build per video, and qa waits on it
     by = {t["id"]: t for t in new}
     rekv = [t for t in new if t["baseline"] == "rekv"]
     assert len(rekv) == sum(len(v) for v in BANK_VIDEOS.values()) and not any(t["deps"] or t["stage"] != "qa" for t in rekv)
+    # VST: the same shape, a task per bank and video (vst-vst7b-qa-<bank>-<video>), done when its answers are in
+    vst = [t for t in new if t["baseline"] == "vst"]
+    assert len(vst) == len(rekv) and not any(t["deps"] or t.get("needs_env") or t["stage"] != "qa" or t["pools"] != M.M8 for t in vst)
+    assert by[f"vst-vst7b-qa-t2_agree2-{T2[0]}"]["arm"] == "vst7b"
+    assert f"vst-vst7b-qa-t2_agree2-{T2[0]}" not in {t["id"] for t in M.desired(have, files | {f"vst/vst7b/{T2[0]}/answers_t2_agree2.json.gz"})}
     assert sum(t["baseline"] == "m3agent" and t["stage"] == "build" for t in new) == len(B10 + T2 + T3 + T4 + T5 + REST)
     assert by[f"m3agent-m3-qa-t2_agree2-{T2[0]}"]["deps"] == [f"m3agent-m3-build-{T2[0]}"]
     assert by[f"m3agent-m3-build-{T2[0]}"]["pools"] == M.M8 and by[f"m3agent-m3-qa-t2_agree2-{T2[0]}"]["pools"] == M.M27

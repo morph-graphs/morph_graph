@@ -20,7 +20,7 @@ each package has its own README (`epic_eval/`, `event_eval/`).
 | `baselines/worldmm/` | WorldMM memory baseline on EPIC-Morph: run script, environments, WorldMM fork as a submodule |
 | `baselines/m3agent/` | M3-Agent memory baseline on EPIC-Morph: run script, Docker image, m3-agent fork as a submodule |
 | `baselines/direct/` | plain video model (no memory) on EPIC-Morph: frames before the ask time through MERIT's loader, prompt and scorer |
-| `baselines/vst/` | VST (Video Streaming Thinking, VST-7B) streaming video model on EPIC-Morph: run script, environment, upstream VST as a submodule |
+| `baselines/vst/` | VST (Video Streaming Thinking, VST-7B) streaming video model on EPIC-Morph: run script, Docker image, upstream VST as a submodule |
 | `baselines/hippomm/` | HippoMM (hippocampal multimodal memory) on EPIC-Morph, as released (Qwen2.5-VL-7B, ImageBind, Whisper locally; gpt-4o through the OpenAI API, paid; arm `q25vl7b-gpt41` answers with gpt-4.1 instead): run script, Docker image, upstream HippoMM as a submodule with `HippoMM.patch` applied at run time |
 | `baselines/vgent/` | Vgent graph-RAG baseline on EPIC-Morph, as released (Qwen2.5-VL-7B): run script, environment, upstream Vgent as a submodule |
 | `baselines/egagent/` | EGAgent (entity-graph agent) on EPIC-Morph, as published (paid APIs: GPT-4.1 memory, GPT-4.1 or Gemini 2.5 Pro agent; arm `gemini36flash` is a Gemini 3.6 Flash agent instead): run script, Docker image, upstream as a submodule + our patch |
