@@ -349,14 +349,15 @@ def test_paid_rows(monkeypatch, tmp_path):
     assert not [t for t in listed if t["arm"] in ("m8", "m27", "oss120-q27", "q25vl7b-gpt41") or t["arm"].startswith(("qwen35", "molmo2"))]
     assert M.gate([t for t in tasks if (t["baseline"], t["arm"]) not in PRIORITY])[1] == 0   # the priority rows done: everything else is listed
     # answering frozen for four baselines: none of their qa tasks is listed, with or without PRIORITY; their builds are
-    monkeypatch.setattr(M, "QA_FROZEN", QA_FROZEN)
-    assert QA_FROZEN == {"magic", "worldmm", "egagent", "m3agent"}
-    frozen = lambda t: t["stage"] == "qa" and t["baseline"] in QA_FROZEN
+    assert QA_FROZEN == {"magic"}                                      # as published: only MAGIC-Video is still frozen
+    QA4 = {"magic", "worldmm", "egagent", "m3agent"}                   # the rule, with the four it was made for
+    monkeypatch.setattr(M, "QA_FROZEN", QA4)
+    frozen = lambda t: t["stage"] == "qa" and t["baseline"] in QA4
     listed, withheld = M.gate(tasks)
     assert not any(map(frozen, listed)) and withheld == len(tasks) - len(listed)
-    assert {(t["baseline"], t["arm"]) for t in listed if t["baseline"] in QA_FROZEN} == {
+    assert {(t["baseline"], t["arm"]) for t in listed if t["baseline"] in QA4} == {
         ("magic", "oss120"), ("worldmm", "g5m"), ("egagent", "gpt41"), ("m3agent", "m3")}
-    assert all(t["stage"] == "build" for t in listed if t["baseline"] in QA_FROZEN)
+    assert all(t["stage"] == "build" for t in listed if t["baseline"] in QA4)
     monkeypatch.setattr(M, "PRIORITY", set())
     listed, withheld = M.gate(tasks)
     assert listed == [t for t in tasks if not frozen(t)] and withheld == sum(map(frozen, tasks)) > 0
