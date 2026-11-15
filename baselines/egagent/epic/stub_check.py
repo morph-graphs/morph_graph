@@ -17,7 +17,7 @@ model and the run must stop (exit 4). Everything is written under --tmp; nothing
 The route of the GPT-4.1 calls is checked on every request: to api.openai.com as gpt-4.1 with OpenAI's key (also
 when an OpenRouter key is set as well), or with --gateway openrouter (only OPENROUTER_API_KEY set; a --tmp of
 its own) to openrouter.ai as openai/gpt-4.1 with the provider pin and OpenRouter's key; and that the usage rows
-record the endpoint, and through OpenRouter the provider and the cost the reply reports.
+record the endpoint (a Gemini row: Google's, over REST), and through OpenRouter the provider and the cost the reply reports.
 """
 import argparse
 import base64
@@ -281,8 +281,10 @@ def main():
             assert r["provider"] == "OpenAI" and abs(r["cost"] - 0.001 * r["calls"]) < 1e-9, (m, r)
         else:
             assert "provider" not in r and "cost" not in r, (m, r)
-    assert not any("endpoint" in r for calls in WATCHED for m, r in calls.items() if "gpt" not in m)
-    print(f"  GPT-4.1 route {STATE['route'][:3]}: every request matched; usage rows e.g. {json.dumps(dict(gpt[:1]))}")
+    gem = [(m, r) for calls in WATCHED for m, r in calls.items() if "gemini" in m]   # Google's API over REST by default
+    assert all(r["endpoint"] == "https://generativelanguage.googleapis.com" for m, r in gem), gem
+    assert gem or not backbone.startswith("gemini")
+    print(f"  GPT-4.1 route {STATE['route'][:3]}: every request matched; usage rows e.g. {json.dumps(dict((gpt or gem)[:1]))}")
     blind = [c for c in CALLS if c["phase"] == "blind"]
     assert len(blind) == a.questions and not any(c["seconds"] for c in blind) and not any("ENT_" in c["text"].upper() for c in blind)
     print(f"  blind: {len(blind)} calls, no frame and no memory text in any")

@@ -147,7 +147,7 @@ BANK_VIDEOS = {"batch10_agree2": B10, "t2_agree2": T2, "t3_agree2": T3, "t4_agre
                "rescue_agree2": T2[:1], "extra_agree2": T3}   # the last two: second banks of videos that have one
 
 
-PRIORITY, QA_FROZEN, HELD = set(M.PRIORITY), set(M.QA_FROZEN), set(M.HELD)
+PRIORITY, QA_FROZEN, HELD, FIRST = set(M.PRIORITY), set(M.QA_FROZEN), set(M.HELD), list(M.FIRST)
 
 
 def board(monkeypatch, tmp_path, experiments=None):
@@ -160,6 +160,7 @@ def board(monkeypatch, tmp_path, experiments=None):
     monkeypatch.setattr(M, "PRIORITY", set())   # the tests below are of the whole list; test_paid_rows puts both back
     monkeypatch.setattr(M, "QA_FROZEN", set())
     monkeypatch.setattr(M, "HELD", set())
+    monkeypatch.setattr(M, "FIRST", [])   # nor of what leads it: test_first_and_rank puts it back
     if experiments is not None:
         monkeypatch.setattr(M, "EXPERIMENTS", experiments)
 
@@ -351,11 +352,12 @@ def test_paid_rows(monkeypatch, tmp_path):
     assert {k for k in PRIORITY if len(k) == 3} == {("magic", "m27", "build")}
     assert {(t["baseline"], t["arm"]) for t in listed} == arms & on_board | {("magic", "m27")} and arms - on_board <= {("vst", "vst7b")}
     assert all(t["stage"] == "build" for t in listed if (t["baseline"], t["arm"]) == ("magic", "m27"))
+    assert {t["stage"] for t in listed if (t["baseline"], t["arm"]) == ("merit", "m27")} == {"build", "qa"}   # MERIT 27B: the whole arm
     assert not [t for t in listed if (t["arm"] in ("m8", "m27", "oss120-q27", "q25vl7b-gpt41") or t["arm"].startswith(("qwen35", "molmo2")))
-                and (t["baseline"], t["arm"], t["stage"]) != ("magic", "m27", "build")]
+                and (t["baseline"], t["arm"], t["stage"]) != ("magic", "m27", "build") and (t["baseline"], t["arm"]) != ("merit", "m27")]
     assert M.gate([t for t in tasks if not prio(t)])[1] == 0   # the priority rows done: everything else is listed
     # answering frozen for four baselines: none of their qa tasks is listed, with or without PRIORITY; their builds are
-    assert QA_FROZEN == {"magic"}                                      # as published: only MAGIC-Video is still frozen
+    assert QA_FROZEN == set()                                          # as published: nothing is frozen
     QA4 = {"magic", "worldmm", "egagent", "m3agent"}                   # the rule, with the four it was made for
     monkeypatch.setattr(M, "QA_FROZEN", QA4)
     frozen = lambda t: t["stage"] == "qa" and t["baseline"] in QA4
@@ -390,6 +392,68 @@ def test_paid_rows(monkeypatch, tmp_path):
                                                                            f"egorag/egogpt_gpt41/{w}/{w}_30sec.json"})
     assert done == {("egor1", "gemini36flash", v), ("egagent", "gpt41", v), ("egorag", "egogpt_gpt41", v),
                     ("hippomm", "q25vl7b-gpt4o", v), ("magic", "oss120", v)}
+
+
+def test_first_and_rank(monkeypatch, tmp_path):
+    """FIRST: MAGIC-Video's tasks lead the list, then MERIT's with Qwen3.8-27B, both ahead of the API tasks. rank(): each
+    pool's queue, the free tasks it is listed for in the list's order; a task no pool can take now says why."""
+    board(monkeypatch, tmp_path)
+    monkeypatch.setattr(M, "FIRST", FIRST)
+    assert FIRST == [("magic",), ("merit", "m27")] and ("merit", "m27") in PRIORITY and ("merit", "m8") not in PRIORITY
+    v, w = B10
+    have = {("merit", "m27", x) for x in B10 + T2 + T3 + T4 + T5 + REST if x != v}   # one MERIT 27B memory to build
+    tasks = M.desired(have, set())
+    by = {t["id"]: t for t in tasks}
+    kind = lambda t: 0 if t["baseline"] == "magic" else 1 if (t["baseline"], t["arm"]) == ("merit", "m27") else 2 if t["baseline"] == "api" else 3
+    assert [kind(t) for t in tasks] == sorted(kind(t) for t in tasks) and {kind(t) for t in tasks} == {0, 1, 2, 3}
+    assert [t["priority"] for t in tasks] == list(range(len(tasks))) and M.lead(tasks[-1]) == len(FIRST) + 2
+    # inside MAGIC-Video's group: its memory builds (8B, 27B), the GPT-OSS-120B row, then its 27B and 8B answers
+    magic = [("oss120", "") if t["arm"].startswith("oss120") else (t["arm"], t["stage"]) for t in tasks if t["baseline"] == "magic"]
+    inside = [("m8", "build"), ("m27", "build"), ("oss120", ""), ("m27", "qa"), ("m8", "qa")]
+    assert sorted(magic, key=inside.index) == magic and set(magic) == set(inside)
+    # MERIT 27B: the memory still to build before the answers, and the answer that waits for it; a task never before its deps
+    merit = [t for t in tasks if kind(t) == 1]
+    assert merit[0]["id"] == f"merit-m27-build-{v}" and all(t["stage"] == "qa" for t in merit[1:])
+    assert by[f"merit-m27-qa-batch10_agree2-{v}"]["deps"] == [f"merit-m27-build-{v}"] and not by[f"merit-m27-qa-batch10_agree2-{w}"]["deps"]
+    assert all(by[d]["priority"] < t["priority"] for t in tasks for d in t["deps"])
+    # as published: the priority rows only, in the same order (MAGIC-Video's non-priority answers are withheld with the rest)
+    monkeypatch.setattr(M, "PRIORITY", PRIORITY)
+    listed, _ = M.gate(tasks)
+    assert [kind(t) for t in listed] == sorted(kind(t) for t in listed) and {kind(t) for t in listed} == {0, 1, 2, 3}
+    assert {(t["arm"], t["stage"]) for t in listed if t["baseline"] == "magic"} == {
+        ("m27", "build"), ("oss120", "build"), ("oss120-flash", "qa")}
+    assert {t["bank"] for t in listed if (t["baseline"], t["arm"], t["stage"]) == ("merit", "m27", "qa")} == set(M.BANKS)
+    # rank: a per-pool queue over the free tasks. a: held by a live claim; b: failed twice; c: a build, done, so the
+    # answers that waited for it are free; e: failed once on pulkit, which does not retry it, max may
+    live = {"status": "running", "lease_until": 2}
+    a, b, c = listed[0]["id"], f"magic-oss120-flash-qa-batch10_agree2-{w}", f"magic-oss120-build-{v}"
+    e = f"api-gpt-5.5-f384-qa-batch10_agree2-{v}"
+    assert a == f"magic-m27-build-{v}" and by[a]["pools"] == ["pulkit"] and by[e]["pools"] == M.KEY_POOLS
+    pools = {"pulkit": {"claims": {a: live, b: {"status": "failed"}, e: {"status": "failed"}}},
+             "max": {"claims": {b: {"status": "failed"}, c: {"status": "done"}}}}
+    before = json.dumps([{k: x for k, x in t.items()} for t in listed])
+    free = M.rank(listed, pools, 1)
+    assert json.dumps([{k: x for k, x in t.items() if k not in ("rank", "waiting")} for t in listed]) == before   # nothing else changes
+    for p in ("pulkit", "max", "nexus", "wriva"):
+        mine = [t["rank"][p] for t in listed if p in t["rank"]]
+        assert mine == list(range(1, len(mine) + 1)) and len(mine) == free[p] > 0   # 1, 2, 3, ... down the list
+    assert all(set(t["rank"]) <= set(t["pools"]) and ("waiting" in t) != bool(t["rank"]) for t in listed)
+    assert (by[a]["waiting"], by[b]["waiting"], by[c]["waiting"]) == ("claimed", "failed", "claimed")
+    # pulkit's first seven are MAGIC-Video's other 27B builds (its alone); c is done, so v's answers are free
+    assert by[f"magic-oss120-build-{w}"]["rank"] == {"max": 1, "pulkit": 8, "nexus": 1}
+    assert by[f"magic-oss120-flash-qa-batch10_agree2-{v}"]["rank"] == {"max": 2, "pulkit": 9, "nexus": 2}
+    assert set(by[e]["rank"]) == {"max"} and "waiting" not in by[e]
+    assert by[f"merit-m27-qa-batch10_agree2-{v}"]["waiting"] == "deps" and by[f"merit-m27-qa-batch10_agree2-{w}"]["rank"]
+    waits = lambda t: t["id"] in (a, b, c) or any(d != c for d in t["deps"])
+    assert all(("waiting" in t) == waits(t) for t in listed)
+    # the same task stands differently for two pools: far down the list, and one pool's next
+    far = next(t for t in listed if t["rank"].get("wriva") == 1)
+    assert far["priority"] > 0 and far["rank"]["wriva"] < far["rank"]["max"] < far["priority"] + 1
+    # the lapsed lease of a is free again; a pool file with no claims ranks like no file
+    assert M.rank(listed, pools, 3)["pulkit"] == free["pulkit"] + 1 and "waiting" not in by[a] and by[a]["rank"] == {"pulkit": 1}
+    M.restrict(listed, [])
+    M.rank(listed, {})
+    assert all(t["pools"] == [] and t["rank"] == {} and t["waiting"] == ("deps" if t["deps"] else "no pool") for t in listed)
 
 
 def desired_before(have, files):

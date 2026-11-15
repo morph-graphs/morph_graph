@@ -7,7 +7,8 @@
 
 Desired state (EXPERIMENTS below) x videos, minus memories already in the results dataset, minus nothing
 else: claims and leases are the workers' business. A task's `pools` says which pools may take it; the order
-of tasks.json is the priority. Reassignment is automatic: a claim whose lease lapsed is free again, and a
+of tasks.json is the priority (`priority`: the index), and `rank` says where a task stands for each pool that may take
+it (rank()). Reassignment is automatic: a claim whose lease lapsed is free again, and a
 task that failed twice is held back and shown as a failure.
 
 `qa` experiments answer a named epic-morph bank (one experiment per bank in BANKS): a task per video that has
@@ -31,6 +32,7 @@ The other paid rows (PAID: Ego-R1, EGAgent, EgoRAG, HippoMM and MAGIC-Video, wit
 gateway serves) follow the reported-configuration arms, for every bank of BANKS, on pools `max` and `pulkit` only,
 behind the same PILOT gate (MAGIC-Video's OpenRouter arms also on `nexus`: ALSO_POOLS).
 While a task of a PRIORITY arm is listed, the tasks of every other arm are withheld (gate()).
+The lines of FIRST lead the list, ahead of the API tasks: MAGIC-Video's tasks, then MERIT's with Qwen3.8-27B.
 """
 import argparse
 import functools
@@ -144,12 +146,10 @@ PILOT = []   # emptied 2026-11-14 (Anubhav): the pilot, worldmm-g5m-build-P05-20
 # (API_CONFIGS above), so nothing is held.
 HELD = set()
 # Baselines whose answering is frozen, every arm and bank: their qa tasks are withheld, their memory builds are listed as
-# usual, and a qa claim already running finishes. First used (Anubhav, 2026-11-14) while the walk through the memory
-# was being logged for MAGIC-Video, WorldMM, EGAgent and M3-Agent (#73, merged 2026-11-15; answers without a trace are
-# redone: TRACED). Since then WorldMM, EGAgent and M3-Agent answer again. MAGIC-Video stays frozen until the two things
-# #73 found are checked: an entity node's time span runs to its last sighting in the whole memory, so it can extend
-# past a question's t_ask, and the time parser sometimes searches a window after t_ask (answers could use the future).
-QA_FROZEN = {"magic"}
+# usual, and a qa claim already running finishes. Used on 2026-11-14/15 while the walk through the memory was being
+# logged for MAGIC-Video, WorldMM, EGAgent and M3-Agent (#73), and for MAGIC-Video until its time-named searches were
+# cut at t_ask (#88: they could return captions from after a question's ask time). Empty since.
+QA_FROZEN = set()
 # The other paid rows of the sheet (baselines/<b>/README.md). Max and Pulkit run them through their gateway, which has
 # GPT-4.1, GPT-5-mini, Gemini 3.6 Flash and DeepSeek but no GPT-4o and no Gemini 2.5 Pro, so each row is listed with a
 # stand-in arm it can run (Anubhav, 2026-11-14). The published arms' code stays in each baseline; their lines are off
@@ -248,7 +248,16 @@ PRIORITY = {("api", c) for c in API_CONFIGS} | {
     ("merit", "g5m"), ("merit", "g5m-q8"), ("merit", "g5m-g51"), ("m3agent", "m3"),
     ("worldmm", "g5m"), ("worldmm", "g5m-q8"), ("worldmm", "g5m-g51"),
     ("egagent", "gpt41"), ("egagent", "gemini36flash"), ("magic", "oss120"), ("magic", "oss120-flash"),
-    ("magic", "m27", "build")}   # a (baseline, arm, stage) entry: that stage only (MAGIC-Video's 27B memories, not its answers)
+    ("magic", "m27", "build"),   # a (baseline, arm, stage) entry: that stage only (MAGIC-Video's 27B memories, not its answers)
+    ("merit", "m27")}            # MERIT with Qwen3.8-27B: its answers, every bank (Anubhav, 2026-11-15), with the memory they
+#                                  wait for (a qa task whose build is withheld would wait for good; all 156 are built)
+# What leads the list (Anubhav, 2026-11-15): MAGIC-Video's tasks first, then MERIT with Qwen3.8-27B (its answers; a
+# memory still to build comes before them), both ahead of the API tasks and of the other priority rows. An entry is
+# (baseline,), (baseline, arm) or (baseline, arm, stage); the list's order is the order of the groups, and inside a
+# group the tasks keep the order they had (MAGIC: its 8B and 27B memory builds, then the GPT-OSS-120B memory with its
+# answers, video by video, then its 27B and 8B answers). It only orders: which rows are listed at all is PRIORITY's
+# and the gates' business.
+FIRST = [("magic",), ("merit", "m27")]
 EXPERIMENTS = [("api", c, "qa", KEY_POOLS, bank) for bank in BANKS for c in API_CONFIGS] + URGENT + REPORTED + PAID + [
     ("direct", arm, "qa", pools, bank) for bank in BANKS for arm, pools in DIRECT.items()] + [
     ("rekv", "m8", "qa", M8, bank) for bank in BANKS] + [
@@ -404,6 +413,15 @@ def built_from(files):
     return {k for k in out if k[0] in MEMORY_DONE and f"{k[0]}/{k[1]}/{k[2]}/{MEMORY_DONE[k[0]].format(v=k[2])}" in files}, files
 
 
+def lead(t):
+    """Where a task's group stands in the list: the index of its FIRST entry, then the API tasks, the URGENT lines, the rest."""
+    k = (t["baseline"], t["arm"], t["stage"])
+    for i, f in enumerate(FIRST):
+        if k[:len(f)] == f:
+            return i
+    return len(FIRST) + (0 if k[0] == "api" else 1 if k in {(b, arm, stage) for b, arm, stage, *_ in URGENT} else 2)
+
+
 def reported(t):
     """A task behind the pilot gate: one of a reported-configuration or paid-row arm (GATED), not baselines/api."""
     return (t["baseline"], t["arm"]) in GATED
@@ -471,8 +489,8 @@ def desired(have, files, answers=None, busy=()):
     block = {id(t): i for t in tasks for i, lines in enumerate((REPORTED, PAID))
              if (t["baseline"], t["arm"]) in {(b, arm) for b, arm, *_ in lines}}
     first = {i: min(rank[k] for k in block if block[k] == i) for i in set(block.values())}
-    urgent = {(b, arm, stage) for b, arm, stage, *_ in URGENT}   # right after the API tasks, whatever their rank
-    tasks.sort(key=lambda t: (0 if t["baseline"] == "api" else 1 if (t["baseline"], t["arm"], t["stage"]) in urgent else 2,)
+    # the FIRST groups lead, then the API tasks, then the URGENT lines, whatever their rank (lead())
+    tasks.sort(key=lambda t: (lead(t),)
                + ((first[block[id(t)]], group[t["video"]], rank[id(t)]) if id(t) in block else (rank[id(t)], 0, 0)))
     for i, t in enumerate(tasks):
         t["priority"] = i
@@ -504,6 +522,37 @@ def leftovers(tasks, old, now, claimed=()):
     return n
 
 
+def rank(tasks, pools, t=None):
+    """The per-pool priority, by the worker's own claim rule (worker.py; pools: the pool files). A task free to claim gets
+    `rank` {pool: n} for each pool it is listed for: it is the n-th (1: the next) of the free tasks that pool may take,
+    in the list's order, so two pools read the same list as two queues. Any other task gets an empty `rank` and
+    `waiting`, why no pool can take it now: "claimed" (a pool holds it: running, or done and not yet off the list),
+    "deps" (a task it waits for is not done), "failed" (failed twice: held until `reset`; or every pool listed for it
+    has failed it, which a worker does not retry), "no pool" (listed for none). What a worker decides from its own
+    setup is not known here (--baselines, --arms, its queues, the keys in its environment), so a pool's n is an upper
+    bound: it takes its lowest-ranked task that it can run."""
+    held, fails = jobs.taken(pools, t), jobs.failures(pools)
+    done = {tid for tid, (_, c) in held.items() if c["status"] == "done"}
+    n = Counter()
+    for x in tasks:
+        x.pop("waiting", None)
+        x["rank"] = {}
+        if x["id"] in held:
+            x["waiting"] = "claimed"
+        elif fails.get(x["id"], 0) >= 2:
+            x["waiting"] = "failed"
+        elif any(d not in done for d in x["deps"]):
+            x["waiting"] = "deps"
+        else:
+            for p in x["pools"]:
+                if pools.get(p, {}).get("claims", {}).get(x["id"], {}).get("status") != "failed":
+                    n[p] += 1
+                    x["rank"][p] = n[p]
+            if not x["rank"]:
+                x["waiting"] = "failed" if x["pools"] else "no pool"
+    return n
+
+
 def restrict(tasks, only_pools):
     """--only-pools (a test): every task to these pools, except that a task needing a key, or listed for the key
     pool only, never leaves its own."""
@@ -519,6 +568,7 @@ def main():
     ap.add_argument("--first", nargs="*", default=[], help="task video ids to put at the top (e.g. a test video)")
     ap.add_argument("--only-pools", nargs="*", help="publish: restrict every task to these pools (for a test)")
     ap.add_argument("--dry-run", action="store_true", help="publish: print the task counts, commit nothing")
+    ap.add_argument("--top", type=int, default=5, help="--dry-run: how many of the first tasks, and of each pool's next ones, to print")
     a = ap.parse_args()
     first = os.path.join(os.path.dirname(os.path.abspath(__file__)), "first_videos.txt")
     if not a.first and os.path.exists(first):   # videos to put at the top (e.g. a collaborator's test)
@@ -543,17 +593,18 @@ def main():
         busy = {tid.split("-redo-")[0] for tid, (_, c) in held.items() if c["status"] != "done"}
         tasks, withheld = gate(desired(have, files, read_answers(commit, files), busy))
         if a.first:
-            # the API tasks stay on top (they are few, short and only Max's pool can take them), then the URGENT lines,
-            # then the reported arms in their own order (batch10 first), then the first videos
-            urgent = {(b, arm, stage) for b, arm, stage, *_ in URGENT}
-            tasks.sort(key=lambda t: (0 if t["baseline"] == "api" else 1 if (t["baseline"], t["arm"], t["stage"]) in urgent
-                                      else 2 if reported(t) else 3,
-                                      not reported(t) and t["video"] not in a.first, t["priority"]))
+            # the FIRST groups stay on top, in their own order, then the API tasks (few, short, and only the key pools
+            # can take them), then the URGENT lines, then the reported arms in their own order (batch10 first), then
+            # the first videos
+            tasks.sort(key=lambda t: (lead(t),) + ((False, False) if lead(t) < len(FIRST) else
+                                                   (not reported(t), not reported(t) and t["video"] not in a.first))
+                                     + (t["priority"],))
         for i, t in enumerate(tasks):
             t["priority"] = i
         left = leftovers(tasks, old, int(jobs.now()), {tid for tid, (_, c) in held.items() if c["status"] != "done"})
         if a.only_pools is not None:
             restrict(tasks, a.only_pools)
+        free = rank(tasks, pools)   # after the pools are final (leftovers, --only-pools)
         if a.dry_run:
             n, wait, redo, qs = Counter(), Counter(), Counter(), Counter()
             for t in tasks:
@@ -571,8 +622,12 @@ def main():
             print(f"leftovers: {left} tasks listed {LEFTOVER_H} h or more ago, offered to {', '.join(LEFTOVER_POOLS)} too")
             print(f"need a key (pool {', '.join(KEY_POOLS)} only): "
                   f"{sum(1 for t in tasks if t.get('needs_env'))} tasks")
+            print(f"waiting, no rank: {dict(Counter(t['waiting'] for t in tasks if 'waiting' in t))}")
+            for p, c in sorted(free.items()):
+                print(f"next for {p} ({c} free tasks listed for it): "
+                      f"{[t['id'] for t in tasks if 0 < t['rank'].get(p, 0) <= a.top]}")
             print(f"dry run, nothing committed: {len(tasks)} tasks, {len(have)} memories already built; "
-                  f"first: {[t['id'] for t in tasks[:5]]}")
+                  f"first: {[t['id'] for t in tasks[:a.top]]}")
             return
         ok = jobs.commit({"tasks.json": tasks, "master.json": {"updated": jobs.iso(), "tasks": len(tasks), "built": len(have)}},
                          head, f"master: {len(tasks)} tasks")

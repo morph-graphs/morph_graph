@@ -513,3 +513,23 @@ last job before them was slow. A released job loses its age in the queue; the ol
 
 Start it by adding `--auto-slots 5` to a `--sbatch` worker's command (Zaratan), or `AUTO_SLOTS=15` to the
 `--export` list of `coord/nexus_worker.sbatch` (Nexus).
+
+## Priority per pool: `rank`
+
+Added 2026-11-15. The list's one order (`priority`, a task's index) misleads when read as one queue: task 1,032 can be
+the next one for the only pools that may take it. So `master.rank()` writes, with every publish, where a task stands
+for each pool it is listed for:
+
+- `rank`: `{pool: n}`. The task is the n-th (1: the next) of the *free* tasks that pool is listed for, in the list's
+  order. Free is the worker's own claim rule as far as the board shows it: no claim holds the task, it has not failed
+  twice, the tasks it waits for are done; a pool that failed the task once is left out (it does not retry it).
+- `waiting`, for a task with an empty `rank`: `claimed`, `deps`, `failed` (twice, or on every pool listed for it) or
+  `no pool`.
+- n is an upper bound. What a worker decides from its own setup is not on the board (`--baselines`, `--arms`, its
+  queues file, the keys in its environment), and a worker with a `fallback` queue (the H200 on Nexus) takes the
+  tasks that queue fits before the others, whatever their priority (`scarce` in `worker.py`).
+- Workers do not read `rank`: they sort by `priority`, as before. The dashboard works the same rank out again from
+  the claims it reads every 5 minutes (`board_views.queue_ranks()`), since the master's is up to a cycle old.
+
+`master.FIRST` names the groups that lead the list, ahead of the API tasks: MAGIC-Video's tasks, then MERIT with
+Qwen3.8-27B (Anubhav, 2026-11-15). It only orders; `PRIORITY` and the gates decide what is listed.
