@@ -19,7 +19,8 @@
 #          gemini36flash  Gemini 3.6 Flash agent, not the paper's: it stands in for gemini25pro, which Google
 #                       no longer serves to our key (README: Read first). Same keys as gemini25pro
 #          OPENROUTER_API_KEY without OPENAI_API_KEY sends the GPT-4.1 calls through OpenRouter instead (README
-#          "Through OpenRouter"); Gemini is only ever called through Google's API
+#          "Through OpenRouter"); Gemini is only ever called through Google's API (GOOGLE_GEMINI_BASE_URL: another
+#          endpoint that speaks it)
 #   bank   a named bank of the epic-morph checkout, e.g. batch10_agree2
 #
 # A paid stage runs when its key is in the environment and stops (exit 3, nothing spent) when it is not. Keys
@@ -72,7 +73,8 @@ have_memory() { local m; for m in "${MEMORY[@]}"; do [ -s "$OUT/${m//\{video\}/$
 [ -f "$R/egagent/langgraph_agent.py" ] || { echo "upstream missing: git submodule update --init baselines/egagent/egagent"; exit 1; }
 patched() { grep -q "def build_app" "$R/egagent/run_egagent_on_videomme.py" && grep -q EGAGENT_BACKBONE "$R/egagent/langgraph_agent.py" \
             && grep -q "startswith('gemini-')" "$R/egagent/langgraph_agent.py" \
-            && grep -q EGAGENT_DB_ROOT "$R/paths.py" && grep -q "def get_api_key" "$R/utils.py" && grep -q EGAGENT_GPT_PREFIX "$R/utils.py"; }
+            && grep -q EGAGENT_DB_ROOT "$R/paths.py" && grep -q "def get_api_key" "$R/utils.py" && grep -q EGAGENT_GPT_PREFIX "$R/utils.py" \
+            && grep -q GEMINI_CLIENT_OPTIONS "$R/utils.py"; }
 if ! patched; then
     ( if command -v flock >/dev/null; then flock 9; fi
       if ! patched && grep -q OPENROUTER "$R/utils.py"; then   # an earlier epic_morph.patch: upstream's files back first

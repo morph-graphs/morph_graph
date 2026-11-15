@@ -7,6 +7,7 @@
 #   OPENAI_API_KEY   for build (the memory, both arms) and for qa / blind of arm gpt41; or OPENROUTER_API_KEY
 #                    without it: the same GPT-4.1 calls through OpenRouter (README "Through OpenRouter")
 #   GEMINI_API_KEY   for qa / blind of arms gemini25pro and gemini36flash
+#                    (GOOGLE_GEMINI_BASE_URL, passed on when set: another endpoint that speaks Google's API)
 #                    Export a key in the shell: it is handed to the container by name, so it never appears on a
 #                    command line, in a file or in the image. A paid stage without its key stops, nothing spent
 #   HF_TOKEN         for upload and for taking a memory from the dataset; or `hf auth login` on the host (the
@@ -51,7 +52,7 @@ ENVS=(EPIC_MORPH_DIR=/epic-morph HDEPIC_VIDEOS=/videos HF_HOME=/hf HF_HUB_OFFLIN
 if [ -n "${MERIT_WORK:-}" ]; then   # the shared work folder: EGAgent's own subfolder in it
     umask 002; mkdir -p "$MERIT_WORK"; BINDS+=("$(cd -P "$MERIT_WORK" && pwd):/work"); export EGAGENT_WORK=${EGAGENT_WORK:-/work/egagent}
 fi
-PASS=(OPENAI_API_KEY OPENROUTER_API_KEY OPENROUTER_BASE_URL OPENAI_BASE_URL OPENAI_PROVIDER_NOTE OPENAI_MODEL_ALIASES EGAGENT_GPT_PREFIX GEMINI_API_KEY HF_TOKEN MERIT_HF_REPO EGAGENT_TAG EGAGENT_FETCH EGAGENT_FRAME_PX EGAGENT_CHUNK_S
+PASS=(OPENAI_API_KEY OPENROUTER_API_KEY OPENROUTER_BASE_URL OPENAI_BASE_URL OPENAI_PROVIDER_NOTE OPENAI_MODEL_ALIASES EGAGENT_GPT_PREFIX GEMINI_API_KEY GOOGLE_GEMINI_BASE_URL HF_TOKEN MERIT_HF_REPO EGAGENT_TAG EGAGENT_FETCH EGAGENT_FRAME_PX EGAGENT_CHUNK_S
       THREADS LIMIT EGAGENT_OUT EGAGENT_WORK)
 if [ "$RUNTIME" = apptainer ]; then
     case $IMAGE in *.sif) ;; *) IMAGE=docker://$IMAGE ;; esac

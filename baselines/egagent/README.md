@@ -52,6 +52,16 @@ as the agent) stands in for the Gemini 2.5 Pro arm, which Google no longer serve
   `OPENROUTER_API_KEY` and no `OPENAI_API_KEY`, the GPT-4.1 calls go through OpenRouter (see Through
   OpenRouter); Gemini is only ever called through Google's API. Each paid script is started without the
   other provider's key.
+- **How Gemini is called** (2026-11-15): upstream's client (`langchain-google-genai` 2.1.12) over HTTPS + JSON
+  (`transport="rest"`), as Google's `google-genai` SDK calls it in our other Gemini baselines (`api`, Ego-R1);
+  upstream's default was gRPC. On Max's machines the same `GEMINI_API_KEY` that works for those baselines got
+  `400 API key not valid` over gRPC, on every question (whether REST alone cures that there was not yet known
+  when this was written). `GOOGLE_GEMINI_BASE_URL` (the variable that SDK reads;
+  passed on by `docker/run.sh`) points the calls at another endpoint that speaks Google's API. Every Gemini
+  usage row records the `endpoint` the client called.
+- **A failed stage says why on its last line**: after the `API calls:` summary, `<step> failed: <exception>:
+  HTTP <status> [<code>] <message>` (or `<n> questions unanswered; last error ...`, or the other model's id for
+  exit 4), cut to 220 characters, so the tail of a log (a job board note keeps about 400) shows the cause.
 - **What is not the authors'** (each forced by the benchmark or by what upstream released):
   - *The caption prompt is ours* (`epic/caption_epic.py`): upstream released neither its captioning script
     nor the prompt.
@@ -169,8 +179,8 @@ For an sbatch job, read the key into the job's environment inside the job and do
   grader, answer) is built on the arm's backbone, and the watch on the calls stops the run if any other model
   answers. `gpt41`'s `qa` and `blind` call GPT-4.1 only.
 - **What is recorded.** `api_usage.jsonl` and the stage's `runs.jsonl` line (`api`) key each row by the model
-  id the endpoint returned, with calls, input / cached / output / reasoning tokens, and for a GPT row the
-  `endpoint`; through OpenRouter also `provider` (who served the calls) and `cost` (dollars OpenRouter
+  id the endpoint returned, with calls, input / cached / output / reasoning tokens, and the `endpoint` (GPT and
+  Gemini rows); through OpenRouter also `provider` (who served the calls) and `cost` (dollars OpenRouter
   charged, summed). The memory folder stays `egagent/gpt41/<video>/`: the same model through another gateway.
 - **One gateway per run.** With both keys set OpenAI's is used and `OPENROUTER_API_KEY` is dropped.
 - **An OpenAI-compatible gateway.** With `OPENAI_API_KEY`, `OPENAI_BASE_URL` (passed on by `docker/run.sh`)
