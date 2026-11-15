@@ -188,8 +188,9 @@ NEEDS_ENV |= {
     ("magic", "oss120"): ["OPENROUTER_API_KEY"], ("magic", "oss120-flash"): ["OPENROUTER_API_KEY"],
     ("magic", "oss120-q27"): ["OPENROUTER_API_KEY"]}
 # Pools added to an arm's key pools: MAGIC-Video's Qwen3.5-Flash row calls OpenRouter only, a key that Max's and
-# Pulkit's gateway does not have and our Nexus worker does (Anubhav, 2026-11-14)
-ALSO_POOLS = {("magic", "oss120"): ["nexus"], ("magic", "oss120-flash"): ["nexus"]}
+# Pulkit's gateway does not have and our Nexus worker does (Anubhav, 2026-11-14). Zaratan answers it too (Anubhav,
+# 2026-11-15: Nexus GPUs were full, Zaratan idle); its compute nodes reach OpenRouter over IPv6
+ALSO_POOLS = {("magic", "oss120"): ["nexus"], ("magic", "oss120-flash"): ["nexus", "zaratan"]}
 # The arms behind the pilot gate: every arm of the REPORTED and PAID lines. A new paid baseline joins the gate by
 # being listed in one of them, not by its name.
 GATED = {(b, arm) for b, arm, *_ in REPORTED + PAID}
