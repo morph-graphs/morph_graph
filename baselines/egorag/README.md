@@ -50,7 +50,9 @@ What differs from the release, all of it:
    as no summary for the hour, and the patch instead retries it and, after three tries, fails the build with
    `EmptyReply: empty content ... (finish_reason=..., completion_tokens=..., reasoning ...)` in the note. A reply
    cut after some text is kept, cut, as upstream would (`runs.jsonl` counts them as `cut_by_max_tokens`).
-   `EGORAG_DEEPSEEK_MAX_TOKENS` raises the cap; the default stays upstream's. Model and endpoint are set by the
+   **Deviation from upstream (Anubhav, 2026-11-15): the cap is 8192, not 2048**: DeepSeek-V4-Pro's reasoning
+   alone measured up to 3.9k tokens on one hour, so at 2048 ~60% of hour calls came back empty; the answer is
+   still bounded by the prompt's "<500 words". `EGORAG_DEEPSEEK_MAX_TOKENS` overrides it. Model and endpoint are set by the
    environment, for both arms: `EGORAG_DEEPSEEK_MODEL` (the id asked for), `DEEPSEEK_BASE_URL` (any
    OpenAI-compatible endpoint; default `https://api.deepseek.com`) and `DEEPSEEK_API_KEY` (that endpoint's key).
    Whether the gateway that runs `egogpt_gpt41` serves a DeepSeek model is not known yet: what it asks instead,

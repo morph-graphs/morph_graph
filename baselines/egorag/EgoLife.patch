@@ -180,9 +180,9 @@ index 1fe0152..ffbfde7 100644
 +        # sets it), the base URL from DEEPSEEK_BASE_URL. Without DeepSeek's key, through OpenRouter (_client).
 +        client, model, extra = _client(deepseek_api_key, os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
 +                                       os.environ["EGORAG_DEEPSEEK_MODEL"], "deepseek")
-+        # EPIC-Morph port: upstream's max_tokens (2048, the hour summaries') unless EGORAG_DEEPSEEK_MAX_TOKENS is set.
++        # EPIC-Morph port: 8192 instead of upstream's 2048 (hour and day summaries), EGORAG_DEEPSEEK_MAX_TOKENS overrides.
 +        # A reasoning model's reasoning counts against it (README.md, "DeepSeek's reasoning and max_tokens").
-+        max_tokens = int(os.getenv("EGORAG_DEEPSEEK_MAX_TOKENS") or max_tokens)
++        max_tokens = int(os.getenv("EGORAG_DEEPSEEK_MAX_TOKENS") or 8192)
  
          max_retries = 3
          retry_count = 0

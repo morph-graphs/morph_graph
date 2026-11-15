@@ -37,8 +37,8 @@
 #   DEEPSEEK_BASE_URL      default https://api.deepseek.com, with DEEPSEEK_API_KEY: an OpenAI-compatible gateway
 #                          that has the model takes these three. runs.jsonl records the ids asked for and, per
 #                          call, the id the API returned and the endpoint
-#   EGORAG_DEEPSEEK_MAX_TOKENS  default upstream's 2048 for the hour summaries; a reasoning model's reasoning counts
-#                          against it (README.md, "DeepSeek's reasoning and max_tokens")
+#   EGORAG_DEEPSEEK_MAX_TOKENS  default 8192 for the hour and day summaries (upstream: 2048); a reasoning model's reasoning
+#                          counts against it (README.md, "DeepSeek's reasoning and max_tokens")
 #   EGORAG_EGOGPT    default lmms-lab/EgoGPT-7b-EgoIT-EgoLife (Hugging Face cache), or a local copy
 #   EGORAG_WORK      default baselines/egorag/work: clips, the Chroma index, upstream's events_diary
 #   EGORAG_OUT       default baselines/egorag/results: per <arm>/<video> the memory, answers_<bank>.json.gz,
