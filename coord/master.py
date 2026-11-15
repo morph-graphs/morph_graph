@@ -93,10 +93,13 @@ BANKS = ["batch10_agree2", "t2_agree2", "t3_agree2", "t4_agree2", "t5_agree2", "
 # other pool may take them. Listed first: short tasks that should not wait behind the memory builds. Every bank since
 # 2026-11-14 (Anubhav; batch10 only before).
 # GPT-5 stand-ins (Anubhav, 2026-11-15): no pool reaches gpt-5 through an OpenAI key (Max's and Pulkit's gateway serves
-# it from Azure only, 50 images a request), and the gateway has GPT-5.1 to 5.5. The GPT row is GPT-5.5 from 1,024 frames
-# (gpt-5.5-f1024: the newest, a model row), and MERIT's and WorldMM's GPT-5 answer rows are answered by GPT-5.1
+# it from Azure only, 50 images a request), and the gateway has GPT-5.1 to 5.5. The GPT row is GPT-5.5 from 384 frames
+# (gpt-5.5-f384: the newest, a model row), and MERIT's and WorldMM's GPT-5 answer rows are answered by GPT-5.1
 # (g5m-g51: the nearest to the published model). The gpt-5 arms (gpt-5-f1024, g5m-g5) stay in the code, off the board.
-API_CONFIGS = ["gemini-3.1-flash-lite-high", "gemini-3.6-flash-high", "gpt-5.5-f1024"]
+# Frame limit (Anubhav, 2026-11-15): through NVIDIA's gateway GPT-5.1 and GPT-5.5 run out of context beyond 384 frames in
+# a request, so no row sends more: what would need more (the 1,024-frame row) is cut to 384. MERIT's and WorldMM's
+# answer requests stay below it by their own settings (each README).
+API_CONFIGS = ["gemini-3.1-flash-lite-high", "gemini-3.6-flash-high", "gpt-5.5-f384"]
 # The reported-configuration arms (baselines/<b>/README.md): g5m is the memory written by gpt-5-mini, once per video;
 # the g5m-* arms answer from it with another reasoning model and keep answers plus a reference to that memory
 # (<video>_memory_ref.json) in their own folders. MEMORY_ARM: the arm whose build an arm's qa waits for (default itself).

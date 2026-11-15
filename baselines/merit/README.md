@@ -102,7 +102,7 @@ reasoning model makes no API call when answering.
 | (the memory of the three rows) | `g5m` | gpt-5-mini | - | - | `build` | m8 |
 | MERIT (reported): GPT-5-mini / Qwen3-VL-8B | `g5m-q8` | from `g5m` | Qwen3-VL-8B, local | 5 | nothing | m8 |
 | MERIT (reported): GPT-5-mini / GPT-5 | `g5m-g5` | from `g5m` | gpt-5 | 10 | `qa` | m8 |
-| MERIT: GPT-5-mini / GPT-5.1, a stand-in for the row above where gpt-5 cannot be reached (Max's and Pulkit's gateway; Anubhav, 2026-11-15). The id `gpt-5.1` is sent as it is (no snapshot pinned). On the board in `g5m-g5`'s place | `g5m-g51` | from `g5m` | gpt-5.1 | 10 | `qa` | m8 |
+| MERIT: GPT-5-mini / GPT-5.1, a stand-in for the row above where gpt-5 cannot be reached (Max's and Pulkit's gateway; Anubhav, 2026-11-15). The id `gpt-5.1` is sent as it is (no snapshot pinned). On the board in `g5m-g5`'s place. Through NVIDIA's gateway GPT-5.1 runs out of context beyond 384 frames in a request; by the settings here (top-k 10, 6 frames a clip, at most 5 rounds) an answer request holds at most 300, not measured on a real run | `g5m-g51` | from `g5m` | gpt-5.1 | 10 | `qa` | m8 |
 | MERIT: GPT-5-mini / Qwen3.8-27B | `g5m-q27` | from `g5m` | Qwen3.8-27B, local | 5 | nothing | m27 |
 
 - One memory per video, at `merit/g5m/<video>/`, shared by the three answer arms. An answer arm keeps its answers

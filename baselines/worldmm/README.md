@@ -96,7 +96,7 @@ sheet has two WorldMM rows, and three arms cover them:
 | `g5m` | the memory, built once per video, at `worldmm/g5m/<video>/` | gpt-5-mini | | | both rows read it |
 | `g5m-q8` | answers at `worldmm/g5m-q8/<video>/` | (reads `g5m`) | gpt-5-mini | Qwen3-VL-8B, local | "Memory Model GPT-5-mini, Reasoning Model Qwen3-VL-8B" |
 | `g5m-g5` | answers at `worldmm/g5m-g5/<video>/` | (reads `g5m`) | gpt-5-mini | gpt-5 | "Memory Model GPT-5-mini, Reasoning Model GPT-5" |
-| `g5m-g51` | answers at `worldmm/g5m-g51/<video>/` | (reads `g5m`) | gpt-5-mini | gpt-5.1 | a stand-in for `g5m-g5` where gpt-5 cannot be reached (Anubhav, 2026-11-15); the id is sent as it is, no snapshot pinned; on the board in its place |
+| `g5m-g51` | answers at `worldmm/g5m-g51/<video>/` | (reads `g5m`) | gpt-5-mini | gpt-5.1 | a stand-in for `g5m-g5` where gpt-5 cannot be reached (Anubhav, 2026-11-15); the id is sent as it is, no snapshot pinned; on the board in its place. Through NVIDIA's gateway GPT-5.1 runs out of context beyond 384 frames in a request; a visual search adds 33 frames (3 clips x 11) and a question averaged 0.68 of them in our count, far below that, but the largest request has not been measured |
 
 **How the sheet's two columns map to WorldMM's three roles (decided by Anubhav, 2026-11-13; it matches the paper's
 own rows).** "Memory model" is everything that builds the memory (10 s captions from 10 frames each, the 30 s /

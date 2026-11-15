@@ -65,9 +65,9 @@ def test_experiments():
     """Every baseline on the board has build + qa of every bank per arm, qa on the build's pools; arm00 (aarch64)
     runs MERIT only."""
     ex = {(b, arm, stage, bank): pools for b, arm, stage, pools, bank in M.EXPERIMENTS}
-    # the api rows: three configs (gpt-5.5-f1024 among them), every bank
+    # the api rows: three configs (gpt-5.5-f384 among them), every bank
     assert {(arm, stage, bank) for b, arm, stage, bank in ex if b == "api"} == {
-        (c, "qa", bank) for bank in M.BANKS for c in ("gemini-3.1-flash-lite-high", "gemini-3.6-flash-high", "gpt-5.5-f1024")}
+        (c, "qa", bank) for bank in M.BANKS for c in ("gemini-3.1-flash-lite-high", "gemini-3.6-flash-high", "gpt-5.5-f384")}
     assert M.BANKS == M.REPORTED_BANKS == ["batch10_agree2", "t2_agree2", "t3_agree2", "t4_agree2", "t5_agree2",
                                            "rescue_agree2", "extra_agree2"]
     for b in ("merit", "magic", "worldmm"):
@@ -365,7 +365,7 @@ def test_paid_rows(monkeypatch, tmp_path):
     # nothing is held as published (the GPT-5 rows run on stand-ins); a held line of a priority arm is not listed, and
     # the other rows do not wait for it
     assert HELD == set()
-    lines = {("api", "gpt-5.5-f1024", "qa"), ("merit", "g5m-g51", "qa")}
+    lines = {("api", "gpt-5.5-f384", "qa"), ("merit", "g5m-g51", "qa")}
     monkeypatch.setattr(M, "HELD", lines)
     held = lambda t: (t["baseline"], t["arm"], t["stage"]) in lines
     listed, withheld = M.gate(tasks)
@@ -415,7 +415,7 @@ def test_existing_tasks_unchanged(monkeypatch, tmp_path):
     """Without the reported arms the board is main's, field for field (api tasks gain needs_env only); with them,
     the merit / magic / worldmm / api tasks are the same ones in the same order."""
     have = {("merit", "m8", T2[0]), ("worldmm", "m27", REST[0])}
-    files = {f"magic/m8/{T2[1]}/answers_t2_agree2.json.gz", f"api/gpt-5.5-f1024/{B10[0]}/answers_batch10_agree2.json.gz"}
+    files = {f"magic/m8/{T2[1]}/answers_t2_agree2.json.gz", f"api/gpt-5.5-f384/{B10[0]}/answers_batch10_agree2.json.gz"}
     full = list(M.EXPERIMENTS)
     board(monkeypatch, tmp_path, [e for e in full if e not in M.REPORTED + M.PAID])
     assert len(M.EXPERIMENTS) == len(full) - len(M.REPORTED) - len(M.PAID) == 6 * (1 + len(M.BANKS)) + 3 * len(M.BANKS) + len(M.DIRECT) * len(M.BANKS) + 2 * len(M.BANKS) + 1 + len(M.BANKS)   # 6 arms x (build + banks) + 3 api x banks + the direct arms x banks + rekv's and vst's banks + m3agent's build + banks

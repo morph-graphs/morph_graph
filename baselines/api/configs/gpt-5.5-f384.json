@@ -15,7 +15,7 @@
     "reasoning_effort": "high",
     "reasoning_summary": null,
     "max_output_tokens": 32768,
-    "max_frames": 1024,
+    "max_frames": 384,
     "max_fps": 1.0,
     "frame_side": 512,
     "detail": "high",

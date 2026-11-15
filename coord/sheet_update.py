@@ -85,7 +85,7 @@ METHODS = {
     ("api", "gpt-5-f1024"): ("GPT-5", "--", "GPT-5", 1024),
     ("merit", "g5m-g51"): ("MERIT (GPT-5.1 in GPT-5's place)", "GPT-5-mini", "GPT-5.1", ""),
     ("worldmm", "g5m-g51"): ("WorldMM (GPT-5.1 in GPT-5's place)", "GPT-5-mini", "GPT-5.1", ""),
-    ("api", "gpt-5.5-f1024"): ("GPT-5.5 (in GPT-5's place)", "--", "GPT-5.5", 1024),
+    ("api", "gpt-5.5-f384"): ("GPT-5.5 (in GPT-5's place)", "--", "GPT-5.5", 384),
     ("vst", "vst7b"): ("VST", "Qwen2.5-VL-7B", "Qwen2.5-VL-7B", "2 fps (max 384 frames)"),
 }
 COLS = ["row_key", "method", "memory_model", "reasoning_model", "n_frames", "baseline", "arm", "bank", "tag",

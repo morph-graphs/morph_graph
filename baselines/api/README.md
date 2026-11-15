@@ -23,7 +23,7 @@ layout. Rows prepared: `gemini-3.1-flash-lite`, `gemini-3.6-flash`, `gpt-5`. Gem
 | `gemini-3.6-flash-high` | `gemini-3.6-flash` (stable) | same | same |
 | `gemini-3.8-flash-high` | `gemini-3.8-flash` | same | same: the settings of the run already made (below) |
 | `gpt-5-f1024` | `gpt-5` (deprecated, **shut down 2026-12-11**) | frames of the clip | up to 1,024 frames, at most 1 a second, 512 px, `detail: high`, reasoning effort high |
-| `gpt-5.5-f1024` | `gpt-5.5` | frames of the clip | the same settings as `gpt-5-f1024`: its stand-in on the board (Anubhav, 2026-11-15), since no pool reaches `gpt-5` with 1,024 images a request. Not run yet |
+| `gpt-5.5-f384` | `gpt-5.5` | frames of the clip | `gpt-5-f1024`'s settings with at most 384 frames: its stand-in on the board (Anubhav, 2026-11-15). No pool reaches `gpt-5`, and through NVIDIA's gateway GPT-5.1 and GPT-5.5 run out of context beyond 384 frames in a request, so nothing sends them more. Not run yet |
 
 Both new Gemini models accept thinking `high` (their documented levels are minimal, low, medium, high), so
 the three Gemini configs differ in the model id only. Model ids, limits and prices were read from the
