@@ -64,6 +64,9 @@ def test_fitting():
     vst = W.fitting(task("vst", "vst7b"), shipped, idle=shipped)
     assert vst == ["scav-a5000-64g", "tron-a5000-64g"] and all("--mem=64G" in shipped[n]["sbatch"] for n in vst)
     assert W.valid(dict(task("vst", "vst7b"), stage="qa", bank="batch10_agree2", id="vst-vst7b-qa-batch10_agree2-P01-20240101-000001"))
+    # a kitchen's stitched video is a video too; nothing else of that shape
+    assert W.valid(dict(task(), video="P03-stitched", id="merit-m8-build-P03-stitched"))
+    assert not any(W.valid(dict(task(), video=v)) for v in ("P03-stitched-x", "P03-stitched;x", "stitched", "P3-stitched"))
     # a stage of an arm (baseline/arm/stage): M3-Agent's build fits one 48 GB GPU, its qa (a 32.8B model) the H200 only
     m3 = lambda stage: dict(task("m3agent", "m3"), stage=stage)
     assert W.fitting(m3("qa"), shipped) == ["h200"] and W.fitting(m3("build"), shipped, idle=shipped) == W.fitting(task(arm="m8"), shipped)

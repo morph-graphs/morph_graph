@@ -101,10 +101,11 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # arm (q25vl7b-gpt4o, egogpt_gpt4o), a model and frame budget of baselines/direct (qwen3vl-8b-f128) or a config name
 # of baselines/api/configs/ (gpt-5-f1024): lower-case letters and digits in runs joined by one `.`, `-` or `_`, none
 # of which the shell, a Slurm job name or a file pattern reads as anything but itself (no space, quote, `$`, `/`, `*`,
-# and never a leading `-`, so it cannot become an option).
+# and never a leading `-`, so it cannot become an option). A video is an HD-EPIC recording, or a kitchen's stitched
+# video (master.STITCHED_VIDEOS).
 VALID = dict(baseline=re.compile(r"^(merit|worldmm|magic|m3agent|api|egor1|egagent|egorag|hippomm|direct|rekv|vst)$"),
              arm=re.compile(r"^(m(8|27|3)|[a-z0-9]+([._-][a-z0-9]+)*)$"),
-             stage=re.compile(r"^(prep|build|qa|blind)$"), video=re.compile(r"^P\d\d-\d{8}-\d{6}$"),
+             stage=re.compile(r"^(prep|build|qa|blind)$"), video=re.compile(r"^P\d\d-(\d{8}-\d{6}|stitched)$"),
              bank=re.compile(r"^[A-Za-z0-9_]*$"), id=re.compile(r"^[A-Za-z0-9_.-]+$"))
 
 

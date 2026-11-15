@@ -456,6 +456,35 @@ def test_first_and_rank(monkeypatch, tmp_path):
     assert all(t["pools"] == [] and t["rank"] == {} and t["waiting"] == ("deps" if t["deps"] else "no pool") for t in listed)
 
 
+def test_stitched_builds(monkeypatch, tmp_path):
+    """The stitched videos: a build of each, for every line that builds, on that line's pools and keys; no qa; after
+    every other task; MAGIC-Video's waits for MERIT's; a memory already in the dataset is not built again."""
+    board(monkeypatch, tmp_path)
+    tasks = M.desired({("merit", "m8", "P01-stitched")}, set())
+    st = [t for t in tasks if t["video"] in M.STITCHED_VIDEOS]
+    lines = {(b, arm) for b, arm, stage, _, bank in M.EXPERIMENTS if stage == "build" and bank != (M.STITCHED,)}
+    assert len(M.STITCHED_VIDEOS) == 9 and all(t["stage"] == "build" and t["bank"] is None for t in st)
+    assert {(t["baseline"], t["arm"]) for t in st} == lines and len(st) == 9 * len(lines) - 1
+    assert "merit-m8-build-P01-stitched" not in {t["id"] for t in st}                      # built already
+    assert [t["video"] in M.STITCHED_VIDEOS for t in tasks] == sorted(t["video"] in M.STITCHED_VIDEOS for t in tasks)
+    normal = {(t["baseline"], t["arm"]): t for t in tasks if t["stage"] == "build" and t["video"] not in M.STITCHED_VIDEOS}
+    for t in st:
+        n = normal[t["baseline"], t["arm"]]
+        assert (t["pools"], t.get("needs_env"), t.get("memory_arm")) == (n["pools"], n.get("needs_env"), n.get("memory_arm"))
+    by = {t["id"]: t for t in tasks}
+    assert by["magic-m27-build-P02-stitched"]["deps"] == ["merit-m27-build-P02-stitched"]
+    assert by["magic-m8-build-P01-stitched"]["deps"] == []                                  # MERIT's memory is there
+    assert all(by[d]["priority"] < t["priority"] for t in st for d in t["deps"])
+    # as published: the priority arms' stitched builds are listed, after the priority rows; the rest wait with their arms
+    monkeypatch.setattr(M, "PRIORITY", PRIORITY)
+    monkeypatch.setattr(M, "FIRST", FIRST)
+    listed, _ = M.gate(M.desired(set(), set()))
+    mine = [t["video"] in M.STITCHED_VIDEOS for t in listed]
+    assert any(mine) and mine == sorted(mine)
+    assert {(t["baseline"], t["arm"]) for t in listed if t["video"] in M.STITCHED_VIDEOS} == {
+        k for k in lines if k in PRIORITY or k + ("build",) in PRIORITY}
+
+
 def desired_before(have, files):
     """master.desired as it was before the reported arms (origin/main 4c57eb0), for the comparison below, except that
     builds now cover every video: each bank's (batch10's, missing from build_order.txt, first), then the build order."""

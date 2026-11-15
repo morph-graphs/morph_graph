@@ -275,6 +275,17 @@ MEMORY_DONE = {"merit": "{v}_30sec_4_key.json", "magic": "graph.pkl", "worldmm":
 # a build that starts from another baseline's memory waits for that build while it is listed: MAGIC's 30 s captions
 # are MERIT's (same backbone), fetched from the dataset; without the wait it would caption the video itself
 BUILD_ON = {"magic": "merit"}
+# The stitched videos (Anubhav, 2026-11-15): one per kitchen, its recording sessions in order with a 4 s date card
+# before each (epic-morph v3/stitched, Vatsal; 41.5 h in all), id <kitchen>-stitched, found like any other video at
+# <videos>/<kitchen>/<kitchen>-stitched.mp4. Their end-of-video bank (623 questions) is not on the board: only the
+# memories are built, a build line for each line of EXPERIMENTS that builds, on its pools, built on the stitched video
+# itself (not put together from its sessions' memories). Listed after every other task (lead()). STITCHED is the bank
+# a build line names for them: its videos are STITCHED_VIDEOS, not an epic-morph export.
+STITCHED = "stitched"
+STITCHED_VIDEOS = [f"P0{k}-stitched" for k in range(1, 10)]
+# MERIT's lines first: MAGIC-Video's builds wait for MERIT's of the same video, which must be listed before them
+EXPERIMENTS += sorted([(b, arm, "build", pools, (STITCHED,)) for b, arm, stage, pools, _ in EXPERIMENTS if stage == "build"],
+                      key=lambda e: e[0] not in BUILD_ON.values())
 
 
 def bank_questions(bank):
@@ -414,8 +425,11 @@ def built_from(files):
 
 
 def lead(t):
-    """Where a task's group stands in the list: the index of its FIRST entry, then the API tasks, the URGENT lines, the rest."""
+    """Where a task's group stands in the list: the index of its FIRST entry, then the API tasks, the URGENT lines, the
+    rest, and last the stitched videos' builds."""
     k = (t["baseline"], t["arm"], t["stage"])
+    if t["video"] in STITCHED_VIDEOS:
+        return len(FIRST) + 3
     for i, f in enumerate(FIRST):
         if k[:len(f)] == f:
             return i
@@ -459,7 +473,7 @@ def desired(have, files, answers=None, busy=()):
             env["memory_arm"] = mem
         if stage == "build":
             # a build line with banks: their videos only, each once, in the banks' order
-            for v in dict.fromkeys(v for x in bank for v in bank_videos(x)) if bank else videos:
+            for v in dict.fromkeys(v for x in bank for v in (STITCHED_VIDEOS if x == STITCHED else bank_videos(x))) if bank else videos:
                 if (b, arm, v) not in have:
                     base = f"{BUILD_ON.get(b)}-{arm}-build-{v}"
                     tasks.append(dict(id=f"{b}-{arm}-build-{v}", baseline=b, arm=arm, stage="build", video=v, bank=None,
@@ -491,7 +505,7 @@ def desired(have, files, answers=None, busy=()):
     first = {i: min(rank[k] for k in block if block[k] == i) for i in set(block.values())}
     # the FIRST groups lead, then the API tasks, then the URGENT lines, whatever their rank (lead())
     tasks.sort(key=lambda t: (lead(t),)
-               + ((first[block[id(t)]], group[t["video"]], rank[id(t)]) if id(t) in block else (rank[id(t)], 0, 0)))
+               + ((first[block[id(t)]], group.get(t["video"], len(group)), rank[id(t)]) if id(t) in block else (rank[id(t)], 0, 0)))
     for i, t in enumerate(tasks):
         t["priority"] = i
     return tasks
