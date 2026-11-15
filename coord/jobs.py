@@ -1,6 +1,8 @@
 """The job board's store: the private dataset morph-graphs/epic-morph-jobs (DESIGN.md).
 
-    tasks.json          the master's list: [{id, baseline, arm, stage, video, bank, pools, priority, est_gpu_h, deps}]
+    tasks.json          the master's list: [{id, baseline, arm, stage, video, bank, pools, priority, est_gpu_h, deps,
+                        rank, waiting}]   priority: the index in the list; rank: {pool: n}, the task is that pool's
+                        n-th free task (1: its next); waiting: why it has no rank (master.rank())
     pools/<pool>.json   one file per pool, written only by that pool's worker:
                         {pool, host, gpus, updated, claims: {task_id: {status, lease_until, claimed, started,
                          finished, seconds, gpu, exit, note}}}   status: running | relay | done | failed
