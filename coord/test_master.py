@@ -143,7 +143,7 @@ BANK_VIDEOS = {"batch10_agree2": B10, "t2_agree2": T2, "t3_agree2": T3, "t4_agre
                "rescue_agree2": T2[:1], "extra_agree2": T3}   # the last two: second banks of videos that have one
 
 
-PRIORITY = set(M.PRIORITY)
+PRIORITY, QA_FROZEN = set(M.PRIORITY), set(M.QA_FROZEN)
 
 
 def board(monkeypatch, tmp_path, experiments=None):
@@ -153,7 +153,8 @@ def board(monkeypatch, tmp_path, experiments=None):
     order.write_text("\n".join(REST[:1] + T2 + T3 + T4 + T5 + REST[1:]) + "\n")   # as build_order.txt: the tranches in it, batch10 not
     monkeypatch.setattr(M, "BUILD_ORDER", str(order))
     monkeypatch.setattr(M, "bank_videos", lambda bank: BANK_VIDEOS[bank])
-    monkeypatch.setattr(M, "PRIORITY", set())   # the tests below are of the whole list; test_paid_rows puts it back
+    monkeypatch.setattr(M, "PRIORITY", set())   # the tests below are of the whole list; test_paid_rows puts both back
+    monkeypatch.setattr(M, "QA_FROZEN", set())
     if experiments is not None:
         monkeypatch.setattr(M, "EXPERIMENTS", experiments)
 
@@ -343,6 +344,19 @@ def test_paid_rows(monkeypatch, tmp_path):
     assert {(t["baseline"], t["arm"]) for t in listed} == PRIORITY & on_board and PRIORITY - on_board <= {("vst", "vst7b")}
     assert not [t for t in listed if t["arm"] in ("m8", "m27", "oss120-q27", "q25vl7b-gpt41") or t["arm"].startswith(("qwen35", "molmo2"))]
     assert M.gate([t for t in tasks if (t["baseline"], t["arm"]) not in PRIORITY])[1] == 0   # the priority rows done: everything else is listed
+    # answering frozen for four baselines: none of their qa tasks is listed, with or without PRIORITY; their builds are
+    monkeypatch.setattr(M, "QA_FROZEN", QA_FROZEN)
+    assert QA_FROZEN == {"magic", "worldmm", "egagent", "m3agent"}
+    frozen = lambda t: t["stage"] == "qa" and t["baseline"] in QA_FROZEN
+    listed, withheld = M.gate(tasks)
+    assert not any(map(frozen, listed)) and withheld == len(tasks) - len(listed)
+    assert {(t["baseline"], t["arm"]) for t in listed if t["baseline"] in QA_FROZEN} == {
+        ("magic", "oss120"), ("worldmm", "g5m"), ("egagent", "gpt41"), ("m3agent", "m3")}
+    assert all(t["stage"] == "build" for t in listed if t["baseline"] in QA_FROZEN)
+    monkeypatch.setattr(M, "PRIORITY", set())
+    listed, withheld = M.gate(tasks)
+    assert listed == [t for t in tasks if not frozen(t)] and withheld == sum(map(frozen, tasks)) > 0
+    monkeypatch.setattr(M, "QA_FROZEN", set())
     monkeypatch.setattr(M, "PRIORITY", set())
     # built: each baseline's last memory file, next to runs.jsonl
     done, _ = M.built_from({f"{b}/{arm}/{v}/{f}" for b, arm, last in (

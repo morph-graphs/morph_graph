@@ -130,6 +130,11 @@ PILOT = []   # emptied 2026-11-14 (Anubhav): the pilot, worldmm-g5m-build-P05-20
 # would pay for twice. A qa task keeps its wait on such a build until the memory is uploaded. Empty since 2026-11-14:
 # WorldMM's gpt-5-mini memories, built by Slurm arrays on Nexus, are in the dataset for all 156 videos.
 HELD = set()
+# Baselines whose answering is frozen, every arm and bank (Anubhav, 2026-11-14): traversal logic is being added to the
+# inference of MAGIC-Video, WorldMM, EGAgent and M3-Agent in another PR, and answers given before it would be redone.
+# Their qa tasks are withheld until that PR is merged (then empty this set); their memory builds are listed as usual.
+# A qa claim already running finishes, and its answers are then replaced by the redone ones.
+QA_FROZEN = {"magic", "worldmm", "egagent", "m3agent"}
 # The other paid rows of the sheet (baselines/<b>/README.md). Max and Pulkit run them through their gateway, which has
 # GPT-4.1, GPT-5-mini, Gemini 3.6 Flash and DeepSeek but no GPT-4o and no Gemini 2.5 Pro, so each row is listed with a
 # stand-in arm it can run (Anubhav, 2026-11-14). The published arms' code stays in each baseline; their lines are off
@@ -442,8 +447,9 @@ def desired(have, files, answers=None, busy=()):
 
 def gate(tasks):
     """(tasks to list, how many are withheld): of the gated arms (GATED) only PILOT's tasks, while it is non-empty,
-    and none of HELD; then, while a task of a PRIORITY arm is among them, only those."""
+    none of HELD and no qa of a QA_FROZEN baseline; then, while a task of a PRIORITY arm is among them, only those."""
     keep = [t for t in tasks if (t["baseline"], t["arm"], t["stage"]) not in HELD
+            and not (t["stage"] == "qa" and t["baseline"] in QA_FROZEN)
             and (not PILOT or not reported(t) or t["id"] in PILOT)]
     first = [t for t in keep if (t["baseline"], t["arm"]) in PRIORITY]
     return first or keep, len(tasks) - len(first or keep)
@@ -526,7 +532,7 @@ def main():
                   f"{sum(held.get(t['id'], (0, {}))[1].get('status') == 'done' for t in tasks if 'stale' in t)} of them "
                   "done already and still stale (the worker's bank is older than the master's, or the questions failed again)")
             print(f"gate: {withheld} tasks withheld (PRIORITY: every arm but the {len(PRIORITY)} priority ones while they have tasks; "
-                  f"PILOT: the reported-configuration and paid-row arms; HELD: {sorted(HELD)})"
+                  f"PILOT: the reported-configuration and paid-row arms; HELD: {sorted(HELD)}; qa frozen: {sorted(QA_FROZEN)})"
                   + (f"; listed of them: {[t['id'] for t in tasks if reported(t)]}" if PILOT else " (PILOT is empty)"))
             print(f"leftovers: {left} tasks listed {LEFTOVER_H} h or more ago, offered to {', '.join(LEFTOVER_POOLS)} too")
             print(f"need a key (pool {', '.join(KEY_POOLS)} only): "
