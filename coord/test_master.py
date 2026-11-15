@@ -445,6 +445,13 @@ def test_existing_tasks_unchanged(monkeypatch, tmp_path):
     assert sum(t["baseline"] == "m3agent" and t["stage"] == "build" for t in new) == len(B10 + T2 + T3 + T4 + T5 + REST)
     assert by[f"m3agent-m3-qa-t2_agree2-{T2[0]}"]["deps"] == [f"m3agent-m3-build-{T2[0]}"]
     assert by[f"m3agent-m3-build-{T2[0]}"]["pools"] == M.M8 and by[f"m3agent-m3-qa-t2_agree2-{T2[0]}"]["pools"] == M.M27
+    # M3-Agent's qa is never listed without its memory: with no build line to wait on, only the built videos' qa is
+    was = M.EXPERIMENTS
+    monkeypatch.setattr(M, "EXPERIMENTS", [e for e in was if e[:3] != ("m3agent", "m3", "build")])
+    only = [t for t in M.desired(have | {("m3agent", "m3", T2[0])}, files) if t["baseline"] == "m3agent"]
+    assert only and {t["video"] for t in only} == {T2[0]} and not any(t["deps"] or t["stage"] != "qa" for t in only)
+    assert M.NEEDS_MEMORY == {"m3agent"} and not [t for t in M.desired(have, files) if t["baseline"] == "m3agent"]
+    monkeypatch.setattr(M, "EXPERIMENTS", was)
     monkeypatch.setattr(M, "EXPERIMENTS", full)
     noprio = lambda ts: [{k: v for k, v in t.items() if k != "priority"} for t in ts]
     assert noprio(strip(t for t in M.desired(have, files) if not M.reported(t))) == noprio(old)
