@@ -205,7 +205,7 @@ index be92d88..0df9b6d 100644
  def get_vLLM(ip_address: str, llm_name: str):
      """Get a local LLM using Langchain's ChatOpenAI, e.g. Qwen 2.5 VL 7B."""
      qwen_vl_local = ChatOpenAI(
-@@ -180,8 +188,23 @@ def get_file_contents(filename):
+@@ -180,8 +188,24 @@ def get_file_contents(filename):
      except FileNotFoundError:
          raise FileNotFoundError(f"'{filename}' file not found")
  
@@ -222,10 +222,11 @@ index be92d88..0df9b6d 100644
 +GOOGLE_GENAI_API_KEY = get_api_key("GEMINI_API_KEY", "GOOGLE_API_KEY")
 +# EPIC-Morph port, the gateway for the GPT calls: with OPENROUTER_API_KEY set and OPENAI_API_KEY not, the same
 +# Chat Completions requests go to OpenRouter as openai/<model>, pinned to the provider OpenAI with no fallback
-+# (OpenAI itself answers, or the call fails). With OPENAI_API_KEY set they go to OpenAI, as released.
++# (OpenAI itself answers, or the call fails). With OPENAI_API_KEY set they go to OpenAI, as released, or to the
++# OpenAI-compatible gateway in OPENAI_BASE_URL when that is set (the endpoint is recorded with every call).
 +OPENROUTER = bool(os.environ.get("OPENROUTER_API_KEY")) and not os.environ.get("OPENAI_API_KEY")
 +OPENAI_API_KEY = get_api_key("OPENROUTER_API_KEY" if OPENROUTER else "OPENAI_API_KEY")
-+OPENAI_BASE_URL = (os.environ.get("OPENROUTER_BASE_URL") or "https://openrouter.ai/api/v1") if OPENROUTER else "https://api.openai.com/v1"
++OPENAI_BASE_URL = (os.environ.get("OPENROUTER_BASE_URL") or "https://openrouter.ai/api/v1") if OPENROUTER else os.environ.get("OPENAI_BASE_URL") or "https://api.openai.com/v1"
 +OPENAI_MODEL_PREFIX = "openai/" if OPENROUTER else ""
 +OPENAI_EXTRA_BODY = {"provider": {"only": ["openai"], "allow_fallbacks": False}} if OPENROUTER else None
  

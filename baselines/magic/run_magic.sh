@@ -44,6 +44,7 @@
 #                    MAGIC_CONTROLLER=reason lets the reasoning model run the search loop too (the released code)
 # Every step skips finished work, so rerunning the same command resumes.
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/../common/single_process_env.sh"   # never a torch.distributed job: drop torchrun's variables
 STAGE=${1:?usage: run_magic.sh <prep|build|qa|upload|all> <video> <arm> [bank]}
 V=${2:?video id}; ARM=${3:?arm m8, m27, oss120, oss120-flash or oss120-q27}; BANK=${4:-}
 M=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); REPO=$(cd "$M/../.." && pwd); R=$M/MAGIC-video   # R: the submodule

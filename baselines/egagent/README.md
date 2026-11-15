@@ -173,6 +173,13 @@ For an sbatch job, read the key into the job's environment inside the job and do
   `endpoint`; through OpenRouter also `provider` (who served the calls) and `cost` (dollars OpenRouter
   charged, summed). The memory folder stays `egagent/gpt41/<video>/`: the same model through another gateway.
 - **One gateway per run.** With both keys set OpenAI's is used and `OPENROUTER_API_KEY` is dropped.
+- **An OpenAI-compatible gateway.** With `OPENAI_API_KEY`, `OPENAI_BASE_URL` (passed on by `docker/run.sh`)
+  points the same requests at another endpoint, model id `gpt-4.1` unchanged and no provider pin. A gateway
+  serving GPT-4.1 from Azure OpenAI answers as `azure/openai/gpt-4.1`, which counts as GPT-4.1; the `endpoint`
+  of every usage row says which gateway it was. A gateway that answers with its deployment's own label:
+  `OPENAI_MODEL_ALIASES="gpt-4.1=<label>"` counts that label as GPT-4.1 (the label is what gets recorded, so
+  pass it through; never rewrite it to `gpt-4.1`). `OPENAI_PROVIDER_NOTE` (e.g. "azure-openai, via local
+  relay") is recorded in every GPT usage row as `provider_note`, with the replies' `system_fingerprints`.
 - **Check without a key**: `epic/stub_check.py ... --gateway openrouter` runs the paid scripts against the
   fake APIs with only an OpenRouter key set and checks, on every GPT request, the host, the `openai/gpt-4.1`
   id, the provider pin and the key used, and that the usage rows hold the endpoint, provider and cost; without

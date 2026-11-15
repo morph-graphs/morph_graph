@@ -1,8 +1,8 @@
 diff --git a/EgoRAG/egorag/utils/util.py b/EgoRAG/egorag/utils/util.py
-index 1fe0152..c64ddaa 100644
+index 1fe0152..650f488 100644
 --- a/EgoRAG/egorag/utils/util.py
 +++ b/EgoRAG/egorag/utils/util.py
-@@ -13,6 +13,50 @@ from azure.core.pipeline.transport import RequestsTransport
+@@ -13,6 +13,56 @@ from azure.core.pipeline.transport import RequestsTransport
  from openai import OpenAI
  
  
@@ -50,10 +50,16 @@ index 1fe0152..c64ddaa 100644
 +            {"provider": {"only": [provider], "allow_fallbacks": False}})
 +
 +
++# EPIC-Morph port: per function, why its last call gave up (endpoint, model, the API's own message). Upstream turns a
++# failed call into the text "error" (call_gpt4) or None (call_deepseek) and goes on, so the reason is only in the
++# per-attempt prints; epic/build_memory.py ends a failed build with it.
++LAST_ERROR = {}
++
++
  def call_gpt4(
      prompt: str,
      system_message: str = "You are an effective first perspective assistant.",
-@@ -37,6 +81,7 @@ def call_gpt4(
+@@ -37,6 +87,7 @@ def call_gpt4(
      azure_key = os.getenv("AZURE_API_KEY")
      azure_endpoint = os.getenv("AZURE_API_ENDPOINT")
      openai_key = os.getenv("OPENAI_API_KEY")
@@ -61,19 +67,21 @@ index 1fe0152..c64ddaa 100644
  
      # Use Azure if both Azure credentials are available
      if azure_key and azure_endpoint:
-@@ -60,7 +105,9 @@ def call_gpt4(
+@@ -60,31 +111,40 @@ def call_gpt4(
              try:
                  response = requests.post(azure_endpoint, headers=headers, json=payload)
                  response.raise_for_status()
 -                return response.json()["choices"][0]["message"]["content"]
 +                data = response.json()
-+                _log_usage("call_gpt4", data)
++                _log_usage("call_gpt4", data, azure_endpoint)
 +                return data["choices"][0]["message"]["content"]
              except Exception as e:
                  print(f"Attempt {attempt + 1} failed. Error: {e}")
                  if attempt < retries - 1:
-@@ -69,22 +116,28 @@ def call_gpt4(
+                     time.sleep(2)
+                 else:
                      print("All retry attempts failed.")
++                    LAST_ERROR["call_gpt4"] = f"{azure_endpoint}: {type(e).__name__}: {e}"
                      return "error"
      # Fall back to standard OpenAI API if OpenAI key is available
 -    elif openai_key:
@@ -107,7 +115,15 @@ index 1fe0152..c64ddaa 100644
                  return response.choices[0].message.content
              except Exception as e:
                  print(f"Attempt {attempt + 1} failed. Error: {e}")
-@@ -117,6 +170,7 @@ def call_deepseek(
+@@ -92,6 +152,7 @@ def call_gpt4(
+                     time.sleep(2)
+                 else:
+                     print("All retry attempts failed.")
++                    LAST_ERROR["call_gpt4"] = f"{client.base_url} model {model}: {type(e).__name__}: {e}"
+                     return "error"
+     else:
+         raise ValueError("Neither Azure OpenAI nor standard OpenAI credentials are properly configured")
+@@ -117,6 +178,7 @@ def call_deepseek(
      azure_key = os.getenv("AZURE_DEEPSEEK_KEY")
      azure_endpoint = os.getenv("AZURE_DEEPSEEK_ENDPOINT")
      deepseek_api_key = os.getenv("DEEPSEEK_API_KEY")
@@ -115,15 +131,19 @@ index 1fe0152..c64ddaa 100644
  
      # Use Azure if both Azure credentials are available
      if azure_key and azure_endpoint:
-@@ -140,6 +194,7 @@ def call_deepseek(
+@@ -140,6 +202,7 @@ def call_deepseek(
                      model=model_name,
                      max_tokens=max_tokens,
                  )
-+                _log_usage("call_deepseek", response)
++                _log_usage("call_deepseek", response, azure_endpoint)
                  full_response = response["choices"][0]["message"]["content"]
                  # Only split if the response contains </think> tag
                  if "</think>" in full_response:
-@@ -154,11 +209,12 @@ def call_deepseek(
+@@ -151,14 +214,16 @@ def call_deepseek(
+                 print(f"Error on attempt {retry_count}: {e}")
+                 if retry_count == max_retries:
+                     print("Max retries reached. Giving up.")
++                    LAST_ERROR["call_deepseek"] = f"{azure_endpoint} model {model_name}: {type(e).__name__}: {e}"
                      return None
  
      # Fall back to standard DeepSeek API if API key is available
@@ -141,7 +161,7 @@ index 1fe0152..c64ddaa 100644
  
          max_retries = 3
          retry_count = 0
-@@ -166,15 +222,17 @@ def call_deepseek(
+@@ -166,15 +231,17 @@ def call_deepseek(
          while retry_count < max_retries:
              try:
                  response = client.chat.completions.create(
@@ -162,3 +182,11 @@ index 1fe0152..c64ddaa 100644
                  if "</think>" in full_response:
                      response = full_response.split("</think>")[1]
                      return response
+@@ -184,6 +251,7 @@ def call_deepseek(
+                 print(f"Error on attempt {retry_count}: {e}")
+                 if retry_count == max_retries:
+                     print("Max retries reached. Giving up.")
++                    LAST_ERROR["call_deepseek"] = f"{client.base_url} model {model}: {type(e).__name__}: {e}"
+                     return None
+     else:
+         raise ValueError("Neither Azure DeepSeek nor standard DeepSeek credentials are properly configured")

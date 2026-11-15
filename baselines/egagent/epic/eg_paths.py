@@ -26,10 +26,18 @@ CLIP_S = 30                                          # caption window (paper: 30
 
 
 # a returned model id that counts as the model asked for: the name itself or one of its dated snapshots
-# (OpenRouter returns GPT-4.1's as openai/gpt-4.1...)
-SAME_MODEL = {"gpt-4.1": r"(openai/)?gpt-4\.1(-\d{4}-\d{2}-\d{2})?", "gemini-2.5-pro": r"(models/)?gemini-2\.5-pro(-\d[\w.-]*)?",
+# (OpenRouter returns GPT-4.1's as openai/gpt-4.1..., an OpenAI-compatible gateway serving it from Azure OpenAI
+# as azure/openai/gpt-4.1; the endpoint is recorded with each call)
+SAME_MODEL = {"gpt-4.1": r"(azure/)?(openai/)?gpt-4\.1(-\d{4}-\d{2}-\d{2})?", "gemini-2.5-pro": r"(models/)?gemini-2\.5-pro(-\d[\w.-]*)?",
               "gemini-3.6-flash": r"(models/)?gemini-3\.6-flash(-\d[\w.-]*)?"}
 FIELDS = ("calls", "input_tokens", "cached_tokens", "output_tokens", "reasoning_tokens")
+
+
+def aliases(model):
+    """Reply ids that also count as `model`: OPENAI_MODEL_ALIASES="gpt-4.1=<label>,...", for a gateway that answers
+    with its deployment's own label (each call still records the label it returned)."""
+    pairs = [x.split("=", 1) for x in os.environ.get("OPENAI_MODEL_ALIASES", "").split(",") if "=" in x]
+    return {label.strip() for asked, label in pairs if asked.strip() == model}
 
 
 class WrongModel(SystemExit):
@@ -44,7 +52,8 @@ def watch_api(stage, model):
     "unreported". output_tokens is what the API billed as output (Gemini's thinking included), cached_tokens and
     reasoning_tokens the parts of the input and the output it reported as such. A GPT row also has the
     `endpoint` that was called, and through OpenRouter the `provider` that served it and `cost`, the dollars
-    OpenRouter charged, summed."""
+    OpenRouter charged, summed; `provider_note` is OPENAI_PROVIDER_NOTE (who serves the calls behind an
+    OpenAI-compatible gateway, in words) and `system_fingerprints` the distinct fingerprints the replies carried."""
     from contextvars import ContextVar
     from langchain_core.callbacks import BaseCallbackHandler
     from langchain_core.tracers.context import register_configure_hook
@@ -57,7 +66,8 @@ def watch_api(stage, model):
         def result(self, response, *a, **kw):
             res = self._egagent_result(response, *a, **kw)
             extra = response if isinstance(response, dict) else getattr(response, "model_extra", None) or {}
-            res.llm_output.update(endpoint=str(self.openai_api_base), provider=extra.get("provider"))
+            res.llm_output.update(endpoint=str(self.openai_api_base), provider=extra.get("provider"),
+                                  provider_note=os.environ.get("OPENAI_PROVIDER_NOTE") or None)
             return res
         ChatOpenAI._create_chat_result = result
 
@@ -76,13 +86,16 @@ def watch_api(stage, model):
             c["cached_tokens"] += (use.get("input_token_details") or {}).get("cache_read") or 0
             c["output_tokens"] += use.get("output_tokens") or 0
             c["reasoning_tokens"] += (use.get("output_token_details") or {}).get("reasoning") or 0
-            c.update({k: meta[k] for k in ("endpoint", "provider") if meta.get(k)})
+            c.update({k: meta[k] for k in ("endpoint", "provider", "provider_note") if meta.get(k)})
+            fp = meta.get("system_fingerprint")
+            if fp and fp not in c.setdefault("system_fingerprints", []):
+                c["system_fingerprints"].append(fp)
             cost = (meta.get("token_usage") or {}).get("cost")   # OpenRouter reports it with every reply
             if cost is not None:
                 c["cost"] = round(c.get("cost", 0) + cost, 6)
             if sum(r["calls"] for r in calls.values()) % 25 == 0:   # a killed run's log still says what it spent
                 print("API so far:", json.dumps(calls), flush=True)
-            if got != "unreported" and not re.fullmatch(SAME_MODEL[model], got):
+            if got != "unreported" and not re.fullmatch(SAME_MODEL[model], got) and got not in aliases(model):
                 print(f"STOP: asked {model}, the API answered with {got!r}; nothing from this call is kept", flush=True)
                 raise WrongModel(4)
 

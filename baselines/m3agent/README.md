@@ -146,7 +146,11 @@ Other changes, all in the submodule's first commit:
 6. The memorization output is accepted under `video_description` as well as `video_descriptions` (the prompt asks
    for the first, upstream's parser reads the second), and its retries are capped at 3 instead of 20: decoding is
    near-greedy (temperature 1e-6), so a retry repeats the same output.
-7. Control: every request seeded (sampling stays at upstream's 0.6 / 0.95 / 20), searches run in one process on a
+7. Control: every request seeded (sampling stays at upstream's 0.6 / 0.95 / 20) and vLLM's engine run in the same
+   process (`VLLM_ENABLE_V1_MULTIPROCESSING=0`): vLLM's default separate engine process starts stepping before all of
+   a call's requests arrive, so batching and prefix caching, and with them the replies, changed run to run (14 of 59
+   first replies identical across two runs, greedy too; in-process: 59/59, and two full runs on two nodes gave
+   identical conversations, searches and letters); searches run in one process on a
    cached truncated graph instead of a process pool reloading the pickle, max_model_len 16384 and
    gpu_memory_utilization 0.8 (to leave room for the embedding model), answers resumable. Parsing: the action is
    read after `</think>` only (upstream also matched inside reasoning cut off at 1024 tokens) and without a

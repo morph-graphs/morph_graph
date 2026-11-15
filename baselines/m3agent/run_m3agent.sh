@@ -37,6 +37,7 @@
 #   M3AGENT_GPU_UTIL, M3AGENT_MAX_LEN  vLLM's gpu_memory_utilization (0.8) and max_model_len (16384)
 # Every stage skips finished work, so rerunning the same command resumes (build resumes after its last clip).
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/../common/single_process_env.sh"   # never a torch.distributed job: drop torchrun's variables
 STAGE=${1:?usage: run_m3agent.sh <prep|build|qa|blind|upload|all> <video> <arm> [bank]}
 V=${2:?video id}; ARM=${3:?arm: m3 or m3api}; BANK=${4:-}
 case $ARM in m3) BACKEND=local ;; m3api) BACKEND=api ;; *) echo "arm must be m3 or m3api"; exit 1 ;; esac
