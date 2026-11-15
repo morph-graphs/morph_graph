@@ -63,6 +63,18 @@ holds on any host that sees the state folder, whatever host the claims name: wit
 exit codes; with --sbatch a task whose `sbatch --wait` died with the old worker is followed through squeue, and when
 its job has ended sacct decides (COMPLETED 0:0: done; anything else: failed).
 
+With --auto-slots F (slurm; off by default) the worker sizes its own slot count from how its jobs fare in the queue;
+--slots stays the ceiling. A task whose job runs keeps its slot; what is sized is how many claimed tasks may wait in
+the queue at once, since no other pool can run a claimed task. While jobs start within F minutes of their claim, up
+to --waiting tasks (default 4) may wait: enough to fill every free GPU within a few cycles and to have a job ready for
+each one that ends before the next cycle. Once the last job to start took longer than F, one task may wait: the probe
+that shows when there is room again. And when tasks have waited longer than 2 F (a per-user limit: Zaratan's 16 H100s,
+less whatever our other jobs hold; or a full cluster), all of them but the oldest are released: their claims are
+dropped in the cycle's one commit, then their pending jobs cancelled, so another pool can take them. With --queues each
+group of tasks that fit the same queues is sized by itself. Nothing is kept between cycles: squeue says what waits,
+and each claim keeps how long its job waited (`wait`, seconds; written with the commits that happen anyway), so a
+restarted worker goes on where the old one was. F: Zaratan 5, Nexus 15 (DESIGN.md has the measurements).
+
 The Hub allows a repository 128 commits an hour, shared by every pool: a cycle with nothing to report but renewed
 leases and the heartbeat commits every 20 minutes at most, and when the Hub refuses a read or a commit (429, or the
 network is down) the worker waits for the time it names, or a few minutes, and goes on. It never stops for that.
@@ -134,8 +146,9 @@ def board_wait(e, what):
 
 def substance(pool_file):
     """A pool file without what changes every cycle (the heartbeat time, the leases): equal means nothing to report."""
-    return json.dumps({**{k: v for k, v in pool_file.items() if k not in ("updated", "claims")},
-                       "claims": {tid: {k: v for k, v in c.items() if k != "lease_until"}
+    # (`wait` and `auto`, --auto-slots' measurements, ride along with the next commit instead of causing one)
+    return json.dumps({**{k: v for k, v in pool_file.items() if k not in ("updated", "claims", "auto")},
+                       "claims": {tid: {k: v for k, v in c.items() if k not in ("lease_until", "wait")}
                                   for tid, c in pool_file.get("claims", {}).items()}}, sort_keys=True)
 
 
@@ -218,13 +231,86 @@ def submit_copies(task, a, queues, state, sbatch="sbatch"):
     return ids
 
 
-def my_jobs(squeue="squeue"):
-    """Ids of this user's jobs still in the queue (pending, running, requeued), or None when squeue fails."""
+def queue_view(squeue="squeue"):
+    """{job id: (state, start time)} of this user's jobs still in the queue (pending, running, requeued), or None
+    when squeue fails."""
     try:
-        r = subprocess.run([squeue, "-h", "-u", getpass.getuser(), "-o", "%i"], capture_output=True, text=True, timeout=120)
-        return set(r.stdout.split()) if r.returncode == 0 else None
+        r = subprocess.run([squeue, "-h", "-u", getpass.getuser(), "-o", "%i|%T|%S"], capture_output=True, text=True, timeout=120)
+        rows = [(l.strip().split("|") + ["", ""])[:3] for l in r.stdout.splitlines() if l.strip()]
+        return {x[0]: tuple(x[1:]) for x in rows} if r.returncode == 0 else None
     except Exception:
         return None
+
+
+def my_jobs(squeue="squeue"):
+    """Ids of this user's jobs still in the queue, or None when squeue fails."""
+    view = queue_view(squeue)
+    return None if view is None else set(view)
+
+
+def job_ids(p):
+    """Slurm job ids of a claimed task (p: its path prefix in the state folder): its copies (--queues) or its one job."""
+    try:
+        if os.path.exists(p + ".jobs"):
+            ids = [l.split()[0] for l in open(p + ".jobs") if l.strip()]
+        else:
+            ids = [open(p + ".log.submit").readline().strip().split(";")[0]]
+    except OSError:
+        ids = []
+    return [j for j in ids if j.isdigit()]
+
+
+def job_start(p, view):
+    """Has a claimed task's job started (view: queue_view())? "pending" while every job of it in the queue is PENDING;
+    else its start as unix time, or 0 when it started but squeue no longer lists it; None when that cannot be said
+    (nothing submitted; every copy gone and none ran)."""
+    ids = job_ids(p)
+    if os.path.exists(p + ".ran"):   # --queues: the guard of the copy that started wrote it
+        return os.path.getmtime(p + ".ran")
+    mine = [view[j] for j in ids if j in view]
+    if mine and all(m[0] == "PENDING" for m in mine):
+        return "pending"
+    for state, start in mine:
+        try:   # (a pending copy's start time is the scheduler's estimate)
+            if state != "PENDING":
+                return time.mktime(time.strptime(start, "%Y-%m-%dT%H:%M:%S"))
+        except ValueError:
+            pass
+    if not ids or os.path.exists(p + ".jobs"):
+        return None
+    return 0   # --sbatch: its job came and went between two cycles
+
+
+def queue_group(tid, queues):
+    """--auto-slots sizes each group of tasks by itself: the tasks that fit the same queues (27B work that only an H200
+    queue takes must not hold back 8B claims). Read from the task id, so finished claims have it too. () without --queues."""
+    parts = kind(tid).split("-")
+    if not queues or len(parts) < 3:
+        return ()
+    return tuple(fitting(dict(baseline=parts[0], arm="-".join(parts[1:-1]), stage=parts[-1]), queues))
+
+
+def auto_slots(claims, pending, group, t, fast_s, waiting):
+    """The --auto-slots rule. claims: this pool's; pending: the claimed tasks whose jobs still wait in the queue; group:
+    task id -> its group, each sized by itself; fast_s: a job that starts within this many seconds of its claim is fast.
+    A group may have `waiting` tasks in the queue while its last job to start was fast, and one once that job was slow
+    or a task has waited longer than 2 * fast_s; of the tasks that have, all but the group's oldest waiting one are
+    released. Returns ({group: how many more tasks it may claim now}, [task ids to release])."""
+    at = lambda tid: claims[tid].get("started_t", 0)
+    pend, last = collections.defaultdict(list), {}   # last: (start, wait) of the group's last job to start
+    for tid, c in claims.items():
+        if tid in pending:
+            pend[group(tid)].append(tid)
+        elif "wait" in c:
+            last[group(tid)] = max(last.get(group(tid), (0, 0)), (at(tid) + c["wait"], c["wait"]))
+    room, release = {}, []
+    for g in set(pend) | set(last):
+        tids = sorted(pend[g], key=at)
+        drop = [x for x in tids[1:] if t - at(x) > 2 * fast_s]
+        release += drop
+        slow = last.get(g, (0, 0))[1] > fast_s or any(t - at(x) > 2 * fast_s for x in tids)
+        room[g] = (1 if slow else waiting) - (len(tids) - len(drop))
+    return room, release
 
 
 def copies_state(p, queued):
@@ -338,6 +424,12 @@ def main():
     ap.add_argument("--baselines", nargs="+", default=["merit", "api"],   # api: only Max's pool gets those tasks
                     help="baselines this worker takes (it needs each one's image or SIF for every arm it may get): "
                          "e.g. merit magic worldmm")
+    ap.add_argument("--auto-slots", type=float, default=0, metavar="MINUTES", help="slurm: size the slot count from the queue, "
+                    "--slots being the ceiling: --waiting claimed tasks may wait in the queue while jobs start within MINUTES "
+                    "of their claim, one once the last took longer; tasks that wait over 2 x MINUTES (a per-user limit, a "
+                    "full cluster) go back to the board, all but the oldest (0 = off: every slot is filled)")
+    ap.add_argument("--waiting", type=int, default=4, help="--auto-slots: claimed tasks that may wait in the queue at once (at "
+                    "least as many as jobs end in one cycle when every GPU is busy)")
     ap.add_argument("--every", type=int, default=300, help="seconds between cycles")
     ap.add_argument("--max-tasks", type=int, default=0, help="stop claiming after this many (0 = no limit)")
     ap.add_argument("--state", default=None, help="local folder for logs and exit codes (default ~/.cache/coord/<pool>)")
@@ -350,6 +442,8 @@ def main():
     a = ap.parse_args()
     if a.queues and (a.launcher != "slurm" or a.sbatch):
         ap.error("--queues needs --launcher slurm and replaces --sbatch")
+    if a.auto_slots and a.launcher != "slurm":
+        ap.error("--auto-slots needs --launcher slurm (it reads the queue)")
     queues = load_queues(a.queues) if a.queues else None
     state = os.path.abspath(a.state or os.path.expanduser(f"~/.cache/coord/{a.pool}"))   # the jobs write there too
     os.makedirs(state, exist_ok=True)
@@ -360,6 +454,7 @@ def main():
     # docker / local: only those started on this host, where their processes are.
     here = (lambda c: True) if a.launcher == "slurm" else (lambda c: c.get("host") == host)
     last_commit = 0
+    seen_pending, said = {}, None   # --auto-slots: when a task was last seen waiting; the last sizes printed
     while True:
         try:
             head, tasks, pools = jobs.read()
@@ -370,7 +465,9 @@ def main():
         claims = mine.setdefault("claims", {})
         before = substance(mine) if a.pool in pools else None
         t = jobs.now()
-        queued = my_jobs() if queues else None   # one squeue per cycle for every task's copies
+        view = queue_view() if queues or a.auto_slots else None   # one squeue per cycle for every task's copies
+        queued = None if view is None else set(view)
+        pending = set()   # --auto-slots: the claimed tasks whose jobs still wait in the queue
         others = {tid: (n, c) for n, p in pools.items() if n != a.pool for tid, c in p.get("claims", {}).items()}
         # finished, still running, lost, or taken over by another pool?
         for tid, c in claims.items():
@@ -385,6 +482,13 @@ def main():
                 c.update(status="superseded", finished=jobs.iso(), note=f"taken over by pool {o[0]}")
                 continue
             p = os.path.join(state, tid)
+            if a.auto_slots and view is not None and "wait" not in c:   # has its job started, and after how long?
+                at = job_start(p, view)
+                if at == "pending":
+                    pending.add(tid)
+                    seen_pending[tid] = t
+                elif at is not None:   # (start time unknown: not before it was last seen waiting)
+                    c["wait"] = int(max(0, (at or seen_pending.pop(tid, c.get("started_t", t))) - c.get("started_t", t)))
             if os.path.exists(p + ".jobs"):   # submitted to several queues (--queues)
                 if queued is None:   # squeue failed this cycle: assume nothing, keep the lease
                     c["lease_until"] = t + jobs.LEASE_S
@@ -434,6 +538,21 @@ def main():
                         break
                 if how or note:
                     c["note"] = f"{how}: {note}" if how and note and a.launcher == "slurm" else how or note
+        room, cancel = {}, []
+        if a.auto_slots and view is not None:
+            room, release = auto_slots(claims, pending, lambda tid: queue_group(tid, queues), t, a.auto_slots * 60, a.waiting)
+            for tid in release:   # their claims go with this cycle's commit, their pending jobs once it is made
+                cancel += job_ids(os.path.join(state, tid))
+                print(f"{jobs.iso()} auto-slots: releasing {tid} after {int(t - claims[tid].get('started_t', t)) // 60} min "
+                      f"in the queue", flush=True)
+                del claims[tid]
+                pending.discard(tid)
+            mine["auto"] = dict(minutes=a.auto_slots, pending=len(pending),
+                                may_claim={",".join(g) or "all": n for g, n in sorted(room.items())})
+            if mine["auto"] != said:
+                said = mine["auto"]
+                print(f"{jobs.iso()} auto-slots: {sum('wait' in c for c in claims.values() if c['status'] == 'running')} started, "
+                      f"{len(pending)} waiting; may claim {said['may_claim'] or a.waiting}", flush=True)
         busy = collections.Counter(c["slot"] for c in claims.values() if c["status"] == "running" and here(c))
         free = []
         for s in a.slots:   # a slot id listed n times runs n tasks at once
@@ -441,6 +560,8 @@ def main():
                 busy[s] -= 1
             else:
                 free.append(s)
+        if a.auto_slots and view is None:   # squeue failed: how many are waiting is not known, so claim nothing
+            free = []
         p90 = runtimes(pools) if a.until else {}
         held = jobs.taken(pools, t)
         fails = jobs.failures(pools)
@@ -495,6 +616,10 @@ def main():
                 continue
             if any(d not in done for d in task.get("deps", [])):
                 continue
+            g = queue_group(tid, queues) if a.auto_slots else None
+            if a.auto_slots and room.get(g, a.waiting) < 1:   # as many of its group are waiting in the queue as may
+                continue
+            room[g] = room.get(g, a.waiting) - 1
             slot = free.pop(0)
             claims[tid] = dict(status="running", host=host, node=socket.gethostname(), slot=slot,
                                gpu="(scheduler)" if a.launcher == "slurm" else gpu_name(slot), claimed=jobs.iso(),
@@ -526,6 +651,13 @@ def main():
                 print(f"{jobs.iso()} board moved under us; re-reading", flush=True)
                 continue
             last_commit = jobs.now()
+        if cancel:   # --auto-slots, only now that the board no longer has their claims (a failed commit: nothing was cancelled,
+            # the next cycle decides again). Only jobs still pending: one that started in the last seconds runs on, unclaimed,
+            # as a task taken over does; its outputs are idempotent
+            r = subprocess.run(["scancel", "--state=PENDING", *cancel], capture_output=True, text=True)
+            claimed_total -= len(release)
+            if r.returncode:
+                print(f"{jobs.iso()} auto-slots: scancel {' '.join(cancel)} failed: {r.stderr.strip()[:200]}", flush=True)
         for task, slot, qs in start:   # start only after the claim is committed
             tid = task["id"]
             if a.prefetch:   # before any copy can start
