@@ -144,12 +144,10 @@ PILOT = []   # emptied 2026-11-14 (Anubhav): the pilot, worldmm-g5m-build-P05-20
 # (API_CONFIGS above), so nothing is held.
 HELD = set()
 # Baselines whose answering is frozen, every arm and bank: their qa tasks are withheld, their memory builds are listed as
-# usual, and a qa claim already running finishes. First used (Anubhav, 2026-11-14) while the walk through the memory
-# was being logged for MAGIC-Video, WorldMM, EGAgent and M3-Agent (#73, merged 2026-11-15; answers without a trace are
-# redone: TRACED). Since then WorldMM, EGAgent and M3-Agent answer again. MAGIC-Video stays frozen until the two things
-# #73 found are checked: an entity node's time span runs to its last sighting in the whole memory, so it can extend
-# past a question's t_ask, and the time parser sometimes searches a window after t_ask (answers could use the future).
-QA_FROZEN = {"magic"}
+# usual, and a qa claim already running finishes. Used on 2026-11-14/15 while the walk through the memory was being
+# logged for MAGIC-Video, WorldMM, EGAgent and M3-Agent (#73), and for MAGIC-Video until its time-named searches were
+# cut at t_ask (#88: they could return captions from after a question's ask time). Empty since.
+QA_FROZEN = set()
 # The other paid rows of the sheet (baselines/<b>/README.md). Max and Pulkit run them through their gateway, which has
 # GPT-4.1, GPT-5-mini, Gemini 3.6 Flash and DeepSeek but no GPT-4o and no Gemini 2.5 Pro, so each row is listed with a
 # stand-in arm it can run (Anubhav, 2026-11-14). The published arms' code stays in each baseline; their lines are off
