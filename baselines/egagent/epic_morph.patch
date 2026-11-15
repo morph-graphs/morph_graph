@@ -227,7 +227,7 @@ index be92d88..0df9b6d 100644
 +OPENROUTER = bool(os.environ.get("OPENROUTER_API_KEY")) and not os.environ.get("OPENAI_API_KEY")
 +OPENAI_API_KEY = get_api_key("OPENROUTER_API_KEY" if OPENROUTER else "OPENAI_API_KEY")
 +OPENAI_BASE_URL = (os.environ.get("OPENROUTER_BASE_URL") or "https://openrouter.ai/api/v1") if OPENROUTER else os.environ.get("OPENAI_BASE_URL") or "https://api.openai.com/v1"
-+OPENAI_MODEL_PREFIX = "openai/" if OPENROUTER else ""
++OPENAI_MODEL_PREFIX = "openai/" if OPENROUTER else os.environ.get("EGAGENT_GPT_PREFIX", "")   # e.g. azure/openai/ on a gateway
 +OPENAI_EXTRA_BODY = {"provider": {"only": ["openai"], "allow_fallbacks": False}} if OPENROUTER else None
  
  def get_50_frames_from_video(image_dir:str, n_samples=50) -> Tuple[int, List[str]]:
