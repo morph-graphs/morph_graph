@@ -44,6 +44,20 @@ class WrongModel(SystemExit):
     """Not an Exception on purpose: no retry loop (ours or LangChain's) may swallow it."""
 
 
+FAILURE = []   # why this process failed, in one line: printed after the usage summary, so a log's tail shows it
+
+
+def failed(why):
+    """Set the failure line: an exception (its type, the HTTP status and error code an API error carries, the message)
+    or a text."""
+    if isinstance(why, BaseException):
+        e, why = why, type(why).__name__ + ":"
+        why += f" HTTP {e.status_code}" if getattr(e, "status_code", None) else ""
+        why += f" [{e.code}]" if isinstance(getattr(e, "code", None), str) else ""
+        why += f" {getattr(e, 'message', None) or e}"
+    FAILURE[:] = [" ".join(str(why).split())[:220]]   # a board note keeps the last ~400 characters of a log
+
+
 def watch_api(stage, model):
     """Watch every LLM call this process makes through LangChain: count calls and tokens per model id the API
     says answered, and stop the run (exit 4) when that id is not `model` (a provider may route a retired model's
@@ -51,12 +65,14 @@ def watch_api(stage, model):
     its stage, $EGAGENT_USAGE_STAGE, into runs.jsonl). A call whose reply names no model is counted under
     "unreported". output_tokens is what the API billed as output (Gemini's thinking included), cached_tokens and
     reasoning_tokens the parts of the input and the output it reported as such. A GPT row also has the
-    `endpoint` that was called, and through OpenRouter the `provider` that served it and `cost`, the dollars
+    `endpoint` that was called (a Gemini row too), and through OpenRouter the `provider` that served it and `cost`, the dollars
     OpenRouter charged, summed; `provider_note` is OPENAI_PROVIDER_NOTE (who serves the calls behind an
-    OpenAI-compatible gateway, in words) and `system_fingerprints` the distinct fingerprints the replies carried."""
+    OpenAI-compatible gateway, in words) and `system_fingerprints` the distinct fingerprints the replies carried.
+    A process that fails prints `<stage> failed: <why>` after the summary (failed())."""
     from contextvars import ContextVar
     from langchain_core.callbacks import BaseCallbackHandler
     from langchain_core.tracers.context import register_configure_hook
+    from langchain_google_genai import ChatGoogleGenerativeAI
     from langchain_openai import ChatOpenAI
 
     calls = {}
@@ -70,6 +86,14 @@ def watch_api(stage, model):
                                   provider_note=os.environ.get("OPENAI_PROVIDER_NOTE") or None)
             return res
         ChatOpenAI._create_chat_result = result
+    if not hasattr(ChatGoogleGenerativeAI, "_egagent_generate"):   # the Gemini endpoint, as the client's transport has it
+        ChatGoogleGenerativeAI._egagent_generate = ChatGoogleGenerativeAI._generate
+
+        def generate(self, *a, **kw):
+            res = self._egagent_generate(*a, **kw)
+            res.llm_output = {**(res.llm_output or {}), "endpoint": str(self.client._transport._host)}
+            return res
+        ChatGoogleGenerativeAI._generate = generate
 
     class Watch(BaseCallbackHandler):
         raise_error = True
@@ -97,11 +121,18 @@ def watch_api(stage, model):
                 print("API so far:", json.dumps(calls), flush=True)
             if got != "unreported" and not re.fullmatch(SAME_MODEL[model], got) and got not in aliases(model):
                 print(f"STOP: asked {model}, the API answered with {got!r}; nothing from this call is kept", flush=True)
+                failed(f"asked {model}, the API answered with {got!r} (exit 4)")
                 raise WrongModel(4)
 
     var = ContextVar("egagent_api_watch", default=None)
     register_configure_hook(var, inheritable=True)
     var.set(Watch())
+    hook = sys.excepthook   # an uncaught exception: the traceback as before, and its one line kept for the end
+
+    def keep(t, e, tb):
+        failed(e)
+        hook(t, e, tb)
+    sys.excepthook = keep
 
     def report():   # "stage" as run_egagent.sh names it (it sums the lines of a stage), "step" the script's own
         line = {"stage": os.environ.get("EGAGENT_USAGE_STAGE") or stage, "step": stage, "asked": model, "models": calls,
@@ -109,6 +140,8 @@ def watch_api(stage, model):
         print("API calls:", json.dumps(line), flush=True)
         if calls and os.environ.get("EGAGENT_USAGE"):
             open(os.environ["EGAGENT_USAGE"], "a").write(json.dumps(line) + "\n")
+        if FAILURE:
+            print(f"{stage} failed: {FAILURE[0]}", flush=True)
     atexit.register(report)
     return calls
 

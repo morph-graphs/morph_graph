@@ -154,7 +154,7 @@ index 30223c9..d21a6ae 100644
  TIMESTAMP_EPISODES_ROOT = EGAGENT_ROOT / "timestamp_episodes"
 \ No newline at end of file
 diff --git a/utils.py b/utils.py
-index be92d88..0df9b6d 100644
+index be92d88..0b5c803 100644
 --- a/utils.py
 +++ b/utils.py
 @@ -63,13 +63,14 @@ def get_vision_llm(llm_name: str) -> ChatOpenAI:
@@ -192,7 +192,12 @@ index be92d88..0df9b6d 100644
      )
      return vision_llm
  
-@@ -99,6 +101,12 @@ def get_external_gemini_llm(llm_name: str):
+@@ -96,9 +98,17 @@ def get_external_gemini_llm(llm_name: str):
+         max_tokens=None,
+         timeout=None,
+         max_retries=3,
++        transport="rest", # EPIC-Morph port: HTTPS + JSON, as Google's genai SDK (our other Gemini baselines); was gRPC
++        client_options=GEMINI_CLIENT_OPTIONS,
      )
      return gemini_llm
  
@@ -205,7 +210,7 @@ index be92d88..0df9b6d 100644
  def get_vLLM(ip_address: str, llm_name: str):
      """Get a local LLM using Langchain's ChatOpenAI, e.g. Qwen 2.5 VL 7B."""
      qwen_vl_local = ChatOpenAI(
-@@ -180,8 +188,24 @@ def get_file_contents(filename):
+@@ -180,8 +190,27 @@ def get_file_contents(filename):
      except FileNotFoundError:
          raise FileNotFoundError(f"'{filename}' file not found")
  
@@ -220,6 +225,9 @@ index be92d88..0df9b6d 100644
 +    return "MISSING"
 +
 +GOOGLE_GENAI_API_KEY = get_api_key("GEMINI_API_KEY", "GOOGLE_API_KEY")
++# EPIC-Morph port: GOOGLE_GEMINI_BASE_URL, which Google's genai SDK reads, points the Gemini calls at another
++# endpoint that speaks Google's API (default https://generativelanguage.googleapis.com); recorded with every call
++GEMINI_CLIENT_OPTIONS = {"api_endpoint": os.environ["GOOGLE_GEMINI_BASE_URL"].rstrip("/")} if os.environ.get("GOOGLE_GEMINI_BASE_URL") else None
 +# EPIC-Morph port, the gateway for the GPT calls: with OPENROUTER_API_KEY set and OPENAI_API_KEY not, the same
 +# Chat Completions requests go to OpenRouter as openai/<model>, pinned to the provider OpenAI with no fallback
 +# (OpenAI itself answers, or the call fails). With OPENAI_API_KEY set they go to OpenAI, as released, or to the
