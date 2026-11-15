@@ -20,6 +20,7 @@
 #   API_MEDIA_DIR    reuse a folder of clips already encoded with the same media settings
 #   PY               the Python to use (default python3; needs env/requirements.txt, and ffmpeg on PATH)
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/../common/single_process_env.sh"   # never a torch.distributed job: drop torchrun's variables
 STAGE=${1:?usage: run_api.sh <prep|qa|upload|score|all> <video> <config> [bank]}
 V=${2:?video id}; CFG=${3:?config name}; BANK=${4:-batch10_agree2}
 M=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); REPO=$(cd "$M/../.." && pwd); PY=${PY:-python3}

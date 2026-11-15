@@ -43,6 +43,7 @@
 # Every step skips finished work, so rerunning the same command resumes. The memory is built once per video
 # and arm and shared by every bank, probe set and variant.
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/../common/single_process_env.sh"   # never a torch.distributed job: drop torchrun's variables
 STAGE=${1:?usage: run_merit.sh <prep|build|qa|blind|upload|all> <video> <m8|m27|g5m|g5m-q8|g5m-q27|g5m-g5|g5m-g51> [bank]}
 V=${2:?video id}; ARM=${3:?arm m8, m27, g5m, g5m-q8, g5m-q27, g5m-g5 or g5m-g51}; BANK=${4:-}
 M=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); REPO=$(cd "$M/../.." && pwd); R=$M/MERIT   # R: the MERIT submodule

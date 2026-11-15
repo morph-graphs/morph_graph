@@ -45,6 +45,7 @@
 #                    has no .git (a synced copy); read with git otherwise
 # Every step skips finished work, so rerunning the same command resumes.
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/../common/single_process_env.sh"   # never a torch.distributed job: drop torchrun's variables
 STAGE=${1:?usage: run_egagent.sh <prep|build|qa|blind|upload|all|check> <video> <gpt41|gemini25pro|gemini36flash> [bank]}
 V=${2:?video id}; ARM=${3:?arm gpt41, gemini25pro or gemini36flash}; BANK=${4:-}
 M=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); REPO=$(cd "$M/../.." && pwd); R=$M/egagent   # R: the submodule
@@ -63,12 +64,6 @@ PX=${EGAGENT_FRAME_PX:-0}; CHUNK=${EGAGENT_CHUNK_S:-300}
 MEMORY=("{video}_frames.npy" "{video}_captions.json" "{video}_graph.json")   # as epic/eg_paths.memory_files
 mkdir -p "$OUT" "$WORK/logs"
 [ -z "${OPENAI_API_KEY:-}" ] || unset OPENROUTER_API_KEY   # one gateway per run: OpenAI's key wins
-# every script here is one process on one GPU, never a torch.distributed job. Some clusters set torchrun's variables
-# in a job's environment (Max's H100 nodes do); with WORLD_SIZE set, transformers 4.53 turns upstream's
-# device_map="auto" into tp_plan="auto", starts NCCL and loads SigLIP 2 for tensor parallelism, which fails
-# ("ValueError: too many values to unpack (expected 2)" in shard_and_distribute_module). Without them it loads on
-# the one GPU, as upstream does.
-unset WORLD_SIZE RANK LOCAL_RANK LOCAL_WORLD_SIZE GROUP_RANK GROUP_WORLD_SIZE ROLE_RANK ROLE_WORLD_SIZE MASTER_ADDR MASTER_PORT
 export TOKENIZERS_PARALLELISM=false EPIC BACKBONE PX CHUNK EGAGENT_USAGE=$OUT/api_usage.jsonl
 log() { echo "=== $V $ARM $1 ($(date '+%F %H:%M'))"; }
 have_memory() { local m; for m in "${MEMORY[@]}"; do [ -s "$OUT/${m//\{video\}/$V}" ] || return 1; done; }

@@ -42,6 +42,7 @@
 #   EGOR1_LIMIT      qa / firstturn: only the first N unanswered questions (a smoke test)
 # Every step skips finished work, so rerunning the same command resumes.
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/../common/single_process_env.sh"   # never a torch.distributed job: drop torchrun's variables
 STAGE=${1:?usage: run_egor1.sh <prep|build|qa|firstturn|upload|all> <video> <gemini36flash|gemini36flash-gpt41|gemini25pro|llava> [bank]}
 V=${2:?video id}; ARM=${3:?arm gemini36flash, gemini36flash-gpt41, gemini25pro or llava}; BANK=${4:-}
 M=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); REPO=$(cd "$M/../.." && pwd); R=$M/Ego-R1   # R: the upstream checkout

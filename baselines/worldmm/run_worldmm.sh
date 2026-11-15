@@ -46,6 +46,7 @@
 # and arm and shared by every bank and variant. g5m-q8 and g5m-g5 share the g5m memory (<out>/g5m/<video>/;
 # `build` with either name builds or fetches it) and keep their answers in their own folders.
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/../common/single_process_env.sh"   # never a torch.distributed job: drop torchrun's variables
 STAGE=${1:?usage: run_worldmm.sh <prep|build|qa|blind|upload|all> <video> <m8|m27|g5m|g5m-q8|g5m-g5|g5m-g51> [bank]}
 V=${2:?video id}; ARM=${3:?arm m8, m27, g5m, g5m-q8, g5m-g5 or g5m-g51}; BANK=${4:-}
 M=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); REPO=$(cd "$M/../.." && pwd); R=$M/WorldMM   # R: the submodule
