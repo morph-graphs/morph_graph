@@ -515,6 +515,17 @@ def test_stale_answers(tmp_path, monkeypatch):
     assert sorted(t["video"] for t in M.desired(have, files)) == [V[2]]
 
 
+def test_trace_stale():
+    """For a TRACED baseline an answer row without a trace leaves its question unanswered (listed again); other
+    baselines, and summaries from before the trace flag, compare as before."""
+    q = [bank_q("k1", 100.4)]
+    row = {"key": "k1", "qhash": M.asked(q[0])[1], "answer": "B", "response": "B", "t_ask": 100.4}
+    assert M.unanswered(q, M.summary([row]), trace=True) == ["k1"]
+    assert M.unanswered(q, M.summary([row | {"trace": []}]), trace=True) == []
+    assert M.unanswered(q, M.summary([row])) == [] and M.unanswered(q, [["k1", None, "B", 100]]) == []
+    assert "magic" in M.TRACED and "merit" not in M.TRACED
+
+
 def test_ask_time_formats():
     """Each baseline's record of when a question was asked, in seconds: MERIT's query_time, MAGIC / WorldMM's int,
     the API's and the paid rows' t_ask; none for a row that records none."""
@@ -546,7 +557,7 @@ def test_read_answers_downloads_changed_only(tmp_path, monkeypatch):
     monkeypatch.setattr(M, "EXPERIMENTS", [("merit", "m8", "qa", ["p"], "tb")])
     files = {p1: "sha1", p2: "sha2", p3: "sha1", "merit/m8/V1/runs.jsonl": "sha3", "merit/m8/V1/answers_tb_ctx.json.gz": "sha4"}
     first = M.read_answers("c0", files)
-    assert len(got) == 2 and p2 in got and first == {p1: [["k1", "h", "B", 1.5]], p2: None, p3: [["k1", "h", "B", 1.5]]}
+    assert len(got) == 2 and p2 in got and first == {p1: [["k1", "h", "B", 1.5, False]], p2: None, p3: [["k1", "h", "B", 1.5, False]]}
     got.clear()
     assert M.read_answers("c1", files) == first and got == []
     files[p1] = "sha5"

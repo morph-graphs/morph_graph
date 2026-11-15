@@ -82,6 +82,7 @@ as the agent) stands in for the Gemini 2.5 Pro arm, which Google no longer serve
 |---|---|
 | `egagent/` | submodule: upstream [facebookresearch/egagent](https://github.com/facebookresearch/egagent) at `01a48a4`, unmodified in git |
 | `epic_morph.patch` | our patch to upstream, applied to the submodule's files by `run_egagent.sh` before anything runs (it refuses to run if the patch does not apply): settings from the environment instead of edited files, API keys from the environment only, the workflow graph as a function (`build_app`) |
+| `epic_morph_trace.patch` | applied after it, logging only: the agent's tool steps per question (plan, SQL written and rows kept, frame searches and frames found), which `run_qa.py` writes as each row's `trace` |
 | `epic/prepare_epic.py` | one HD-EPIC video -> 1 fps frames, as upstream cuts them |
 | `epic/embed_frames.py` | SigLIP 2 embeddings of the frames with upstream's code (GPU, local) |
 | `epic/caption_epic.py` | GPT-4.1 captions of every 30 s of frames (paid) |

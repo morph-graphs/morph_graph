@@ -206,7 +206,9 @@ qa() {
     log "qa $BANK$SUF"; local t=$SECONDS ans=$OUT/answers_$BANK$SUF.json.gz
     if have_memory; then memory_ref; fi   # first: answers made from another memory are not "done"
     # (an answer arm whose memory is not here goes on: it fetches the memory, compares, and reuses its kept rows)
-    [ -s "$ans" ] && { [ "$MEM" = "$ARM" ] || have_memory; } && { echo "done: $ans"; return 0; }
+    # (answers from before rows carried a trace are not done: their questions are asked again)
+    [ -s "$ans" ] && { [ "$MEM" = "$ARM" ] || have_memory; } && "$PY" "$M/../common/earlier.py" traced "$ans" \
+        && { echo "done: $ans"; return 0; }
     qa_file
     have_memory || build
     [ -s "$SMALL" ] || prep

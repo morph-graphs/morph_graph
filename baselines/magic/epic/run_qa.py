@@ -12,9 +12,12 @@ choice, query time ceil(t_ask)), plus the bank's stable `key` and a hash of the 
 Hyperparameters are eval/eval_egolife.py's paper defaults (unified graph, chain_mode=facts).
 
 Writes --answers (.json.gz): one row per question in bank order, keyed by `key`, with the chosen option,
-correctness and MAGIC's retrieval rounds (what was retrieved, with its time stamps). Resumes from it, then from
+correctness and MAGIC's retrieval rounds (what was retrieved, with its time stamps), and `trace`: per search round the
+unified graph's PPR seeds, the nodes it returned (ids, short labels, seconds, scores), the edges among them and
+the chain facts injected (the fork's walk_trace; capped, see there). A row without a trace (from before it) is not
+reused: the question is asked again. Resumes from it, then from
 --prev (the video's answers under other banks): a row counts as done when it has a valid answer from this VERSION,
-this memory (memory_hash), the same key and question (qhash), gold letter and query time, and the same
+this memory (memory_hash), a trace, the same key and question (qhash), gold letter and query time, and the same
 `reason_model` and `control_model`. With the reported arms (MAGIC_ROLES=1, roles.py) the retriever is the memory role,
 the search/answer loop the control role (the memory role's model unless MAGIC_CONTROLLER=reason), the final answer and
 the time parser the reason role; rows also carry those two model names, and when the answers live in another folder
@@ -72,7 +75,7 @@ def done_rows(rows, paths, mh, reason={}):
     sig = lambda o: (o.get("version"), o.get("memory_hash"), o.get("qhash"), o.get("answer"), o.get("query_time"),
                      *(o.get(k) for k in models))
     ids = {r["key"]: r["ID"] for r in rows}
-    return {k: {**o, "ID": ids[k]} for k, o in reuse(want, paths, sig).items()}
+    return {k: {**o, "ID": ids[k]} for k, o in reuse(want, paths, sig, need=("trace",)).items()}   # a row without one: asked again
 
 
 def memory_hash(mem, video):
@@ -171,6 +174,7 @@ def main():
                     "evaluate": evaluate_prediction(resp, r["answer"], choices),
                     "t_ask": r["meta"]["t_ask"], "query_time": until_t, "cutoff": cut,
                     "num_rounds": res.num_rounds if res else 0, "round_history": res.round_history if res else [],
+                    "trace": res.trace if res else [],   # each search's graph walk: seeds, nodes, edges, chains
                     "seconds": round(time.time() - t0, 1), "version": VERSION, "memory_hash": mh, **reason}
         with ThreadPoolExecutor(a.parallel) as ex:
             for res in ex.map(one, grp):
