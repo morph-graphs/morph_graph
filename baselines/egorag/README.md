@@ -133,7 +133,8 @@ export EGORAG_DEEPSEEK_MODEL=<the gateway's id of the DeepSeek model>
   (about 25 GB together).
 - EgoGPT needs one 48 GB GPU: its peak was 23.2 GB, and on a 24 GB RTX A5000 the first clip ran out of memory.
   About 6 s a clip on an RTX A6000 (12 min per hour of video). Upstream's loader opens a `gloo` process group on
-  port 12356, so run one caption job per machine.
+  the fixed port 12356; `epic/caption_clips_egogpt.py` opens it on a free port instead, so several caption jobs can
+  share a machine.
 
 On our own clusters, a virtualenv: `bash baselines/egorag/env/setup_env.sh <venv dir>` (Python 3.10 or 3.11),
 then `PY=<venv dir>/bin/python bash baselines/egorag/run_egorag.sh ...` with `ffmpeg` and `patch` on the path and

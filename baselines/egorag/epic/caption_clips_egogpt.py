@@ -47,7 +47,21 @@ def main():
         return
 
     import egogpt.model.builder   # noqa: F401  upstream's wrapper hides a failed EgoGPT import behind a print
+    import egorag.models.egogpt as egogpt_module
     from egorag.models.egogpt import EgoGPT   # needs EgoLife/EgoGPT and EgoLife/EgoRAG on PYTHONPATH
+
+    def setup(rank, world_size):
+        """Upstream's setup() opens its one-process gloo group on the fixed port 12356, so two caption jobs on one
+        node fail (EADDRINUSE). The same group on a free port; nothing else changes."""
+        import socket
+        import torch.distributed as dist
+        with socket.socket() as s:
+            s.bind(("localhost", 0))
+            port = s.getsockname()[1]
+        os.environ["MASTER_ADDR"], os.environ["MASTER_PORT"] = "localhost", str(port)
+        dist.init_process_group("gloo", rank=rank, world_size=world_size)
+
+    egogpt_module.setup = setup   # EgoGPT.__init__ calls the module's setup(0, 1)
 
     class EgoGPTClip(EgoGPT):
         def process_video(self, video_path, video_start_time, start_time, end_time, fps=1):
