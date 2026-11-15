@@ -91,6 +91,14 @@ def final_answer(history_text, question):
     return None
 
 
+def jsonable(o):
+    """A set in a tool call, written as a list: upstream's parse_tool_call returns {'arguments': {<raw text>}}, a
+    set, when the agent's arguments do not parse (the call goes on to the tool as upstream sends it)."""
+    if isinstance(o, set):
+        return sorted(o, key=str)
+    raise TypeError(f"Object of type {type(o).__name__} is not JSON serializable")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--video", required=True)
@@ -133,7 +141,7 @@ def main():
 
     def save():
         with gzip.open(a.answers + ".tmp", "wt") as f:
-            json.dump([done[r["key"]] for r in rows if r["key"] in done], f, indent=1)
+            json.dump([done[r["key"]] for r in rows if r["key"] in done], f, indent=1, default=jsonable)
         os.replace(a.answers + ".tmp", a.answers)
 
     first = []
@@ -170,7 +178,7 @@ def main():
             turns.append({"output": msg, "tool_call": call, "sent": tools.sent if call else None, "information": info})
             user = f"<information>{info}</information>"
         if a.first_turn:
-            print(f"{r['key']} @ {cut}s: {json.dumps(first[-1]['tool_call'])[:300]}", flush=True)
+            print(f"{r['key']} @ {cut}s: {json.dumps(first[-1]['tool_call'], default=jsonable)[:300]}", flush=True)
             continue
         m = re.search(r"\s*([A-Z])\s*", process.parse_answer(out.replace("\n", " ")) or "") if out else None
         resp = m.group(1) if m else ""        # the first capital letter, as process.compute_score reads it
@@ -185,7 +193,7 @@ def main():
         save()
     if a.first_turn:
         p = a.answers.replace(".json.gz", "") + "_firstturn.json"
-        json.dump(first, open(p, "w"), indent=1)
+        json.dump(first, open(p, "w"), indent=1, default=jsonable)
         n = sum(bool(x["tool_call"]) for x in first)
         print(f"# first turn: {len(first)} questions, {n} valid tool calls -> {p}")
         return
