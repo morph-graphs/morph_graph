@@ -1,8 +1,8 @@
 diff --git a/EgoRAG/egorag/utils/util.py b/EgoRAG/egorag/utils/util.py
-index 1fe0152..650f488 100644
+index 1fe0152..ffbfde7 100644
 --- a/EgoRAG/egorag/utils/util.py
 +++ b/EgoRAG/egorag/utils/util.py
-@@ -13,6 +13,56 @@ from azure.core.pipeline.transport import RequestsTransport
+@@ -13,6 +13,77 @@ from azure.core.pipeline.transport import RequestsTransport
  from openai import OpenAI
  
  
@@ -25,6 +25,7 @@ index 1fe0152..650f488 100644
 +                                "prompt_tokens": at(usage, "prompt_tokens"), "completion_tokens": at(usage, "completion_tokens"),
 +                                "cached_tokens": at(at(usage, "prompt_tokens_details"), "cached_tokens"),
 +                                "reasoning_tokens": at(at(usage, "completion_tokens_details"), "reasoning_tokens"),
++                                "finish_reason": at((at(response, "choices") or [None])[0], "finish_reason"),
 +                                "endpoint": endpoint, "provider": extra(response).get("provider"),
 +                                "cost": extra(usage).get("cost")}) + "\n")
 +    except Exception as e:
@@ -56,10 +57,30 @@ index 1fe0152..650f488 100644
 +LAST_ERROR = {}
 +
 +
++class EmptyReply(Exception):
++    """EPIC-Morph port: a 200 reply with no text. A reasoning model (DeepSeek-V4-Pro) that spends max_tokens on its
++    reasoning answers with empty content and finish_reason "length". Upstream keeps "" as an answer and drops that
++    window or hour from the summaries without a word; raised, it is retried and recorded in LAST_ERROR like an API error."""
++
++
++def _text(response, text=None):
++    """The reply's text (or `text`, what is left of it after upstream's </think> split), else EmptyReply saying why."""
++    choice = response.choices[0]
++    text = choice.message.content if text is None else text
++    if text and text.strip():
++        return text
++    reasoning = (getattr(choice.message, "model_extra", None) or {})
++    reasoning = reasoning.get("reasoning_content") or reasoning.get("reasoning") or ""
++    details = getattr(response.usage, "completion_tokens_details", None)
++    raise EmptyReply(f"empty content (finish_reason={choice.finish_reason}, completion_tokens="
++                     f"{getattr(response.usage, 'completion_tokens', None)}, reasoning_tokens={getattr(details, 'reasoning_tokens', None)}, "
++                     f"reasoning {len(reasoning)} chars) from {response.model}")
++
++
  def call_gpt4(
      prompt: str,
      system_message: str = "You are an effective first perspective assistant.",
-@@ -37,6 +87,7 @@ def call_gpt4(
+@@ -37,6 +108,7 @@ def call_gpt4(
      azure_key = os.getenv("AZURE_API_KEY")
      azure_endpoint = os.getenv("AZURE_API_ENDPOINT")
      openai_key = os.getenv("OPENAI_API_KEY")
@@ -67,7 +88,7 @@ index 1fe0152..650f488 100644
  
      # Use Azure if both Azure credentials are available
      if azure_key and azure_endpoint:
-@@ -60,31 +111,40 @@ def call_gpt4(
+@@ -60,38 +132,48 @@ def call_gpt4(
              try:
                  response = requests.post(azure_endpoint, headers=headers, json=payload)
                  response.raise_for_status()
@@ -111,11 +132,12 @@ index 1fe0152..650f488 100644
 +                    max_tokens=max_tokens,
 +                    extra_body=extra
                  )
+-                return response.choices[0].message.content
 +                _log_usage("call_gpt4", response, str(client.base_url))
-                 return response.choices[0].message.content
++                return _text(response)
              except Exception as e:
                  print(f"Attempt {attempt + 1} failed. Error: {e}")
-@@ -92,6 +152,7 @@ def call_gpt4(
+                 if attempt < retries - 1:
                      time.sleep(2)
                  else:
                      print("All retry attempts failed.")
@@ -123,7 +145,7 @@ index 1fe0152..650f488 100644
                      return "error"
      else:
          raise ValueError("Neither Azure OpenAI nor standard OpenAI credentials are properly configured")
-@@ -117,6 +178,7 @@ def call_deepseek(
+@@ -117,6 +199,7 @@ def call_deepseek(
      azure_key = os.getenv("AZURE_DEEPSEEK_KEY")
      azure_endpoint = os.getenv("AZURE_DEEPSEEK_ENDPOINT")
      deepseek_api_key = os.getenv("DEEPSEEK_API_KEY")
@@ -131,7 +153,7 @@ index 1fe0152..650f488 100644
  
      # Use Azure if both Azure credentials are available
      if azure_key and azure_endpoint:
-@@ -140,6 +202,7 @@ def call_deepseek(
+@@ -140,6 +223,7 @@ def call_deepseek(
                      model=model_name,
                      max_tokens=max_tokens,
                  )
@@ -139,7 +161,7 @@ index 1fe0152..650f488 100644
                  full_response = response["choices"][0]["message"]["content"]
                  # Only split if the response contains </think> tag
                  if "</think>" in full_response:
-@@ -151,14 +214,16 @@ def call_deepseek(
+@@ -151,14 +235,19 @@ def call_deepseek(
                  print(f"Error on attempt {retry_count}: {e}")
                  if retry_count == max_retries:
                      print("Max retries reached. Giving up.")
@@ -158,10 +180,13 @@ index 1fe0152..650f488 100644
 +        # sets it), the base URL from DEEPSEEK_BASE_URL. Without DeepSeek's key, through OpenRouter (_client).
 +        client, model, extra = _client(deepseek_api_key, os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
 +                                       os.environ["EGORAG_DEEPSEEK_MODEL"], "deepseek")
++        # EPIC-Morph port: 8192 instead of upstream's 2048 (hour and day summaries), EGORAG_DEEPSEEK_MAX_TOKENS overrides.
++        # A reasoning model's reasoning counts against it (README.md, "DeepSeek's reasoning and max_tokens").
++        max_tokens = int(os.getenv("EGORAG_DEEPSEEK_MAX_TOKENS") or 8192)
  
          max_retries = 3
          retry_count = 0
-@@ -166,15 +231,17 @@ def call_deepseek(
+@@ -166,24 +255,26 @@ def call_deepseek(
          while retry_count < max_retries:
              try:
                  response = client.chat.completions.create(
@@ -178,11 +203,14 @@ index 1fe0152..650f488 100644
                  )
 -                full_response = response["choices"][0]["message"]["content"]
 +                _log_usage("call_deepseek", response, str(client.base_url))
-+                full_response = response.choices[0].message.content
++                full_response = _text(response)
                  if "</think>" in full_response:
-                     response = full_response.split("</think>")[1]
-                     return response
-@@ -184,6 +251,7 @@ def call_deepseek(
+-                    response = full_response.split("</think>")[1]
+-                    return response
++                    return _text(response, full_response.split("</think>")[1])
+                 return full_response
+             except Exception as e:
+                 retry_count += 1
                  print(f"Error on attempt {retry_count}: {e}")
                  if retry_count == max_retries:
                      print("Max retries reached. Giving up.")
