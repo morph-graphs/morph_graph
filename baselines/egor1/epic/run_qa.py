@@ -20,7 +20,7 @@ missing, nothing was called.
 --first_turn runs only what needs no paid API: the agent's first turn on every question, the parsed tool call
 and the streaming check on it, written to <answers minus .json.gz>_firstturn.json. It needs no memory.
 
-    python run_qa.py --video <V> --arm gemini25pro --bank_file <V>_questions.json --memory <dir> --clips <clip_root>/<V> \
+    python run_qa.py --video <V> --arm gemini36flash --bank_file <V>_questions.json --memory <dir> --clips <clip_root>/<V> \
         --answers answers_<bank>.json.gz --cache_dir <dir>
 """
 import argparse
@@ -94,7 +94,7 @@ def final_answer(history_text, question):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--video", required=True)
-    ap.add_argument("--arm", required=True, choices=["gemini25pro", "llava"])
+    ap.add_argument("--arm", required=True, choices=list(apis.ARMS))
     ap.add_argument("--bank_file", required=True, help="epic-morph outputs/v3/banks/<bank>/<video>_questions.json")
     ap.add_argument("--memory", help="the memory folder (build_memory.py --out)")
     ap.add_argument("--clips", required=True, help="<clip_root>/<video> (prepare_clips.py)")
@@ -109,6 +109,7 @@ def main():
     a.answers, a.cache_dir, a.clips, a.bank_file = map(os.path.abspath, (a.answers, a.cache_dir, a.clips, a.bank_file))
     a.memory = os.path.abspath(a.memory) if a.memory else None      # the tools run in another folder (tools._quiet)
     V = a.video
+    apis.use_arm(a.arm)
     if not a.first_turn:
         apis.need("rag", "vlm", "answer", *(["video_llm"] if a.arm != "llava" else []))
         apis.USAGE = os.path.join(a.memory, "api_usage.jsonl")
@@ -138,6 +139,7 @@ def main():
     first = []
     for r in todo:
         cut = secs(r["query_time"]["time"])
+        apis.QUESTION = r["key"]               # in every api_usage.jsonl line of this question, its cutoff view included
         choices = {L: r[f"choice_{L.lower()}"] for L in "ABCD" if r.get(f"choice_{L.lower()}")}
         question = (f"{r['question']} <timestamp>DAY1_{r['query_time']['time']}</timestamp>\n"
                     + "\n".join(f"{L}. {c}" for L, c in choices.items()))

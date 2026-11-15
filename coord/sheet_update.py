@@ -61,7 +61,7 @@ SENTINEL = "AUTO (coord/sheet_update.py)"   # start of A1 of a tab this script c
 GRID = (2000, 80)                           # rows, columns the tab is created with; a larger table is an error
 # every bank the job board answers (coord/master.py EXPERIMENTS), in its order: a new bank there is a new set of rows
 # here, and the "all" rows (ALL) are over the questions of every one of them
-BANKS = list(dict.fromkeys(e[4] for e in master.EXPERIMENTS if e[4]))
+BANKS = list(dict.fromkeys(e[4] for e in master.EXPERIMENTS if e[2] == "qa"))   # (a build line may name several)
 ALL = "all"
 # a question's ask_at in the bank -> its rows' `asked`; BOTH: every question (the row_key without a suffix)
 ASKED = {"end": "end", "t": "streaming"}

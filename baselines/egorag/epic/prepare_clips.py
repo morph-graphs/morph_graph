@@ -38,6 +38,22 @@ def video_sec(hhmmssff):
     return int(s[0:2]) * 3600 + int(s[2:4]) * 60 + int(s[4:6]) - CLOCK0
 
 
+def x264_ffmpeg():
+    """(ffmpeg, its environment): the first ffmpeg on PATH that has libx264. The image's base Python brings its
+    own ffmpeg without it, ahead of the system one the Dockerfile installs for the clips. And under
+    `apptainer --nv` the host's GL libraries (/.singularity.d/libs, first on LD_LIBRARY_PATH) can need a newer
+    glibc than the image has, so the system ffmpeg, which links GL, does not start: it runs without that folder
+    (the encode is on the CPU)."""
+    libs = [d for d in os.environ.get("LD_LIBRARY_PATH", "").split(os.pathsep) if d != "/.singularity.d/libs"]
+    env = dict(os.environ, LD_LIBRARY_PATH=os.pathsep.join(libs))
+    for d in os.get_exec_path():
+        f = os.path.join(d, "ffmpeg")
+        if os.access(f, os.X_OK) and "libx264" in subprocess.run([f, "-hide_banner", "-encoders"], capture_output=True,
+                                                                 text=True, env=env).stdout:
+            return f, env
+    sys.exit("no ffmpeg with libx264 on PATH")
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     p.add_argument("--video", required=True)
@@ -64,13 +80,14 @@ def main():
         shutil.rmtree(tmp, ignore_errors=True)
         os.makedirs(tmp)
         s = a.size
+        ffmpeg, env = x264_ffmpeg()
         subprocess.run(
-            ["ffmpeg", "-loglevel", "error", "-threads", str(a.threads), "-i", a.video,
+            [ffmpeg, "-loglevel", "error", "-threads", str(a.threads), "-i", a.video,
              "-vf", f"scale='if(gt(iw,ih),-2,{s})':'if(gt(iw,ih),{s},-2)'",
              "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-c:a", "aac", "-ar", "16000", "-ac", "1",
              "-force_key_frames", f"expr:gte(t,n_forced*{a.clip_sec})",
              "-f", "segment", "-segment_time", str(a.clip_sec), "-reset_timestamps", "1",
-             os.path.join(tmp, "seg_%04d.mp4")], check=True)
+             os.path.join(tmp, "seg_%04d.mp4")], check=True, env=env)
         segs = sorted(glob.glob(os.path.join(tmp, "seg_*.mp4")))
         # the container can run a few seconds past the last video frame (as in MERIT's prep): one clip fewer
         assert max(1, n - 1) <= len(segs) <= n, f"expected {n} segments, got {len(segs)}"

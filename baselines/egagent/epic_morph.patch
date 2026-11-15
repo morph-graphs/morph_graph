@@ -1,5 +1,5 @@
 diff --git a/egagent/langgraph_agent.py b/egagent/langgraph_agent.py
-index 2b6eb05..8125ef3 100644
+index 2b6eb05..0230cca 100644
 --- a/egagent/langgraph_agent.py
 +++ b/egagent/langgraph_agent.py
 @@ -31,8 +31,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -13,6 +13,33 @@ index 2b6eb05..8125ef3 100644
  
  logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
  logger = logging.getLogger(__name__)
+@@ -77,7 +77,7 @@ def get_llm_worker(system_prompt, human_prompt, structured_llm_class, model):
+         llm = get_vision_llm(model) # All workers currently use GPT 4.1
+     elif model in ['gpt-5', 'o3']:
+         llm = get_reasoning_llm(model)
+-    elif model == 'gemini-2.5-pro':
++    elif model.startswith('gemini-'): # EPIC-Morph port: was == 'gemini-2.5-pro'; any Gemini backbone takes its path
+         llm = get_external_gemini_llm(model)
+     elif model == 'qwen-2.5-vl-7b':
+         llm = get_vLLM("localhost", "Qwen/Qwen2.5-VL-7B-Instruct")
+@@ -120,7 +120,7 @@ def get_llm_msg_with_imglist(system: str, human:str, image_contents: List[str]):
+ ****************   Define LLM workers   ****************
+ ********************************************************
+ """
+-if agent_backbone == 'gemini-2.5-pro':
++if agent_backbone.startswith('gemini-'):
+     llm = get_external_gemini_llm(agent_backbone)
+ elif agent_backbone == 'qwen-2.5-vl-7b':
+     llm = get_vLLM("localhost", "Qwen/Qwen2.5-VL-7B-Instruct")
+@@ -401,7 +401,7 @@ timestamp_dict =
+ 
+ If you only need one text query, only use one text query. Only use additional text queries if they are semantically distinct from one another."""
+ 
+-if agent_backbone in ['gemini-2.5-pro']:
++if agent_backbone.startswith('gemini-'):
+     framesearchquery = get_llm_worker(framesearchquery_system, framesearchquery_human_gemini, FrameSearchQueries_Gemini, agent_backbone)
+ else:
+     framesearchquery = get_llm_worker(framesearchquery_system, framesearchquery_human, FrameSearchQueries, agent_backbone)
 diff --git a/egagent/run_egagent_on_videomme.py b/egagent/run_egagent_on_videomme.py
 index 52407b2..325d33e 100644
 --- a/egagent/run_egagent_on_videomme.py
@@ -127,10 +154,58 @@ index 30223c9..d21a6ae 100644
  TIMESTAMP_EPISODES_ROOT = EGAGENT_ROOT / "timestamp_episodes"
 \ No newline at end of file
 diff --git a/utils.py b/utils.py
-index be92d88..9377811 100644
+index be92d88..0df9b6d 100644
 --- a/utils.py
 +++ b/utils.py
-@@ -180,8 +180,16 @@ def get_file_contents(filename):
+@@ -63,13 +63,14 @@ def get_vision_llm(llm_name: str) -> ChatOpenAI:
+     """Get a vision-capable LLM using Langchain's ChatOpenAI."""
+     vision_llm = ChatOpenAI(
+         api_key=OPENAI_API_KEY,
+-        base_url="https://api.openai.com/v1",
++        base_url=OPENAI_BASE_URL,
+         max_retries=3,
+-        model=llm_name,
++        model=OPENAI_MODEL_PREFIX + llm_name,
+         temperature=0,
+         stream_usage=True,
+         streaming=False,
+         callbacks=None,
++        extra_body=OPENAI_EXTRA_BODY,
+     )
+     return vision_llm
+ 
+@@ -77,13 +78,14 @@ def get_reasoning_llm(llm_name: str):
+     """Get a reasoning LLM using Langchain's ChatOpenAI with high reasoning effort, e.g. o3 or gpt-5."""
+     vision_llm = ChatOpenAI(
+         api_key=OPENAI_API_KEY,
+-        base_url="https://api.openai.com/v1",
++        base_url=OPENAI_BASE_URL,
+         max_retries=3,
+-        model=llm_name,        # e.g. "gpt-5" or "gpt-5-chat"
++        model=OPENAI_MODEL_PREFIX + llm_name,        # e.g. "gpt-5" or "gpt-5-chat"
+         temperature=0,
+         streaming=False,
+         callbacks=None,
+-        reasoning_effort="high"
++        reasoning_effort="high",
++        extra_body=OPENAI_EXTRA_BODY,
+     )
+     return vision_llm
+ 
+@@ -99,6 +101,12 @@ def get_external_gemini_llm(llm_name: str):
+     )
+     return gemini_llm
+ 
++# EPIC-Morph port: the pinned langchain-google-genai forces the function call of a structured output (tool_choice)
++# only for models named gemini-1.5-* or gemini-2*, which covers upstream's gemini-2.5-pro. A later Gemini would be
++# free to answer in text instead, which the output parser returns as None. Every Gemini backbone gets the request
++# gemini-2.5-pro gets.
++ChatGoogleGenerativeAI._supports_tool_choice = property(lambda self: True)
++
+ def get_vLLM(ip_address: str, llm_name: str):
+     """Get a local LLM using Langchain's ChatOpenAI, e.g. Qwen 2.5 VL 7B."""
+     qwen_vl_local = ChatOpenAI(
+@@ -180,8 +188,23 @@ def get_file_contents(filename):
      except FileNotFoundError:
          raise FileNotFoundError(f"'{filename}' file not found")
  
@@ -145,7 +220,14 @@ index be92d88..9377811 100644
 +    return "MISSING"
 +
 +GOOGLE_GENAI_API_KEY = get_api_key("GEMINI_API_KEY", "GOOGLE_API_KEY")
-+OPENAI_API_KEY = get_api_key("OPENAI_API_KEY")
++# EPIC-Morph port, the gateway for the GPT calls: with OPENROUTER_API_KEY set and OPENAI_API_KEY not, the same
++# Chat Completions requests go to OpenRouter as openai/<model>, pinned to the provider OpenAI with no fallback
++# (OpenAI itself answers, or the call fails). With OPENAI_API_KEY set they go to OpenAI, as released.
++OPENROUTER = bool(os.environ.get("OPENROUTER_API_KEY")) and not os.environ.get("OPENAI_API_KEY")
++OPENAI_API_KEY = get_api_key("OPENROUTER_API_KEY" if OPENROUTER else "OPENAI_API_KEY")
++OPENAI_BASE_URL = (os.environ.get("OPENROUTER_BASE_URL") or "https://openrouter.ai/api/v1") if OPENROUTER else "https://api.openai.com/v1"
++OPENAI_MODEL_PREFIX = "openai/" if OPENROUTER else ""
++OPENAI_EXTRA_BODY = {"provider": {"only": ["openai"], "allow_fallbacks": False}} if OPENROUTER else None
  
  def get_50_frames_from_video(image_dir:str, n_samples=50) -> Tuple[int, List[str]]:
      """Get 50 image frames from a video."""

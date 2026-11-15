@@ -2,7 +2,7 @@
 """Ego-R1's hierarchical memory (H-RAG database) of one video, question-independent.
 
 As the paper describes it (the official repo ships the finished EgoLife database, not the code that made it):
-every 30 s clip is captioned, with its dialogue, by Gemini 1.5 Pro (retired: here Gemini 2.5 Pro, apis.py); GPT-4.1 merges the captions bottom-up into
+every 30 s clip is captioned, with its dialogue, by Gemini 1.5 Pro (retired: here the arm's Gemini, apis.py); GPT-4.1 merges the captions bottom-up into
 10 minute, 1 hour and 1 day summaries. The files have the format of Ego-R1/h-rag_database (egolife/A1_JAKE):
 a list of {"generated_text", "date": 1, "start_time": HHMMSSFF as int, "end_time"}.
 
@@ -14,7 +14,7 @@ description and the look of the released database (first person, "I ...").
 Both steps call paid APIs and stop with exit code 5 when the keys are missing (apis.py). Resumes: captions are
 saved as they come, a finished level is kept.
 
-    python build_memory.py --video <V> --clips <clip_root>/<V> --out <dir>
+    python build_memory.py --video <V> --arm gemini36flash --clips <clip_root>/<V> --out <dir>
     python build_memory.py --memory_files          (the memory's file name patterns, for run_egor1.sh)
 """
 import argparse
@@ -85,6 +85,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--memory_files", action="store_true")
     ap.add_argument("--video")
+    ap.add_argument("--arm", choices=list(apis.ARMS), help="the arm, for the model of the captions (required to build)")
     ap.add_argument("--clips", help="<clip_root>/<video> (prepare_clips.py)")
     ap.add_argument("--out")
     ap.add_argument("--clip_sec", type=int, default=30)
@@ -96,6 +97,7 @@ def main():
     if all(os.path.exists(p) for p in paths.values()):
         print(f"{a.video}: memory already in {a.out}")
         return
+    apis.use_arm(a.arm)      # stops when --arm is missing
     apis.need("caption", "summary")
     os.makedirs(a.out, exist_ok=True)
     apis.USAGE = os.path.join(a.out, "api_usage.jsonl")
