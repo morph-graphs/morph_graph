@@ -139,8 +139,14 @@ def nexus(rows, alerts, nxq):
 
 def board(alerts, out_dir):
     """The board as coord/board_read.py prints it; on failure the last good read, with an alert."""
-    rc, out = sh(["nx", "cd /fs/cfar-projects/mem_open_vocab/morph_graphs/anubhav/pkg/wt-coord && HF_TOKEN=$(cat ~/.config/hf_write_token) "
-                        "HF_HOME=/fs/cfar-projects/mem_open_vocab/anubhav/hf_home /fs/nexus-scratch/anubhav/merit_envs/m8/bin/python coord/board_read.py 2>/dev/null | tail -1"], timeout=300)
+    cmd = ("cd /fs/cfar-projects/mem_open_vocab/morph_graphs/anubhav/pkg/wt-coord && HF_TOKEN=$(cat ~/.config/hf_write_token) "
+           "HF_HOME=/fs/cfar-projects/mem_open_vocab/anubhav/hf_home /fs/nexus-scratch/anubhav/merit_envs/m8/bin/python coord/board_read.py 2>/dev/null | tail -1")
+    # plain ssh first, like the Nexus queue: nx waits for the file sync to settle, which can take longer than a cycle
+    # (2026-11-15: every read for 20 min timed out while nx-morph rescanned); nx only as the fallback
+    for c in (SSH + ["-o", "RemoteCommand=none", "-o", "RequestTTY=no", "nexus", cmd], ["nx", cmd]):
+        rc, out = sh(c, timeout=300)
+        if rc == 0 and out.strip().startswith("{"):
+            break
     cache = os.path.join(out_dir, "board_raw.json")
     try:
         v = json.loads(out.strip().splitlines()[-1])
