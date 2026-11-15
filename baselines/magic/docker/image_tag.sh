@@ -2,7 +2,8 @@
 # The image tag for an arm: <arm>-<12 hex of a hash over the files that define the image> (m27 also takes
 # MERIT's m27 environment files, which it installs). Any commit with the same environment files maps to the
 # same image, so a code-only commit on main needs no rebuild. Used by build.sh, run.sh and
-# .github/workflows/baseline-images.yml.
+# .github/workflows/baseline-images.yml. IMAGE_ARCH=arm64 gives the aarch64 image's tag, <arm>-arm64-<hash> over
+# Dockerfile.arm64 and its files (coord/worker.py sets it on aarch64 hosts).
 #   bash baselines/magic/docker/image_tag.sh <m8|m27>
 set -euo pipefail
 ARM=${1:?m8 or m27}; B=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)   # baselines/
@@ -11,8 +12,10 @@ case $ARM in   # the reported arms need no image of their own: an API is called 
     oss120-q27) ARM=m27 ;;           # serves Qwen3.8-27B for the reason role
 esac
 case $ARM in m8|m27) ;; *) echo "arm must be m8, m27, oss120, oss120-flash or oss120-q27" >&2; exit 1 ;; esac
-F=(magic/docker/Dockerfile magic/env/install_requirements.sh magic/env/wheels-client.txt magic/env/requirements-client.txt)
-[ "$ARM" = m27 ] && F+=(merit/env/install_requirements.sh merit/env/wheels-m27.txt merit/env/requirements-m27.txt
+X=; A=; [ "${IMAGE_ARCH:-}" = arm64 ] && { X=-arm64; A=arm64-; }
+F=(magic/docker/Dockerfile${X/-/.} magic/env/install_requirements.sh magic/env/wheels-client$X.txt magic/env/requirements-client.txt)
+[ "$ARM" = m27 ] && F+=(merit/env/install_requirements.sh merit/env/wheels-m27$X.txt merit/env/requirements-m27.txt
                         merit/env/requirements-m27-nodeps.txt)
+[ -n "$X" ] && F+=(common/docker/arm64_stack.sh)
 H=$(cd "$B" && cat "${F[@]}" | { sha256sum 2>/dev/null || shasum -a 256; } | cut -c1-12)
-echo "$ARM-$H"
+echo "$ARM-$A$H"

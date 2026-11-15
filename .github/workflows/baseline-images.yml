@@ -7,6 +7,9 @@
 # - workflow_dispatch on main: build and publish every image whose tag is not in GHCR yet (code-only
 #   commits keep their tags, so they need no new image). No schedule.
 # A new baseline: add its (baseline, arm) rows to the matrix and its paths to the trigger.
+# Job image-arm64: the aarch64 images (docker/Dockerfile.arm64, for Grace hosts: GH200, GB200, GB300) of the
+# baselines that have one, tagged <arm>-arm64-<env hash> (IMAGE_ARCH=arm64 image_tag.sh), built on GitHub's arm
+# runner. They compile flash-attn, so a build takes hours on its 4 CPUs.
 name: baseline-images
 
 on:
@@ -32,6 +35,7 @@ on:
       - baselines/egor1/docker/**
       - baselines/rekv/env/**
       - baselines/rekv/docker/**
+      - baselines/common/docker/**
       - .github/workflows/baseline-images.yml
   workflow_dispatch:
 
@@ -103,6 +107,69 @@ jobs:
         run: |
           docker build -f baselines/${{ matrix.baseline }}/docker/Dockerfile --build-arg ARM=${{ matrix.arm }} \
             --build-arg COMMIT=$(git rev-parse --short HEAD) -t "${{ steps.tag.outputs.image }}" .
+      - name: Push
+        if: env.PUBLISH == 'true' && steps.have.outputs.skip != 'true'
+        run: docker push "${{ steps.tag.outputs.image }}"
+
+  image-arm64:
+    name: ${{ matrix.baseline }}:${{ matrix.arm }}-arm64
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 360
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {baseline: merit, arm: m8}
+          - {baseline: merit, arm: m27}
+          - {baseline: magic, arm: m8}
+          - {baseline: magic, arm: m27}
+          - {baseline: worldmm, arm: m8}
+          - {baseline: worldmm, arm: m27}
+    env:
+      PUBLISH: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
+      TAGS: baselines/${{ matrix.baseline }}/docker/image_tag.sh
+      IMAGE_ARCH: arm64
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Tag
+        id: tag
+        run: echo "image=ghcr.io/morph-graphs/${{ matrix.baseline }}:$(bash "$TAGS" ${{ matrix.arm }})" >> "$GITHUB_OUTPUT"
+      - name: Same tag as the base branch?
+        id: same
+        if: github.event_name == 'pull_request'
+        run: |
+          git worktree add -q /tmp/base "${{ github.event.pull_request.base.sha }}"
+          base=$( [ -f "/tmp/base/$TAGS" ] && bash "/tmp/base/$TAGS" ${{ matrix.arm }} || true)
+          if [ "ghcr.io/morph-graphs/${{ matrix.baseline }}:$base" = "${{ steps.tag.outputs.image }}" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"; echo "${{ steps.tag.outputs.image }}: unchanged by this PR; nothing to build"
+          fi
+      - name: Log in to GHCR
+        if: env.PUBLISH == 'true'
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Already published?
+        id: have
+        if: env.PUBLISH == 'true'
+        run: |
+          if docker manifest inspect "${{ steps.tag.outputs.image }}" >/dev/null 2>&1; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"; echo "${{ steps.tag.outputs.image }} exists; nothing to build"
+          fi
+      - name: Free disk (the CUDA devel base image is ~8 GB)
+        if: steps.have.outputs.skip != 'true' && steps.same.outputs.skip != 'true'
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache || true
+          docker system prune -af >/dev/null; df -h /
+          # flash-attn's nvcc jobs take up to ~7 GB each: 3 at a time on 16 GB of RAM, plus swap for the peaks
+          sudo fallocate -l 8G /swap-build && sudo chmod 600 /swap-build && sudo mkswap /swap-build && sudo swapon /swap-build; free -g
+      - name: Build
+        if: steps.have.outputs.skip != 'true' && steps.same.outputs.skip != 'true'
+        run: |
+          docker build -f baselines/${{ matrix.baseline }}/docker/Dockerfile.arm64 --build-arg ARM=${{ matrix.arm }} \
+            --build-arg MAX_JOBS=3 --build-arg COMMIT=$(git rev-parse --short HEAD) -t "${{ steps.tag.outputs.image }}" .
       - name: Push
         if: env.PUBLISH == 'true' && steps.have.outputs.skip != 'true'
         run: docker push "${{ steps.tag.outputs.image }}"
