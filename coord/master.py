@@ -231,7 +231,9 @@ NEEDS_MEMORY = {"m3agent"}
 # Urgent (Anubhav, 2026-11-14): MAGIC-Video's memories (its graph.pkl) are what the structure matching of the memory
 # evaluation (M3) needs first, so its builds go right after the API tasks, ahead of everything else, 8B then 27B, and
 # to the Nexus pools at once as well (no LEFTOVER_H wait).
-URGENT = [("magic", arm, "build", POOLS["magic", arm] + LEFTOVER_POOLS, None) for arm in ("m8", "m27")]
+# The 27B memories still missing (8 of 156 on 2026-11-15) go to Pulkit first (Anubhav, 2026-11-15: his GB200/GB300
+# pool, on priority); after LEFTOVER_H hours unclaimed they are offered to the Nexus pools too, like any task.
+URGENT = [("magic", "m8", "build", POOLS["magic", "m8"] + LEFTOVER_POOLS, None), ("magic", "m27", "build", ["pulkit"], None)]
 # The rows to finish first (Anubhav, 2026-11-14: time and compute are short). While a task of one of these arms is
 # listed, the tasks of every other arm are withheld from tasks.json (gate()); a claim already running on a withheld
 # task finishes, since a worker renews its claims whatever is listed. Results-sheet rows (tab `Epic Morph Results`):
@@ -245,7 +247,8 @@ PRIORITY = {("api", c) for c in API_CONFIGS} | {
     ("egor1", "gemini36flash"), ("egor1", "gemini36flash-gpt41"), ("egorag", "egogpt_gpt41"),
     ("merit", "g5m"), ("merit", "g5m-q8"), ("merit", "g5m-g51"), ("m3agent", "m3"),
     ("worldmm", "g5m"), ("worldmm", "g5m-q8"), ("worldmm", "g5m-g51"),
-    ("egagent", "gpt41"), ("egagent", "gemini36flash"), ("magic", "oss120"), ("magic", "oss120-flash")}
+    ("egagent", "gpt41"), ("egagent", "gemini36flash"), ("magic", "oss120"), ("magic", "oss120-flash"),
+    ("magic", "m27", "build")}   # a (baseline, arm, stage) entry: that stage only (MAGIC-Video's 27B memories, not its answers)
 EXPERIMENTS = [("api", c, "qa", KEY_POOLS, bank) for bank in BANKS for c in API_CONFIGS] + URGENT + REPORTED + PAID + [
     ("direct", arm, "qa", pools, bank) for bank in BANKS for arm, pools in DIRECT.items()] + [
     ("rekv", "m8", "qa", M8, bank) for bank in BANKS] + [
@@ -482,7 +485,7 @@ def gate(tasks):
     keep = [t for t in tasks if (t["baseline"], t["arm"], t["stage"]) not in HELD
             and not (t["stage"] == "qa" and t["baseline"] in QA_FROZEN)
             and (not PILOT or not reported(t) or t["id"] in PILOT)]
-    first = [t for t in keep if (t["baseline"], t["arm"]) in PRIORITY]
+    first = [t for t in keep if (t["baseline"], t["arm"]) in PRIORITY or (t["baseline"], t["arm"], t["stage"]) in PRIORITY]
     return first or keep, len(tasks) - len(first or keep)
 
 
