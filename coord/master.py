@@ -223,6 +223,11 @@ DIRECT = {"qwen3vl-8b-f768": M8, "qwen38-27b-f768": M27,
 # file names the stages: m3agent/m3/build, m3agent/m3/qa). Listed last. Its arm m3api calls paid APIs (Gemini speech
 # segments, OpenAI embeddings) and is not listed: it would be a paid row (PAID, NEEDS_ENV).
 M3AGENT = {"build": M8, "qa": M27}
+# Baselines whose answering is never listed without its memory (Anubhav, 2026-11-15): a qa task of one is listed only
+# when the video's memory is in the dataset, or its build task is listed too (the qa then waits on it: deps). For the
+# other baselines a qa task with neither builds the memory itself first; M3-Agent's qa job is sized for the control
+# model (the m27 pools), not for building a memory, so it must never do that.
+NEEDS_MEMORY = {"m3agent"}
 # Urgent (Anubhav, 2026-11-14): MAGIC-Video's memories (its graph.pkl) are what the structure matching of the memory
 # evaluation (M3) needs first, so its builds go right after the API tasks, ahead of everything else, 8B then 27B, and
 # to the Nexus pools at once as well (no LEFTOVER_H wait).
@@ -451,6 +456,8 @@ def desired(have, files, answers=None, busy=()):
             # wait for the video's build task (its memory arm's) while it is listed; a memory already built (on the
             # board or off it) needs no wait, and with neither, qa builds the memory itself first
             build = f"{b}-{mem}-build-{v}"
+            if b in NEEDS_MEMORY and (b, mem, v) not in have and build not in ids:
+                continue                         # no memory and no build to wait on: not listed
             tasks.append(dict(id=tid, baseline=b, arm=arm, stage=stage, video=v, bank=bank,
                               pools=pools, deps=[build] if build in ids else [], **env, **stale))
             ids.add(tasks[-1]["id"])
