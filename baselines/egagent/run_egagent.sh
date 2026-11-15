@@ -117,7 +117,8 @@ if os.path.exists(os.environ["EGAGENT_USAGE"]):
             for m, c in u["models"].items():   # counts, tokens and cost summed; endpoint and provider kept
                 a = api.setdefault(m, {})
                 for k, v in c.items():
-                    a[k] = v if isinstance(v, str) else round(a.get(k, 0) + v, 6)
+                    a[k] = (v if isinstance(v, str) else sorted(set(a.get(k, [])) | set(v)) if isinstance(v, list)
+                            else round(a.get(k, 0) + v, 6))
 print(json.dumps({"stage": sys.argv[1], "seconds": int(float(sys.argv[2])), "commit": commit,
                   "egagent_commit": up, "epic_morph_commit": bank, "agent_model": os.environ.get("BACKBONE"),
                   "memory_models": ["gpt-4.1", "google/siglip2-giant-opt-patch16-384"], "api": api,
