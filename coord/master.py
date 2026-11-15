@@ -92,12 +92,16 @@ BANKS = ["batch10_agree2", "t2_agree2", "t3_agree2", "t4_agree2", "t5_agree2", "
 # provider's key (GEMINI_API_KEY / OPENAI_API_KEY in the worker's environment), which only Max's machine has, so no
 # other pool may take them. Listed first: short tasks that should not wait behind the memory builds. Every bank since
 # 2026-11-14 (Anubhav; batch10 only before).
-API_CONFIGS = ["gemini-3.1-flash-lite-high", "gemini-3.6-flash-high", "gpt-5-f1024"]
+# GPT-5 stand-ins (Anubhav, 2026-11-15): no pool reaches gpt-5 through an OpenAI key (Max's and Pulkit's gateway serves
+# it from Azure only, 50 images a request), and the gateway has GPT-5.1 to 5.5. The GPT row is GPT-5.5 from 1,024 frames
+# (gpt-5.5-f1024: the newest, a model row), and MERIT's and WorldMM's GPT-5 answer rows are answered by GPT-5.1
+# (g5m-g51: the nearest to the published model). The gpt-5 arms (gpt-5-f1024, g5m-g5) stay in the code, off the board.
+API_CONFIGS = ["gemini-3.1-flash-lite-high", "gemini-3.6-flash-high", "gpt-5.5-f1024"]
 # The reported-configuration arms (baselines/<b>/README.md): g5m is the memory written by gpt-5-mini, once per video;
 # the g5m-* arms answer from it with another reasoning model and keep answers plus a reference to that memory
 # (<video>_memory_ref.json) in their own folders. MEMORY_ARM: the arm whose build an arm's qa waits for (default itself).
-MEMORY_ARM = {("worldmm", "g5m-q8"): "g5m", ("worldmm", "g5m-g5"): "g5m",
-              ("merit", "g5m-q8"): "g5m", ("merit", "g5m-q27"): "g5m", ("merit", "g5m-g5"): "g5m"}
+MEMORY_ARM = {("worldmm", "g5m-q8"): "g5m", ("worldmm", "g5m-g51"): "g5m",
+              ("merit", "g5m-q8"): "g5m", ("merit", "g5m-q27"): "g5m", ("merit", "g5m-g51"): "g5m"}
 # Arms that call a paid API: every task of one carries needs_env (a worker with any of them unset leaves the task) and
 # is listed for KEY_POOLS only, whatever its EXPERIMENTS line or --only-pools says: nobody but Max has the keys.
 # WorldMM's answer arms both call gpt-5-mini (its retriever); MERIT's Qwen answer arms (g5m-q8, g5m-q27) call nothing
@@ -107,20 +111,20 @@ KEY_POOLS = ["max", "pulkit"]   # Max and Pulkit (NVIDIA) run with their own API
 # OPENAI_API_KEY, or through OpenRouter with OPENROUTER_API_KEY alone (each README, "Through OpenRouter").
 # ROUTER_POOLS once also offered a task whose every need an OpenRouter key meets to our own Nexus worker, which has
 # that key and no other; since 2026-11-14 it is KEY_POOLS alone (the Qwen work left Nexus). The gpt-5 answer arms
-# (g5m-g5) stay with Max and OpenAI's key (Anubhav, 2026-11-14), although the code could route them too.
+# (g5m-g5, now its stand-in g5m-g51) stay with Max and OpenAI's key (Anubhav, 2026-11-14), although the code could route them too.
 GPT = "OPENAI_API_KEY|OPENROUTER_API_KEY"
 ROUTER_POOLS = KEY_POOLS   # was + ["nexus"]: the OpenRouter arm left is WorldMM's g5m-q8, a Qwen model, so off Nexus (2026-11-14)
 NEEDS_ENV = {("api", c): ["GEMINI_API_KEY" if c.startswith("gemini") else "OPENAI_API_KEY"] for c in API_CONFIGS} | {
-    ("worldmm", "g5m"): [GPT], ("worldmm", "g5m-q8"): [GPT], ("worldmm", "g5m-g5"): ["OPENAI_API_KEY"],
-    ("merit", "g5m"): [GPT], ("merit", "g5m-g5"): ["OPENAI_API_KEY"]}
+    ("worldmm", "g5m"): [GPT], ("worldmm", "g5m-q8"): [GPT], ("worldmm", "g5m-g51"): ["OPENAI_API_KEY"],
+    ("merit", "g5m"): [GPT], ("merit", "g5m-g51"): ["OPENAI_API_KEY"]}
 # OpenAI shuts gpt-5 and gpt-5-mini down on 2026-12-11, and a built memory can be reused afterwards: the g5m memories
 # are built for ALL videos, as every memory is (desired: build_order.txt plus the batch10 videos it lacks, batch10's
 # first, then each bank's of BANKS in order, then the rest); the answer arms answer every one of these banks.
 REPORTED_BANKS = BANKS
 REPORTED = [("worldmm", "g5m", "build", KEY_POOLS, None), ("merit", "g5m", "build", KEY_POOLS, None)] + [
     (b, arm, "qa", pools, bank) for bank in REPORTED_BANKS for b, arm, pools in (
-        ("worldmm", "g5m-q8", KEY_POOLS), ("worldmm", "g5m-g5", KEY_POOLS),
-        ("merit", "g5m-q8", M8), ("merit", "g5m-q27", POOLS["merit", "m27"]), ("merit", "g5m-g5", KEY_POOLS))]
+        ("worldmm", "g5m-q8", KEY_POOLS), ("worldmm", "g5m-g51", KEY_POOLS),
+        ("merit", "g5m-q8", M8), ("merit", "g5m-q27", POOLS["merit", "m27"]), ("merit", "g5m-g51", KEY_POOLS))]
 # The pilot gate: while PILOT is non-empty, these are the only tasks of the gated arms (GATED below: the
 # reported-configuration arms and the paid rows) that are listed; all their other tasks are withheld from tasks.json
 # (the API tasks and the local-model tasks are not affected). Empty it (a one-line PR) once the pilot's token usage has
@@ -129,9 +133,9 @@ PILOT = []   # emptied 2026-11-14 (Anubhav): the pilot, worldmm-g5m-build-P05-20
 # Withheld whatever PILOT says: (baseline, arm, stage) lines whose work is running off the board, which a board copy
 # would pay for twice. A qa task keeps its wait on such a build until the memory is uploaded. Empty since 2026-11-14:
 # WorldMM's gpt-5-mini memories, built by Slurm arrays on Nexus, are in the dataset for all 156 videos.
-# Since 2026-11-14 (Anubhav) also the three GPT-5 rows (sheet rows 7, 25, 36): no pool has GPT-5 through an OpenAI key
-# (Max's and Pulkit's gateway serves it from Azure only). Take them out when Max or Pulkit confirms access.
-HELD = {("api", "gpt-5-f1024", "qa"), ("merit", "g5m-g5", "qa"), ("worldmm", "g5m-g5", "qa")}
+# The three GPT-5 rows were held here on 2026-11-14 for want of GPT-5 access; since 2026-11-15 they run on stand-ins
+# (API_CONFIGS above), so nothing is held.
+HELD = set()
 # Baselines whose answering is frozen, every arm and bank (Anubhav, 2026-11-14): traversal logic is being added to the
 # inference of MAGIC-Video, WorldMM, EGAgent and M3-Agent in another PR, and answers given before it would be redone.
 # Their qa tasks are withheld until that PR is merged (then empty this set); their memory builds are listed as usual.
@@ -220,13 +224,13 @@ URGENT = [("magic", arm, "build", POOLS["magic", arm] + LEFTOVER_POOLS, None) fo
 # 4, 6, 7 the API models; 12, 14 Qwen3-VL-8B and Qwen3.8-27B from 768 frames; 18 VST; 22 Ego-R1; 23 EgoRAG; 24, 25
 # MERIT on the gpt-5-mini memory, answered by Qwen 8B and by GPT-5; 34 M3-Agent; 35, 36 WorldMM likewise; 39 EGAgent
 # (Gemini 3.6 Flash agent); 40 MAGIC-Video (Qwen3.5-Flash); with the arms that build their memories. The GPT-5 rows
-# (7, 25, 36) are in the set but withheld for now (HELD), so the other rows do not wait for them. Empty the set to
+# (7, 25, 36) run on GPT-5.5 / GPT-5.1 stand-ins (API_CONFIGS above). Empty the set to
 # list everything again.
 PRIORITY = {("api", c) for c in API_CONFIGS} | {
     ("direct", "qwen3vl-8b-f768"), ("direct", "qwen38-27b-f768"), ("vst", "vst7b"),
     ("egor1", "gemini36flash"), ("egor1", "gemini36flash-gpt41"), ("egorag", "egogpt_gpt41"),
-    ("merit", "g5m"), ("merit", "g5m-q8"), ("merit", "g5m-g5"), ("m3agent", "m3"),
-    ("worldmm", "g5m"), ("worldmm", "g5m-q8"), ("worldmm", "g5m-g5"),
+    ("merit", "g5m"), ("merit", "g5m-q8"), ("merit", "g5m-g51"), ("m3agent", "m3"),
+    ("worldmm", "g5m"), ("worldmm", "g5m-q8"), ("worldmm", "g5m-g51"),
     ("egagent", "gpt41"), ("egagent", "gemini36flash"), ("magic", "oss120"), ("magic", "oss120-flash")}
 EXPERIMENTS = [("api", c, "qa", KEY_POOLS, bank) for bank in BANKS for c in API_CONFIGS] + URGENT + REPORTED + PAID + [
     ("direct", arm, "qa", pools, bank) for bank in BANKS for arm, pools in DIRECT.items()] + [
