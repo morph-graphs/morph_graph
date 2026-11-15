@@ -34,7 +34,8 @@
 #   M3AGENT_GEMINI_MODEL  arm m3api: the Gemini model for speech segments (default gemini-2.5-pro)
 #   M3AGENT_TAG     a variant name for the answers (answers_<bank>_<tag>.json.gz)
 #   M3AGENT_FETCH   0 to never take the memory from the dataset (build normally reuses it when it is there)
-#   M3AGENT_GPU_UTIL, M3AGENT_MAX_LEN  vLLM's gpu_memory_utilization (0.8) and max_model_len (16384)
+#   M3AGENT_GPU_UTIL, M3AGENT_MAX_LEN  vLLM's gpu_memory_utilization (0.8; 0.9 on one GPU under 100 GB, which also puts
+#                   the embedding model on the CPU unless M3AGENT_EMBED_DEVICE is set) and max_model_len (16384)
 # Every stage skips finished work, so rerunning the same command resumes (build resumes after its last clip).
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/../common/single_process_env.sh"   # never a torch.distributed job: drop torchrun's variables
@@ -141,10 +142,16 @@ qa_file() {   # this bank's questions for the video in M3-Agent's control format
     "$PY_CTL" "$M/epic/m3_epic.py" questions --bank "$src" --video_id "$V" --clips "$CLIPS/clips.json" --mem_path "$MEM" --out "$QA"
 }
 control() {   # control <run jsonl> [--blind]: answer the questions not yet in the run file (resumes)
-    local tp=${M3AGENT_TP:-$NGPU}
+    local tp=${M3AGENT_TP:-$NGPU} util=${M3AGENT_GPU_UTIL:-0.8} mib
     [ "$tp" -ge 1 ] || { echo "no GPU visible"; exit 1; }
+    mib=$( (nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null || true) | head -1 | tr -d ' ')
+    if [ "$tp" = 1 ] && [ "${mib:-0}" -lt 100000 ]; then
+        # one 80 GB GPU: the 61 GiB of weights leave no KV cache at 0.8 (vLLM stops at start-up), and no room
+        # for the embedding model beside a larger share
+        util=${M3AGENT_GPU_UTIL:-0.9}; export M3AGENT_EMBED_DEVICE=${M3AGENT_EMBED_DEVICE:-cpu}
+    fi
     (cd "$R" && "$PY_CTL" m3_agent/control.py --data_file "$QA" --output "$1" --model "$M3AGENT_CONTROL_CKPT" --tp "$tp" \
-        --gpu_memory_utilization "${M3AGENT_GPU_UTIL:-0.8}" --max_model_len "${M3AGENT_MAX_LEN:-16384}" "${@:2}")
+        --gpu_memory_utilization "$util" --max_model_len "${M3AGENT_MAX_LEN:-16384}" "${@:2}")
 }
 qa() {
     log "qa $BANK$SUF"; need PY_CTL control; keys OPENAI_API_KEY; local t=$SECONDS run=$AW/runs/$V/${BANK}${SUF}.jsonl missing
@@ -156,7 +163,8 @@ qa() {
             --out "$OUT/answers_$BANK$SUF.json.gz" | tail -1)
         [ -z "$missing" ] && break
     done
-    [ -z "$missing" ] || { echo "still unanswered: $missing (rerun the same command to retry)"; exit 1; }
+    # a count, not every key: the board keeps only the tail of the output, and the error above must stay in it
+    [ -z "$missing" ] || { echo "still unanswered: $(wc -w <<< "$missing" | tr -d " ") of $V's $BANK questions (rerun the same command to retry)"; exit 1; }
     record "$PY_CTL" "qa $BANK$SUF" $((SECONDS - t))
 }
 blind() {
@@ -165,7 +173,7 @@ blind() {
     control "$run" --blind 2>&1 | tee -a "$AW/logs/${V}_blind_${BANK}.log"
     local missing; missing=$("$PY_CTL" "$M/epic/m3_epic.py" collect --questions "$QA" --clips "$CLIPS/clips.json" --runs "$run" \
         --out "$OUT/blind_$BANK.json" | tail -1)
-    [ -z "$missing" ] || { echo "blind: still unanswered: $missing"; exit 1; }
+    [ -z "$missing" ] || { echo "blind: still unanswered: $(wc -w <<< "$missing" | tr -d " ") of $V's $BANK questions"; exit 1; }
     record "$PY_CTL" "blind $BANK" $((SECONDS - t))
 }
 upload() {   # only a finished memory: a half-built folder would overwrite a good one in the dataset
