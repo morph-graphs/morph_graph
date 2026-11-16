@@ -18,9 +18,9 @@
 #          gemini25pro  Gemini 2.5 Pro agent    needs GEMINI_API_KEY (and OPENAI_API_KEY to build the memory)
 #          gemini36flash  Gemini 3.6 Flash agent, not the paper's: it stands in for gemini25pro, which Google
 #                       no longer serves to our key (README: Read first). Same keys as gemini25pro
-#          OPENROUTER_API_KEY without OPENAI_API_KEY sends the GPT-4.1 calls through OpenRouter instead (README
-#          "Through OpenRouter"); Gemini is only ever called through Google's API (GOOGLE_GEMINI_BASE_URL: another
-#          endpoint that speaks it)
+#          OPENROUTER_API_KEY without OPENAI_API_KEY sends the GPT-4.1 calls through OpenRouter instead, and without
+#          GEMINI_API_KEY the Gemini calls (README "Through OpenRouter"); with GEMINI_API_KEY Gemini is called through
+#          Google's API (GOOGLE_GEMINI_BASE_URL: another endpoint that speaks it)
 #   bank   a named bank of the epic-morph checkout, e.g. batch10_agree2
 #
 # A paid stage runs when its key is in the environment and stops (exit 3, nothing spent) when it is not. Keys
@@ -42,6 +42,7 @@
 #   EGAGENT_CHUNK_S  seconds of captions per graph extraction, default 300 (README: Read first)
 #   EGAGENT_TAG      a variant name for the answers (answers_<bank>_<tag>.json.gz)
 #   EGAGENT_FETCH    0 to never take the memory from the dataset (build normally reuses it when it is there)
+#   EGAGENT_QA_WORKERS  qa: questions answered at once (threads), default 1 = one at a time (README: Parallel answering)
 #   EGAGENT_REPO_COMMIT, EGAGENT_UPSTREAM_COMMIT, EGAGENT_EPIC_COMMIT  commits for runs.jsonl when a checkout
 #                    has no .git (a synced copy); read with git otherwise
 # Every step skips finished work, so rerunning the same command resumes.
@@ -74,7 +75,7 @@ have_memory() { local m; for m in "${MEMORY[@]}"; do [ -s "$OUT/${m//\{video\}/$
 patched() { grep -q "def build_app" "$R/egagent/run_egagent_on_videomme.py" && grep -q EGAGENT_BACKBONE "$R/egagent/langgraph_agent.py" \
             && grep -q "startswith('gemini-')" "$R/egagent/langgraph_agent.py" \
             && grep -q EGAGENT_DB_ROOT "$R/paths.py" && grep -q "def get_api_key" "$R/utils.py" && grep -q EGAGENT_GPT_PREFIX "$R/utils.py" \
-            && grep -q GEMINI_CLIENT_OPTIONS "$R/utils.py"; }
+            && grep -q GEMINI_CLIENT_OPTIONS "$R/utils.py" && grep -q GEMINI_OPENROUTER "$R/utils.py"; }
 if ! patched; then
     ( if command -v flock >/dev/null; then flock 9; fi
       if ! patched && grep -q OPENROUTER "$R/utils.py"; then   # an earlier epic_morph.patch: upstream's files back first
@@ -104,6 +105,9 @@ paid() {   # $1: the model, $2: its key's name, $3: its shutdown date, $4: what 
     fi
     if [ "$2" = OPENAI_API_KEY ] && [ -z "${OPENAI_API_KEY:-}" ] && [ -n "${OPENROUTER_API_KEY:-}" ]; then
         echo "$1 through OpenRouter (openai/$1, provider OpenAI only)"; return 0
+    fi
+    if [ "$2" = GEMINI_API_KEY ] && [ -z "${GEMINI_API_KEY:-}${GOOGLE_API_KEY:-}" ] && [ -n "${OPENROUTER_API_KEY:-}" ]; then
+        echo "$1 through OpenRouter (google/$1, provider Google AI Studio only)"; return 0
     fi
     [ -n "${!2:-}" ] || { echo "STOP before a paid API step, nothing spent: $4. It runs when $2 is set in the environment."; exit 3; }
 }
@@ -191,6 +195,7 @@ bank_file() {   # this bank's questions for the video (banks are generated in ep
     [ -s "$BF" ] || { echo "no $bank questions for $V in $EPIC"; exit 1; }
 }
 agent_only=(env -u OPENAI_API_KEY -u OPENROUTER_API_KEY); [ "$ARM" != gpt41 ] || agent_only=(env -u GEMINI_API_KEY -u GOOGLE_API_KEY)
+[ "$ARM" = gpt41 ] || [ -n "${GEMINI_API_KEY:-}${GOOGLE_API_KEY:-}" ] || agent_only=(env -u OPENAI_API_KEY)   # Gemini through OpenRouter
 run_qa() { "${agent_only[@]}" "$PY" -u "$M/epic/run_qa.py" --video "$V" --bank_file "$BF" --frames_dir "$FRAMES" --backbone "$BACKBONE" \
                --db_root "$WORK/dbs/${ARM}_${V}_$$" "$@"; }
 qa() {

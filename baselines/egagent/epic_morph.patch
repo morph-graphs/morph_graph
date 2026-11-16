@@ -154,7 +154,7 @@ index 30223c9..d21a6ae 100644
  TIMESTAMP_EPISODES_ROOT = EGAGENT_ROOT / "timestamp_episodes"
 \ No newline at end of file
 diff --git a/utils.py b/utils.py
-index be92d88..0b5c803 100644
+index be92d88..bae78bd 100644
 --- a/utils.py
 +++ b/utils.py
 @@ -63,13 +63,14 @@ def get_vision_llm(llm_name: str) -> ChatOpenAI:
@@ -174,7 +174,7 @@ index be92d88..0b5c803 100644
      )
      return vision_llm
  
-@@ -77,13 +78,14 @@ def get_reasoning_llm(llm_name: str):
+@@ -77,18 +78,23 @@ def get_reasoning_llm(llm_name: str):
      """Get a reasoning LLM using Langchain's ChatOpenAI with high reasoning effort, e.g. o3 or gpt-5."""
      vision_llm = ChatOpenAI(
          api_key=OPENAI_API_KEY,
@@ -192,7 +192,16 @@ index be92d88..0b5c803 100644
      )
      return vision_llm
  
-@@ -96,9 +98,17 @@ def get_external_gemini_llm(llm_name: str):
+ def get_external_gemini_llm(llm_name: str):
+     """Get a Gemini LLM using Langchain's ChatGoogleGenerativeAI, e.g. Gemini 2.5 Pro."""
++    if GEMINI_OPENROUTER:   # EPIC-Morph port: OpenRouter, see GEMINI_OPENROUTER below
++        return ChatOpenAI(api_key=os.environ["OPENROUTER_API_KEY"], base_url=OPENROUTER_BASE_URL, max_retries=3,
++                          model="google/" + llm_name, temperature=0, stream_usage=True, streaming=False,
++                          extra_body={"provider": {"only": ["google-ai-studio"], "allow_fallbacks": False}})
+     gemini_llm = ChatGoogleGenerativeAI(
+         api_key=GOOGLE_GENAI_API_KEY,
+         model=llm_name,
+@@ -96,9 +102,17 @@ def get_external_gemini_llm(llm_name: str):
          max_tokens=None,
          timeout=None,
          max_retries=3,
@@ -210,7 +219,7 @@ index be92d88..0b5c803 100644
  def get_vLLM(ip_address: str, llm_name: str):
      """Get a local LLM using Langchain's ChatOpenAI, e.g. Qwen 2.5 VL 7B."""
      qwen_vl_local = ChatOpenAI(
-@@ -180,8 +190,27 @@ def get_file_contents(filename):
+@@ -180,8 +194,32 @@ def get_file_contents(filename):
      except FileNotFoundError:
          raise FileNotFoundError(f"'{filename}' file not found")
  
@@ -227,6 +236,10 @@ index be92d88..0b5c803 100644
 +GOOGLE_GENAI_API_KEY = get_api_key("GEMINI_API_KEY", "GOOGLE_API_KEY")
 +# EPIC-Morph port: GOOGLE_GEMINI_BASE_URL, which Google's genai SDK reads, points the Gemini calls at another
 +# endpoint that speaks Google's API (default https://generativelanguage.googleapis.com); recorded with every call
++# EPIC-Morph port: with OPENROUTER_API_KEY set and no Gemini key, the Gemini calls go to OpenRouter's OpenAI-compatible
++# endpoint as google/<model>, pinned to Google AI Studio (Google's Gemini API) with no fallback, through LangChain's
++# OpenAI client: the same prompts, but not Google's client, so the structured outputs are asked the OpenAI way.
++GEMINI_OPENROUTER = bool(os.environ.get("OPENROUTER_API_KEY")) and GOOGLE_GENAI_API_KEY == "MISSING"
 +GEMINI_CLIENT_OPTIONS = {"api_endpoint": os.environ["GOOGLE_GEMINI_BASE_URL"].rstrip("/")} if os.environ.get("GOOGLE_GEMINI_BASE_URL") else None
 +# EPIC-Morph port, the gateway for the GPT calls: with OPENROUTER_API_KEY set and OPENAI_API_KEY not, the same
 +# Chat Completions requests go to OpenRouter as openai/<model>, pinned to the provider OpenAI with no fallback
@@ -234,7 +247,8 @@ index be92d88..0b5c803 100644
 +# OpenAI-compatible gateway in OPENAI_BASE_URL when that is set (the endpoint is recorded with every call).
 +OPENROUTER = bool(os.environ.get("OPENROUTER_API_KEY")) and not os.environ.get("OPENAI_API_KEY")
 +OPENAI_API_KEY = get_api_key("OPENROUTER_API_KEY" if OPENROUTER else "OPENAI_API_KEY")
-+OPENAI_BASE_URL = (os.environ.get("OPENROUTER_BASE_URL") or "https://openrouter.ai/api/v1") if OPENROUTER else os.environ.get("OPENAI_BASE_URL") or "https://api.openai.com/v1"
++OPENROUTER_BASE_URL = os.environ.get("OPENROUTER_BASE_URL") or "https://openrouter.ai/api/v1"
++OPENAI_BASE_URL = OPENROUTER_BASE_URL if OPENROUTER else os.environ.get("OPENAI_BASE_URL") or "https://api.openai.com/v1"
 +OPENAI_MODEL_PREFIX = "openai/" if OPENROUTER else os.environ.get("EGAGENT_GPT_PREFIX", "")   # e.g. azure/openai/ on a gateway
 +OPENAI_EXTRA_BODY = {"provider": {"only": ["openai"], "allow_fallbacks": False}} if OPENROUTER else None
  

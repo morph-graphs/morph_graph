@@ -26,6 +26,7 @@
 #   HDEPIC_VIDEOS    videos on the host (default $EPIC_MORPH_DIR/data/HD-EPIC/videos), mounted read-only at /videos
 #   EGAGENT_OUT, EGAGENT_WORK  optional, paths inside the container (e.g. /repo/baselines/egagent/work/check)
 #   passed through when set: MERIT_HF_REPO EGAGENT_TAG EGAGENT_FETCH EGAGENT_FRAME_PX EGAGENT_CHUNK_S THREADS LIMIT
+#                    EGAGENT_QA_WORKERS
 set -euo pipefail
 : "${3:?usage: run.sh <stage> <video> <arm> [bank]}"
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
@@ -53,7 +54,7 @@ if [ -n "${MERIT_WORK:-}" ]; then   # the shared work folder: EGAgent's own subf
     umask 002; mkdir -p "$MERIT_WORK"; BINDS+=("$(cd -P "$MERIT_WORK" && pwd):/work"); export EGAGENT_WORK=${EGAGENT_WORK:-/work/egagent}
 fi
 PASS=(OPENAI_API_KEY OPENROUTER_API_KEY OPENROUTER_BASE_URL OPENAI_BASE_URL OPENAI_PROVIDER_NOTE OPENAI_MODEL_ALIASES EGAGENT_GPT_PREFIX GEMINI_API_KEY GOOGLE_GEMINI_BASE_URL HF_TOKEN MERIT_HF_REPO EGAGENT_TAG EGAGENT_FETCH EGAGENT_FRAME_PX EGAGENT_CHUNK_S
-      THREADS LIMIT EGAGENT_OUT EGAGENT_WORK)
+      THREADS LIMIT EGAGENT_OUT EGAGENT_WORK EGAGENT_QA_WORKERS)
 if [ "$RUNTIME" = apptainer ]; then
     case $IMAGE in *.sif) ;; *) IMAGE=docker://$IMAGE ;; esac
     # through APPTAINERENV_* (the environment), not --env: a command line, keys included, is visible in `ps`

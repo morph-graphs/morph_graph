@@ -23,6 +23,7 @@ import json
 import os
 import shutil
 import sys
+import threading
 
 try:   # Chroma needs sqlite >= 3.35; where the system's is older (RHEL 8), use the pysqlite3 wheel instead
     import pysqlite3
@@ -62,8 +63,10 @@ def open_agent(video, captions, work):
     from egorag.database.Chroma import Chroma
 
     class SeenOnly(Chroma):
-        """With .cutoff set (a clock integer), every retrieval is limited to clips that ended by then."""
-        cutoff = None
+        """With .cutoff set (a clock integer), every retrieval is limited to clips that ended by then. The cutoff is
+        the setting thread's own: questions answered in parallel (run_qa.py, EGORAG_QA_WORKERS) each have theirs."""
+        _seen = threading.local()
+        cutoff = property(lambda self: getattr(self._seen, "cutoff", None), lambda self, v: setattr(self._seen, "cutoff", v))
 
         def custom_query(self, query_texts, n_results=3, where=None, filter_first=True):
             if self.cutoff is not None:

@@ -129,6 +129,14 @@ export EGORAG_DEEPSEEK_MODEL=<the gateway's id of the DeepSeek model>
   missing key; `qa` exits 4. So the GPU part can be done first, by anyone, and the paid part later from the same
   results folder (or from the dataset, after `upload` of a finished memory).
 - `EGORAG_LIMIT=5` answers only 5 questions (a first paid smoke test: a few cents).
+- `EGORAG_QA_WORKERS=6` answers six questions at a time (threads; default 1, one at a time). A question's steps
+  share nothing with another's except the index, and the index's time cutoff is per thread
+  (`build_memory.SeenOnly`); only the main thread writes the answers file, in bank order. qa's time is almost
+  all API calls: the local part (the OpenCLIP index built from the captions, ~35 s for a 29 min video, and
+  0.06-0.15 s per retrieval) runs on the CPU, with or without a GPU. Measured on P01-20240203-123350, bank probes_v2 (36
+  questions), `egogpt_gpt41` through OpenRouter (2026-11-16): one worker 326 s and 329 s (two runs), six workers
+  69 s, each 252 calls and $0.41-0.42. Every question took the same branch and retrieved as many clips in all
+  three runs; the letters agree 32/36 between the two one-worker runs and 31-32/36 with six workers.
 - `OPENROUTER_API_KEY` instead of either key: see "Through OpenRouter" below.
 - `docker/run.sh` mounts this checkout at `/repo`, the epic-morph checkout at `/epic-morph`, the videos at
   `/videos` and the Hugging Face cache (`EGORAG_HF_CACHE`, default `~/.cache/huggingface`) at `/hf`; keys are

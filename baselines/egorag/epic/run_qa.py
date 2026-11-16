@@ -20,7 +20,10 @@ What the adapter adds:
   a question is retried (3 tries) and otherwise left unanswered (exit code 2: run again).
 
 Writes --answers (.json.gz): one row per question in bank order, keyed by the bank's `key`, with the chosen
-option, correctness, and what was retrieved (times in video seconds). Resumes from it.
+option, correctness, and what was retrieved (times in video seconds), rewritten after every answer. Resumes from it.
+EGORAG_QA_WORKERS=n answers n questions at a time (threads; default 1, one at a time): a question's steps share
+nothing with another's but the index, whose time cutoff is per thread (build_memory.SeenOnly); only the main
+thread writes the file.
 
     python run_qa.py --video <V> --bank_file <V>_questions.json --memory <memory dir> --work <dir> --answers <file>
 """
@@ -31,6 +34,7 @@ import json
 import os
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path[:0] = [HERE, os.path.join(HERE, "..", "..", "merit", "epic")]
@@ -92,7 +96,8 @@ def main():
             json.dump([done[r["key"]] for r in rows if r["key"] in done], f, indent=1)
         os.replace(a.answers + ".tmp", a.answers)
 
-    for n, r in enumerate(todo, 1):
+    def attempt(r):
+        """(result or None, the last error, seconds): up to 3 tries."""
         t0, res, err = time.time(), None, None
         for _ in range(3):
             try:
@@ -102,17 +107,35 @@ def main():
                 raise
             except Exception as e:
                 err = f"{type(e).__name__}: {e}"
+        return res, err, round(time.time() - t0, 1)
+
+    def keep(n, r, res, err, seconds):
+        """The main thread only: the answer into `done` and the answers file rewritten, in bank order."""
         if res is None:
             print(f"[{n}/{len(todo)}] {r['key']}: failed 3 times ({err})", flush=True)
-            continue
+            return
         choices = {L: r[f"choice_{L.lower()}"] for L in "ABCD" if f"choice_{L.lower()}" in r}
         done[r["key"]] = {"key": r["key"], "qhash": r["qhash"], "ID": r["ID"], "type": r["type"], "question": r["question"],
                           "choices": choices, "answer": r["answer"], **res, "evaluate": res["response"] == r["answer"],
                           "t_ask": r["meta"]["t_ask"], "cutoff": video_sec(r["query_time"]["time"]),
-                          "seconds": round(time.time() - t0, 1), "version": VERSION, "memory_hash": mh}
+                          "seconds": seconds, "version": VERSION, "memory_hash": mh}
         print(f"[{n}/{len(todo)}] {r['key']} @ {done[r['key']]['cutoff']}s: {res['response']!r} gold {r['answer']} "
               f"({res['branch']}, {len(res['retrieved'])} clips, {len(res['evidence_cards'])} evidence)", flush=True)
         save()
+
+    workers = max(1, int(os.environ.get("EGORAG_QA_WORKERS") or 1))
+    if workers == 1:
+        for n, r in enumerate(todo, 1):
+            keep(n, r, *attempt(r))
+    elif todo:
+        print(f"answering {workers} questions at a time", flush=True)
+        pool = ThreadPoolExecutor(workers)
+        try:
+            futures = {pool.submit(attempt, r): r for r in todo}
+            for n, f in enumerate(as_completed(futures), 1):
+                keep(n, futures[f], *f.result())
+        finally:   # a retrieval after the question time (AssertionError) stops the questions not yet started
+            pool.shutdown(wait=True, cancel_futures=True)
     missing = [r["key"] for r in todo if r["key"] not in done]   # with --limit: of what this run was asked
     right = sum(done[r["key"]]["evaluate"] for r in rows if r["key"] in done)
     print(f"# {len(done)}/{len(rows)} answered, {right} right, {len(missing)} missing -> {a.answers}", flush=True)

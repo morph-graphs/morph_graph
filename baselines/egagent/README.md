@@ -161,7 +161,7 @@ be built on our cluster without an OpenAI account. Nothing else is set; the swit
 export OPENROUTER_API_KEY=...      # typed into the shell (or read -s): never an argument, a file, a log or a commit
 unset OPENAI_API_KEY
 bash baselines/egagent/docker/run.sh build P05-20240425-201444 gpt41                       # the memory: GPT-4.1 through OpenRouter
-export GEMINI_API_KEY=...          # Google's own API: the gemini25pro agent never goes through OpenRouter
+export GEMINI_API_KEY=...          # Google's own API for the Gemini agent (without it: through OpenRouter, below)
 bash baselines/egagent/docker/run.sh qa    P05-20240425-201444 gemini25pro batch10_agree2  # takes the gpt41 folder's memory
 ```
 For an sbatch job, read the key into the job's environment inside the job and do not write it into the script.
@@ -183,6 +183,14 @@ For an sbatch job, read the key into the job's environment inside the job and do
   Gemini rows); through OpenRouter also `provider` (who served the calls) and `cost` (dollars OpenRouter
   charged, summed). The memory folder stays `egagent/gpt41/<video>/`: the same model through another gateway.
 - **One gateway per run.** With both keys set OpenAI's is used and `OPENROUTER_API_KEY` is dropped.
+- **The Gemini agent through OpenRouter, a fallback only.** With `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) set nothing
+  changes: Gemini is called through Google's API as before, whatever else is set. Only with `OPENROUTER_API_KEY` and no
+  Gemini key (our own test runs),
+  a Gemini arm's calls go to OpenRouter as `google/<model>` (e.g. `google/gemini-3.6-flash`), pinned to the
+  provider `google-ai-studio` (Google's Gemini API) with no fallback; reply ids `google/gemini-...` count as the
+  model. Unlike the GPT route this is not the same client: the requests go through LangChain's `ChatOpenAI`
+  instead of `langchain-google-genai`, so the structured outputs are asked the OpenAI way. Answers from this route
+  are comparable with each other, not with answers made with `GEMINI_API_KEY`: give them their own `EGAGENT_TAG`.
 - **An OpenAI-compatible gateway.** With `OPENAI_API_KEY`, `OPENAI_BASE_URL` (passed on by `docker/run.sh`)
   points the same requests at another endpoint, model id `gpt-4.1` unchanged and no provider pin. A gateway
   serving GPT-4.1 from Azure OpenAI answers as `azure/openai/gpt-4.1`, which counts as GPT-4.1; the `endpoint`
@@ -205,6 +213,25 @@ export EPIC_MORPH_DIR=<epic-morph checkout> PY=<dir>/egagent-client/bin/python
 bash baselines/egagent/run_egagent.sh build P05-20240425-201444 gpt41                  # embeddings; stops before GPT-4.1 without a key
 bash baselines/egagent/run_egagent.sh check P05-20240425-201444 gpt41 batch10_agree2   # tables + frame search per cutoff, no API
 ```
+
+### Parallel answering
+
+`EGAGENT_QA_WORKERS=6` (passed on by `docker/run.sh`) has `qa` answer six questions at a time in threads; the
+default, 1, answers one at a time as before. Each question's agent is already independent: a fresh graph state,
+LLM clients that keep nothing between calls, SQLite connections opened per call. What `epic/run_qa.py` adds for
+threads (`per_question_state`): the trace lists of `epic_morph_trace.patch` become one list per question (a
+ContextVar), SigLIP 2's text encoder runs behind a lock, each cutoff's two tables are written once by the first of
+its questions and deleted after its last, every question runs in a copy of the main thread's context (so the
+usage watch counts its calls, under a lock, and still stops a wrong model), and only the main thread writes rows.
+The answers file is in bank order either way. Measured on P01-20240203-123350, bank probes_v2 (36
+questions), `gemini36flash` through OpenRouter (2026-11-16): one worker 1,505 s and 1,565 s (two runs), six workers
+297 s, with the same calls (305 / 303 / 308), tokens (3.8-3.9 M in) and cost ($3.63 / $3.68 / $3.66). The two
+one-worker runs agree on 17 of 36 letters, one-vs-six on 25 and 22: the agent's own run-to-run spread (API
+sampling over ~8 calls a question) is too large for live runs to show a small difference. `epic/parallel_check.py`
+checks the threads exactly, against the fake APIs (no cost): every question's prompts, trace, working memory and
+answer are the same with one worker and with six, and every call is counted. Six workers send about one call a
+second and ~0.8 M input tokens a minute per task; a rate-limited (429) call is retried by the client, then the
+question by the next pass.
 
 Every stage skips finished work; captions, graph chunks and answers resume from where they stopped, and a
 question that failed is retried (three passes per run). The frames (about 0.16 MB each, one per second of
