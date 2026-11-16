@@ -30,6 +30,7 @@ QUEUES=${QUEUES:-$W/mg/coord/nexus_queues.json}
 PY=${PY:-$P/envs/magic-client/bin/python}           # any venv with huggingface_hub >= 0.30 (the worker needs nothing else)
 TOKEN_FILE=${TOKEN_FILE:-$HOME/.config/hf_write_token}
 [ "$(stat -c %a "$TOKEN_FILE")" = 600 ] || { echo "$TOKEN_FILE must exist with mode 600"; exit 1; }
+umask 002   # shared caches (HF locks, work folders) stay group-writable for the other pools: a 0644 lock fails their fetch (Vatsal, 2026-11-16)
 export HF_TOKEN=$(cat "$TOKEN_FILE")
 KEY_FILE=${OPENROUTER_KEY_FILE:-$HOME/.config/openrouter_key}   # optional: without it the worker leaves the keyed tasks
 if [ -z "${OPENROUTER_API_KEY:-}" ] && [ -f "$KEY_FILE" ]; then
