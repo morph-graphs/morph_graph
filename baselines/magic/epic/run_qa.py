@@ -35,7 +35,7 @@ import logging
 import os
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path[:0] = [HERE, os.path.join(HERE, "..", "..", "merit", "epic"), os.path.join(HERE, "..", "..", "common")]
@@ -94,7 +94,8 @@ def main():
     ap.add_argument("--answers", required=True)
     ap.add_argument("--cache_dir", required=True, help="WorldMM's per-video index cache (not part of the memory)")
     ap.add_argument("--prev", nargs="*", default=[], help="the video's answers files under other banks (same memory)")
-    ap.add_argument("--parallel", type=int, default=8, help="questions in flight per cutoff group (eval_egolife default 8)")
+    ap.add_argument("--parallel", type=int, default=int(os.environ.get("MAGIC_QA_WORKERS", 8)),
+                    help="questions in flight per cutoff group (eval_egolife default 8; env MAGIC_QA_WORKERS)")
     a = ap.parse_args()
     a.memory, a.answers, a.cache_dir, a.bank_file = map(os.path.abspath, (a.memory, a.answers, a.cache_dir, a.bank_file))
     sys.path.insert(0, os.path.join(SRC, "eval"))
@@ -181,13 +182,16 @@ def main():
                     "num_rounds": res.num_rounds if res else 0, "round_history": res.round_history if res else [],
                     "trace": res.trace if res else [],   # each search's graph walk: seeds, nodes, edges, chains
                     "seconds": round(time.time() - t0, 1), "version": VERSION, "memory_hash": mh, **reason}
+        # saved as each question finishes (this thread is the only writer, rows in bank order): an end bank is one
+        # group of the video's every question, and a run stopped mid-group keeps what it answered
         with ThreadPoolExecutor(a.parallel) as ex:
-            for res in ex.map(one, grp):
+            for fut in as_completed([ex.submit(one, r) for r in grp]):
+                res = fut.result()
                 if res["response"] != "Error":
                     done[res["key"]] = res
+                    save()
                 log.info(f"{res['key']} ID {res['ID']} @ {cut}s: {res['response']!r} gold {res['answer']} -> {res['evaluate']} "
                          f"({res['num_rounds']} rounds, {res['seconds']}s)")
-        save()
         wm.cleanup()
     save()
     right = sum(bool(done[r["key"]]["evaluate"]) for r in rows if r["key"] in done)
