@@ -235,7 +235,10 @@ NEEDS_MEMORY = {"m3agent"}
 # to the Nexus pools at once as well (no LEFTOVER_H wait).
 # The 27B memories still missing (8 of 156 on 2026-11-15) go to Pulkit first (Anubhav, 2026-11-15: his GB200/GB300
 # pool, on priority); after LEFTOVER_H hours unclaimed they are offered to the Nexus pools too, like any task.
-URGENT = [("magic", "m8", "build", POOLS["magic", "m8"] + LEFTOVER_POOLS, None), ("magic", "m27", "build", ["pulkit"], None)]
+# Zaratan takes them too (Anubhav, 2026-11-15), on two H100s: on one 80 GB GPU the 27B server and MAGIC's graph step
+# ran out of memory together (2026-11-14), and on two the server spreads over both
+URGENT = [("magic", "m8", "build", POOLS["magic", "m8"] + LEFTOVER_POOLS, None),
+          ("magic", "m27", "build", ["pulkit", "zaratan"], None)]
 # The rows to finish first (Anubhav, 2026-11-14: time and compute are short). While a task of one of these arms is
 # listed, the tasks of every other arm are withheld from tasks.json (gate()); a claim already running on a withheld
 # task finishes, since a worker renews its claims whatever is listed. Results-sheet rows (tab `Epic Morph Results`):
