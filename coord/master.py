@@ -292,8 +292,7 @@ EXPERIMENTS = [("api", c, "qa", KEY_POOLS, bank) for bank in BANKS for c in API_
 # fetches the videos it needs from the dataset (or EVCLIPS_DIR). Local rows take the pools of their Direct arms (the 8B
 # class one 48 GB GPU; the 27B and 35B-A3B the 27B pools; VST its m8 pools); the paid ones need their key (NEEDS_ENV:
 # Max's and Pulkit's pools), except Qwen3.5-Flash, which calls OpenRouter on our key as MAGIC-Video's oss120-flash does
-# (ALSO_POOLS). M3-Agent has no row: its control model (Qwen3-32B, Qwen3ForCausalLM) reads no images. Listed last,
-# after all the other work (and, as every non-PRIORITY arm, withheld while a PRIORITY arm has tasks: gate()).
+# (ALSO_POOLS). M3-Agent has no row: its control model (Qwen3-32B, Qwen3ForCausalLM) reads no images.
 EVCLIPS = [("direct", f"{m}-evclips", pools) for m, pools in (
     ("qwen3vl-8b", M8), ("qwen38-27b", M27), ("qwen35-9b", M8), ("molmo2-8b", M8), ("qwen35-35b-a3b", M27))] + [
     ("vst", "vst7b-evclips", M8)] + [("api", c, KEY_POOLS) for c in (
@@ -305,6 +304,8 @@ NEEDS_ENV |= {("api", c): [k] for c, k in (
     ("qwen3.5-flash-f384-evclips", "OPENROUTER_API_KEY"))}
 ALSO_POOLS |= {("api", "qwen3.5-flash-f384-evclips"): ["nexus", "zaratan"]}
 EXPERIMENTS += [(b, arm, "qa", pools, bank) for bank in BANKS for b, arm, pools in EVCLIPS]
+# ... and raised to a priority row (Anubhav, 2026-11-16): listed now, after the memory builds and the API rows (lead())
+PRIORITY |= {(b, arm) for b, arm, _ in EVCLIPS}
 # the file whose presence in <baseline>/<arm>/<video>/ (next to runs.jsonl) means the memory is built: the last
 # one each baseline writes ({v}: the video)
 MEMORY_DONE = {"merit": "{v}_30sec_4_key.json", "magic": "graph.pkl", "worldmm": "{v}_visual.pkl",
@@ -492,7 +493,8 @@ def built_from(files):
 
 def lead(t):
     """Where a task's group stands in the list: the CANARY's builds (-2) and answers (-1), the index of its FIRST entry,
-    then the API tasks (API_CONFIGS'), the URGENT lines, the other stitched videos' builds and their answers, the rest."""
+    then the API tasks (API_CONFIGS'), the URGENT lines, the other stitched videos' builds and their answers, every
+    other memory build, the evidence-clips rows (EVCLIPS), the rest."""
     k = (t["baseline"], t["arm"], t["stage"])
     if t["video"] in STITCHED_VIDEOS:
         qa = t["stage"] == "qa"
@@ -500,8 +502,10 @@ def lead(t):
     for i, f in enumerate(FIRST):
         if k[:len(f)] == f:
             return i
-    api = k[0] == "api" and k[1] in API_CONFIGS   # the evidence-clips configs (EVCLIPS) stay last, with the rest
-    return len(FIRST) + (1 if api else 2 if k in {(b, arm, stage) for b, arm, stage, *_ in URGENT} else 5)
+    api = k[0] == "api" and k[1] in API_CONFIGS   # the evidence-clips configs (EVCLIPS) have their own place
+    evclips = k[1].endswith("-evclips")   # after every memory build, ahead of the other answers (Anubhav, 2026-11-16)
+    return len(FIRST) + (1 if api else 2 if k in {(b, arm, stage) for b, arm, stage, *_ in URGENT}
+                         else 4 if k[2] == "build" else 5 if evclips else 6)
 
 
 def reported(t):
