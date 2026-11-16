@@ -11,13 +11,18 @@ question in it: the memory is built once for the whole video, and each question 
 
 `questions` writes the bank's questions for the video in WorldMM/EgoLifeQA row format: asked at t_ask (a
 non-streaming question at the end of the video); ID is the 1-based position in the bank file and key the
-bank's stable question key.
+bank's stable question key. A stitched video's question (<K>-stitched) also gets `context`: the kitchen's sessions
+started by its query time (baselines/common/stitched_sessions.py), which eval_epic.py puts before the question.
 """
 import argparse
 import json
 import math
 import os
 import subprocess
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "common"))
+from stitched_sessions import context  # noqa: E402
 
 LETTERS = "ABCD"
 
@@ -44,6 +49,7 @@ def convert_questions(qfile, video_end):
         # end <= the query time, so ceil would show an item ending up to 1 s after t_ask; else at the video's end
         streaming = q.get("streaming") and "t_ask" in q
         t = q["t_ask"] if streaming else video_end
+        ctx = context(q["video"], math.floor(t) if streaming else math.ceil(t), day=True)
         row = {
             "ID": str(i),
             "key": q.get("key"),
@@ -55,6 +61,8 @@ def convert_questions(qfile, video_end):
             "answer": LETTERS[mcq["answer_index"]],
             "meta": {k: q.get(k) for k in ("form", "hops", "streaming", "origin", "answer")},
         }
+        if ctx:
+            row["context"] = ctx
         for letter, o in zip(LETTERS, opts):
             row[f"choice_{letter.lower()}"] = o
         rows.append(row)

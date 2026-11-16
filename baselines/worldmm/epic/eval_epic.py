@@ -143,7 +143,9 @@ def main():
             choices = build_choices(row)
             until = qtime(row)
             try:
-                res = wm.answer(query=row["question"], choices=choices, until_time=None if a.blind else until)
+                # a stitched video's question: its session table first (prepare_epic.py `context`)
+                query = f"{row['context']}\n\nQuestion: {row['question']}" if row.get("context") else row["question"]
+                res = wm.answer(query=query, choices=choices, until_time=None if a.blind else until)
                 response, hist, nr, trace = res.answer, res.round_history, res.num_rounds, res.trace
             except Exception as e:
                 scrub = lambda x: re.sub(r"sk-[A-Za-z0-9_*.-]+", "sk-...", x)   # an API error can quote the key
@@ -163,6 +165,8 @@ def main():
                 rec["indexed"] = ({g: len(wm.episodic_memory.indexed_entries[g]) for g in GRANULARITIES}
                                   | {"visual": len(wm.visual_memory.indexed_entries),
                                      "semantic_ts": wm.semantic_memory.indexed_timestamp})
+            if row.get("context"):
+                rec["context"] = row["context"]
             if err:
                 rec["error"] = err
             if final:

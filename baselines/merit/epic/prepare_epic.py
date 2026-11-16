@@ -13,6 +13,10 @@ at its t_ask; every other question is asked at the end of the video.
 A question's ID is its bank `key`, so answers stay attached to it when a tranche adds or reorders a video's
 questions; a file without keys (e.g. M2 probes) keeps the 1-based position. match_answers() reuses an answer
 only while the question's wording, options and gold letter are unchanged (qhash).
+
+A stitched video's question (<K>-stitched, bank `stitched`) is asked with the kitchen's sessions started by its query
+time put before it (baselines/common/stitched_sessions.py, in MERIT's DAY1 HH:MM:SS form): MERIT reads only the
+question text, so the table goes in there, and its qhash stays that of the bank's own wording.
 """
 import argparse
 import glob
@@ -22,6 +26,10 @@ import math
 import os
 import shutil
 import subprocess
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "common"))
+from stitched_sessions import context  # noqa: E402
 
 LETTERS = "ABCD"
 
@@ -127,7 +135,8 @@ def match_answers(qa_rows, answers):
             q = next((q for q in same if len(same) == 1 or str(pos[str(q["ID"])]) == str(r["ID"])), None)
         if q and str(q["ID"]) not in got:
             i = str(q["ID"])
-            got[i] = {**r, "ID": q["ID"], "key": q.get("key"), "qhash": row_qhash(q), "pos": pos[i]}
+            # the bank wording's qhash (a stitched question's text also carries its session table)
+            got[i] = {**r, "ID": q["ID"], "key": q.get("key"), "qhash": q.get("qhash") or row_qhash(q), "pos": pos[i]}
     return got
 
 
@@ -155,7 +164,7 @@ def convert_questions(qfile, subject, video_end):
             "pos": i,
             "query_time": {"date": "DAY1", "time": hhmmss(t) + "00"},
             "type": q["form"],
-            "question": q["q"],
+            "question": (f"{ctx}\n\nQuestion: {q['q']}" if (ctx := context(subject, t, day=True)) else q["q"]),
             "answer": LETTERS[mcq["answer_index"]],
             # Kept for the report; MERIT ignores these.
             "meta": {k: q.get(k) for k in ("form", "hops", "streaming", "guessable", "confidence",

@@ -127,12 +127,14 @@ def run_video(run_dir, video: str, limit: int | None = None, which: str = "all",
             append_jsonl(path, row)
             counts["ok" if ok else "fail"] += 1
 
-    def ask_one(r: dict, ctx: dict, cutoff, vpath, label: str) -> None:
+    def ask_one(r: dict, ctx: dict, cutoff, vpath, label: str, gcfg: dict) -> None:
         base = {"qid": r["qid"], "video": video, "cutoff_s": cutoff, "model": mcfg["name"], "time": now()}
         if mode == "evidence":
             base["evidence_clips"] = media_files.get(vpath.name, {}).get("clips") if vpath else None
+        if vpath and "frame_budget" in media_files.get(vpath.name, {}):   # sampled input (prep_media.prep_sampled)
+            base |= {k: media_files[vpath.name][k] for k in ("frame_budget", "n_frames", "video_fps", "last_frame_s")}
         try:  # anything that goes wrong for one question stays with that question
-            out = backend.ask(client, mcfg, ctx, build_prompt(r), len(r["options"]))
+            out = backend.ask(client, gcfg, ctx, build_prompt(r), len(r["options"]))
             gt = LETTERS[r["answer_index"]]
             row = {**base, **out, "gt_letter": gt,
                    "correct": out["pred_letter"] == gt if out["pred_letter"] else None,
@@ -160,14 +162,17 @@ def run_video(run_dir, video: str, limit: int | None = None, which: str = "all",
         label = key if mode == "evidence" else "full" if cutoff is None else f"t_ask={cutoff:.1f}s"
         print(f"  [{label}] {len(group)} questions, input={vpath.name if vpath else 'text-only'}")
         ctx = None
+        # a sampled input is read at the fps it was encoded at, so the model gets each of its frames once
+        fps = media_files.get(vpath.name, {}).get("video_fps") if vpath else None
+        gcfg = {**mcfg, "fps": fps} if fps else mcfg
         try:
             t0 = time.time()
-            ctx = backend.open_context(client, mcfg, vpath, sys_inst, len(group))
+            ctx = backend.open_context(client, gcfg, vpath, sys_inst, len(group))
             print(f"    [{label}] context ready in {time.time() - t0:.0f}s "
                   f"(cache={'yes' if ctx.get('cache') else 'no'}, cache_tokens={ctx.get('cache_tokens')})")
             # every question of the group is in flight at once, bounded by the shared request pool;
             # wait for all of them (never stop at the first error) before the context is closed
-            futures = [requests.submit(ask_one, r, ctx, cutoff, vpath, label) for r in group]
+            futures = [requests.submit(ask_one, r, ctx, cutoff, vpath, label, gcfg) for r in group]
             wait(futures)
             for f in futures:
                 if f.exception() is not None:  # ask_one records its own failures; this is a bug
