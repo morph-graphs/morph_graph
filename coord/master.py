@@ -553,8 +553,8 @@ def rank(tasks, pools, t=None):
     in the list's order, so two pools read the same list as two queues. Any other task gets an empty `rank` and
     `waiting`, why no pool can take it now: "claimed" (a pool holds it: running, or done and not yet off the list),
     "deps" (a task it waits for is not done), "failed" (failed twice: held until `reset`; or every pool listed for it
-    has failed it, which a worker does not retry), "no video" (the pools listed for it that have not
-    failed it lack the video file: `no_video` in their pool files, worker.py), "no pool" (listed for none). What a worker decides from its own
+    has failed it, which a worker does not retry), "no video" (no pool listed for it has failed it, and
+    those that could take it lack the video file: `no_video` in their pool files, worker.py), "no pool" (listed for none). What a worker decides from its own
     setup is not known here (--baselines, --arms, its queues, the keys in its environment), so a pool's n is an upper
     bound: it takes its lowest-ranked task that it can run."""
     held, fails = jobs.taken(pools, t), jobs.failures(pools)
@@ -576,7 +576,8 @@ def rank(tasks, pools, t=None):
                     n[p] += 1
                     x["rank"][p] = n[p]
             if not x["rank"]:
-                x["waiting"] = "no video" if novideo else "failed" if x["pools"] else "no pool"
+                failed = any(pools.get(p, {}).get("claims", {}).get(x["id"], {}).get("status") == "failed" for p in x["pools"])
+                x["waiting"] = "no video" if novideo and not failed else "failed" if x["pools"] else "no pool"
     return n
 
 

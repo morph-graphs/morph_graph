@@ -517,6 +517,12 @@ def test_stitched_builds(monkeypatch, tmp_path):
     M.rank(listed, lack)
     assert all(t["waiting"] == "no video" for t in listed if stitched(t) and set(t["pools"]) <= {"max", "pulkit"} and not t["deps"])
     assert all(set(t["rank"]) <= {"nexus"} for t in listed if stitched(t))
+    # a failure on one pool shows as "failed", not hidden behind another pool's missing video
+    x = next(t for t in listed if stitched(t) and t["pools"] == ["max", "pulkit"] and not t["deps"])
+    lack["max"]["claims"] = {x["id"]: {"status": "failed"}}
+    lack["max"]["no_video"] = []
+    M.rank(listed, lack)
+    assert x["waiting"] == "failed"
     # never offered to the leftover pools, however long they wait
     before = {t["id"]: list(t["pools"]) for t in listed if stitched(t)}
     n = M.leftovers(listed, [dict(id=t["id"], listed_t=1) for t in listed], 10 ** 6)
