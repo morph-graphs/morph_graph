@@ -5,8 +5,11 @@ MAGIC distils its chains by scanning a whole video offline, which would leak the
 question. So the chains are built per question cutoff (ceil(t_ask)) from the memory that ends before it:
 captions, 3 min summaries and semantic-extraction groups ending <= the cutoff. They are made by the qa stage
 (run_qa.py), cached per cutoff under <memory dir>/chains/c<seconds>/ and reused by every bank that asks at
-the same second. A topic prompt whose input did not change since an earlier cutoff is answered from
-chains/topic_cache.json.
+the same second. Every chain prompt is memoised in chains/prompt_cache.json (keyed by the whole prompt, so a key
+holds only video before the cutoff that made it): a later cutoff pays only for prompts whose input changed. With the
+topic prompts in 50-caption chunks and the event step 1 per hour of video (long videos, below), the cutoffs of a
+video sorted in time build incrementally: each one adds the topic chunks and the hour that grew since the last, plus
+the event merge (step 2) and its enrichment (step 3), which read the whole video so far and are redone per cutoff.
 
 They are the memory role's work (upstream: extract_{topic,event}_chains.py --model openai/gpt-oss-120b). With
 the reported arms that is a paid API, so cutoffs another machine already built are first taken from the dataset
@@ -156,12 +159,18 @@ def parse_json(raw):
     return None
 
 
-def call(model, prompt, system=None, max_tokens=4096, tries=3):
+def call(model, prompt, system=None, max_tokens=4096, tries=3, cache=None):
+    """One chain prompt at temperature 0; a parsed reply is kept in cache (the prompt cache) and reused."""
+    key = json.dumps([system, prompt, max_tokens])
+    if cache is not None and key in cache:
+        return copy.deepcopy(cache[key])   # a caller that edits its reply never edits the cache
     msgs = ([{"role": "system", "content": system}] if system else []) + [{"role": "user", "content": prompt}]
     for _ in range(tries):
         try:
             r = parse_json(model.generate(msgs, max_tokens=max_tokens, temperature=0.0))
             if r is not None:
+                if cache is not None:
+                    cache[key] = r
                 return r
         except Exception as e:
             log.warning(f"chain LLM error: {e}")
@@ -184,9 +193,13 @@ PERSONS = {"i", "me", "my", "we", "us", "everyone", "narrator", "person", "peopl
 
 
 MERGE_TOKENS = 16000 if roles.ROUTED else 8000   # upstream's 16000 for its API model (reasoning tokens count too)
+# Event step 1 reads 3 min summaries in windows of this many seconds of video. Upstream runs it once per EgoLife day
+# (10 min summaries); one call over a whole multi-hour video asked for 3-12 activities from ~144 summaries in one
+# 4,000-token reply. A video (or cutoff) up to an hour long is one window, as before.
+STEP1_WINDOW = 3600
 
 
-def chains_at(cut, caps, m3, sem_triples, model, topic_cache):
+def chains_at(cut, caps, m3, sem_triples, model, cache):
     """Topic + event chains from the video before `cut` seconds only."""
     caps = [c for c in caps if secs(c["end_time"]) <= cut]
     m3 = [c for c in m3 if secs(c["end_time"]) <= cut]
@@ -202,32 +215,33 @@ def chains_at(cut, caps, m3, sem_triples, model, topic_cache):
                         ent_ts[e].add(ts)
     cands = sorted(e for e, s in ent_ts.items() if len(s) >= 2)
 
-    def topic(ent):
+    def topic(ent):   # chunks of 50 captions in time order: an earlier cutoff's full chunks are cache hits
         lines = [f"[{fmt_hm(c['start_time'])}] {c['text']}" for c in caps if ent in c["text"].lower()]
-        key = json.dumps([ent, lines])
-        if key in topic_cache:           # same entity, same captions as an earlier cutoff -> same prompt
-            return ent, topic_cache[key]
         facts = []
         for i in range(0, len(lines), 50):
-            r = call(model, TOPIC_PROMPT.format(entity=ent, episodes_text="\n\n".join(lines[i:i + 50])), system=SYSTEM_PROMPT)
+            r = call(model, TOPIC_PROMPT.format(entity=ent, episodes_text="\n\n".join(lines[i:i + 50])), system=SYSTEM_PROMPT,
+                     cache=cache)
             if isinstance(r, list):
                 facts += [f for f in r if isinstance(f, dict) and f.get("fact")]
-        res = {"entity": ent, "has_lifecycle": bool(facts), "facts": facts}
-        topic_cache[key] = res
-        return ent, res
+        return ent, {"entity": ent, "has_lifecycle": bool(facts), "facts": facts}
     with ThreadPoolExecutor(32) as ex:
         topics = dict(ex.map(topic, cands))
 
     # event chains: step 1 over 3 min summaries (EgoLife: 10 min per day), step 2 merge (+ round 2), step 3 enrich
     enriched = []
     if m3:
-        seg = "\n\n".join(f"[{fmt_hms(c['start_time'])}] {c['text']}" for c in m3)
-        acts = call(model, EVENT_STEP1.format(date="DAY1", segments=seg), max_tokens=4000) or []
-        acts = [x for x in acts if isinstance(x, dict)]
+        win = defaultdict(list)
+        for c in m3:
+            win[secs(c["start_time"]) // STEP1_WINDOW].append(c)
+        acts = []
+        for k in sorted(win):   # a finished window's prompt is the same at every later cutoff: cached
+            seg = "\n\n".join(f"[{fmt_hms(c['start_time'])}] {c['text']}" for c in win[k])
+            acts += [x for x in call(model, EVENT_STEP1.format(date="DAY1", segments=seg), max_tokens=4000, cache=cache) or []
+                     if isinstance(x, dict)]
         daily = "\n=== DAY1 ===\n" + "".join(
             f"- [{x.get('time_range', '')}] {x.get('name', '')}: {x.get('summary', '')}\n"
             + (f"  Entities: {', '.join(map(str, x['key_entities']))}\n" if x.get("key_entities") else "") for x in acts)
-        chains = call(model, EVENT_STEP2.format(daily_activities=daily), max_tokens=MERGE_TOKENS) or []
+        chains = call(model, EVENT_STEP2.format(daily_activities=daily), max_tokens=MERGE_TOKENS, cache=cache) or []
         chains = [c for c in chains if isinstance(c, dict) and isinstance(c.get("steps"), list)]
         if chains:
             found = "\n".join(f"- {c.get('name', '')}" for c in chains)
@@ -236,7 +250,7 @@ def chains_at(cut, caps, m3, sem_triples, model, topic_cache):
                       f"Already found chains (do NOT repeat these):\n{found}\n\nActivities:\n{daily}\n\n"
                       "For each NEW event chain, output:\n- name: specific name\n- steps: list of {day, start_time, end_time, description}\n"
                       "- key_entities: important objects and places only\n\nReturn JSON list. If no additional chains found, return [].",
-                      max_tokens=MERGE_TOKENS)
+                      max_tokens=MERGE_TOKENS, cache=cache)
             names = {c.get("name", "").lower() for c in chains}
             chains += [c for c in (r2 or []) if isinstance(c, dict) and isinstance(c.get("steps"), list)
                        and c.get("name", "").lower() not in names]
@@ -257,11 +271,13 @@ def chains_at(cut, caps, m3, sem_triples, model, topic_cache):
                 if s0 > cut:   # a step the model placed after the cutoff cannot be grounded; drop it
                     st["start_time"] = st["end_time"] = ""
                     continue
+                if s1 > cut:   # nor can its part after the cutoff: the step ends at the cutoff at the latest
+                    st["end_time"], s1 = f"{cut // 3600:02d}:{cut % 3600 // 60:02d}:{cut % 60:02d}", cut
                 txt = [f"[{fmt_hms(c['start_time'])}] {c['text']}" for c in caps if s0 <= secs(c["start_time"]) <= s1]
                 if not txt:
                     continue
                 r = call(model, EVENT_STEP3.format(chain_name=ec.get("name", ""), day="DAY1", start_time=st["start_time"],
-                                                   end_time=st["end_time"], captions_text="\n\n".join(txt)), max_tokens=1024)
+                                                   end_time=st["end_time"], captions_text="\n\n".join(txt)), max_tokens=1024, cache=cache)
                 if isinstance(r, dict) and r.get("description"):
                     st["description"] = r["description"]
             return ec
@@ -287,8 +303,8 @@ def fetch_chains(cdir, memory_hash, todo):
         got = [c for c in todo if os.path.exists(os.path.join(src, f"c{c:05d}", "step3_enriched_chains.json"))]
         for c in got:
             shutil.copytree(os.path.join(src, f"c{c:05d}"), os.path.join(cdir, f"c{c:05d}"), dirs_exist_ok=True)
-        if os.path.exists(os.path.join(src, "topic_cache.json")) and not os.path.exists(os.path.join(cdir, "topic_cache.json")):
-            shutil.copy(os.path.join(src, "topic_cache.json"), cdir)
+        if os.path.exists(os.path.join(src, "prompt_cache.json")) and not os.path.exists(os.path.join(cdir, "prompt_cache.json")):
+            shutil.copy(os.path.join(src, "prompt_cache.json"), cdir)
         log.info(f"chains for {len(got)} of {len(todo)} missing cutoffs taken from the dataset ({path})")
 
 
@@ -312,9 +328,9 @@ def ensure_chains(mem, video, cuts, memory_hash):
     if todo:
         caps, m3 = jload(os.path.join(mem, f"{video}_30sec.json")), jload(os.path.join(mem, f"{video}_3min.json"))
         sem = jload(os.path.join(mem, f"semantic_extraction_results_{TAG}.json"))["semantic_triples"]
-        model, cache_f = llm(), os.path.join(cdir, "topic_cache.json")
+        model, cache_f = llm(), os.path.join(cdir, "prompt_cache.json")
         cache = jload(cache_f) if os.path.exists(cache_f) else {}
-        for cut in todo:
+        for cut in todo:   # in time order: each cutoff reuses the earlier ones' prompts
             failed = roles.errors()
             topics, events = chains_at(cut, caps, m3, sem, model, cache)
             if roles.errors() > failed:   # a failed call would be kept as an empty chain

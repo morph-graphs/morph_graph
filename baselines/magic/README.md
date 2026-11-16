@@ -209,16 +209,13 @@ factor of three.
 With `MAGIC_CONTROLLER=reason` the loop's 12k tokens per question move to the reasoning model (and row B's qa needs
 the key only for chains that are not built yet).
 
-**As released: a time named in a search query.** When the controller's query names a time, upstream's
-`retrieve_by_time` returns captions by time instead of searching. It compares the parsed seconds with the captions'
+**A time named in a search query.** When the controller's query names a time, upstream's `retrieve_by_time`
+returns the captions of that span instead of searching. Upstream compares the parsed seconds with the captions'
 `HHMMSSFF` stamps read as plain numbers (its MM-Lifelong captions are in seconds; the EgoLife layout used here is
-not), so it returns the video's first clips whatever time was asked: in the `m8` run on P05 a query about 00:17:11
-got the clip at 00:00:00, and nearly any time query also gets the first 3 min summary (its stamps read as 0 to
-30000). It applies no cutoff of its own either, so a question asked before those first items ended was shown
-them: with the 3 min summary, any question asked in the video's first 3 minutes whose search named a time (1 of
-batch10's 598 questions is asked that early; 91 of the 6,927 in the eight banks exported on 2026-11-15).
-`run_qa.py` therefore loads, per cutoff, only the captions and summaries that ended by it; the lookup itself runs
-as released, in every arm.
+not), so it returned the video's first clips whatever time was asked (in the `m8` run on P05 a query about 00:17:11
+got the clip at 00:00:00), and applied no cutoff. `run_qa.py` replaces it (`by_time`): the stamps are read as times,
+only captions and 3 min summaries that ended by the cutoff are returned, and spans are printed as `DAY1 HH:MM:SS`.
+Answers made before this fix (VERSION 1) keep their rows.
 
 ## Test without API calls
 
@@ -257,7 +254,13 @@ the same arm (same backbone): taken from the dataset's `merit/<arm>/<video>/`, o
 here by `../merit/run_merit.sh build` (with `MERIT_PY`, default the server's python). MAGIC's Narrative Memory
 Chain is a whole-video scan upstream, which would show a streaming question the future; so `qa` builds the chains
 at each question cutoff (ceil(t_ask)) from the captions, 3 min summaries and semantic groups that end before it,
-caches them in `chains/c<seconds>/`, and every bank asking at the same second reuses them. The graph is filtered
+caches them in `chains/c<seconds>/`, and every bank asking at the same second reuses them. Every chain prompt is
+memoised in `chains/prompt_cache.json` (keyed by the whole prompt, which holds only video before the cutoff that
+made it), and the cutoffs are built in time order, so a later cutoff pays only for what grew: the topic prompts are
+in 50-caption chunks, and event step 1 reads the 3 min summaries one hour of video at a time (upstream runs it once
+per EgoLife day; one call over a multi-hour video put every summary in one 4,000-token reply). The event merge (step
+2) and its enrichment (step 3) read everything so far and are redone at each cutoff. A step the merge ends after the
+cutoff is cut at the cutoff. The graph is filtered
 to nodes ending before the cutoff and the semantic memory to the last snapshot before it (MAGIC's own query-time
 filter). So a question sees only memory up to its `t_ask`.
 
@@ -273,7 +276,7 @@ Per video, at `magic/<arm>/<video>/`:
 - the memory: `<video>_{30sec,3min,10min,1h}.json`, `openie_results_local.json`,
   `semantic_{extraction,consolidation}_results_local.json`, `visual_embeddings.pkl`, `graph.pkl` (clip paths in
   it are relative to the clips folder);
-- `chains/c<seconds>/{topic_chains,step3_enriched_chains}.json` and `chains/topic_cache.json`;
+- `chains/c<seconds>/{topic_chains,step3_enriched_chains}.json` and `chains/prompt_cache.json`;
 - `answers_<bank>.json.gz`: one row per question in bank order, keyed by the bank's `key` (plus `qhash`, a hash of
   question and options, and the positional `ID`), with the chosen option (`response`), `evaluate`, the cutoff and
   MAGIC's retrieval rounds (`round_history`: each round's query and the retrieved items with their time stamps),
