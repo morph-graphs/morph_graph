@@ -181,14 +181,16 @@ def load_bank(epic, bank):
     """{video: question rows} of the bank as the epic-morph checkout defines it now (regenerated, as coord/master.py
     does: banks are generated, not committed). Rows are prepare_epic's (ID = key, answer = gold letter), plus leaves
     and asked."""
-    subprocess.run([sys.executable, "v3/export_bank.py", bank], cwd=epic, check=True, stdout=subprocess.DEVNULL)
+    if bank not in master.COMMITTED_BANKS:   # (a committed bank's files are read as they are, as the master does)
+        subprocess.run([sys.executable, "v3/export_bank.py", bank], cwd=epic, check=True, stdout=subprocess.DEVNULL)
     out = {}
     for f in sorted(glob.glob(os.path.join(epic, "outputs", "v3", "banks", bank, "*_questions.json"))):
         qa = convert_questions(f, "x", 0)
         for row, q in zip(qa, json.load(open(f))["questions"]):
             row["leaves"] = list(q.get("taxonomy") or [])
-            assert q.get("ask_at") in ASKED, f"{f}: question {row['ID']} has ask_at {q.get('ask_at')!r}, not one of {list(ASKED)}"
-            row["asked"] = ASKED[q["ask_at"]]
+            at = q.get("ask_at") or ("t" if q.get("streaming") and "t_ask" in q else "end")   # (a committed bank may not say)
+            assert at in ASKED, f"{f}: question {row['ID']} has ask_at {at!r}, not one of {list(ASKED)}"
+            row["asked"] = ASKED[at]
         if qa:
             out[os.path.basename(f)[:-len("_questions.json")]] = qa
     assert out, f"bank {bank}: no questions under {epic}"
@@ -292,8 +294,11 @@ def build(a, now):
                 sets.setdefault(k, {})[v] = own + add
     # the "all" rows: each (baseline, arm, kind, tag) over the questions of every bank, videos keyed <bank>/<video>
     # (unanswered = wrong, as in every row, so a method that has answered one bank shows partial)
-    banks[ALL] = {f"{bank}/{v}": qa for bank in BANKS for v, qa in banks[bank].items()}
+    # (not the banks of master.NOT_IN_ALL: the M2 probes are not benchmark questions)
+    banks[ALL] = {f"{bank}/{v}": qa for bank in BANKS if bank not in master.NOT_IN_ALL for v, qa in banks[bank].items()}
     for (b, arm, bank, kind, tag), by_video in list(sets.items()):
+        if bank in master.NOT_IN_ALL:
+            continue
         sets.setdefault((b, arm, ALL, kind, tag), {}).update({f"{bank}/{v}": d for v, d in by_video.items()})
     for s in info.siblings:   # answers of a bank not in BANKS: said in the header, not silently left out
         p = s.rfilename.split("/")
