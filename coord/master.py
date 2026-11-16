@@ -33,6 +33,7 @@ gateway serves) follow the reported-configuration arms, for every bank of BANKS,
 behind the same PILOT gate (MAGIC-Video's OpenRouter arms also on `nexus`: ALSO_POOLS).
 While a task of a PRIORITY arm is listed, the tasks of every other arm are withheld (gate()).
 The lines of FIRST lead the list, ahead of the API tasks: MAGIC-Video's tasks, then MERIT's with Qwen3.8-27B.
+The stitched videos' memory builds (STITCHED): one video's (CANARY) right after them, the others after the URGENT lines.
 """
 import argparse
 import functools
@@ -279,11 +280,18 @@ BUILD_ON = {"magic": "merit"}
 # The stitched videos (Anubhav, 2026-11-15): one per kitchen, its recording sessions in order with a 4 s date card
 # before each (epic-morph v3/stitched, Vatsal; 41.5 h in all), id <kitchen>-stitched, found like any other video at
 # <videos>/<kitchen>/<kitchen>-stitched.mp4. Their end-of-video bank (623 questions) is not on the board: only the
-# memories are built, a build line for each line of EXPERIMENTS that builds, on its pools, built on the stitched video
-# itself (not put together from its sessions' memories). Listed after every other task (lead()). STITCHED is the bank
-# a build line names for them: its videos are STITCHED_VIDEOS, not an epic-morph export.
+# memories are built, a build line for each line of EXPERIMENTS that builds, built on the stitched video itself (not
+# put together from its sessions' memories). STITCHED is the bank a build line names for them: its videos are
+# STITCHED_VIDEOS, not an epic-morph export. A pool runs them only once it has the files (worker.py: a stitched build
+# whose video is not there is left), so a task waits rather than fails.
+# Pools (Anubhav, 2026-11-15): a build is one job of 9 to 19 h on the longest video, so only the line's pools among
+# STITCHED_POOLS take it (Max's and Pulkit's machines have no time limit; Nexus only on its long queue, worker.py), not
+# Zaratan, wriva or arm00, and not the leftover pools.
+# Order: CANARY's builds right after the FIRST groups, so errors show early; the others after the URGENT lines (lead()).
 STITCHED = "stitched"
 STITCHED_VIDEOS = [f"P0{k}-stitched" for k in range(1, 10)]
+STITCHED_POOLS = ["max", "pulkit", "nexus"]
+CANARY = "P05-stitched"   # the shortest, 3.48 h
 # MERIT's lines first: MAGIC-Video's builds wait for MERIT's of the same video, which must be listed before them
 EXPERIMENTS += sorted([(b, arm, "build", pools, (STITCHED,)) for b, arm, stage, pools, _ in EXPERIMENTS if stage == "build"],
                       key=lambda e: e[0] not in BUILD_ON.values())
@@ -426,15 +434,15 @@ def built_from(files):
 
 
 def lead(t):
-    """Where a task's group stands in the list: the index of its FIRST entry, then the API tasks, the URGENT lines, the
-    rest, and last the stitched videos' builds."""
+    """Where a task's group stands in the list: the index of its FIRST entry, then the CANARY's builds, the API tasks,
+    the URGENT lines, the other stitched videos' builds, the rest."""
     k = (t["baseline"], t["arm"], t["stage"])
     if t["video"] in STITCHED_VIDEOS:
-        return len(FIRST) + 3
+        return len(FIRST) + (0 if t["video"] == CANARY else 3)
     for i, f in enumerate(FIRST):
         if k[:len(f)] == f:
             return i
-    return len(FIRST) + (0 if k[0] == "api" else 1 if k in {(b, arm, stage) for b, arm, stage, *_ in URGENT} else 2)
+    return len(FIRST) + (1 if k[0] == "api" else 2 if k in {(b, arm, stage) for b, arm, stage, *_ in URGENT} else 4)
 
 
 def reported(t):
@@ -469,6 +477,8 @@ def desired(have, files, answers=None, busy=()):
     for b, arm, stage, pools, bank in EXPERIMENTS:
         env = {"needs_env": needs(b, arm, stage)} if needs(b, arm, stage) else {}
         pools = key_pools(env["needs_env"]) + ALSO_POOLS.get((b, arm), []) if env else pools
+        if bank == (STITCHED,):
+            pools = [p for p in pools if p in STITCHED_POOLS]
         mem = MEMORY_ARM.get((b, arm), arm)
         if mem != arm:   # for the worker: the arm whose dataset folder holds this task's memory (worker.py --prefetch)
             env["memory_arm"] = mem
@@ -530,7 +540,7 @@ def leftovers(tasks, old, now, claimed=()):
     n = 0
     for t in tasks:
         t["listed_t"] = now if t["id"] in claimed else since.get(t["id"]) or now
-        if (t["pools"] and t["pools"] != KEY_POOLS and not t.get("needs_env")
+        if (t["pools"] and t["pools"] != KEY_POOLS and not t.get("needs_env") and t["video"] not in STITCHED_VIDEOS
                 and now - t["listed_t"] >= LEFTOVER_H * 3600):
             t["pools"] = t["pools"] + [p for p in LEFTOVER_POOLS if p not in t["pools"]]
             n += 1
@@ -543,7 +553,8 @@ def rank(tasks, pools, t=None):
     in the list's order, so two pools read the same list as two queues. Any other task gets an empty `rank` and
     `waiting`, why no pool can take it now: "claimed" (a pool holds it: running, or done and not yet off the list),
     "deps" (a task it waits for is not done), "failed" (failed twice: held until `reset`; or every pool listed for it
-    has failed it, which a worker does not retry), "no pool" (listed for none). What a worker decides from its own
+    has failed it, which a worker does not retry), "no video" (the pools listed for it that have not
+    failed it lack the video file: `no_video` in their pool files, worker.py), "no pool" (listed for none). What a worker decides from its own
     setup is not known here (--baselines, --arms, its queues, the keys in its environment), so a pool's n is an upper
     bound: it takes its lowest-ranked task that it can run."""
     held, fails = jobs.taken(pools, t), jobs.failures(pools)
@@ -559,12 +570,13 @@ def rank(tasks, pools, t=None):
         elif any(d not in done for d in x["deps"]):
             x["waiting"] = "deps"
         else:
+            novideo = [p for p in x["pools"] if x["video"] in pools.get(p, {}).get("no_video", [])]
             for p in x["pools"]:
-                if pools.get(p, {}).get("claims", {}).get(x["id"], {}).get("status") != "failed":
+                if p not in novideo and pools.get(p, {}).get("claims", {}).get(x["id"], {}).get("status") != "failed":
                     n[p] += 1
                     x["rank"][p] = n[p]
             if not x["rank"]:
-                x["waiting"] = "failed" if x["pools"] else "no pool"
+                x["waiting"] = "no video" if novideo else "failed" if x["pools"] else "no pool"
     return n
 
 

@@ -48,6 +48,26 @@ def task(b="merit", arm="m8"):
     return dict(id=f"{b}-{arm}-build-P01-20240101-000001", baseline=b, arm=arm, stage="build", video="P01-20240101-000001")
 
 
+def test_has_video():
+    """A stitched video's task only where run.sh would find the file ($HDEPIC_VIDEOS, else under $EPIC_MORPH_DIR);
+    an HD-EPIC recording is never checked."""
+    st = dict(task(), video="P05-stitched")
+    with tempfile.TemporaryDirectory() as d:
+        env = {k: os.environ.pop(k) for k in ("HDEPIC_VIDEOS", "EPIC_MORPH_DIR") if k in os.environ}
+        try:
+            assert W.has_video(task()) and not W.has_video(st)              # nothing set: a stitched one is left
+            os.environ["EPIC_MORPH_DIR"] = d
+            os.makedirs(f"{d}/data/HD-EPIC/videos/P05")
+            assert not W.has_video(st)
+            open(f"{d}/data/HD-EPIC/videos/P05/P05-stitched.mp4", "w").close()
+            assert W.has_video(st)
+            os.environ["HDEPIC_VIDEOS"] = f"{d}/elsewhere"                # HDEPIC_VIDEOS wins, as in run.sh
+            assert not W.has_video(st) and W.has_video(task())
+        finally:
+            os.environ.pop("HDEPIC_VIDEOS", None), os.environ.pop("EPIC_MORPH_DIR", None)
+            os.environ.update(env)
+
+
 def test_fitting():
     """m8 goes to every 48 GB+ queue; m27 only where 80 GB (or MERIT's 2x48 GB) fits; a person with no 80 GB queue gets no 27B.
     A queue may also name one stage of an arm (m3agent/m3/qa)."""
@@ -57,16 +77,20 @@ def test_fitting():
     assert W.fitting(task(arm="m27"), {"a6000": QUEUES["a6000"]}) == []
     shipped = W.load_queues(os.path.join(HERE, "nexus_queues.json"))   # the example file for Nexus users
     assert W.fitting(task(arm="m27"), shipped) == ["h200"]
-    assert len(W.fitting(task(arm="m8"), shipped)) == len(shipped) - 4 == 5   # not the CPU queue or VST's two; the H200 only when idle (fallback)
+    assert len(W.fitting(task(arm="m8"), shipped)) == len(shipped) - 5 == 5   # not the CPU queue, VST's two or the long one; the H200 only when idle (fallback)
     # ReKV's m8 is named by the plain m8, as every baseline's: it fits those queues' GPU and RAM
     assert W.fitting(task("rekv", "m8"), shipped) == W.fitting(task(arm="m8"), shipped)
     # VST needs 64G of RAM, which the m8 queues (40G) do not have: named as vst/vst7b, on its own 64G queues only
     vst = W.fitting(task("vst", "vst7b"), shipped, idle=shipped)
     assert vst == ["scav-a5000-64g", "tron-a5000-64g"] and all("--mem=64G" in shipped[n]["sbatch"] for n in vst)
     assert W.valid(dict(task("vst", "vst7b"), stage="qa", bank="batch10_agree2", id="vst-vst7b-qa-batch10_agree2-P01-20240101-000001"))
-    # a kitchen's stitched video is a video too; nothing else of that shape
-    assert W.valid(dict(task(), video="P03-stitched", id="merit-m8-build-P03-stitched"))
+    # a kitchen's stitched video is a video too; nothing else of that shape. Its build goes to the long queue only,
+    # and that queue takes nothing else
+    st = dict(task(), video="P03-stitched", id="merit-m8-build-P03-stitched")
+    assert W.valid(st)
     assert not any(W.valid(dict(task(), video=v)) for v in ("P03-stitched-x", "P03-stitched;x", "stitched", "P3-stitched"))
+    assert W.fitting(st, shipped, idle=shipped) == ["sailon-a6000-long"] and "--time=3-00:00:00" in shipped["sailon-a6000-long"]["sbatch"]
+    assert "sailon-a6000-long" not in W.fitting(task(arm="m8"), shipped, idle=shipped) and W.fitting(st, QUEUES) == []
     # a stage of an arm (baseline/arm/stage): M3-Agent's build fits one 48 GB GPU, its qa (a 32.8B model) the H200 only
     m3 = lambda stage: dict(task("m3agent", "m3"), stage=stage)
     assert W.fitting(m3("qa"), shipped) == ["h200"] and W.fitting(m3("build"), shipped, idle=shipped) == W.fitting(task(arm="m8"), shipped)
@@ -237,6 +261,9 @@ def test_worker_loop(tmp):
     qf = f"{tmp}/queues.json"
     open(qf, "w").write(json.dumps({k: QUEUES[k] for k in ("a6000", "pair48")}))
     m8, m27 = dict(task(), pools=["p"], priority=1), dict(task("magic", "m27"), pools=["p"], priority=0)
+    # a stitched video's build ahead of both, whose file this machine lacks: left, and named in the pool file
+    st = dict(task(), video="P05-stitched", id="merit-m8-build-P05-stitched", pools=["p"], priority=-1)
+    os.environ["HDEPIC_VIDEOS"] = f"{tmp}/videos"
     pools, commits, cycle = {}, [], [0]
 
     def commit(files, head, msg):
@@ -258,14 +285,16 @@ def test_worker_loop(tmp):
             raise AssertionError("worker did not finish")
 
     saved = (W.jobs.read, W.jobs.commit, W.time.sleep, sys.argv)
-    W.jobs.read, W.jobs.commit, W.time.sleep = (lambda: ("h", [m27, m8], json.loads(json.dumps(pools)))), commit, sleep
+    W.jobs.read, W.jobs.commit, W.time.sleep = (lambda: ("h", [st, m27, m8], json.loads(json.dumps(pools)))), commit, sleep
     sys.argv = ["worker.py", "--pool", "p", "--launcher", "slurm", "--queues", qf, "--slots", "1", "2",
                 "--max-tasks", "1", "--state", f"{tmp}/state"]
     try:
         W.main()
     finally:
         W.jobs.read, W.jobs.commit, W.time.sleep, sys.argv = saved
+        os.environ.pop("HDEPIC_VIDEOS")
     claims = [c["claims"] for c in commits]
+    assert st["id"] not in claims[-1] and all(c["no_video"] == ["P05-stitched"] for c in commits)
     assert list(claims[0]) == [m8["id"]] and claims[0][m8["id"]]["status"] == "running"   # 27B never claimed
     assert open(f"{tmp}/state/{m8['id']}.jobs").read() == "101 a6000\n"                   # pair48 fits MERIT 27B only
     assert claims[1][m8["id"]]["queue"] == "a6000" and claims[2][m8["id"]]["status"] == "running"   # grace cycle
