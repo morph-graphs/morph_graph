@@ -78,6 +78,46 @@ def done_rows(rows, paths, mh, reason={}):
     return {k: {**o, "ID": ids[k]} for k, o in reuse(want, paths, sig, need=("trace",)).items()}   # a row without one: asked again
 
 
+def by_time(wm, cut):
+    """upstream's retrieve_by_time (a search query that names a time returns the captions of that span) on this port's
+    HHMMSSFF stamps: upstream reads them as plain numbers of seconds (its MM-Lifelong layout), so a time query got
+    the video's first clips. Here the stamps are read as times, nothing after the cutoff is returned, and spans are
+    printed as DAY1 HH:MM:SS, as the rest of the memory is."""
+    fmt = lambda t: f"DAY1 {t // 3600:02d}:{t % 3600 // 60:02d}:{t % 60:02d}"
+
+    def retrieve_by_time(start_sec, end_sec):
+        out = []
+        for gran in ["30sec", "3min"]:
+            for c in wm.episodic_memory.captions.get(gran, []):
+                s, e = secs(c.start_time), secs(c.end_time)
+                if e <= cut and e > start_sec and s < end_sec and c.text.strip():
+                    out.append(f"[{fmt(s)} - {fmt(e)}] ({gran})\n{c.text}")
+        return "\n\n".join(out)
+    return retrieve_by_time
+
+
+def entities_seen_by_cutoff():
+    """MultimodalGraph.filter_by_time keeps an entity first named in a clip that starts by the cutoff, also the clip
+    that runs past it (its caption describes up to 30 s after t_ask). Such an entity has no edge in the filtered graph
+    but can still take a BM25 seed and a top-k slot. Keep an entity only when it is mentioned in a visible episode."""
+    from worldmm.memory.unified.graph import MultimodalGraph
+    from worldmm.memory.unified.nodes import EdgeType, NodeType
+    orig = MultimodalGraph.filter_by_time
+    if getattr(orig, "entities_seen", False):
+        return
+
+    def filter_by_time(self, until_time):
+        sub = orig(self, until_time)
+        seen = {e.src_id for e in sub.edges if e.edge_type == EdgeType.MENTIONED_IN}   # both ends visible
+        drop = {n for n, x in sub.nodes.items() if x.node_type == NodeType.ENTITY and n not in seen}
+        for n in drop:
+            del sub.nodes[n]
+        sub.edges = [e for e in sub.edges if e.src_id not in drop and e.dst_id not in drop]
+        return sub
+    filter_by_time.entities_seen = True
+    MultimodalGraph.filter_by_time = filter_by_time
+
+
 def memory_hash(mem, video):
     h = hashlib.sha1()
     for p in memory_paths(mem, video):
@@ -104,6 +144,7 @@ def main():
     import worldmm.memory.memory as wmem
     from worldmm.llm import PromptTemplateManager
     from worldmm.memory import WorldMemory
+    entities_seen_by_cutoff()
 
     V, M = a.video, a.memory
     caps30 = jload(os.path.join(M, f"{V}_30sec.json"))
@@ -153,11 +194,10 @@ def main():
         wm.chain_event_min_hits, wm.chain_event_granularities = 1, ("30sec", "3min")
         wm.set_retrieval_top_k(episodic=3, semantic=10, visual=3)
         # only the captions that ended by the cutoff: upstream's retrieve_by_time (a search query that names a time)
-        # reads this list with no cutoff of its own, and compares seconds with HHMMSSFF stamps, so nearly any time
-        # query returned the first 30 s clip and the first 3 min summary, also to a question asked before they ended.
-        # The unified graph (wm.index) does not read this list.
+        # reads this list with no cutoff of its own. The unified graph (wm.index) does not read it.
         wm.load_episodic_captions(caption_data={g: [c for c in jload(os.path.join(M, f"{V}_{g}.json")) if secs(c["end_time"]) <= cut]
                                                 for g in ["30sec", "3min", "10min", "1h"]})
+        wm.retrieve_by_time = by_time(wm, cut)   # replaces upstream's (seconds read against HHMMSSFF stamps)
         wm.load_semantic_triples(data=jload(os.path.join(M, f"semantic_consolidation_results_{TAG}.json")))
         wm.load_visual_clips(embeddings_path=os.path.join(M, "visual_embeddings.pkl"), clips_data=caps30)
         until_t = until(grp[0])
