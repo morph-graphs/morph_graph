@@ -179,16 +179,34 @@ def main():
                 open(mine, "w").write("\n".join(merged) + "\n")
         if rebuilt:
             print("the dataset holds a different memory for this video: mirroring, so answers made from it are removed")
-        for attempt in range(6):   # parallel jobs uploading other videos can move main under us (HTTP 412)
+        # The dataset takes at most 512 commits an hour from all pools together (HTTP 429, "rate limit for repository
+        # commit creation"): short tasks finishing at once on several pools reach it (2026-11-16, the evidence-clips
+        # rows). Such a refusal is waited out, for the time the Hub names (else 10 min), up to HF_RATE_WAIT_S in all
+        # (default 2 h), instead of failing a task whose answers are made: one commit per task, nothing else changes.
+        attempt, limit = 0, time.time() + float(os.environ.get("HF_RATE_WAIT_S", 7200))
+        while True:   # parallel jobs uploading other videos can also move main under us (HTTP 412)
             try:
                 HfApi().upload_folder(repo_id=REPO, repo_type="dataset", folder_path=a.dir, path_in_repo=path,
                                       ignore_patterns=[".*", "*.partial"], delete_patterns="*" if rebuilt else None,
                                       commit_message=f"{a.baseline} {a.arm} {a.video}" + (" (rebuilt memory)" if rebuilt else ""))
                 break
             except Exception as e:
-                if attempt == 5 or "401" in str(e) or "403" in str(e) or "404" in str(e):
+                r = getattr(e, "response", None)
+                if getattr(r, "status_code", None) == 429 or "rate limit" in str(e):
+                    try:
+                        wait = float(r.headers.get("Retry-After"))
+                    except Exception:
+                        wait = 600
+                    wait = min(max(wait, 60), 3600) * random.uniform(1, 1.2)   # spread the pools' retries
+                    if time.time() + wait > limit:
+                        raise
+                    print(f"upload refused by the commit rate limit; retrying in {wait:.0f} s", flush=True)
+                    time.sleep(wait)
+                    continue
+                attempt += 1
+                if attempt == 6 or "401" in str(e) or "403" in str(e) or "404" in str(e):
                     raise
-                wait = 10 * 2 ** attempt * random.uniform(0.5, 1.5)
+                wait = 10 * 2 ** (attempt - 1) * random.uniform(0.5, 1.5)
                 print(f"upload failed ({str(e)[:120]}); retrying in {wait:.0f} s", flush=True)
                 time.sleep(wait)
         print(f"uploaded {len(files)} files to {REPO}/{path}: {', '.join(files)}")
