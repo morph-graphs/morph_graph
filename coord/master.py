@@ -331,7 +331,13 @@ STITCHED_VIDEOS = [f"P0{k}-stitched" for k in range(1, 10)]
 STITCHED_POOLS = ["max", "pulkit", "nexus"]
 CANARY = "P05-stitched"   # the shortest, 3.48 h
 # MERIT's lines first: MAGIC-Video's builds wait for MERIT's of the same video, which must be listed before them
-EXPERIMENTS += sorted([(b, arm, "build", pools, (STITCHED,)) for b, arm, stage, pools, _ in EXPERIMENTS if stage == "build"],
+# Only the systems Vatsal's stitched hand-off asks for (Anubhav, 2026-11-16): MERIT with Qwen3.8-27B, WorldMM with the
+# GPT-5-mini memory (answers: GPT-5.1 for GPT-5, as on the normal banks), MAGIC-Video's GPT-OSS-120B memory (its answers
+# wait, STITCHED_QA_LATER); the other methods' stitched builds and answers are off the board
+STITCHED_BUILDS = {("merit", "m27"), ("worldmm", "g5m"), ("magic", "oss120")}
+STITCHED_ANSWERS = {("merit", "m27"), ("worldmm", "g5m-g51")}
+EXPERIMENTS += sorted([(b, arm, "build", pools, (STITCHED,)) for b, arm, stage, pools, _ in EXPERIMENTS
+                       if stage == "build" and (b, arm) in STITCHED_BUILDS],
                       key=lambda e: e[0] not in BUILD_ON.values())
 # The stitched videos' end-of-video bank (Anubhav, 2026-11-15; epic-morph v3/export_bank.py stitched_eov: 623 questions,
 # each asked at the end of the video with the "As of video time ..." clause naming the moment its answer is as of). A qa
@@ -346,7 +352,7 @@ STITCHED_EOV = "stitched_eov"
 STITCHED_QA_LATER = {"magic", "egorag"}
 EXPERIMENTS += [(b, arm, "qa", list(pools), STITCHED_EOV) for (b, arm), pools in dict.fromkeys(
     ((b, arm), tuple(pools)) for b, arm, stage, pools, bank in EXPERIMENTS
-    if stage == "qa" and b in MEMORY_DONE and b not in STITCHED_QA_LATER)]
+    if stage == "qa" and b in MEMORY_DONE and b not in STITCHED_QA_LATER and (b, arm) in STITCHED_ANSWERS)]
 
 
 def bank_questions(bank):
@@ -498,7 +504,7 @@ def lead(t):
     k = (t["baseline"], t["arm"], t["stage"])
     if t["video"] in STITCHED_VIDEOS:
         qa = t["stage"] == "qa"
-        return -2 + qa if t["video"] == CANARY else len(FIRST) + 3 + qa
+        return -2 + qa   # every stitched video's builds, then their answers, ahead of all else (Anubhav, 2026-11-16)
     for i, f in enumerate(FIRST):
         if k[:len(f)] == f:
             return i
