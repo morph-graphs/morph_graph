@@ -101,10 +101,11 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # arm (q25vl7b-gpt4o, egogpt_gpt4o), a model and frame budget of baselines/direct (qwen3vl-8b-f128) or a config name
 # of baselines/api/configs/ (gpt-5-f1024): lower-case letters and digits in runs joined by one `.`, `-` or `_`, none
 # of which the shell, a Slurm job name or a file pattern reads as anything but itself (no space, quote, `$`, `/`, `*`,
-# and never a leading `-`, so it cannot become an option).
+# and never a leading `-`, so it cannot become an option). A video is an HD-EPIC recording, or a kitchen's stitched
+# video (master.STITCHED_VIDEOS).
 VALID = dict(baseline=re.compile(r"^(merit|worldmm|magic|m3agent|api|egor1|egagent|egorag|hippomm|direct|rekv|vst)$"),
              arm=re.compile(r"^(m(8|27|3)|[a-z0-9]+([._-][a-z0-9]+)*)$"),
-             stage=re.compile(r"^(prep|build|qa|blind)$"), video=re.compile(r"^P\d\d-\d{8}-\d{6}$"),
+             stage=re.compile(r"^(prep|build|qa|blind)$"), video=re.compile(r"^P\d\d-(\d{8}-\d{6}|stitched)$"),
              bank=re.compile(r"^[A-Za-z0-9_]*$"), id=re.compile(r"^[A-Za-z0-9_.-]+$"))
 
 
@@ -124,6 +125,22 @@ def has_env(task):
     """Does this worker's environment have every variable the task needs (needs_env: an API key, by name; "A|B" is
     met by either)?"""
     return all(isinstance(e, str) and any(os.environ.get(x) for x in e.split("|")) for e in task.get("needs_env") or [])
+
+
+def stitched(task):
+    return str(task.get("video", "")).endswith("-stitched")
+
+
+def has_video(task):
+    """A kitchen's stitched video (master.STITCHED_VIDEOS) is not on every machine: its task is taken only where the
+    file is, where the baselines' run.sh finds it ($HDEPIC_VIDEOS, else $EPIC_MORPH_DIR/data/HD-EPIC/videos, then
+    <kitchen>/<video>.mp4), so a machine without it leaves the task instead of failing it. Other videos are not checked."""
+    if not stitched(task):
+        return True
+    d = os.environ.get("HDEPIC_VIDEOS") or (os.environ.get("EPIC_MORPH_DIR") and
+                                            os.path.join(os.environ["EPIC_MORPH_DIR"], "data", "HD-EPIC", "videos"))
+    v = task["video"]
+    return bool(d) and os.path.isfile(os.path.join(d, v.split("-")[0], f"{v}.mp4"))
 
 
 HEARTBEAT_S = 1200   # a cycle that changes nothing but leases and the heartbeat commits at most this often
@@ -197,8 +214,9 @@ def names(task, arms):
 def fitting(task, queues, idle=(), full=()):
     """The queues whose GPU can run this task: their `fits` names it, or their `fallback` names it and the queue is
     idle (no task its `fits` names is waiting: an H200 takes 8B work only when no 27B task needs it). A queue in
-    `full` (as many of this worker's tasks on it as its max_jobs) takes no more."""
-    return [n for n, q in queues.items() if n not in full
+    `full` (as many of this worker's tasks on it as its max_jobs) takes no more. A stitched video's build (one job of
+    up to ~19 h) goes only to a queue marked `long`, and a `long` queue takes nothing else."""
+    return [n for n, q in queues.items() if n not in full and bool(q.get("long")) == stitched(task)
             and (names(task, q["fits"]) or (n in idle and names(task, q.get("fallback", []))))]
 
 
@@ -570,7 +588,7 @@ def main():
             tid = task["id"]
             return (valid(task) and tid not in held and fails.get(tid, 0) < 2 and claims.get(tid, {}).get("status") != "failed"
                     and (a.pool in task.get("pools", []) or "*" in task.get("pools", [])) and task["baseline"] in a.baselines
-                    and has_env(task) and all(d in done for d in task.get("deps", [])))
+                    and has_env(task) and has_video(task) and all(d in done for d in task.get("deps", [])))
         # A queue with a fallback (an H200: fits 27B, fallback 8B) takes fallback work only while it is idle: no task its
         # `fits` names is waiting, none of this worker's own is still active, and fewer than fallback_max (default 1)
         # of this worker's tasks have a copy on it.
@@ -614,6 +632,8 @@ def main():
                 continue
             if not has_env(task):   # a paid-API task and no key here: claiming it would only fail it
                 continue
+            if not has_video(task):   # a stitched video this machine does not have (yet): the board shows it waiting
+                continue
             if any(d not in done for d in task.get("deps", [])):
                 continue
             g = queue_group(tid, queues) if a.auto_slots else None
@@ -636,7 +656,11 @@ def main():
             for n in [n for n in list(idle) if names(task, queues[n]["fits"])]:   # its own work just got claimed
                 idle.discard(n)
             start.append((task, slot, qs))
+        # the stitched videos listed for this pool that this machine lacks (a few file checks): master.rank() shows
+        # their tasks as waiting for "no video" rather than as this pool's next
+        no_video = {x["video"] for x in tasks if stitched(x) and a.pool in x.get("pools", []) and not has_video(x)}
         mine.update(pool=a.pool, host=host, slots=a.slots, launcher=a.launcher, updated=jobs.iso(), queues=sorted(queues or []),
+                    no_video=sorted(no_video),
                     running=sum(1 for c in claims.values() if c["status"] == "running"))
         # nothing to report but renewed leases and the heartbeat: commit that every HEARTBEAT_S at most (leases last
         # LEASE_S, 1.5 times as long), since the Hub allows a repository 128 commits an hour, shared by every pool (20 min

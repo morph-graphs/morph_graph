@@ -64,7 +64,7 @@ urgent = lambda t: (t["baseline"], t["arm"], t["stage"]) in {(b, arm, s) for b, 
 def test_experiments():
     """Every baseline on the board has build + qa of every bank per arm, qa on the build's pools; arm00 (aarch64)
     runs MERIT only."""
-    ex = {(b, arm, stage, bank): pools for b, arm, stage, pools, bank in M.EXPERIMENTS}
+    ex = {(b, arm, stage, bank): pools for b, arm, stage, pools, bank in BASE}
     # the api rows: three configs (gpt-5.5-f384 among them), every bank
     assert {(arm, stage, bank) for b, arm, stage, bank in ex if b == "api"} == {
         (c, "qa", bank) for bank in M.BANKS for c in ("gemini-3.1-flash-lite-high", "gemini-3.6-flash-high", "gpt-5.5-f384")}
@@ -148,6 +148,10 @@ BANK_VIDEOS = {"batch10_agree2": B10, "t2_agree2": T2, "t3_agree2": T3, "t4_agre
 
 
 PRIORITY, QA_FROZEN, HELD, FIRST = set(M.PRIORITY), set(M.QA_FROZEN), set(M.HELD), list(M.FIRST)
+# the board's lines with and without the stitched videos' builds: the tests of the normal videos' tasks use BASE
+# (test_stitched_builds checks that adding the stitched lines changes none of those tasks)
+ALL = list(M.EXPERIMENTS)
+BASE = [e for e in ALL if e[4] != (M.STITCHED,)]
 
 
 def board(monkeypatch, tmp_path, experiments=None):
@@ -161,8 +165,7 @@ def board(monkeypatch, tmp_path, experiments=None):
     monkeypatch.setattr(M, "QA_FROZEN", set())
     monkeypatch.setattr(M, "HELD", set())
     monkeypatch.setattr(M, "FIRST", [])   # nor of what leads it: test_first_and_rank puts it back
-    if experiments is not None:
-        monkeypatch.setattr(M, "EXPERIMENTS", experiments)
+    monkeypatch.setattr(M, "EXPERIMENTS", BASE if experiments is None else experiments)
 
 
 ROUTER = {("merit", "g5m"), ("worldmm", "g5m"), ("worldmm", "g5m-q8"), ("magic", "oss120"), ("magic", "oss120-flash"),
@@ -406,7 +409,7 @@ def test_first_and_rank(monkeypatch, tmp_path):
     by = {t["id"]: t for t in tasks}
     kind = lambda t: 0 if t["baseline"] == "magic" else 1 if (t["baseline"], t["arm"]) == ("merit", "m27") else 2 if t["baseline"] == "api" else 3
     assert [kind(t) for t in tasks] == sorted(kind(t) for t in tasks) and {kind(t) for t in tasks} == {0, 1, 2, 3}
-    assert [t["priority"] for t in tasks] == list(range(len(tasks))) and M.lead(tasks[-1]) == len(FIRST) + 2
+    assert [t["priority"] for t in tasks] == list(range(len(tasks))) and M.lead(tasks[-1]) == len(FIRST) + 4
     # inside MAGIC-Video's group: its memory builds (8B, 27B), the GPT-OSS-120B row, then its 27B and 8B answers
     magic = [("oss120", "") if t["arm"].startswith("oss120") else (t["arm"], t["stage"]) for t in tasks if t["baseline"] == "magic"]
     inside = [("m8", "build"), ("m27", "build"), ("oss120", ""), ("m27", "qa"), ("m8", "qa")]
@@ -456,6 +459,76 @@ def test_first_and_rank(monkeypatch, tmp_path):
     assert all(t["pools"] == [] and t["rank"] == {} and t["waiting"] == ("deps" if t["deps"] else "no pool") for t in listed)
 
 
+def test_stitched_builds(monkeypatch, tmp_path):
+    """The stitched videos: a build of each, for every line that builds, on that line's pools among STITCHED_POOLS and
+    with its keys; no qa; the canary's (P05) right after the FIRST groups, the others after the URGENT lines; MAGIC-Video's
+    waits for MERIT's; a memory already in the dataset is not built again; not offered to the leftover pools. The normal
+    videos' tasks are the same, in the same order, with or without them."""
+    board(monkeypatch, tmp_path, ALL)
+    stitched = lambda t: t["video"] in M.STITCHED_VIDEOS
+    lines = {(b, arm) for b, arm, stage, *_ in BASE if stage == "build"}
+    assert ALL[:len(BASE)] == BASE and len(ALL) == len(BASE) + len(lines)   # one stitched line per build line, appended
+    have = {("merit", "m8", "P01-stitched")}
+    tasks = M.desired(have, set())
+    st = [t for t in tasks if stitched(t)]
+    assert len(M.STITCHED_VIDEOS) == 9 and M.CANARY == "P05-stitched" and all(t["stage"] == "build" and t["bank"] is None for t in st)
+    assert {(t["baseline"], t["arm"]) for t in st} == lines and len(st) == 9 * len(lines) - 1
+    assert "merit-m8-build-P01-stitched" not in {t["id"] for t in st}                      # built already
+    normal = {(t["baseline"], t["arm"]): t for t in tasks if t["stage"] == "build" and not stitched(t)}
+    for t in st:
+        n = normal[t["baseline"], t["arm"]]
+        assert t["pools"] == [p for p in n["pools"] if p in M.STITCHED_POOLS] and t["pools"]
+        assert (t.get("needs_env"), t.get("memory_arm")) == (n.get("needs_env"), n.get("memory_arm"))
+        assert not {"zaratan", "wriva", "arm00", "vatsal"} & set(t["pools"])
+    assert {p for t in st for p in t["pools"]} == {"max", "pulkit", "nexus"}
+    by = {t["id"]: t for t in tasks}
+    assert by["magic-m27-build-P02-stitched"]["deps"] == ["merit-m27-build-P02-stitched"]
+    assert by["magic-m8-build-P01-stitched"]["deps"] == []                                  # MERIT's memory is there
+    assert all(by[d]["priority"] < t["priority"] for t in tasks for d in t["deps"])
+    # order (FIRST is empty here): the canary's builds lead, then the API tasks, the URGENT lines, the other stitched
+    # builds, the rest
+    group = [0 if t["video"] == M.CANARY else 1 if t["baseline"] == "api" else 2 if urgent(t) and not stitched(t)
+             else 3 if stitched(t) else 4 for t in tasks]
+    assert group == sorted(group) and set(group) == {0, 1, 2, 3, 4} and [M.lead(t) for t in tasks] == group
+    # the normal videos' tasks are those of the board without the stitched lines, in the same order, field for field
+    # (only the priority numbers move)
+    strip = lambda ts: [{k: v for k, v in t.items() if k != "priority"} for t in ts]
+    monkeypatch.setattr(M, "EXPERIMENTS", BASE)
+    assert strip(t for t in tasks if not stitched(t)) == strip(M.desired(have, set()))
+    # as published: the priority arms' stitched builds are listed; the rest wait with their arms; the listed normal tasks
+    # keep their order, and a pool that takes no stitched build ranks them as before
+    monkeypatch.setattr(M, "PRIORITY", PRIORITY)
+    monkeypatch.setattr(M, "FIRST", FIRST)
+    pools = {"max": {"claims": {}}, "pulkit": {"claims": {}}}
+    without, _ = M.gate(M.desired(set(), set()))
+    M.rank(without, pools)
+    monkeypatch.setattr(M, "EXPERIMENTS", ALL)
+    listed, _ = M.gate(M.desired(set(), set()))
+    M.rank(listed, pools)
+    assert [t["id"] for t in listed if not stitched(t)] == [t["id"] for t in without]
+    for p in ("wriva", "zaratan", "arm00"):
+        assert [t["rank"].get(p) for t in listed if not stitched(t)] == [t["rank"].get(p) for t in without]
+    assert {(t["baseline"], t["arm"]) for t in listed if stitched(t)} == {
+        k for k in lines if k in PRIORITY or k + ("build",) in PRIORITY}
+    canary = [i for i, t in enumerate(listed) if t["video"] == M.CANARY]
+    assert canary and all(M.lead(t) < len(FIRST) for t in listed[:canary[0]])               # right after the FIRST groups
+    # a pool that says it lacks a video does not rank its tasks; with every pool so, they wait for "no video"
+    lack = {p: {"claims": {}, "no_video": list(M.STITCHED_VIDEOS)} for p in ("max", "pulkit")}
+    M.rank(listed, lack)
+    assert all(t["waiting"] == "no video" for t in listed if stitched(t) and set(t["pools"]) <= {"max", "pulkit"} and not t["deps"])
+    assert all(set(t["rank"]) <= {"nexus"} for t in listed if stitched(t))
+    # a failure on one pool shows as "failed", not hidden behind another pool's missing video
+    x = next(t for t in listed if stitched(t) and t["pools"] == ["max", "pulkit"] and not t["deps"])
+    lack["max"]["claims"] = {x["id"]: {"status": "failed"}}
+    lack["max"]["no_video"] = []
+    M.rank(listed, lack)
+    assert x["waiting"] == "failed"
+    # never offered to the leftover pools, however long they wait
+    before = {t["id"]: list(t["pools"]) for t in listed if stitched(t)}
+    n = M.leftovers(listed, [dict(id=t["id"], listed_t=1) for t in listed], 10 ** 6)
+    assert n and all(t["pools"] == before[t["id"]] for t in listed if stitched(t))
+
+
 def desired_before(have, files):
     """master.desired as it was before the reported arms (origin/main 4c57eb0), for the comparison below, except that
     builds now cover every video: each bank's (batch10's, missing from build_order.txt, first), then the build order."""
@@ -487,7 +560,7 @@ def test_existing_tasks_unchanged(monkeypatch, tmp_path):
     the merit / magic / worldmm / api tasks are the same ones in the same order."""
     have = {("merit", "m8", T2[0]), ("worldmm", "m27", REST[0])}
     files = {f"magic/m8/{T2[1]}/answers_t2_agree2.json.gz", f"api/gpt-5.5-f384/{B10[0]}/answers_batch10_agree2.json.gz"}
-    full = list(M.EXPERIMENTS)
+    full = list(BASE)
     board(monkeypatch, tmp_path, [e for e in full if e not in M.REPORTED + M.PAID])
     assert len(M.EXPERIMENTS) == len(full) - len(M.REPORTED) - len(M.PAID) == 6 * (1 + len(M.BANKS)) + 3 * len(M.BANKS) + len(M.DIRECT) * len(M.BANKS) + 2 * len(M.BANKS) + 1 + len(M.BANKS)   # 6 arms x (build + banks) + 3 api x banks + the direct arms x banks + rekv's and vst's banks + m3agent's build + banks
     old = desired_before(have, files)
