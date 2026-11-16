@@ -200,7 +200,7 @@ NEEDS_ENV |= {
 # 2026-11-15: Nexus GPUs were full, Zaratan idle); its compute nodes reach OpenRouter over IPv6
 # EGAgent's GPT-4.1 memory on Zaratan too, through OpenRouter to OpenAI on our key (Anubhav, 2026-11-15): Azure's
 # content filter, behind Max's gateway, refused frames of 37 of its builds (ContentPolicyViolationError)
-ALSO_POOLS = {("magic", "oss120"): ["nexus"], ("magic", "oss120-flash"): ["nexus", "zaratan"],
+ALSO_POOLS = {("magic", "oss120"): ["nexus", "zaratan"], ("magic", "oss120-flash"): ["nexus", "zaratan"],
               ("egagent", "gpt41"): ["zaratan", "nexus"]}   # through OpenRouter (Nexus: Anubhav, 2026-11-16)
 # The arms behind the pilot gate: every arm of the REPORTED and PAID lines. A new paid baseline joins the gate by
 # being listed in one of them, not by its name.
@@ -328,6 +328,9 @@ BUILD_ON = {"magic": "merit"}
 STITCHED = "stitched"
 STITCHED_VIDEOS = [f"P0{k}-stitched" for k in range(1, 10)]
 STITCHED_POOLS = ["max", "pulkit", "nexus"]
+# ... and per line (Anubhav, 2026-11-16): MAGIC-Video's stitched builds on Zaratan's H100s too, whichever pool starts first
+# (measured on the 156 normal videos: build wall time ~0.21x the video's length, so ~1.5 h on the 7.2 h video)
+STITCHED_ALSO = {("magic", "oss120"): ["zaratan"]}
 CANARY = "P05-stitched"   # the shortest, 3.48 h
 # MERIT's lines first: MAGIC-Video's builds wait for MERIT's of the same video, which must be listed before them
 # Only the systems Vatsal's stitched hand-off asks for (Anubhav, 2026-11-16): MERIT with Qwen3.8-27B, WorldMM with the
@@ -575,7 +578,7 @@ def desired(have, files, answers=None, busy=()):
         env = {"needs_env": needs(b, arm, stage)} if needs(b, arm, stage) else {}
         pools = key_pools(env["needs_env"]) + ALSO_POOLS.get((b, arm), []) if env else pools
         if bank in ((STITCHED,), STITCHED_EOV, STITCHED):
-            pools = [p for p in pools if p in STITCHED_POOLS]
+            pools = [p for p in pools if p in STITCHED_POOLS + STITCHED_ALSO.get((b, arm), [])]
         mem = MEMORY_ARM.get((b, arm), arm)
         if mem != arm:   # for the worker: the arm whose dataset folder holds this task's memory (worker.py --prefetch)
             env["memory_arm"] = mem
