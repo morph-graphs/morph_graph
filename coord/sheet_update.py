@@ -297,8 +297,11 @@ def build(a, now):
                 sets.setdefault(k, {})[v] = own + add
     # the "all" rows: each (baseline, arm, kind, tag) over the questions of every bank, videos keyed <bank>/<video>
     # (unanswered = wrong, as in every row, so a method that has answered one bank shows partial)
-    banks[ALL] = {f"{bank}/{v}": qa for bank in BANKS for v, qa in banks[bank].items()}
+    # (not the banks of master.NOT_IN_ALL: the M2 probes are not benchmark questions)
+    banks[ALL] = {f"{bank}/{v}": qa for bank in BANKS if bank not in master.NOT_IN_ALL for v, qa in banks[bank].items()}
     for (b, arm, bank, kind, tag), by_video in list(sets.items()):
+        if bank in master.NOT_IN_ALL:
+            continue
         sets.setdefault((b, arm, ALL, kind, tag), {}).update({f"{bank}/{v}": d for v, d in by_video.items()})
     for s in info.siblings:   # answers of a bank not in BANKS: said in the header, not silently left out
         p = s.rfilename.split("/")

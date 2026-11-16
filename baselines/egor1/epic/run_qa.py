@@ -48,6 +48,19 @@ ANSWER_PROMPT = ("You are given some information and a chain-of-thought reasonin
                  "only return ```<answer>A</answer>```.")
 
 
+def answer_prompt(letters):
+    """ANSWER_PROMPT for a question with these option letters: as it is for four (A|B|C|D), else naming only the
+    letters the question has (the M2 probes have 2 or 3)."""
+    return ANSWER_PROMPT if letters == "ABCD" else ANSWER_PROMPT.replace("A|B|C|D", "|".join(letters))
+
+
+def kept(resp, choices):
+    """Whether a parsed reply is saved: a letter of the question's options, or (a question with fewer than four) a
+    letter of A-D the question lacks, kept as a wrong answer, so the question is not asked again on every run and its
+    task does not fail. Anything else (no letter, or past D) is not saved, as before."""
+    return resp in choices or (len(choices) < 4 and resp in "ABCD" and bool(resp))
+
+
 def memory_hash(mem, video):
     h = hashlib.sha1()
     for m in MEMORY:
@@ -73,10 +86,10 @@ class Agent:
         return self.tok.decode(out[0, ids["input_ids"].shape[1]:], skip_special_tokens=True)
 
 
-def final_answer(history_text, question):
+def final_answer(history_text, question, letters="ABCD"):
     """GPT-4.1 reads the trace and returns '<answer>X</answer>' (three tries, as upstream; None when all fail,
     where upstream would answer A)."""
-    messages = [{"role": "system", "content": ANSWER_PROMPT},
+    messages = [{"role": "system", "content": answer_prompt(letters)},
                 {"role": "user", "content": f"The chat history is as follows:\n{history_text}\n"},
                 {"role": "user", "content": f"Question: {question}"}]
     errors = []
@@ -160,13 +173,13 @@ def main():
         for turn in range(MAX_TURNS):
             history.append({"role": "user", "content": user})
             if turn == MAX_TURNS - 1:      # out of turns: GPT-4.1 answers from the whole trace
-                out = final_answer(str(history), question)
+                out = final_answer(str(history), question, "".join(choices))
                 break
             msg = agent(history, seed + turn)
             history.append({"role": "assistant", "content": msg})
             if "<answer>" in msg and "</answer>" in msg:   # GPT-4.1 puts the agent's answer in the format
                 turns.append({"output": msg})
-                out = final_answer(str(history[-1]), question)
+                out = final_answer(str(history[-1]), question, "".join(choices))
                 break
             call = process.parse_tool_call(process.get_query(msg))
             if a.first_turn:
@@ -182,11 +195,12 @@ def main():
             continue
         m = re.search(r"\s*([A-Z])\s*", process.parse_answer(out.replace("\n", " ")) or "") if out else None
         resp = m.group(1) if m else ""        # the first capital letter, as process.compute_score reads it
-        if T.API_ERRORS or resp not in choices:
+        if T.API_ERRORS or not kept(resp, choices):
             print(f"{r['key']}: not answered ({T.API_ERRORS or repr(out)})", flush=True)
             continue
         done[r["key"]] = {"key": r["key"], "qhash": r["qhash"], "ID": r["ID"], "type": r["type"], "question": r["question"],
                           "choices": choices, "answer": r["answer"], "response": resp, "evaluate": resp == r["answer"],
+                          **({} if resp in choices else {"not_an_option": True}),
                           "t_ask": r["meta"]["t_ask"], "cutoff": cut, "turns": turns, "final": out,
                           "seconds": round(time.time() - t0, 1), "version": VERSION, "memory_hash": mh}
         print(f"{r['key']} @ {cut}s: {resp} gold {r['answer']} ({len(turns)} turns, {done[r['key']]['seconds']}s)", flush=True)

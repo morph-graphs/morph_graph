@@ -159,7 +159,8 @@ PRIORITY, QA_FROZEN, HELD, FIRST = set(M.PRIORITY), set(M.QA_FROZEN), set(M.HELD
 # the board's lines with and without the stitched videos' lines: the tests of the normal videos' tasks use BASE
 # (test_stitched_builds and test_stitched_qa check that adding the stitched lines changes none of those tasks); BUILDS:
 # with the stitched builds, without their answers
-ALL = list(M.EXPERIMENTS)
+FULL = list(M.EXPERIMENTS)
+ALL = [e for e in FULL if e[4] != M.PROBES]   # (the M2 probe lines: test_probes)
 api = lambda t: t["baseline"] == "api" and t["arm"] in M.API_CONFIGS   # the API tasks that lead (not the evidence-clips configs)
 BASE = [e for e in ALL if e[4] not in ((M.STITCHED,), M.STITCHED_EOV)]
 BUILDS = [e for e in ALL if e[4] != M.STITCHED_EOV]
@@ -420,7 +421,7 @@ def test_first_and_rank(monkeypatch, tmp_path):
     by = {t["id"]: t for t in tasks}
     kind = lambda t: 0 if t["baseline"] == "magic" else 1 if (t["baseline"], t["arm"]) == ("merit", "m27") else 2 if api(t) else 3
     assert [kind(t) for t in tasks] == sorted(kind(t) for t in tasks) and {kind(t) for t in tasks} == {0, 1, 2, 3}
-    assert [t["priority"] for t in tasks] == list(range(len(tasks))) and M.lead(tasks[-1]) == len(FIRST) + 5
+    assert [t["priority"] for t in tasks] == list(range(len(tasks))) and M.lead(tasks[-1]) == len(FIRST) + 7
     # inside MAGIC-Video's group: its memory builds (8B, 27B), the GPT-OSS-120B row, then its 27B and 8B answers
     magic = [("oss120", "") if t["arm"].startswith("oss120") else (t["arm"], t["stage"]) for t in tasks if t["baseline"] == "magic"]
     inside = [("m8", "build"), ("m27", "build"), ("oss120", ""), ("m27", "qa"), ("m8", "qa")]
@@ -613,6 +614,56 @@ def desired_before(have, files):
     for i, t in enumerate(tasks):
         t["priority"] = i
     return tasks
+
+
+def test_probes(monkeypatch, tmp_path):
+    """The M2 probe bank: a qa line for every memory arm that answers the normal banks (none for the plain video
+    models, API rows, ReKV, VST), on that arm's pools with its keys, from the memory of the normal video (waiting on its
+    build when listed, never listed without one); listed after the memory builds and ahead of the other answers; the
+    normal tasks unchanged; each arm behind its own PRIORITY gate."""
+    probe_lines = [e for e in FULL if e[4] == M.PROBES]
+    base = [e for e in BASE if e[4] != M.STITCHED]   # (Vatsal's stitched bank: its own tests)
+    board(monkeypatch, tmp_path, base + probe_lines)
+    monkeypatch.setattr(M, "bank_videos", lambda bank: B10 + T2 if bank == M.PROBES else BANK_VIDEOS[bank])
+    arms = {(b, arm) for b, arm, stage, _, bank in base if stage == "qa" and bank in M.BANKS and b in M.MEMORY_DONE}
+    assert {(b, arm) for b, arm, *_ in probe_lines} == arms and len(probe_lines) == len(arms)
+    assert not {b for b, *_ in probe_lines} & {"direct", "api", "rekv", "vst"}
+    assert {b for b, *_ in probe_lines} == {"merit", "magic", "worldmm", "egagent", "egorag", "egor1", "m3agent", "hippomm"}
+    assert M.PROBES in M.NOT_IN_ALL and M.STITCHED_EOV in M.NOT_IN_ALL
+    have = {(b, M.MEMORY_ARM.get((b, arm), arm), v) for b, arm in arms for v in B10}   # batch10's memories are built
+    tasks = M.desired(have, set())
+    by = {t["id"]: t for t in tasks}
+    pr = [t for t in tasks if t["bank"] == M.PROBES]
+    assert len(pr) == len(arms) * len(B10 + T2) and all(t["stage"] == "qa" for t in pr)
+    for t in pr:
+        mem = M.MEMORY_ARM.get((t["baseline"], t["arm"]), t["arm"])
+        build = f"{t['baseline']}-{mem}-build-{t['video']}"
+        assert t["deps"] == ([] if t["video"] in B10 else [build]) and all(by[d]["priority"] < t["priority"] for d in t["deps"])
+        normal = next(x for x in tasks if (x["baseline"], x["arm"], x["stage"], x["video"]) == (t["baseline"], t["arm"], "qa", t["video"])
+                      and x["bank"] != M.PROBES)
+        assert (t["pools"], t.get("needs_env"), t.get("memory_arm")) == (normal["pools"], normal.get("needs_env"), normal.get("memory_arm"))
+    # never listed without the memory: with no build lines, only the built videos' probes
+    monkeypatch.setattr(M, "EXPERIMENTS", [e for e in base + probe_lines if e[2] != "build"])
+    assert {t["video"] for t in M.desired(have, set()) if t["bank"] == M.PROBES} == set(B10)
+    # order: every memory build and the evidence-clips rows, then the probes, then the other answers; normal tasks as before
+    lead = [M.lead(t) for t in tasks]
+    assert lead == sorted(lead) and {M.lead(t) for t in pr} == {len(M.FIRST) + 6}
+    assert max(M.lead(t) for t in tasks if t["stage"] == "build") < len(M.FIRST) + 6   # after every memory build and the
+    assert all(M.lead(t) < len(M.FIRST) + 6 for t in tasks if t["arm"].endswith("-evclips"))   # evidence-clips rows, ahead of
+    assert {M.lead(t) for t in tasks if t["stage"] == "qa" and t not in pr and not api(t)  # the other answers
+            and not t["arm"].endswith("-evclips")} == {len(M.FIRST) + 7}
+    strip = lambda ts: [{k: v for k, v in t.items() if k != "priority"} for t in ts]
+    monkeypatch.setattr(M, "EXPERIMENTS", base)
+    assert strip(t for t in tasks if t["bank"] != M.PROBES) == strip(M.desired(have, set()))
+    # as published (the real PRIORITY and FIRST): an arm's probes are listed with its normal rows (a priority arm, or a
+    # local one that needs no key), the paid others withheld
+    monkeypatch.setattr(M, "PRIORITY", PRIORITY)
+    monkeypatch.setattr(M, "FIRST", FIRST)
+    monkeypatch.setattr(M, "EXPERIMENTS", base + probe_lines)
+    listed, _ = M.gate(M.desired(have, set()))
+    assert {(t["baseline"], t["arm"]) for t in listed if t["bank"] == M.PROBES} == {
+        k for k in arms if k in PRIORITY or k + ("qa",) in PRIORITY or not M.needs(*k, "qa")}   # (the gate lets every keyless task by)
+    assert [M.lead(t) for t in listed] == sorted(M.lead(t) for t in listed)
 
 
 def test_existing_tasks_unchanged(monkeypatch, tmp_path):

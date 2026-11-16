@@ -382,6 +382,19 @@ EXPERIMENTS += [(b, arm, "qa", list(pools), STITCHED_EOV) for (b, arm), pools in
 EXPERIMENTS += [(b, arm, "qa", KEY_POOLS if b == "api" else list(POOLS.get((b, arm), KEY_POOLS)), STITCHED)
                 for b, arm in STITCHED_ANSWER_LINES if (b, arm) in STITCHED_ANSWERS]
 PRIORITY |= {(b, arm) for b, arm in STITCHED_ANSWER_LINES if (b, arm) in STITCHED_ANSWERS}
+# The M2 fact probes (Anubhav, 2026-11-16; epic-morph v3/export_bank.py probes_v2, design/13_m2_probe_sample.md): 3,844
+# probes of a fixed sample of 1,565 benchmark questions over 107 normal videos, every one asked mid-video at its t_ask
+# (the memory cut there, as for the benchmark's streaming questions). Answered by the memory methods only (MEMORY_DONE:
+# not the plain video models, API rows, ReKV or VST): a qa line for every arm that answers BANKS, on its pools, from the
+# memory it already has of the video (never listed without it built or its build listed to wait on). Each arm's lines
+# follow its own PRIORITY gate. Listed after every memory build and the evidence-clips rows, ahead of the other answers
+# (lead()). Not benchmark accuracy: the sheet keeps them out of its "all" rows (NOT_IN_ALL).
+PROBES = "probes_v2"
+EXPERIMENTS += [(b, arm, "qa", list(pools), PROBES) for (b, arm), pools in dict.fromkeys(
+    ((b, arm), tuple(pools)) for b, arm, stage, pools, bank in EXPERIMENTS
+    if stage == "qa" and bank in BANKS and b in MEMORY_DONE)]
+# banks the sheet scores on their own rows but never folds into its "all" rows (sheet_update.py)
+NOT_IN_ALL = {PROBES, STITCHED_EOV}
 
 
 def bank_questions(bank):
@@ -530,18 +543,20 @@ def built_from(files):
 def lead(t):
     """Where a task's group stands in the list: the CANARY's builds (-2) and answers (-1), the index of its FIRST entry,
     then the API tasks (API_CONFIGS'), the URGENT lines, the other stitched videos' builds and their answers, every
-    other memory build, the evidence-clips rows (EVCLIPS), the rest."""
+    other memory build, the evidence-clips rows (EVCLIPS), the M2 probes (PROBES), the rest."""
     k = (t["baseline"], t["arm"], t["stage"])
     if t["video"] in STITCHED_VIDEOS:
         qa = t["stage"] == "qa"
         return -2 + qa   # every stitched video's builds, then their answers, ahead of all else (Anubhav, 2026-11-16)
+    if t.get("bank") == PROBES:
+        return len(FIRST) + 6
     for i, f in enumerate(FIRST):
         if k[:len(f)] == f:
             return i
     api = k[0] == "api" and k[1] in API_CONFIGS   # the evidence-clips configs (EVCLIPS) have their own place
     evclips = k[1].endswith("-evclips")   # after every memory build, ahead of the other answers (Anubhav, 2026-11-16)
     return len(FIRST) + (1 if api else 2 if k in {(b, arm, stage) for b, arm, stage, *_ in URGENT}
-                         else 4 if k[2] == "build" else 5 if evclips else 6)
+                         else 4 if k[2] == "build" else 5 if evclips else 7)
 
 
 def reported(t):
@@ -609,7 +624,7 @@ def desired(have, files, answers=None, busy=()):
             # wait for the video's build task (its memory arm's) while it is listed; a memory already built (on the
             # board or off it) needs no wait, and with neither, qa builds the memory itself first
             build = f"{b}-{mem}-build-{v}"
-            if (b in NEEDS_MEMORY or (bank in (STITCHED_EOV, STITCHED) and b in MEMORY_DONE)) and (b, mem, v) not in have \
+            if (b in NEEDS_MEMORY or (bank in (STITCHED_EOV, STITCHED, PROBES) and b in MEMORY_DONE)) and (b, mem, v) not in have \
                     and build not in ids:
                 continue                         # no memory and no build to wait on: not listed
             tasks.append(dict(id=tid, baseline=b, arm=arm, stage=stage, video=v, bank=bank,
