@@ -10,6 +10,12 @@ The key is read from the environment only (``api_key_env``, default OPENAI_API_K
 ``base_url`` (another OpenAI-compatible endpoint, e.g. OpenRouter's; default OPENAI_BASE_URL, else OpenAI's),
 ``name_prefix_env`` (a variable whose value goes before the model id: a gateway that names the model so, e.g.
 NVIDIA's azure/openai/gpt-4.1), ``temperature``.
+Through OpenRouter: a config whose key is OPENAI_API_KEY and that names no ``base_url`` goes to OpenRouter when
+OPENAI_API_KEY is unset and OPENROUTER_API_KEY is set (as EGAgent's GPT-4.1 calls do, baselines/egagent/README.md
+"Through OpenRouter"): endpoint OPENROUTER_BASE_URL or https://openrouter.ai/api/v1, model ``openai/<name>`` (no
+name prefix), and the request pinned to the provider OpenAI with no fallback, so OpenAI itself answers or the call
+fails. Each answer row then also records ``provider_pin``, the OpenRouter ``generation_id`` (its /generation record
+names the provider that served it) and ``cost_usd``. With OPENAI_API_KEY set nothing changes.
 """
 
 from __future__ import annotations
@@ -26,14 +32,24 @@ from openai import OpenAI
 from ..common import parse_letter
 
 MAX_IMAGES, MAX_BYTES = 1500, 512 * 2 ** 20   # per request (images guide, 2026-11)
+OPENROUTER_PIN = {"only": ["openai"], "allow_fallbacks": False}   # OpenRouter's provider routing field
+
+
+def via_openrouter(mcfg: dict) -> bool:
+    """An OpenAI config sent through OpenRouter: only an OpenRouter key is set (see the module docstring)."""
+    return (mcfg.get("api_key_env", "OPENAI_API_KEY") == "OPENAI_API_KEY" and not mcfg.get("base_url")
+            and not os.environ.get("OPENAI_API_KEY") and bool(os.environ.get("OPENROUTER_API_KEY")))
 
 
 def make_client(mcfg: dict):
-    key = os.environ.get(mcfg.get("api_key_env", "OPENAI_API_KEY"))
+    env, base_url = mcfg.get("api_key_env", "OPENAI_API_KEY"), mcfg.get("base_url")
+    if via_openrouter(mcfg):
+        env, base_url = "OPENROUTER_API_KEY", os.environ.get("OPENROUTER_BASE_URL") or "https://openrouter.ai/api/v1"
+    key = os.environ.get(env)
     if not key:
-        raise RuntimeError(f"no OpenAI key: set ${mcfg.get('api_key_env', 'OPENAI_API_KEY')}")
+        raise RuntimeError(f"no OpenAI key: set ${env}")
     # the SDK retries 408/409/429/5xx and connection errors itself, with backoff
-    return OpenAI(api_key=key.strip(), base_url=mcfg.get("base_url"), max_retries=int(mcfg.get("max_retries", 6)),
+    return OpenAI(api_key=key.strip(), base_url=base_url, max_retries=int(mcfg.get("max_retries", 6)),
                   timeout=float(mcfg.get("timeout_s", 1800)))
 
 
@@ -99,7 +115,9 @@ def _content(mcfg: dict, ctx: dict, prompt: str) -> list[dict]:
 
 def ask(client, mcfg: dict, ctx: dict, prompt: str, n_options: int) -> dict:
     letters = [chr(ord("A") + i) for i in range(n_options)]
+    router = via_openrouter(mcfg)
     name = os.environ.get(mcfg["name_prefix_env"], "") + mcfg["name"] if mcfg.get("name_prefix_env") else mcfg["name"]
+    name = "openai/" + mcfg["name"] if router else name
     kw = {"model": name, "instructions": ctx["system_instruction"], "store": False,
           "input": [{"role": "user", "content": _content(mcfg, ctx, prompt)}],
           "text": {"format": {"type": "json_schema", "name": "answer", "strict": True, "schema": {
@@ -112,6 +130,8 @@ def ask(client, mcfg: dict, ctx: dict, prompt: str, n_options: int) -> dict:
     reasoning = {k: mcfg[f"reasoning_{k}"] for k in ("effort", "summary") if mcfg.get(f"reasoning_{k}")}
     if reasoning:
         kw["reasoning"] = reasoning
+    if router:
+        kw["extra_body"] = {"provider": OPENROUTER_PIN}
     t0 = time.time()
     resp = client.responses.create(**kw)
     latency = time.time() - t0
@@ -140,6 +160,7 @@ def ask(client, mcfg: dict, ctx: dict, prompt: str, n_options: int) -> dict:
         "cache_used": bool(usage.get("cached_content_token_count")),
         "model_returned": getattr(resp, "model", None),
         "endpoint": str(client.base_url),
+        **({"provider_pin": OPENROUTER_PIN, "generation_id": resp.id, "cost_usd": getattr(u, "cost", None)} if router else {}),
         "n_frames": len(ctx["frame_times"]),
         "frame_times_s": ctx["frame_times"],
         "last_frame_s": ctx["frame_times"][-1] if ctx["frame_times"] else None,

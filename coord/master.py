@@ -299,18 +299,22 @@ EXPERIMENTS = [("api", c, "qa", KEY_POOLS, bank) for bank in BANKS for c in API_
 # class one 48 GB GPU; the 27B and 35B-A3B the 27B pools; VST its m8 pools); the paid ones need their key (NEEDS_ENV:
 # Max's and Pulkit's pools), except Qwen3.5-Flash, which calls OpenRouter on our key as MAGIC-Video's oss120-flash does
 # (ALSO_POOLS). M3-Agent has no row: its control model (Qwen3-32B, Qwen3ForCausalLM) reads no images.
+# GPT-4.1 runs on our Nexus worker too, through OpenRouter pinned to OpenAI (backends/openai.py; Anubhav, 2026-11-16:
+# Azure's content filter behind Max's gateway refused EGAgent's frames), and is a PRIORITY row; the other paid
+# evidence-clips rows stay behind the gate.
 EVCLIPS = [("direct", f"{m}-evclips", pools) for m, pools in (
     ("qwen3vl-8b", M8), ("qwen38-27b", M27), ("qwen35-9b", M8), ("molmo2-8b", M8), ("qwen35-35b-a3b", M27))] + [
     ("vst", "vst7b-evclips", M8)] + [("api", c, KEY_POOLS) for c in (
     "gpt-4.1-f384-evclips", "gemini-3.6-flash-high-evclips", "gpt-5.1-f384-evclips", "gemini-3.1-flash-lite-high-evclips",
     "gpt-5.5-f384-evclips", "qwen3.5-flash-f384-evclips")]
 NEEDS_ENV |= {("api", c): [k] for c, k in (
-    ("gpt-4.1-f384-evclips", "OPENAI_API_KEY"), ("gpt-5.1-f384-evclips", "OPENAI_API_KEY"), ("gpt-5.5-f384-evclips", "OPENAI_API_KEY"),
+    ("gpt-4.1-f384-evclips", GPT), ("gpt-5.1-f384-evclips", "OPENAI_API_KEY"), ("gpt-5.5-f384-evclips", "OPENAI_API_KEY"),
     ("gemini-3.6-flash-high-evclips", "GEMINI_API_KEY"), ("gemini-3.1-flash-lite-high-evclips", "GEMINI_API_KEY"),
     ("qwen3.5-flash-f384-evclips", "OPENROUTER_API_KEY"))}
-ALSO_POOLS |= {("api", "qwen3.5-flash-f384-evclips"): ["nexus", "zaratan"]}
+ALSO_POOLS |= {("api", "qwen3.5-flash-f384-evclips"): ["nexus", "zaratan"], ("api", "gpt-4.1-f384-evclips"): ["nexus"]}
+PRIORITY |= {("api", "gpt-4.1-f384-evclips")}
 EXPERIMENTS += [(b, arm, "qa", pools, bank) for bank in BANKS for b, arm, pools in EVCLIPS]
-# ... not a priority row (Anubhav, 2026-11-16: back from #103); its local-GPU rows pass the gate anyway (gate())
+# ... not a priority row but for GPT-4.1 (Anubhav, 2026-11-16: back from #103); its local-GPU rows pass the gate anyway (gate())
 # the file whose presence in <baseline>/<arm>/<video>/ (next to runs.jsonl) means the memory is built: the last
 # one each baseline writes ({v}: the video)
 MEMORY_DONE = {"merit": "{v}_30sec_4_key.json", "magic": "graph.pkl", "worldmm": "{v}_visual.pkl",

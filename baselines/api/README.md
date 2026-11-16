@@ -35,6 +35,19 @@ gateway's `azure/openai/`), `gpt-5.1-f384-evclips` (no reasoning setting, as MER
 settings (at most 384, 1 a second, 512 px, detail high). The backend's config fields `base_url`, `name_prefix_env` and
 `temperature` are for these.
 
+**GPT configs through OpenRouter.** A config whose key is `OPENAI_API_KEY` and that sets no `base_url` goes to
+OpenRouter when `OPENAI_API_KEY` is unset and `OPENROUTER_API_KEY` is set, as EGAgent's GPT-4.1 calls do (its README,
+"Through OpenRouter"): endpoint `https://openrouter.ai/api/v1` (`OPENROUTER_BASE_URL` overrides it), model
+`openai/<name>` (no `name_prefix_env` prefix), and the same Responses request plus `provider: {"only": ["openai"],
+"allow_fallbacks": false}`, so OpenAI itself answers or the call fails (not Azure, whose content filter refused
+EGAgent's frames behind Max's gateway). Each answer row also records `provider_pin`, `generation_id` (OpenRouter's
+`/api/v1/generation?id=` names the provider that served it; the Responses reply does not) and `cost_usd`; the
+`runs.jsonl` line sums `cost_usd` and lists the `endpoints`. With `OPENAI_API_KEY` set nothing changes. Our Nexus
+worker, which has only an OpenRouter key, takes `gpt-4.1-f384-evclips` this way (`coord/master.py`). Measured on
+P05-20240425-201444, `batch10_agree2_end` (2026-11-16): 41/41 answered, 27 right, no failure or refusal;
+replies named `openai/gpt-4.1`, OpenRouter's generation record of a probe call names the provider OpenAI, ~$0.0035 a
+question.
+
 Both new Gemini models accept thinking `high` (their documented levels are minimal, low, medium, high), so
 the three Gemini configs differ in the model id only. Model ids, limits and prices were read from the
 providers' pages on 2026-11-13 ([Gemini models](https://aistudio.google.com/docs/models),

@@ -34,7 +34,8 @@ from epic_eval.common import make_qid   # noqa: E402  (the qid the run wrote; st
 LETTERS = "ABCD"
 KEEP = ("qid", "model", "time", "raw_text", "finish_reason", "usage", "cache_used", "media_file", "media_duration_s")
 FRAMES = ("model_returned", "endpoint", "n_frames", "last_frame_s", "frame_side", "detail", "frame_times_s",   # frame backends
-          "frame_budget", "video_fps")   # and sampled inputs (prep_media.prep_sampled)
+          "frame_budget", "video_fps",   # and sampled inputs (prep_media.prep_sampled)
+          "provider_pin", "generation_id", "cost_usd")   # an OpenAI config sent through OpenRouter (backends/openai.py)
 # batch10_agree2 kept a question when 2+ of these 3 models answered it right, so their own scores on it are inflated
 VERIFIERS = ("gemini-3.8-flash", "gpt-5.6-sol", "qwen3.8-max")
 INFLATED = "inflated by selection: this model was one of the bank's three verifiers (questions kept when 2+ of 3 were right)"
@@ -131,10 +132,14 @@ def main():
         os.makedirs(d, exist_ok=True)
         with gzip.open(os.path.join(d, f"answers_{bank}.json.gz"), "wt") as g:
             json.dump(rows, g, indent=1)
+        pins = [r["provider_pin"] for r in rows if r.get("provider_pin")]
         line = {"stage": "from_epic_eval", "video": video, "arm": arm, "bank": bank, "answered": len(rows),
                 "questions": len(qs), "right": sum(r["evaluate"] for r in rows), "epic_eval_run": os.path.basename(run),
                 "epic_eval_commit": cfg["code"].get("commit"), "epic_morph_commit": cfg["questions"].get("commit"),
-                "model": m, "media": cfg.get("media"), "morph_graph_commit": commit, **({"note": note} if note else {})}
+                "model": m, "media": cfg.get("media"), "morph_graph_commit": commit, **({"note": note} if note else {}),
+                # the route of the answers: endpoints, OpenRouter's provider pin, dollars it charged (summed)
+                "endpoints": sorted({r["endpoint"] for r in rows if r.get("endpoint")}),
+                **({"provider_pin": pins[0], "cost_usd": round(sum(r.get("cost_usd") or 0 for r in rows), 6)} if pins else {})}
         log = os.path.join(d, "runs.jsonl")   # one line per (stage, bank): converting again replaces it
         old = [json.loads(x) for x in open(log)] if os.path.exists(log) else []
         old = [x for x in old if (x.get("stage"), x.get("bank")) != ("from_epic_eval", bank)]
