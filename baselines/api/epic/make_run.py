@@ -56,7 +56,10 @@ def main():
     for f in src:
         d = os.path.join(dst, os.path.basename(f))
         if not os.path.exists(d):
-            shutil.copy(f, d)
+            # whole or not at all: the board starts several videos of a run at once, and a copy half written by one
+            # read as "changed" by another stopped them (gpt-5.5-f384-evclips on Pulkit's pool, 2026-11-16)
+            shutil.copy(f, f"{d}.{os.getpid()}.tmp")
+            os.replace(f"{d}.{os.getpid()}.tmp", d)
         elif open(f, "rb").read() != open(d, "rb").read():
             sys.exit(f"{os.path.basename(f)} differs from the copy this run was asked ({d}): "
                      f"a changed bank needs its own run (another bank name, or another --work)")

@@ -53,10 +53,17 @@ def load_hf(hf_id):
     from types import SimpleNamespace
     from huggingface_hub import snapshot_download
     from transformers import AutoModelForImageTextToText, AutoProcessor
+    # the snapshot completed from the Hub (files only another process had started to fetch are waited for, under the
+    # Hub cache's locks); the local copy alone when the Hub cannot be reached. Taking the local copy first loaded
+    # half-downloaded snapshots when several tasks of a new model started at once (Molmo2-8B, Qwen3.5-35B-A3B on
+    # Pulkit's pool, 2026-11-16)
     try:
-        path = snapshot_download(hf_id, local_files_only=True)
+        path = snapshot_download(hf_id)
     except Exception:
-        path = hf_id
+        try:
+            path = snapshot_download(hf_id, local_files_only=True)
+        except Exception:
+            path = hf_id
     kw = {"device_map": "auto" if torch.cuda.device_count() > 1 else "cuda:0", "dtype": torch.bfloat16}
     if "Molmo" in hf_id:
         kw["trust_remote_code"] = True
