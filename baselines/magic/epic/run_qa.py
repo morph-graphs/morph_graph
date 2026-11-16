@@ -96,6 +96,28 @@ def by_time(wm, cut):
     return retrieve_by_time
 
 
+def entities_seen_by_cutoff():
+    """MultimodalGraph.filter_by_time keeps an entity first named in a clip that starts by the cutoff, also the clip
+    that runs past it (its caption describes up to 30 s after t_ask). Such an entity has no edge in the filtered graph
+    but can still take a BM25 seed and a top-k slot. Keep an entity only when it is mentioned in a visible episode."""
+    from worldmm.memory.unified.graph import MultimodalGraph
+    from worldmm.memory.unified.nodes import EdgeType, NodeType
+    orig = MultimodalGraph.filter_by_time
+    if getattr(orig, "entities_seen", False):
+        return
+
+    def filter_by_time(self, until_time):
+        sub = orig(self, until_time)
+        seen = {e.src_id for e in sub.edges if e.edge_type == EdgeType.MENTIONED_IN}   # both ends visible
+        drop = {n for n, x in sub.nodes.items() if x.node_type == NodeType.ENTITY and n not in seen}
+        for n in drop:
+            del sub.nodes[n]
+        sub.edges = [e for e in sub.edges if e.src_id not in drop and e.dst_id not in drop]
+        return sub
+    filter_by_time.entities_seen = True
+    MultimodalGraph.filter_by_time = filter_by_time
+
+
 def memory_hash(mem, video):
     h = hashlib.sha1()
     for p in memory_paths(mem, video):
@@ -121,6 +143,7 @@ def main():
     import worldmm.memory.memory as wmem
     from worldmm.llm import PromptTemplateManager
     from worldmm.memory import WorldMemory
+    entities_seen_by_cutoff()
 
     V, M = a.video, a.memory
     caps30 = jload(os.path.join(M, f"{V}_30sec.json"))

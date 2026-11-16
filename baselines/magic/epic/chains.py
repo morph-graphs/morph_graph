@@ -2,14 +2,16 @@
 """MAGIC-Video's Narrative Memory Chain (topic + event chains) at one question cutoff, for EPIC-Morph.
 
 MAGIC distils its chains by scanning a whole video offline, which would leak the future into a streaming
-question. So the chains are built per question cutoff (ceil(t_ask)) from the memory that ends before it:
-captions, 3 min summaries and semantic-extraction groups ending <= the cutoff. They are made by the qa stage
+question. So the chains are built per question cutoff (the query time) from the memory that ends before it:
+captions, 10 min summaries and semantic-extraction groups ending <= the cutoff (stricter than the paper, which
+builds them once per video). They are made by the qa stage
 (run_qa.py), cached per cutoff under <memory dir>/chains/c<seconds>/ and reused by every bank that asks at
 the same second. Every chain prompt is memoised in chains/prompt_cache.json (keyed by the whole prompt, so a key
 holds only video before the cutoff that made it): a later cutoff pays only for prompts whose input changed. With the
-topic prompts in 50-caption chunks and the event step 1 per hour of video (long videos, below), the cutoffs of a
-video sorted in time build incrementally: each one adds the topic chunks and the hour that grew since the last, plus
-the event merge (step 2) and its enrichment (step 3), which read the whole video so far and are redone per cutoff.
+topic prompts in 50-caption chunks and the event step 1 once per day (as upstream's EgoLife chains; days: Days), the
+cutoffs of a video sorted in time build incrementally: each one adds the topic chunks and the day that grew since the
+last, plus the event merge (step 2) and its enrichment (step 3), which read the whole video so far and are redone
+per cutoff.
 
 They are the memory role's work (upstream: extract_{topic,event}_chains.py --model openai/gpt-oss-120b). With
 the reported arms that is a paid API, so cutoffs another machine already built are first taken from the dataset
@@ -70,7 +72,7 @@ Output a JSON array (empty array [] if no meaningful facts):
 
 EVENT_STEP1 = """You are analyzing a first-person (egocentric) kitchen video. The camera wearer is referred to as "I" in the captions.
 
-Below are 3-minute summary segments from {date}.
+Below are 10-minute summary segments from {date}.
 
 For each major activity in the video so far, extract:
 - name: a short descriptive name (e.g., "Making the sauce", "Washing up")
@@ -105,7 +107,7 @@ Only output events that have 2 or more related activities at different times. Ig
 
 For each event, output:
 - name: specific name
-- steps: list of {{day, start_time, end_time, description}}  (day is "DAY1"; times are HH:MM:SS)
+- steps: list of {{day, start_time, end_time, description}}  (day is {day_rule}; times are HH:MM:SS)
   * description must state concrete actions, objects and outcomes, not vague summaries
   * description should explain how this step relates to the previous step (continuation, completion, etc.)
 - key_entities: important objects and places only
@@ -177,32 +179,94 @@ def call(model, prompt, system=None, max_tokens=4096, tries=3, cache=None):
     return None
 
 
-def fmt_hm(ts):
-    s = str(ts).zfill(8)
-    return f"DAY1 {s[0:2]}:{s[2:4]}"
-
-
-def fmt_hms(ts):
-    s = str(ts).zfill(8)
-    return f"{s[0:2]}:{s[2:4]}:{s[4:6]}"
-
-
 PERSONS = {"i", "me", "my", "we", "us", "everyone", "narrator", "person", "people", "true", "false", "yes", "no",
            "he", "she", "they", "it", "someone", "something", "anything", "nothing", "things", "stuff",
            "camera wearer", "the camera wearer", "user", "the user"}
 
 
 MERGE_TOKENS = 16000 if roles.ROUTED else 8000   # upstream's 16000 for its API model (reasoning tokens count too)
-# Event step 1 reads 3 min summaries in windows of this many seconds of video. Upstream runs it once per EgoLife day
-# (10 min summaries); one call over a whole multi-hour video asked for 3-12 activities from ~144 summaries in one
-# 4,000-token reply. A video (or cutoff) up to an hour long is one window, as before.
-STEP1_WINDOW = 3600
+STEP1_TOKENS = 16000   # upstream's 4,000 truncated the reply on a long day; parse_json's repair stays the last resort
 
 
-def chains_at(cut, caps, m3, sem_triples, model, cache):
+class Days:
+    """Time labels for the chain prompts. An HD-EPIC video is one recording: DAY1 and the video's own clock, as before.
+    A stitched video (<kitchen>-stitched) is a kitchen's recordings in order, each after a 4 s date card; its session
+    table (the dataset's stitched/sessions/<kitchen>_sessions.json: each session's start date and time, duration and
+    second in the stream) gives every stream second its real day (DAY<n>, n = the date's rank among the kitchen's dates)
+    and clock time, as EgoLife's chains are labelled. The stored chains stay in stream time ("DAY1" + the stream's
+    HH:MM:SS), which is what the qa stage matches them against."""
+
+    def __init__(self, table=None):
+        self.ses = []
+        if table:
+            from datetime import datetime
+            dates = sorted({x["start"][:10] for x in table["sessions"]})
+            for x in table["sessions"]:
+                t0 = datetime.strptime(x["start"], "%Y-%m-%d %H:%M:%S")
+                self.ses.append({"day": dates.index(x["start"][:10]) + 1, "at": x["video_at_s"], "card": x["card_at_s"],
+                                 "dur": x["duration_s"], "clock": t0.hour * 3600 + t0.minute * 60 + t0.second})
+
+    def day_clock(self, sec):
+        """(day, clock seconds) of a stream second; a date card shows its session's start."""
+        if not self.ses:
+            return 1, int(sec)
+        x = [x for x in self.ses if x["card"] <= sec][-1:] or self.ses[:1]
+        x = x[0]
+        return x["day"], x["clock"] + int(max(0, min(sec - x["at"], x["dur"])))
+
+    def day(self, sec):
+        return self.day_clock(sec)[0]
+
+    def label(self, sec, hm=False):
+        """'DAY<n> HH:MM' (hm) or 'HH:MM:SS' for an HD-EPIC video (the earlier labels); 'DAY<n> HH:MM[:SS]' when stitched."""
+        d, c = self.day_clock(sec)
+        t = f"{c // 3600:02d}:{c % 3600 // 60:02d}" + ("" if hm else f":{c % 60:02d}")
+        return f"DAY{d} {t}" if hm or self.ses else t
+
+    def stream(self, day, clock):
+        """The stream second of a day and clock time a reply names (None: not a time). Between two of a day's sessions,
+        or after its last, the end of the session before; before its first, that session's start. (No session of the
+        nine kitchens crosses midnight, 2026-11-16.)"""
+        if clock is None:
+            return None
+        if not self.ses:
+            return clock
+        on = [x for x in self.ses if x["day"] == day] if day else []
+        if not on:
+            return None
+        prev = [x for x in on if x["clock"] // 60 * 60 <= clock]   # HH:MM (topic labels) names the session's first minute
+        if not prev:
+            return on[0]["at"]
+        x = prev[-1]
+        return x["at"] + max(0, min(clock - x["clock"], x["dur"]))
+
+
+def hms(sec):
+    sec = int(sec)
+    return f"{sec // 3600:02d}:{sec % 3600 // 60:02d}:{sec % 60:02d}"
+
+
+def parse_time(t):
+    """(day or None, clock seconds or None) of 'DAY3 18:08[:47]', '18:08:47' or '18:08'."""
+    d = re.search(r"DAY\s*(\d+)", str(t))
+    m = re.search(r"(\d{1,2}):(\d{2})(?::(\d{2}))?", str(t))
+    return (int(d.group(1)) if d else None,
+            int(m.group(1)) * 3600 + int(m.group(2)) * 60 + int(m.group(3) or 0) if m else None)
+
+
+def chains_at(cut, caps, m10, sem_triples, model, cache, days=Days()):
     """Topic + event chains from the video before `cut` seconds only."""
+    def restamp(text, d):   # clock times a stitched video's reply writes in its text -> stream time, as stored
+        if not days.ses or not isinstance(text, str):
+            return text
+
+        def one(m):   # "DAY<n> HH:MM[:SS]" -> "DAY1 <stream time>"; a bare time is on the reply's own day d
+            t = days.stream(int(m.group(1)) if m.group(1) else d, int(m.group(2)) * 3600 + int(m.group(3)) * 60 + int(m.group(4) or 0))
+            return m.group(0) if t is None else ("DAY1 " if m.group(1) else "") + hms(min(t, cut))
+        return re.sub(r"(?:\bDAY\s*(\d+)\s+)?\b(\d{1,2}):(\d{2})(?::(\d{2}))?\b", one, text)
+
     caps = [c for c in caps if secs(c["end_time"]) <= cut]
-    m3 = [c for c in m3 if secs(c["end_time"]) <= cut]
+    m10 = [c for c in m10 if secs(c["end_time"]) <= cut]
     # topic chains: entities in >= 2 semantic-extraction groups that ended before the cutoff
     ent_ts = defaultdict(set)
     for ts, tl in sem_triples.items():
@@ -216,32 +280,41 @@ def chains_at(cut, caps, m3, sem_triples, model, cache):
     cands = sorted(e for e, s in ent_ts.items() if len(s) >= 2)
 
     def topic(ent):   # chunks of 50 captions in time order: an earlier cutoff's full chunks are cache hits
-        lines = [f"[{fmt_hm(c['start_time'])}] {c['text']}" for c in caps if ent in c["text"].lower()]
+        lines = [f"[{days.label(secs(c['start_time']), hm=True)}] {c['text']}" for c in caps if ent in c["text"].lower()]
         facts = []
         for i in range(0, len(lines), 50):
             r = call(model, TOPIC_PROMPT.format(entity=ent, episodes_text="\n\n".join(lines[i:i + 50])), system=SYSTEM_PROMPT,
                      cache=cache)
             if isinstance(r, list):
                 facts += [f for f in r if isinstance(f, dict) and f.get("fact")]
+        if days.ses:   # stored in stream time, as the qa stage reads it; never after the cutoff
+            for f in facts:
+                d, c = parse_time(f.get("time", ""))
+                t = days.stream(d, c)
+                f["time"] = f"DAY1 {hms(min(t, cut))[:5]}" if t is not None else ""
+                f["fact"] = restamp(f["fact"], d)
         return ent, {"entity": ent, "has_lifecycle": bool(facts), "facts": facts}
     with ThreadPoolExecutor(32) as ex:
         topics = dict(ex.map(topic, cands))
 
-    # event chains: step 1 over 3 min summaries (EgoLife: 10 min per day), step 2 merge (+ round 2), step 3 enrich
+    # event chains as upstream's EgoLife ones: step 1 once per day over its 10 min summaries (a summary belongs to the
+    # day it starts on; the cutoff's day only up to the cutoff), step 2 links the days' activities (+ round 2), step 3
+    # enriches each step from the captions
     enriched = []
-    if m3:
-        win = defaultdict(list)
-        for c in m3:
-            win[secs(c["start_time"]) // STEP1_WINDOW].append(c)
-        acts = []
-        for k in sorted(win):   # a finished window's prompt is the same at every later cutoff: cached
-            seg = "\n\n".join(f"[{fmt_hms(c['start_time'])}] {c['text']}" for c in win[k])
-            acts += [x for x in call(model, EVENT_STEP1.format(date="DAY1", segments=seg), max_tokens=4000, cache=cache) or []
-                     if isinstance(x, dict)]
-        daily = "\n=== DAY1 ===\n" + "".join(
-            f"- [{x.get('time_range', '')}] {x.get('name', '')}: {x.get('summary', '')}\n"
-            + (f"  Entities: {', '.join(map(str, x['key_entities']))}\n" if x.get("key_entities") else "") for x in acts)
-        chains = call(model, EVENT_STEP2.format(daily_activities=daily), max_tokens=MERGE_TOKENS, cache=cache) or []
+    if m10:
+        by_day = defaultdict(list)
+        for c in m10:
+            by_day[days.day(secs(c["start_time"]))].append(c)
+        daily = ""
+        for d in sorted(by_day):   # a finished day's prompt is the same at every later cutoff: cached
+            seg = "\n\n".join(f"[{days.label(secs(c['start_time']))}] {c['text']}" for c in by_day[d])
+            acts = [x for x in call(model, EVENT_STEP1.format(date=f"DAY{d}", segments=seg), max_tokens=STEP1_TOKENS,
+                                    cache=cache) or [] if isinstance(x, dict)]
+            daily += f"\n=== DAY{d} ===\n" + "".join(
+                f"- [{x.get('time_range', '')}] {x.get('name', '')}: {x.get('summary', '')}\n"
+                + (f"  Entities: {', '.join(map(str, x['key_entities']))}\n" if x.get("key_entities") else "") for x in acts)
+        rule = '"DAY1"' if len(by_day) == 1 else 'the activity\'s day, "DAY1" to "DAY{}"'.format(max(by_day))
+        chains = call(model, EVENT_STEP2.format(daily_activities=daily, day_rule=rule), max_tokens=MERGE_TOKENS, cache=cache) or []
         chains = [c for c in chains if isinstance(c, dict) and isinstance(c.get("steps"), list)]
         if chains:
             found = "\n".join(f"- {c.get('name', '')}" for c in chains)
@@ -255,31 +328,38 @@ def chains_at(cut, caps, m3, sem_triples, model, cache):
             chains += [c for c in (r2 or []) if isinstance(c, dict) and isinstance(c.get("steps"), list)
                        and c.get("name", "").lower() not in names]
 
-        def to_s(t):
-            m = re.match(r"(\d{1,2}):(\d{2}):?(\d{2})?", str(t))
-            return int(m.group(1)) * 3600 + int(m.group(2)) * 60 + int(m.group(3) or 0) if m else None
-
         def enrich(ec):
             ec = copy.deepcopy(ec)
             for st in ec["steps"]:
                 if not isinstance(st, dict):
                     continue
-                st["day"] = "DAY1"
-                s0, s1 = to_s(st.get("start_time", "")), to_s(st.get("end_time", ""))
+                d = parse_time(st.get("day", ""))[0]
+                s0 = days.stream(d, parse_time(st.get("start_time", ""))[1])
+                s1 = days.stream(d, parse_time(st.get("end_time", ""))[1])
+                st["day"] = "DAY1"   # stored in stream time (the qa stage's clock)
+                if "description" in st:
+                    st["description"] = restamp(st["description"], d)
                 if s0 is None or s1 is None:
+                    if days.ses:   # a day and clock that name no stream time: not a time the qa stage can read
+                        st["start_time"] = st["end_time"] = ""
                     continue
                 if s0 > cut:   # a step the model placed after the cutoff cannot be grounded; drop it
                     st["start_time"] = st["end_time"] = ""
                     continue
+                shown = (days.label(s0).split()[0] if days.ses else "DAY1", st["start_time"], st["end_time"])
                 if s1 > cut:   # nor can its part after the cutoff: the step ends at the cutoff at the latest
-                    st["end_time"], s1 = f"{cut // 3600:02d}:{cut % 3600 // 60:02d}:{cut % 60:02d}", cut
-                txt = [f"[{fmt_hms(c['start_time'])}] {c['text']}" for c in caps if s0 <= secs(c["start_time"]) <= s1]
+                    s1 = cut
+                    shown = shown[:2] + (days.label(cut).split()[-1],)
+                    st["end_time"] = hms(cut)
+                if days.ses:
+                    st["start_time"], st["end_time"] = hms(s0), hms(s1)
+                txt = [f"[{days.label(secs(c['start_time']))}] {c['text']}" for c in caps if s0 <= secs(c["start_time"]) <= s1]
                 if not txt:
                     continue
-                r = call(model, EVENT_STEP3.format(chain_name=ec.get("name", ""), day="DAY1", start_time=st["start_time"],
-                                                   end_time=st["end_time"], captions_text="\n\n".join(txt)), max_tokens=1024, cache=cache)
+                r = call(model, EVENT_STEP3.format(chain_name=ec.get("name", ""), day=shown[0], start_time=shown[1],
+                                                   end_time=shown[2], captions_text="\n\n".join(txt)), max_tokens=1024, cache=cache)
                 if isinstance(r, dict) and r.get("description"):
-                    st["description"] = r["description"]
+                    st["description"] = restamp(r["description"], d)
             return ec
         with ThreadPoolExecutor(16) as ex:
             enriched = list(ex.map(enrich, chains))
@@ -308,6 +388,25 @@ def fetch_chains(cdir, memory_hash, todo):
         log.info(f"chains for {len(got)} of {len(todo)} missing cutoffs taken from the dataset ({path})")
 
 
+def sessions(cdir, video):
+    """A stitched video's session table (kept in cdir, from the dataset's stitched/sessions/); None for other videos."""
+    if not video.endswith("-stitched"):
+        return None
+    f = os.path.join(cdir, "sessions.json")
+    if not os.path.exists(f):
+        from huggingface_hub import hf_hub_download
+        k = video[:-len("-stitched")]
+        with tempfile.TemporaryDirectory() as tmp:
+            try:
+                p = hf_hub_download(os.environ.get("MERIT_HF_REPO", "morph-graphs/epic-morph-results"),
+                                    f"stitched/sessions/{k}_sessions.json", repo_type="dataset", local_dir=tmp)
+            except Exception as e:
+                raise SystemExit(f"{video}: no session table (stitched/sessions/{k}_sessions.json in the dataset; or put it "
+                                 f"at {f}): {type(e).__name__}: {str(e)[:160]}")
+            shutil.copy(p, f)
+    return jload(f)
+
+
 def ensure_chains(mem, video, cuts, memory_hash):
     """Chains for every cutoff (seconds) in cuts, built when missing; returns {cutoff: chain dir}. Chains made
     from another memory (a rebuild) are removed first."""
@@ -326,13 +425,14 @@ def ensure_chains(mem, video, cuts, memory_hash):
         raise SystemExit(f"chains for {len(todo)} cutoffs of {video} are neither here nor in the dataset, and building "
                          f"them calls a paid API: {roles.missing(['memory'])[0]}. Run this bank's qa first where the key is.")
     if todo:
-        caps, m3 = jload(os.path.join(mem, f"{video}_30sec.json")), jload(os.path.join(mem, f"{video}_3min.json"))
+        caps, m10 = jload(os.path.join(mem, f"{video}_30sec.json")), jload(os.path.join(mem, f"{video}_10min.json"))
+        days = Days(sessions(cdir, video))
         sem = jload(os.path.join(mem, f"semantic_extraction_results_{TAG}.json"))["semantic_triples"]
         model, cache_f = llm(), os.path.join(cdir, "prompt_cache.json")
         cache = jload(cache_f) if os.path.exists(cache_f) else {}
         for cut in todo:   # in time order: each cutoff reuses the earlier ones' prompts
             failed = roles.errors()
-            topics, events = chains_at(cut, caps, m3, sem, model, cache)
+            topics, events = chains_at(cut, caps, m10, sem, model, cache, days)
             if roles.errors() > failed:   # a failed call would be kept as an empty chain
                 raise SystemExit(f"{roles.errors() - failed} LLM calls failed building the chains at {cut}s"
                                  f"{': ' + roles.FATAL[0] if roles.FATAL else ''}; not kept, rerun to retry")

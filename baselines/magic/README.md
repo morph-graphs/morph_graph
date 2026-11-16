@@ -253,16 +253,27 @@ the memory from the dataset when it is there (`MAGIC_FETCH=0` to skip that). Its
 the same arm (same backbone): taken from the dataset's `merit/<arm>/<video>/`, or, when MERIT has none, built
 here by `../merit/run_merit.sh build` (with `MERIT_PY`, default the server's python). MAGIC's Narrative Memory
 Chain is a whole-video scan upstream, which would show a streaming question the future; so `qa` builds the chains
-at each question cutoff (ceil(t_ask)) from the captions, 3 min summaries and semantic groups that end before it,
-caches them in `chains/c<seconds>/`, and every bank asking at the same second reuses them. Every chain prompt is
-memoised in `chains/prompt_cache.json` (keyed by the whole prompt, which holds only video before the cutoff that
-made it), and the cutoffs are built in time order, so a later cutoff pays only for what grew: the topic prompts are
-in 50-caption chunks, and event step 1 reads the 3 min summaries one hour of video at a time (upstream runs it once
-per EgoLife day; one call over a multi-hour video put every summary in one 4,000-token reply). The event merge (step
-2) and its enrichment (step 3) read everything so far and are redone at each cutoff. A step the merge ends after the
-cutoff is cut at the cutoff. The graph is filtered
-to nodes ending before the cutoff and the semantic memory to the last snapshot before it (MAGIC's own query-time
-filter). So a question sees only memory up to its `t_ask`.
+at each question cutoff (the query time, from `t_ask`) from the captions, 10 min summaries and semantic groups that
+end before it, caches them in `chains/c<seconds>/`, and every bank asking at the same second reuses them. This is
+stricter than the paper, whose chains are built once over the whole video (Anubhav, 2026-11-16). Every chain
+prompt is memoised in `chains/prompt_cache.json` (keyed by the whole prompt, which holds only video before the
+cutoff that made it), and the cutoffs are built in time order, so a later cutoff pays only for what grew: the topic
+prompts are in 50-caption chunks, and event step 1 runs once per day over that day's 10 min summaries, as upstream
+does for EgoLife (a summary belongs to the day it starts on; the cutoff's day only up to the cutoff; 16,000 output
+tokens). The event merge (step 2, which links the days) and its enrichment (step 3) read everything so far and are
+redone at each cutoff. A step the merge ends after the cutoff is cut at the cutoff.
+
+Days: an HD-EPIC video is one recording, DAY1 on the video's clock. A stitched video (`<kitchen>-stitched`, a
+kitchen's recordings in order) is labelled in the chain prompts with real days and clock times from its session
+table (`stitched/sessions/<kitchen>_sessions.json` in the dataset, copied to `chains/sessions.json`): DAY<n> is the
+n-th date the kitchen recorded on. The stored chains are converted back to stream time (DAY1 and the stream's
+HH:MM:SS), the clock the qa stage reads; a time a reply names between two sessions is read as the end of the one
+before.
+
+The graph is filtered to nodes ending before the cutoff and the semantic memory to the last snapshot before it
+(MAGIC's own query-time filter); an entity is kept only when a visible episode mentions it (`run_qa.py`
+`entities_seen_by_cutoff`: upstream also kept one first named in the clip running past the cutoff). So a question
+sees only memory up to its `t_ask`.
 
 `qa` retries questions MAGIC failed on (up to three passes; rerun the same command for more). Every stage skips
 finished work. `MAGIC_TAG=<name>` writes `answers_<bank>_<name>.json.gz`. There is no blind stage: the
