@@ -304,8 +304,7 @@ NEEDS_ENV |= {("api", c): [k] for c, k in (
     ("qwen3.5-flash-f384-evclips", "OPENROUTER_API_KEY"))}
 ALSO_POOLS |= {("api", "qwen3.5-flash-f384-evclips"): ["nexus", "zaratan"]}
 EXPERIMENTS += [(b, arm, "qa", pools, bank) for bank in BANKS for b, arm, pools in EVCLIPS]
-# ... and raised to a priority row (Anubhav, 2026-11-16): listed now, after the memory builds and the API rows (lead())
-PRIORITY |= {(b, arm) for b, arm, _ in EVCLIPS}
+# ... not a priority row (Anubhav, 2026-11-16: back from #103); its local-GPU rows pass the gate anyway (gate())
 # the file whose presence in <baseline>/<arm>/<video>/ (next to runs.jsonl) means the memory is built: the last
 # one each baseline writes ({v}: the video)
 MEMORY_DONE = {"merit": "{v}_30sec_4_key.json", "magic": "graph.pkl", "worldmm": "{v}_visual.pkl",
@@ -630,11 +629,15 @@ def desired(have, files, answers=None, busy=()):
 
 def gate(tasks):
     """(tasks to list, how many are withheld): of the gated arms (GATED) only PILOT's tasks, while it is non-empty,
-    none of HELD and no qa of a QA_FROZEN baseline; then, while a task of a PRIORITY arm is among them, only those."""
+    none of HELD and no qa of a QA_FROZEN baseline; then, while a task of a PRIORITY arm is among them, only those and
+    the tasks that need no key (local GPU arms)."""
     keep = [t for t in tasks if (t["baseline"], t["arm"], t["stage"]) not in HELD
             and not (t["stage"] == "qa" and t["baseline"] in QA_FROZEN)
             and (not PILOT or not reported(t) or t["id"] in PILOT)]
-    first = [t for t in keep if (t["baseline"], t["arm"]) in PRIORITY or (t["baseline"], t["arm"], t["stage"]) in PRIORITY]
+    pri = lambda t: (t["baseline"], t["arm"]) in PRIORITY or (t["baseline"], t["arm"], t["stage"]) in PRIORITY
+    # ... and, with them, every task that needs no key (a local GPU arm; Anubhav, 2026-11-16): the paid rows outside
+    # PRIORITY wait, the local ones fill the GPUs the paid rows can't use (Nexus, Zaratan, wriva, arm00)
+    first = [t for t in keep if pri(t) or not t.get("needs_env")] if any(pri(t) for t in keep) else []
     return first or keep, len(tasks) - len(first or keep)
 
 
