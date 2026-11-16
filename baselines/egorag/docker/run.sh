@@ -26,7 +26,7 @@
 #   EGORAG_OUT, EGORAG_WORK  optional, paths inside the container (e.g. /repo/baselines/egorag/work/check)
 #   passed through when set: HF_TOKEN MERIT_HF_REPO EGORAG_TAG EGORAG_LIMIT EGORAG_FETCH EGORAG_GPT_MODEL
 #                    EGORAG_DEEPSEEK_MODEL EGORAG_EGOGPT OPENAI_BASE_URL DEEPSEEK_BASE_URL OPENROUTER_BASE_URL
-#                    DEPLOYMENT_NAME THREADS
+#                    DEPLOYMENT_NAME THREADS EGORAG_QA_WORKERS
 #   EGORAG_REPO_COMMIT, EGORAG_EPIC_COMMIT, EGORAG_UPSTREAM_COMMIT  for runs.jsonl when a checkout has no .git (a
 #                    synced copy): the commits it was synced from
 set -euo pipefail
@@ -59,7 +59,7 @@ fi
 # keys and settings, by name only: a value never appears on a command line
 PASS=(OPENAI_API_KEY DEEPSEEK_API_KEY OPENROUTER_API_KEY AZURE_API_KEY AZURE_API_ENDPOINT AZURE_DEEPSEEK_KEY AZURE_DEEPSEEK_ENDPOINT
       DEPLOYMENT_NAME OPENAI_BASE_URL DEEPSEEK_BASE_URL OPENROUTER_BASE_URL HF_TOKEN MERIT_HF_REPO EGORAG_TAG EGORAG_LIMIT EGORAG_FETCH
-      EGORAG_GPT_MODEL EGORAG_DEEPSEEK_MODEL EGORAG_EGOGPT EGORAG_OUT EGORAG_WORK THREADS)
+      EGORAG_GPT_MODEL EGORAG_DEEPSEEK_MODEL EGORAG_EGOGPT EGORAG_OUT EGORAG_WORK THREADS EGORAG_QA_WORKERS)
 if [ "$RUNTIME" = apptainer ]; then
     case $IMAGE in *.sif) ;; *) IMAGE=docker://$IMAGE ;; esac
     # through APPTAINERENV_* (the environment), not --env: a command line, keys included, is visible in `ps`

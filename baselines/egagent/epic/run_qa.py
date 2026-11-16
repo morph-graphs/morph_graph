@@ -15,18 +15,24 @@ and the graph chunks that end <= cutoff are written to upstream's two tables und
 cutoff, so no tool can return anything later; the tables are deleted after the cutoff's questions. HD-EPIC
 has no transcript: the transcript tool gets upstream's "NO TRANSCRIPTS AVAILABLE".
 Rows are appended to --rows as they finish (resume); --out is written when every question has an answer
-(exit 2 otherwise, so the run script retries). Each answered row has `trace`: the agent's steps in order (the plan
+(exit 2 otherwise, so the run script retries), in bank order. EGAGENT_QA_WORKERS=n answers n questions at a time
+(threads; default 1, one at a time): each question's agent is independent of the others' (per_question_state), and
+only the main thread writes rows. Each answered row has `trace`: the agent's steps in order (the plan
 with each step's tools; per entity-graph search the SQL written, the one kept and its rows as edges; per frame
 search the text queries, time window and frames found with their scores; transcript searches), times in seconds.
 """
 import argparse
+import collections
+import contextvars
 import gzip
 import json
 import math
 import os
 import shutil
 import sqlite3
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
 
@@ -75,11 +81,16 @@ def trace_secs(trace):
     return out
 
 
+def table_files(db_root, name):
+    """Where upstream's tools read the frames table and the entity-graph table of video `name`."""
+    return (os.path.join(db_root, "videomme", f"videomme_frames_{name}.db"),
+            os.path.join(db_root, "videomme", EG_CONFIG, f"videomme_{name}.db"))
+
+
 def write_tables(db_root, name, cutoff, embs, frames_dir, files, graph):
     """Upstream's two SQLite tables (create_db_visual_frames.py, create_db_entity_graph.py: Video-MME schemas)
     holding only what exists at `cutoff` seconds. Returns (frames, graph rows) written."""
-    fdb = os.path.join(db_root, "videomme", f"videomme_frames_{name}.db")
-    gdb = os.path.join(db_root, "videomme", EG_CONFIG, f"videomme_{name}.db")
+    fdb, gdb = table_files(db_root, name)
     os.makedirs(os.path.dirname(gdb), exist_ok=True)
     for p in (fdb, gdb):
         if os.path.exists(p):
@@ -112,6 +123,53 @@ def write_tables(db_root, name, cutoff, embs, frames_dir, files, graph):
     con.commit()
     con.close()
     return n, len(rows)
+
+
+class PerQuestion:
+    """A list per question, in a ContextVar: what the trace patch's module-level lists (langgraph_agent.TRACE,
+    _last_frames) become when questions run in parallel threads. reset() starts a question's list in the current
+    context; LangChain and LangGraph run tools and nodes in copies of that context, which share the list, so every
+    other operation changes it in place."""
+
+    def __init__(self, name):
+        self.var = contextvars.ContextVar(name)
+
+    def reset(self):
+        self.var.set([])
+
+    def __getattr__(self, k):   # append, clear
+        return getattr(self.var.get(), k)
+
+    def __len__(self):
+        return len(self.var.get())
+
+    def __iter__(self):
+        return iter(self.var.get())
+
+    def __getitem__(self, i):
+        return self.var.get()[i]
+
+    def __setitem__(self, i, v):
+        self.var.get()[i] = v
+
+
+def per_question_state():
+    """Before answering in parallel (EGAGENT_QA_WORKERS > 1): the trace lists per question, and SigLIP 2's text
+    encoder behind a lock (its fast tokenizer must not be entered by two threads at once). Every other piece of
+    state upstream keeps is per question already (the graph's state) or opened per call (the SQLite connections)."""
+    import langgraph_agent
+    import run_egagent_on_egolife
+    import run_egagent_on_videomme
+    trace = PerQuestion("egagent_trace")
+    for m in (langgraph_agent, run_egagent_on_egolife, run_egagent_on_videomme):   # each has its own name for it
+        m.TRACE = trace
+    langgraph_agent._last_frames = PerQuestion("egagent_last_frames")
+    embed, lock = langgraph_agent.embed_texts_batch, threading.Lock()
+
+    def locked(*args, **kw):
+        with lock:
+            return embed(*args, **kw)
+    langgraph_agent.embed_texts_batch = locked
 
 
 def main():
@@ -169,16 +227,23 @@ def main():
     todo = [r for r in order if (r["key"] or r["ID"]) not in done]
     print(f"{len(qs)} questions, {len(done)} answered, {len(todo)} to do ({a.backbone}{', blind' if a.blind else ''})", flush=True)
     os.makedirs(os.path.dirname(os.path.abspath(a.rows)), exist_ok=True)
+    workers = 1 if a.blind else max(1, int(os.environ.get("EGAGENT_QA_WORKERS") or 1))
     if todo:
         eg_paths.watch_api("blind" if a.blind else "qa", a.backbone)
         if a.blind:
             from langgraph_agent import generate_finalanswer
         else:
             from run_egagent_on_videomme import build_app, run_agentic_inference
+            if workers > 1:
+                per_question_state()
+            import langgraph_agent
             from langgraph_agent import TRACE
             app = build_app(a.tscript_search)
-    name = last_error = None
-    for r in todo:
+    if workers > 1:
+        print(f"answering {workers} questions at a time", flush=True)
+
+    def ask(r, tables):
+        """One question's row (with `error` when it failed); tables(r) gives the name of the tables at its cutoff."""
         t0 = time.time()
         cut = hhmmss(r["cutoff"])
         row = {k: r[k] for k in ("ID", "key", "question", "options", "answer", "t_ask", "cutoff", "meta")}
@@ -187,14 +252,7 @@ def main():
                 ans = generate_finalanswer.invoke({"context": "", "question": r["question"], "candidates": r["candidates"],
                                                    "query_time": f"Query Time: {clock(r['cutoff'])} on DAY0"})
             else:
-                if name != f"{a.video}_c{r['cutoff']:06d}":
-                    shutil.rmtree(a.db_root, ignore_errors=True)
-                    name = None   # set only once the tables are written
-                    new = f"{a.video}_c{r['cutoff']:06d}"
-                    indexed = dict(zip(("frames", "graph_rows"),
-                                       write_tables(a.db_root, new, r["cutoff"], embs, a.frames_dir, files, graph)))
-                    name = new
-                row["indexed"] = indexed
+                name, row["indexed"] = tables(r)
                 TRACE.clear()
                 # upstream's prepare_videomme_example, with the question's cutoff as the video's end; the time is
                 # HHMMSScc (EgoLife's form), which upstream's time formatter prints whole
@@ -211,13 +269,71 @@ def main():
             row["evaluate"] = row["pred"] == r["answer"]
         except Exception as e:
             row["error"] = f"{type(e).__name__}: {str(e)[:300]}"
-            last_error = row["error"]
         row["seconds"] = round(time.time() - t0, 1)
+        return row
+
+    last_error = None
+
+    def keep(row):
+        """The main thread only: the row appended to --rows as it finishes, and counted."""
+        nonlocal last_error
+        last_error = row.get("error", last_error)
         open(a.rows, "a").write(json.dumps(row) + "\n")
         if row.get("pred") in list(LETTERS):   # the same test as on resume
-            done[r["key"] or r["ID"]] = row
-        print(f"Q{r['ID']:>3} cutoff {r['cutoff']:>5} gold {r['answer']} pred {row.get('pred', '?')} "
+            done[row["key"] or row["ID"]] = row
+        print(f"Q{row['ID']:>3} cutoff {row['cutoff']:>5} gold {row['answer']} pred {row.get('pred', '?')} "
               f"{row.get('error', '')} {row['seconds']} s", flush=True)
+
+    held = {}   # the tables of one cutoff in order: (name, {"frames": n, "graph_rows": n}) while its questions run
+
+    def in_order(r):
+        """One cutoff's tables at a time (the questions come in cutoff order); the earlier cutoff's are deleted."""
+        new = f"{a.video}_c{r['cutoff']:06d}"
+        if held.get("name") != new:
+            shutil.rmtree(a.db_root, ignore_errors=True)
+            held.clear()   # set only once the tables are written
+            held.update(name=new, indexed=dict(zip(("frames", "graph_rows"),
+                                                   write_tables(a.db_root, new, r["cutoff"], embs, a.frames_dir, files, graph))))
+        return held["name"], held["indexed"]
+
+    if workers == 1:
+        for r in todo:
+            keep(ask(r, in_order))
+    else:
+        # parallel: a cutoff's tables are written by the first of its questions to start (the others wait for them) and
+        # deleted after its last one; every question runs in a copy of this thread's context (watch_api's counter)
+        left = collections.Counter(r["cutoff"] for r in todo)
+        lock = threading.Lock()
+
+        def shared(r):
+            c = r["cutoff"]
+            with lock:
+                h = held.setdefault(c, {"lock": threading.Lock(), "name": f"{a.video}_c{c:06d}", "indexed": None})
+            with h["lock"]:
+                if h["indexed"] is None:
+                    h["indexed"] = dict(zip(("frames", "graph_rows"), write_tables(a.db_root, h["name"], c, embs,
+                                                                                   a.frames_dir, files, graph)))
+            return h["name"], h["indexed"]
+
+        def one(r):
+            try:
+                langgraph_agent.TRACE.reset()
+                langgraph_agent._last_frames.reset()
+                return ask(r, shared)
+            finally:
+                with lock:
+                    left[r["cutoff"]] -= 1
+                    if not left[r["cutoff"]] and r["cutoff"] in held:
+                        for p in table_files(a.db_root, held.pop(r["cutoff"])["name"]):
+                            if os.path.exists(p):
+                                os.remove(p)
+
+        pool = ThreadPoolExecutor(workers)
+        try:
+            for f in as_completed([pool.submit(contextvars.copy_context().run, one, r) for r in todo]):
+                keep(f.result())
+        finally:   # a wrong model (exit 4) stops the questions not yet started; the running ones finish
+            pool.shutdown(wait=True, cancel_futures=True)
     shutil.rmtree(a.db_root, ignore_errors=True)
     out = [done.get(r["key"] or r["ID"]) for r in (order if a.limit else qs)]
     if not all(out):

@@ -46,6 +46,7 @@
 #                    (`upload` puts them in the dataset morph-graphs/epic-morph-results at egorag/<arm>/<video>/)
 #   EGORAG_TAG       a variant name for the answers (answers_<bank>_<tag>.json.gz)
 #   EGORAG_LIMIT     qa: answer at most this many unanswered questions (a smoke test)
+#   EGORAG_QA_WORKERS  qa: questions answered at once (threads), default 1 = one at a time (README.md)
 #   EGORAG_FETCH     0 to never take the memory from the dataset (build normally reuses it when it is there)
 # Every step skips finished work, so rerunning the same command resumes.
 set -euo pipefail

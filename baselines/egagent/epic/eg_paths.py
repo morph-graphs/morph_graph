@@ -11,6 +11,7 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 
 R = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "egagent"))
@@ -26,10 +27,10 @@ CLIP_S = 30                                          # caption window (paper: 30
 
 
 # a returned model id that counts as the model asked for: the name itself or one of its dated snapshots
-# (OpenRouter returns GPT-4.1's as openai/gpt-4.1..., an OpenAI-compatible gateway serving it from Azure OpenAI
+# (OpenRouter returns GPT-4.1's as openai/gpt-4.1... and Gemini's as google/..., an OpenAI-compatible gateway serving it from Azure OpenAI
 # as azure/openai/gpt-4.1; the endpoint is recorded with each call)
-SAME_MODEL = {"gpt-4.1": r"(azure/)?(openai/)?gpt-4\.1(-\d{4}-\d{2}-\d{2})?", "gemini-2.5-pro": r"(models/)?gemini-2\.5-pro(-\d[\w.-]*)?",
-              "gemini-3.6-flash": r"(models/)?gemini-3\.6-flash(-\d[\w.-]*)?"}
+SAME_MODEL = {"gpt-4.1": r"(azure/)?(openai/)?gpt-4\.1(-\d{4}-\d{2}-\d{2})?", "gemini-2.5-pro": r"(models/|google/)?gemini-2\.5-pro(-\d[\w.-]*)?",
+              "gemini-3.6-flash": r"(models/|google/)?gemini-3\.6-flash(-\d[\w.-]*)?"}
 FIELDS = ("calls", "input_tokens", "cached_tokens", "output_tokens", "reasoning_tokens")
 
 
@@ -68,7 +69,8 @@ def watch_api(stage, model):
     `endpoint` that was called (a Gemini row too), and through OpenRouter the `provider` that served it and `cost`, the dollars
     OpenRouter charged, summed; `provider_note` is OPENAI_PROVIDER_NOTE (who serves the calls behind an
     OpenAI-compatible gateway, in words) and `system_fingerprints` the distinct fingerprints the replies carried.
-    A process that fails prints `<stage> failed: <why>` after the summary (failed())."""
+    A process that fails prints `<stage> failed: <why>` after the summary (failed()). Calls from several threads
+    (EGAGENT_QA_WORKERS) are counted under a lock."""
     from contextvars import ContextVar
     from langchain_core.callbacks import BaseCallbackHandler
     from langchain_core.tracers.context import register_configure_hook
@@ -76,6 +78,7 @@ def watch_api(stage, model):
     from langchain_openai import ChatOpenAI
 
     calls = {}
+    lock = threading.Lock()
     if not hasattr(ChatOpenAI, "_egagent_result"):   # LangChain keeps the reply's usage but not who served it
         ChatOpenAI._egagent_result = ChatOpenAI._create_chat_result
 
@@ -100,6 +103,10 @@ def watch_api(stage, model):
         run_inline = True
 
         def on_llm_end(self, response, **kw):
+            with lock:
+                self.count(response)
+
+        def count(self, response):
             msg = getattr(response.generations[0][0], "message", None)
             meta = getattr(msg, "response_metadata", None) or {}
             got = meta.get("model_name") or meta.get("model_version") or meta.get("model") or "unreported"
