@@ -119,6 +119,8 @@ def parse(fname):
     for kind in ("answers", "blind"):
         if stem.startswith(kind + "_") and stem.endswith(".json"):
             rest = stem[len(kind) + 1:-5]
+            if rest == master.STITCHED_EOV or rest.startswith(master.STITCHED_EOV + "_"):
+                return None   # the stitched end-of-video bank (off the board): not bank "stitched" with a tag "eov"
             for b in sorted(READ, key=len, reverse=True):   # longest first: t2_agree2_end before t2_agree2
                 if rest == b or rest.startswith(b + "_"):
                     return kind, b, rest[len(b) + 1:]
@@ -181,14 +183,17 @@ def load_bank(epic, bank):
     """{video: question rows} of the bank as the epic-morph checkout defines it now (regenerated, as coord/master.py
     does: banks are generated, not committed). Rows are prepare_epic's (ID = key, answer = gold letter), plus leaves
     and asked."""
-    subprocess.run([sys.executable, "v3/export_bank.py", bank], cwd=epic, check=True, stdout=subprocess.DEVNULL)
+    if bank not in master.COMMITTED_BANKS:   # Vatsal's stitched bank is committed as it is: no export entry
+        subprocess.run([sys.executable, "v3/export_bank.py", bank], cwd=epic, check=True, stdout=subprocess.DEVNULL)
     out = {}
     for f in sorted(glob.glob(os.path.join(epic, "outputs", "v3", "banks", bank, "*_questions.json"))):
         qa = convert_questions(f, "x", 0)
         for row, q in zip(qa, json.load(open(f))["questions"]):
             row["leaves"] = list(q.get("taxonomy") or [])
-            assert q.get("ask_at") in ASKED, f"{f}: question {row['ID']} has ask_at {q.get('ask_at')!r}, not one of {list(ASKED)}"
-            row["asked"] = ASKED[q["ask_at"]]
+            # the stitched bank has no ask_at: its questions are streaming, each asked at its t_ask
+            at = q.get("ask_at") or ("t" if q.get("streaming") and q.get("t_ask") is not None else None)
+            assert at in ASKED, f"{f}: question {row['ID']} has ask_at {q.get('ask_at')!r}, not one of {list(ASKED)}"
+            row["asked"] = ASKED[at]
         if qa:
             out[os.path.basename(f)[:-len("_questions.json")]] = qa
     assert out, f"bank {bank}: no questions under {epic}"
