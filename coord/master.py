@@ -313,6 +313,9 @@ NEEDS_ENV |= {("api", c): [k] for c, k in (
     ("qwen3.5-flash-f384-evclips", "OPENROUTER_API_KEY"))}
 ALSO_POOLS |= {("api", "qwen3.5-flash-f384-evclips"): ["nexus", "zaratan"], ("api", "gpt-4.1-f384-evclips"): ["nexus"]}
 PRIORITY |= {("api", "gpt-4.1-f384-evclips")}
+# and the two Gemini rows: the Evid. column of the paper's Table 2 (Anubhav, 2026-11-16 evening); only Qwen3.5-Flash's
+# paid evidence-clips row stays behind the gate
+PRIORITY |= {("api", "gemini-3.6-flash-high-evclips"), ("api", "gemini-3.1-flash-lite-high-evclips")}
 EXPERIMENTS += [(b, arm, "qa", pools, bank) for bank in BANKS for b, arm, pools in EVCLIPS]
 # ... not a priority row but for GPT-4.1 (Anubhav, 2026-11-16: back from #103); its local-GPU rows pass the gate anyway (gate())
 # the file whose presence in <baseline>/<arm>/<video>/ (next to runs.jsonl) means the memory is built: the last
