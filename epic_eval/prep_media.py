@@ -9,6 +9,10 @@ the source with input-side ``-ss/-t`` and concatenated in one encode. Every outp
 is validated by probing its duration; ``_done.json`` is written only when all of a video's files pass.
 With ``media.source: "evclips"`` (the evidence-clips ablation) an evidence file is not encoded here: it is a copy of
 the question's stitched video (baselines/common/evclips.py, encoded once for every baseline), validated the same way.
+With ``media.frame_budget`` (the long-context baseline on the stitched videos, hours long) a [0, t_ask] input is at
+most frame_budget frames sampled uniformly from the video's frames on a ``media.sample_fps`` grid (decoded once per
+video into frames/), each from strictly before t_ask, encoded at frame_budget / t_ask fps so the file is t_ask long
+and its timestamps are video time; the backend reads it at that fps (run_eval.py), so each frame is seen once.
 
     python -m epic_eval.prep_media --run_dir <run> --video P09-20240621-093545
 """
@@ -17,10 +21,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import shutil
 import sys
 import subprocess
+import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -135,6 +141,8 @@ def prep_video(cfg: dict, video: str, force: bool = False, workers: int = 1) -> 
     full_s = probe_duration(src)
     if media_mode(cfg) == "evidence":
         return prep_evidence(cfg, video, rows, src, full_s, force, workers)
+    if media.get("frame_budget"):
+        return prep_sampled(cfg, video, rows, src, full_s, force, workers)
     cutoffs = [c for c in group_by_cutoff(rows) if c is not None]
     # Longest first, so the long encodes start early and the pool finishes evenly.
     targets = sorted([(None, full_s)] + [(c, min(c, full_s)) for c in cutoffs], key=lambda t: -t[1])
@@ -161,6 +169,77 @@ def prep_video(cfg: dict, video: str, force: bool = False, workers: int = 1) -> 
     marker = media_done_marker(media_dir, video)
     marker.write_text(json.dumps({"video": video, "source": str(src), "source_duration_s": full_s,
                                   "media": media, "files": files}, indent=2))
+    return files
+
+
+def frame_count(path) -> int:
+    out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-count_packets", "-show_entries",
+                          "stream=nb_read_packets", "-of", "csv=p=0", str(path)], capture_output=True, text=True, check=True)
+    return int(out.stdout.strip().rstrip(","))
+
+
+def sample(cutoff_s: float, n_grid: int, grid_fps: float, budget: int) -> list[int]:
+    """Indices of the grid frames a [0, cutoff_s] input shows: uniform over those from strictly before the cutoff. Grid
+    frame k is taken (ffmpeg's fps filter, nearest) from source time < (k + 0.5) / grid_fps, so k must satisfy
+    (k + 0.5) / grid_fps < cutoff_s."""
+    avail = min(n_grid, math.ceil(cutoff_s * grid_fps - 0.5))
+    n = min(budget, avail)
+    return [int((i + 0.5) * avail / n) for i in range(n)]
+
+
+def prep_sampled(cfg: dict, video: str, rows: list, src, full_s: float, force: bool, workers: int) -> dict:
+    media, media_dir = cfg["media"], Path(cfg["resolved"]["media_dir"])
+    budget, grid = int(media["frame_budget"]), float(media.get("sample_fps", 1))
+    cpus = int(os.environ.get("SLURM_CPUS_PER_TASK", os.cpu_count() or 1))
+    frames = media_dir / video / "frames"
+    if force or not (frames / "_done.json").exists():   # the grid, decoded once for all of the video's inputs
+        tmp = frames.with_name("frames.tmp")
+        shutil.rmtree(tmp, ignore_errors=True)
+        tmp.mkdir(parents=True)
+        t0 = time.time()
+        subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-threads", str(cpus), "-i", str(src),
+                        "-vf", ",".join([f"fps={grid:g}"] + video_filters({**media, "encode_fps": None})),
+                        "-q:v", "3", "-start_number", "0", str(tmp / "t%06d.jpg")], check=True)
+        n = len(list(tmp.glob("t*.jpg")))
+        (tmp / "_done.json").write_text(json.dumps({"n": n, "fps": grid, "source_duration_s": full_s}))
+        shutil.rmtree(frames, ignore_errors=True)
+        tmp.rename(frames)
+        print(f"  {n} grid frames at {grid:g} fps in {time.time() - t0:.0f}s")
+    n_grid = json.loads((frames / "_done.json").read_text())["n"]
+    marker = media_done_marker(media_dir, video)
+    old = json.loads(marker.read_text())["files"] if marker.exists() else {}
+    threads = max(1, cpus // max(1, workers))
+
+    def one(cutoff):
+        c = min(cutoff, full_s) if cutoff is not None else full_s
+        idx = sample(c, n_grid, grid, budget)
+        dst = media_path(media_dir, video, cutoff)
+        meta = {"cutoff_s": cutoff, "frame_budget": budget, "n_frames": len(idx), "video_fps": len(idx) / c,
+                "sample_fps": grid, "first_frame_s": idx[0] / grid, "last_frame_s": (idx[-1] + 0.5) / grid}
+        if force or {k: old.get(dst.name, {}).get(k) for k in meta} != meta or not dst.exists() or frame_count(dst) != len(idx):
+            t0 = time.time()
+            with tempfile.TemporaryDirectory(dir=dst.parent) as tmp:
+                for i, k in enumerate(idx):
+                    os.symlink(frames / f"t{k:06d}.jpg", Path(tmp) / f"f{i:06d}.jpg")
+                # frame i at i * c / n: the file is c long, on video time (a frame stamped up to one step before its source time)
+                run_to(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-threads", str(threads),
+                        "-framerate", f"{len(idx) * 1000}/{round(c * 1000)}", "-start_number", "0",
+                        "-i", str(Path(tmp) / "f%06d.jpg")] + output_args(media, threads), dst)
+            got = frame_count(dst)
+            if got != len(idx):
+                raise RuntimeError(f"{dst}: {got} frames, want {len(idx)}")
+            print(f"  wrote {dst.name}: {len(idx)} frames at {meta['video_fps']:.4f} fps in {time.time() - t0:.0f}s")
+        else:
+            print(f"  keep {dst.name}: {len(idx)} frames")
+        assert meta["last_frame_s"] <= c, (dst, meta)
+        return dst.name, {**meta, "duration_s": probe_duration(dst), "bytes": dst.stat().st_size}
+
+    cutoffs = sorted({r["t_ask"] for r in rows}, key=lambda c: -(c if c is not None else full_s))
+    print(f"  {len(cutoffs)} inputs of at most {budget} frames, {workers} parallel encodes x {threads} threads")
+    with ThreadPoolExecutor(max(1, workers)) as pool:
+        files = dict(pool.map(one, cutoffs))
+    marker.write_text(json.dumps({"video": video, "source": str(src), "source_duration_s": full_s,
+                                  "media": media, "grid_frames": n_grid, "files": files}, indent=2))
     return files
 
 

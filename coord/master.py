@@ -304,8 +304,7 @@ NEEDS_ENV |= {("api", c): [k] for c, k in (
     ("qwen3.5-flash-f384-evclips", "OPENROUTER_API_KEY"))}
 ALSO_POOLS |= {("api", "qwen3.5-flash-f384-evclips"): ["nexus", "zaratan"]}
 EXPERIMENTS += [(b, arm, "qa", pools, bank) for bank in BANKS for b, arm, pools in EVCLIPS]
-# ... and raised to a priority row (Anubhav, 2026-11-16): listed now, after the memory builds and the API rows (lead())
-PRIORITY |= {(b, arm) for b, arm, _ in EVCLIPS}
+# ... not a priority row (Anubhav, 2026-11-16: back from #103); its local-GPU rows pass the gate anyway (gate())
 # the file whose presence in <baseline>/<arm>/<video>/ (next to runs.jsonl) means the memory is built: the last
 # one each baseline writes ({v}: the video)
 MEMORY_DONE = {"merit": "{v}_30sec_4_key.json", "magic": "graph.pkl", "worldmm": "{v}_visual.pkl",
@@ -339,8 +338,25 @@ CANARY = "P05-stitched"   # the shortest, 3.48 h
 # those per cutoff (prototype on P05-stitched: no time after either anchor in its chains or filtered graph)
 STITCHED_BUILDS = {("merit", "m27"), ("worldmm", "g5m"), ("magic", "oss120")}
 # Answering on the stitched videos is frozen (Anubhav, 2026-11-16) while their protocol changes to Vatsal's: each card at
-# its anchor time, from memory units that end before it; builds go on. Was {("merit", "m27"), ("worldmm", "g5m-g51")}
-STITCHED_ANSWERS = set()
+# its anchor time, from memory units that end before it; builds go on. The end-of-video lines (STITCHED_EOV, below) were
+# {("merit", "m27"), ("worldmm", "g5m-g51")}; they stay off.
+STITCHED_EOV_ANSWERS = set()
+# Vatsal's protocol (Anubhav, 2026-11-16): his stitched bank (epic-morph outputs/v3/banks/stitched: 630 questions, plain
+# wording, streaming, asked at t_ask, mid-video), answered from the memory built once over the whole video (the stitched
+# build lines above), each question seeing only the units that END by its t_ask (MERIT's 30 s clips, WorldMM's every
+# caption level, semantic snapshot and visual clip: each baseline's README), with the kitchen's sessions started by
+# t_ask in its prompt (baselines/common/stitched_sessions.py). The memory arms answer in t_ask order on one memory per
+# video; the long-context Gemini 3.6 Flash row (STITCHED_API) gets [0, t_ask] sampled uniformly to its frame budget
+# (baselines/api/configs/<STITCHED_API>.json; a kitchen that runs out of context goes to the -f1024 config). Its lines:
+# STITCHED_ANSWER_LINES; listed once STITCHED_ANSWERS names them (empty: frozen). The bank's name is STITCHED, as the
+# build lines' marker, but a qa line names it as a string and a build line as the tuple (STITCHED,).
+# Its files are committed in epic-morph as they are (the same as the results dataset's stitched/banks/), with no
+# export_bank.py entry: exported() reads them without generating (COMMITTED_BANKS)
+COMMITTED_BANKS = {STITCHED}
+STITCHED_API = "gemini-3.6-flash-high-stitched-f2048"
+STITCHED_ANSWER_LINES = [("merit", "m27"), ("worldmm", "g5m-g51"), ("api", STITCHED_API)]
+STITCHED_ANSWERS = set()   # switch on: set(STITCHED_ANSWER_LINES)
+NEEDS_ENV[("api", STITCHED_API)] = ["GEMINI_API_KEY"]
 EXPERIMENTS += sorted([(b, arm, "build", pools, (STITCHED,)) for b, arm, stage, pools, _ in EXPERIMENTS
                        if stage == "build" and (b, arm) in STITCHED_BUILDS],
                       key=lambda e: e[0] not in BUILD_ON.values())
@@ -357,7 +373,12 @@ STITCHED_EOV = "stitched_eov"
 STITCHED_QA_LATER = {"magic", "egorag"}
 EXPERIMENTS += [(b, arm, "qa", list(pools), STITCHED_EOV) for (b, arm), pools in dict.fromkeys(
     ((b, arm), tuple(pools)) for b, arm, stage, pools, bank in EXPERIMENTS
-    if stage == "qa" and b in MEMORY_DONE and b not in STITCHED_QA_LATER and (b, arm) in STITCHED_ANSWERS)]
+    if stage == "qa" and b in MEMORY_DONE and b not in STITCHED_QA_LATER and (b, arm) in STITCHED_EOV_ANSWERS)]
+# ... and the lines of Vatsal's stitched bank (STITCHED_ANSWER_LINES), after the stitched builds (lead()); a memory arm's
+# never listed without its stitched memory built or listed to wait on, as on STITCHED_EOV
+EXPERIMENTS += [(b, arm, "qa", KEY_POOLS if b == "api" else list(POOLS.get((b, arm), KEY_POOLS)), STITCHED)
+                for b, arm in STITCHED_ANSWER_LINES if (b, arm) in STITCHED_ANSWERS]
+PRIORITY |= {(b, arm) for b, arm in STITCHED_ANSWER_LINES if (b, arm) in STITCHED_ANSWERS}
 
 
 def bank_questions(bank):
@@ -383,7 +404,8 @@ def exported(epic, bank):
     d = os.path.join(epic, "outputs", "v3", "banks", bank)
     # banks are generated, not committed: regenerate every time, so an interrupted export or an older commit's
     # files never stand in for the checkout's bank (a few seconds)
-    subprocess.run([sys.executable, "v3/export_bank.py", bank], cwd=epic, check=True, stdout=subprocess.DEVNULL)
+    if bank not in COMMITTED_BANKS:
+        subprocess.run([sys.executable, "v3/export_bank.py", bank], cwd=epic, check=True, stdout=subprocess.DEVNULL)
     out = {}
     for f in sorted(os.listdir(d)):
         qs = json.load(open(os.path.join(d, f)))["questions"] if f.endswith("_questions.json") else []
@@ -552,7 +574,7 @@ def desired(have, files, answers=None, busy=()):
     for b, arm, stage, pools, bank in EXPERIMENTS:
         env = {"needs_env": needs(b, arm, stage)} if needs(b, arm, stage) else {}
         pools = key_pools(env["needs_env"]) + ALSO_POOLS.get((b, arm), []) if env else pools
-        if bank in ((STITCHED,), STITCHED_EOV):
+        if bank in ((STITCHED,), STITCHED_EOV, STITCHED):
             pools = [p for p in pools if p in STITCHED_POOLS]
         mem = MEMORY_ARM.get((b, arm), arm)
         if mem != arm:   # for the worker: the arm whose dataset folder holds this task's memory (worker.py --prefetch)
@@ -584,7 +606,8 @@ def desired(have, files, answers=None, busy=()):
             # wait for the video's build task (its memory arm's) while it is listed; a memory already built (on the
             # board or off it) needs no wait, and with neither, qa builds the memory itself first
             build = f"{b}-{mem}-build-{v}"
-            if (b in NEEDS_MEMORY or bank == STITCHED_EOV) and (b, mem, v) not in have and build not in ids:
+            if (b in NEEDS_MEMORY or (bank in (STITCHED_EOV, STITCHED) and b in MEMORY_DONE)) and (b, mem, v) not in have \
+                    and build not in ids:
                 continue                         # no memory and no build to wait on: not listed
             tasks.append(dict(id=tid, baseline=b, arm=arm, stage=stage, video=v, bank=bank,
                               pools=pools, deps=[build] if build in ids else [], **env, **stale))
@@ -606,11 +629,15 @@ def desired(have, files, answers=None, busy=()):
 
 def gate(tasks):
     """(tasks to list, how many are withheld): of the gated arms (GATED) only PILOT's tasks, while it is non-empty,
-    none of HELD and no qa of a QA_FROZEN baseline; then, while a task of a PRIORITY arm is among them, only those."""
+    none of HELD and no qa of a QA_FROZEN baseline; then, while a task of a PRIORITY arm is among them, only those and
+    the tasks that need no key (local GPU arms)."""
     keep = [t for t in tasks if (t["baseline"], t["arm"], t["stage"]) not in HELD
             and not (t["stage"] == "qa" and t["baseline"] in QA_FROZEN)
             and (not PILOT or not reported(t) or t["id"] in PILOT)]
-    first = [t for t in keep if (t["baseline"], t["arm"]) in PRIORITY or (t["baseline"], t["arm"], t["stage"]) in PRIORITY]
+    pri = lambda t: (t["baseline"], t["arm"]) in PRIORITY or (t["baseline"], t["arm"], t["stage"]) in PRIORITY
+    # ... and, with them, every task that needs no key (a local GPU arm; Anubhav, 2026-11-16): the paid rows outside
+    # PRIORITY wait, the local ones fill the GPUs the paid rows can't use (Nexus, Zaratan, wriva, arm00)
+    first = [t for t in keep if pri(t) or not t.get("needs_env")] if any(pri(t) for t in keep) else []
     return first or keep, len(tasks) - len(first or keep)
 
 

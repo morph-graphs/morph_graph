@@ -126,6 +126,22 @@ Limit to keep in mind: at 256 tokens/s a 1M-token window holds 68 min of video a
 longest clip (3,279 s, 840k tokens) fits; a later tranche with a video over ~65 min needs one lower setting
 for the whole row, not per video. For GPT-5 the frame count is fixed, so only the spacing grows.
 
+## The stitched videos: Gemini 3.6 Flash, long context
+
+`gemini-3.6-flash-high-stitched-f2048` (bank `stitched`, Vatsal's protocol): the 9 `<K>-stitched` videos (one per
+kitchen, 3.5-7.2 h) are too long for `[0, t_ask]` at 1 fps, so `media.frame_budget` makes each question's input at
+most 2,048 frames, sampled uniformly from a 1 fps grid of the video (decoded once per video into `frames/`), every one
+from strictly before t_ask (`prep_media.sample`). The file is encoded at n / t_ask fps, so its timestamps are video
+time, and Gemini reads it at that fps (`VideoMetadata.fps`), each frame once. The kitchen's sessions started by t_ask
+come before the question (`baselines/common/stitched_sessions.py`). Each answer row records `frame_budget`,
+`n_frames`, `video_fps` and `last_frame_s` (the latest source time any frame can show, <= t_ask). A kitchen whose
+requests run out of context goes to `gemini-3.6-flash-high-stitched-f1024`, the same at 1,024 frames.
+
+Measured on P05-stitched's first 65 min (prep only, nothing sent): the grid in 28 s, each input in 20-28 s and
+60-82 MB. Size, not measured: at 256 tokens a frame (3.8 Flash's rate here) 2,048 frames are ~524k prompt tokens a
+question, one request each (no cache: every question has its own input), so ~$0.40 a question at $0.75/1M, ~$250
+for the 630 questions before thinking tokens, if no long-context price tier applies.
+
 ## Data handling
 
 Paid-tier API routes only, never a consumer surface. Gemini API terms, paid services: "Google doesn't use
