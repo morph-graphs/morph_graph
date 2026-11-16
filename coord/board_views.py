@@ -115,11 +115,12 @@ BANK_LABELS = {"all": "All questions", "batch10_agree2": "Pilot (10 videos)", "t
                "extra_agree2": "Extra (2nd questions)"}
 
 
-def bank_label(bank):
-    return BANK_LABELS.get(bank, bank)
+def bank_label(bank):   # an _end bank (its questions asked at the video's end only): its base bank's label
+    return f"{BANK_LABELS[bank[:-4]]}, end only" if bank.endswith("_end") and bank[:-4] in BANK_LABELS else BANK_LABELS.get(bank, bank)
 
 
 def bank_order(bank):
+    bank = bank[:-4] if bank.endswith("_end") and bank[:-4] in BANK_LABELS else bank
     return list(BANK_LABELS).index(bank) if bank in BANK_LABELS else len(BANK_LABELS)
 # tranche 1, run before the board existed (2026-11-12); fixed, not read live
 PROGRESS = [

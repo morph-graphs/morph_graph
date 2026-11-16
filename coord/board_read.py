@@ -4,7 +4,8 @@
     python coord/board_read.py
 
 {tasks: the master's open tasks (tasks.json), claims: every pool's claims with all their fields,
- pools: heartbeats, built: [[baseline, arm, video]], answered: [[baseline, arm, video, bank]], master: master.json,
+ pools: heartbeats, built: [[baseline, arm, video]], answered: [[baseline, arm, video, bank]] (an _end bank: also a video
+ its base bank's answers cover), master: master.json,
  bank_questions: {bank: {video: questions}}, answered_q: [[baseline, arm, video, bank, questions answered]],
  build_targets: {"<baseline>|<arm>": [videos its memory is meant for]}, held: [[baseline, arm, stage]]}
 
@@ -52,6 +53,12 @@ for bank in sorted(os.listdir(banks_dir)) if os.path.isdir(banks_dir) else []:
             keys.setdefault(bank, {})[f[:-len("_questions.json")]] = {q["key"]: q["q"].strip() for q in qs}
 answered_q = []
 mine = [a for a in answered if a[3] in keys and a[2] in keys[a[3]]]   # variants (answers_<bank>_<tag>) are not the bank
+# an _end bank (<bank>_end, master.BANKS since 2026-11-15) is counted from its own file and its base bank's (the same
+# questions), as the master does: also a video with only the base file
+base_of = {b: b[:-len("_end")] for b in keys if b.endswith("_end")}
+mine += sorted({(b, arm, v, e) for b, arm, v, x in answered for e, base in base_of.items()
+                if x == base and v in keys[e]} - set(mine))
+listed = {(t["baseline"], t["arm"], t["video"], t.get("bank")) for t in tasks}
 if mine:
     # Only answer files that changed are downloaded: each is kept under its blob id, which a listing of the dataset
     # gives in a few requests. A snapshot of all of them (~1,700 files) at every new dataset commit spent the
@@ -60,8 +67,7 @@ if mine:
             if f.path.endswith(".json.gz") and "/answers_" in f.path and getattr(f, "blob_id", None)}
     cache = os.path.join(os.environ.get("HF_HOME", os.path.expanduser("~/.cache/huggingface")), "board_answers")
     os.makedirs(cache, exist_ok=True)
-    for b, arm, v, bank in mine:
-        path = f"{b}/{arm}/{v}/answers_{bank}.json.gz"
+    def rows_of(path):
         local = os.path.join(cache, f"{blob.get(path, 'none')}.json.gz")
         try:
             if not os.path.exists(local):
@@ -69,15 +75,26 @@ if mine:
                 os.replace(local + ".tmp", local)
             rows = json.load(gzip.open(local, "rt"))
         except Exception:
+            return None
+        return rows.values() if isinstance(rows, dict) else rows
+
+    for b, arm, v, bank in mine:
+        paths = [f"{b}/{arm}/{v}/answers_{x}.json.gz" for x in (bank, base_of.get(bank)) if x]
+        read = [rows_of(p) for p in paths if p in files]
+        if all(r is None for r in read):
             continue
-        rows = rows.values() if isinstance(rows, dict) else rows
         # an answer: a response (EGAgent: pred) that is not one of the master's failures
-        ok = [r for r in rows if isinstance(r, dict) and str(r.get("response", r.get("pred")) or "").strip() not in master.FAILED]
+        ok = [r for rows in read for r in rows or [] if isinstance(r, dict)
+              and str(r.get("response", r.get("pred")) or "").strip() not in master.FAILED]
         want = keys[bank][v]
         # answers keyed by question key (since #16); older files (batch10) carry the question text instead
         got = {r["key"] for r in ok if r.get("key") in want} | \
               {k for k, q in want.items() if q in {(r.get("question") or "").strip() for r in ok if "key" not in r}}
         answered_q.append([b, arm, v, bank, len(got)])
+        if bank in base_of and len(got) == len(want) and (b, arm, v, bank) not in answered and (b, arm, v, bank) not in listed:
+            # every question answered, from the base bank's file, and no task for it (the master's rule is stricter:
+            # trace, wording, query time): done
+            answered.append((b, arm, v, bank))
 order = [v.strip() for v in open(master.BUILD_ORDER) if v.strip()]
 every = list(dict.fromkeys([v for bank in master.REPORTED_BANKS for v in sorted(keys.get(bank, {}))] + order))
 targets = {}   # an arm with several build lines covers all their videos
