@@ -16,7 +16,8 @@ questions in the bank and no answers_<bank>.json.gz in the results dataset, or o
 video's build task while that is pending. A file is stale when some question of the bank has no answer in it as the
 bank asks it now (unanswered(): the reuse rule's key, wording, options, gold letter and query time), e.g. after the bank
 moved a question's t_ask, or when it holds an "Error" or does not parse, or (TRACED baselines) when an answer row
-has no `trace`. A stale file's task gets the id
+has no `trace`. The banks are the _end variants (BANKS: only the questions asked at the video's end), and the answers
+in the base bank's answers_<base>.json.gz count for them too: a video they already cover is not listed. A stale file's task gets the id
 <task>-redo-<hash of the video's questions>, since the plain id may already be done on a pool (held for good): it is
 listed once per state of the bank, so an answer that fails again is not retried every cycle, and not while the task
 or a redo of it still runs or waits for its relay (what it uploads may be current). The master reads the
@@ -94,7 +95,12 @@ POOLS = {("merit", "m27"): M27 + ["arm00"], ("merit", "m8"): M8,
 # out what the video's first bank asks). A video's answers under one bank are reused by another (hf_results.py
 # earlier-answers), so a question is never answered twice. A bank a baseline has already answered (MERIT's batch10)
 # lists nothing while its answers are current: they are in the dataset
-BANKS = ["batch10_agree2", "t2_agree2", "t3_agree2", "t4_agree2", "t5_agree2", "rescue_agree2", "extra_agree2"]
+# End of the video only (Anubhav, 2026-11-15, every baseline): each bank's _end variant (epic-morph export_bank.py
+# <bank>_end: the same bank, only its questions asked at the video's end, ask_at "end"), never the mid-video ones
+# (ask_at "t"): memories are built over the whole video, so answers asked mid-video are not comparable. An _end bank's
+# questions are its base bank's (base_bank()), so the answers already in answers_<base>.json.gz count for it (desired)
+BANKS = [f"{b}_end" for b in ("batch10_agree2", "t2_agree2", "t3_agree2", "t4_agree2", "t5_agree2", "rescue_agree2",
+                              "extra_agree2")]
 # Closed-source API models (baselines/api): no GPU and no memory, one qa task per video and config. They need the
 # provider's key (GEMINI_API_KEY / OPENAI_API_KEY in the worker's environment), which only Max's machine has, so no
 # other pool may take them. Listed first: short tasks that should not wait behind the memory builds. Every bank since
@@ -308,6 +314,11 @@ def bank_questions(bank):
     return exported(epic, bank)
 
 
+def base_bank(bank):
+    """The bank an _end bank (export_bank.py <bank>_end) takes its questions from, whose answers count for it; else None."""
+    return bank[:-len("_end")] if bank and bank.endswith("_end") else None
+
+
 def bank_videos(bank):
     """Videos with at least one question in the epic-morph bank."""
     return list(bank_questions(bank))
@@ -403,7 +414,8 @@ def read_answers(commit, files):
     """{path: summary()} of every answers_<bank>.json.gz of the qa banks in the dataset (files: listing()), None for a file
     that does not parse. A summary is cached by the file's content hash, so only new or changed files download (to a
     temporary folder, not the Hub cache: MERIT's answers are ~2 MB a video)."""
-    names = {f"answers_{bank}.json.gz" for _, _, stage, _, bank in EXPERIMENTS if stage == "qa"}
+    names = {f"answers_{x}.json.gz" for _, _, stage, _, bank in EXPERIMENTS if stage == "qa"
+             for x in (bank, base_bank(bank)) if x}   # an _end bank's base bank's too: its answers count (desired)
     paths = [p for p in files if p.count("/") == 3 and p.rsplit("/", 1)[1] in names]
     os.makedirs(ANSWERS_CACHE, exist_ok=True)
     cached = lambda p: os.path.join(ANSWERS_CACHE, f"{files[p]}.json")
@@ -465,7 +477,8 @@ def key_pools(need):
 
 def desired(have, files, answers=None, busy=()):
     """The tasks: builds missing from `have`, and qa where `files` (the dataset's paths) lacks the answers file or its
-    summary in `answers` (read_answers(); a file without one is not checked) leaves a question unanswered, unless the
+    summary in `answers` (read_answers(); a file without one is not checked), with the base bank's file of an _end bank,
+    leaves a question unanswered, unless the
     task (its plain id) is `busy`: it or a redo of it running, or waiting for the relay (what it uploads may be current)."""
     answers = answers or {}
     order = [v.strip() for v in open(BUILD_ORDER) if v.strip()]
@@ -496,12 +509,19 @@ def desired(have, files, answers=None, busy=()):
             continue
         for v in bank_videos(bank):
             tid, f, stale = f"{b}-{arm}-{stage}-{bank}-{v}", f"{b}/{arm}/{v}/answers_{bank}.json.gz", {}
-            if f in files:
-                todo = (unanswered(bank_questions(bank)[v], answers[f], trace=b in TRACED)
-                        if f in answers and tid not in busy else [])
+            # an _end bank's questions are its base bank's: the answers there count, with the _end file's or alone (a
+            # video whose base answers cover every question is not listed; one they do not cover, listed while no
+            # _end file exists, is a plain task: the baseline reuses them, hf_results.py earlier-answers)
+            base = f"{b}/{arm}/{v}/answers_{base_bank(bank)}.json.gz" if base_bank(bank) else None
+            if f in files and (f not in answers or tid in busy):
+                continue
+            if f in files or (base in files and base in answers and tid not in busy):
+                todo = unanswered(bank_questions(bank)[v], [r for p in (f, base) if p in files for r in answers.get(p) or []],
+                                  trace=b in TRACED)
                 if not todo:
                     continue
-                tid, stale = redo_id(tid, bank_questions(bank)[v]), {"stale": len(todo)}   # questions to ask again
+                if f in files:
+                    tid, stale = redo_id(tid, bank_questions(bank)[v]), {"stale": len(todo)}   # questions to ask again
             # wait for the video's build task (its memory arm's) while it is listed; a memory already built (on the
             # board or off it) needs no wait, and with neither, qa builds the memory itself first
             build = f"{b}-{mem}-build-{v}"

@@ -6,7 +6,9 @@ Reads every answers_<bank>[_<tag>].json.gz, blind_<bank>[_<tag>].json and runs.j
 (baseline, arm, bank, tag) against the CURRENT bank (generated here with epic-morph v3/export_bank.py) and rewrites
 the tab "Auto: EPIC-Morph": a header block, then three rows per (baseline, arm, bank, tag), one per `asked`: "end"
 (the bank's questions asked at the video's end, ask_at "end"), "streaming" (asked mid-video at t_ask, ask_at "t"),
-and "both" (all of them, under the row_key the run had before the split). See coord/SHEET.md.
+and "both" (all of them, under the row_key the run had before the split). See coord/SHEET.md. The board's banks are
+the _end variants (master.BANKS, since 2026-11-15: end questions only), so their streaming rows are empty and left
+out; the answers of an _end bank's base bank (answers_<base>, blind_<base>) are read for it too.
 
 Scoring. An answer counts only while its question's wording, options and gold letter are those of the current bank
 (prepare_epic.match_answers: by key, or by content for answer files from before keys); a failed answer (empty or
@@ -62,6 +64,9 @@ GRID = (2000, 80)                           # rows, columns the tab is created w
 # every bank the job board answers (coord/master.py EXPERIMENTS), in its order: a new bank there is a new set of rows
 # here, and the "all" rows (ALL) are over the questions of every one of them
 BANKS = list(dict.fromkeys(e[4] for e in master.EXPERIMENTS if e[2] == "qa"))   # (a build line may name several)
+# the banks named by the files read -> the bank of BANKS they are scored under: each bank's own, and an _end bank's
+# base bank (master.base_bank: the same questions), whose answers count for it where its own file has none
+READ = {b: b for b in BANKS} | {master.base_bank(b): b for b in BANKS if master.base_bank(b)}
 ALL = "all"
 # a question's ask_at in the bank -> its rows' `asked`; BOTH: every question (the row_key without a suffix)
 ASKED = {"end": "end", "t": "streaming"}
@@ -100,12 +105,13 @@ KEEP = ("ID", "key", "question", "choices", "choice_a", "choice_b", "choice_c", 
 
 # ---------------------------------------------------------------------------------------------- dataset and banks
 def parse(fname):
-    """answers_<bank>[_<tag>].json[.gz] or blind_<bank>[_<tag>].json[.gz] -> (kind, bank, tag); None otherwise."""
+    """answers_<bank>[_<tag>].json[.gz] or blind_<bank>[_<tag>].json[.gz] -> (kind, bank, tag); None otherwise. bank is
+    the file's (one of READ)."""
     stem = fname[:-3] if fname.endswith(".gz") else fname
     for kind in ("answers", "blind"):
         if stem.startswith(kind + "_") and stem.endswith(".json"):
             rest = stem[len(kind) + 1:-5]
-            for b in sorted(BANKS, key=len, reverse=True):
+            for b in sorted(READ, key=len, reverse=True):   # longest first: t2_agree2_end before t2_agree2
                 if rest == b or rest.startswith(b + "_"):
                     return kind, b, rest[len(b) + 1:]
     return None
@@ -243,13 +249,27 @@ def build(a, now):
     files = fetch(info, a.cache)
 
     sets, runs, skipped = {}, {}, 0   # (baseline, arm, bank, kind, tag) -> {video: rows}; (baseline, arm, video) -> lines
+    based = {}   # the same, of an _end bank's base-bank files
     for path, data in files.items():
         b, arm, v, f = path.split("/")
         if f == "runs.jsonl":
             runs[b, arm, v] = data
         else:
             kind, bank, tag = parse(f)
-            sets.setdefault((b, arm, bank, kind, tag), {})[v] = data
+            (sets if READ[bank] == bank else based).setdefault((b, arm, READ[bank], kind, tag), {})[v] = data
+    # an _end bank's answers: its own file's rows, then the base bank's for the questions of the _end bank (same
+    # video) that those leave without an answer, so answers given before the switch keep their scores
+    for k, by_video in based.items():
+        for v, rows in by_video.items():
+            if v not in banks[k[2]]:
+                continue   # a video with no end question
+            own = sets.get(k, {}).get(v, [])
+            ids = {str(q["ID"]) for q in banks[k[2]][v]}
+            have = {str(r["key"]) for r in own if r.get("key") and (r.get("response") or "").strip() not in ("", "Error")}
+            # a row from before keys (batch10) is matched by its content, as in any file
+            add = [r for r in rows if r.get("key") is None or (str(r["key"]) in ids and str(r["key"]) not in have)]
+            if add:
+                sets.setdefault(k, {})[v] = own + add
     # the "all" rows: each (baseline, arm, kind, tag) over the questions of every bank, videos keyed <bank>/<video>
     # (unanswered = wrong, as in every row, so a method that has answered one bank shows partial)
     banks[ALL] = {f"{bank}/{v}": qa for bank in BANKS for v, qa in banks[bank].items()}
@@ -286,7 +306,7 @@ def build(a, now):
         # (an "all" row: each video's own bank's, from its key <bank>/<video>)
         own = lambda v: v.split("/")[0] if bank == ALL else bank
         lines = [x for v in by_video for x in runs.get((b, arm, v.split("/")[-1]), [])
-                 if not any(o in f"{x.get('stage', '')} {x.get('bank', '')}".split() for o in BANKS if o != own(v))]
+                 if not any(o in f"{x.get('stage', '')} {x.get('bank', '')}".split() for o in READ if READ[o] != own(v))]
         notes = list(dict.fromkeys(str(x["note"]) for x in lines if x.get("note")))
         if done < len(qa):
             notes.insert(0, f"partial: {done}/{len(qa)} videos done" + (f", {len(per) - done} more started" if len(per) > done else ""))
@@ -329,7 +349,7 @@ def build(a, now):
         ["last run (UTC)", now.strftime("%Y-%m-%d %H:%M:%S")],
         ["last run (US Eastern)", now.astimezone(ZoneInfo("America/New_York")).strftime("%Y-%m-%d %H:%M:%S %Z")],
         ["results dataset revision", f"{RESULTS}@{info.sha} (last modified {info.last_modified:%Y-%m-%d %H:%M} UTC)"
-         + (f"; {skipped} answer files of banks not in {BANKS} left out" if skipped else "")],
+         + (f"; {skipped} answer files of banks not in {list(READ)} left out" if skipped else "")],
         ["epic-morph commit of the banks", git("log", "-1", "--format=%H (%cI)")],
         ["rows", len(table)],
         ["conventions", "Percent values (36.29 means 36.29%). acc_all_pct = n_right / q_in_bank (unanswered = wrong). "

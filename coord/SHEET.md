@@ -31,6 +31,13 @@ videos (a video without a question of that kind is not in the row), the blind fl
 `answers_dropped` is the run's and the same on its three rows. A bank question without a known `ask_at` stops the
 run (the `ERROR` line), rather than being put in either row.
 
+**Since 2026-11-15 the board's banks are end-only** (Anubhav: every baseline answers only the questions asked at
+the video's end). They are the `_end` variants of the banks (`t2_agree2_end`: epic-morph `export_bank.py
+<bank>_end`), so their rows have bank `<bank>_end`, an `end` and a `both` row (the same numbers) and no `streaming`
+row. An `_end` bank's questions are its base bank's, so the base bank's files (`answers_<base>`, `blind_<base>`) are
+read for it too: its own file's answers first, then the base file's for the questions those leave unanswered.
+Answers to mid-video questions are no longer shown.
+
 **Streaming answers are provisional** (column `provisional`: `TRUE` on every row that holds streaming questions:
 `streaming`, and `both` when the bank has any). Until streaming memories exist, every method answers a streaming question from its
 full-video memory with retrieval cut at `t_ask`; those answers will be redone and overwrite these. When they are,

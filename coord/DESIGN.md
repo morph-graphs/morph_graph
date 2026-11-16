@@ -195,6 +195,14 @@ that order (the order is the priority). Every baseline's memories are built for 
 batch10). `first_videos.txt` (batch10, tranche 2, tranche 3) puts those videos' builds and qa ahead of builds of
 videos with no bank yet.
 
+**End of the video only** (Anubhav, 2026-11-15, every baseline): `master.BANKS` are the `_end` variants of these
+banks (`batch10_agree2_end`, ...: epic-morph `export_bank.py <bank>_end`, the same bank with only its questions
+asked at the video's end, `ask_at` `end`); the 1,549 mid-video questions (`ask_at` `t`) are not asked. An `_end`
+bank's questions are its base bank's, so `answers_<base>.json.gz` counts for it: a video whose base answers already
+cover every end question gets no task. A task that is listed reuses them where the baseline reuses other banks'
+answers (MERIT, MAGIC-Video, WorldMM: `earlier-answers`, epic-morph's BANKS names both); the others answer the
+task's questions again. Task ids carry the `_end` bank name.
+
 No question is answered twice. The tranches are disjoint by video (`rescue_agree2` and `extra_agree2` are second
 banks of videos that have one, without its questions); beyond that, a qa run first reuses the video's
 answers under every other bank (`hf_results.py earlier-answers`: the local folder's `answers_<bank><suffix>.json.gz`,
