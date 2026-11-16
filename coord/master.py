@@ -335,7 +335,9 @@ CANARY = "P05-stitched"   # the shortest, 3.48 h
 # GPT-5-mini memory (answers: GPT-5.1 for GPT-5, as on the normal banks), MAGIC-Video's GPT-OSS-120B memory (its answers
 # wait, STITCHED_QA_LATER); the other methods' stitched builds and answers are off the board
 STITCHED_BUILDS = {("merit", "m27"), ("worldmm", "g5m"), ("magic", "oss120")}
-STITCHED_ANSWERS = {("merit", "m27"), ("worldmm", "g5m-g51")}
+# Answering on the stitched videos is frozen (Anubhav, 2026-11-16) while their protocol changes to Vatsal's: each card at
+# its anchor time, from memory units that end before it; builds go on. Was {("merit", "m27"), ("worldmm", "g5m-g51")}
+STITCHED_ANSWERS = set()
 EXPERIMENTS += sorted([(b, arm, "build", pools, (STITCHED,)) for b, arm, stage, pools, _ in EXPERIMENTS
                        if stage == "build" and (b, arm) in STITCHED_BUILDS],
                       key=lambda e: e[0] not in BUILD_ON.values())
