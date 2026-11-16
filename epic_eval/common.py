@@ -112,6 +112,7 @@ def _rows(banks) -> list[dict]:
                 "majority_baseline": q.get("majority_baseline"),
                 "source_file": path.name,
                 "evidence_clips": evidence_clips(q),
+                "context": session_context(q["video"], t_ask),
             })
     qids = [r["qid"] for r in rows]
     if len(qids) != len(set(qids)):
@@ -121,6 +122,16 @@ def _rows(banks) -> list[dict]:
         if not 0 <= r["answer_index"] < len(r["options"]):
             raise ValueError(f"{r['qid']}: answer_index {r['answer_index']} out of range")
     return rows
+
+
+def session_context(video: str, t_ask) -> str | None:
+    """A stitched video's sessions started by t_ask, put before its question (baselines/common/stitched_sessions.py)."""
+    if not video.endswith("-stitched") or t_ask is None:
+        return None
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "baselines" / "common"))
+    from stitched_sessions import context
+    return context(video, t_ask)
 
 
 def evidence_clips(q: dict) -> list[list[float]]:
@@ -244,7 +255,7 @@ def system_instruction(streaming: bool, video_enabled: bool, mode: str = "cutoff
 
 
 def build_prompt(row: dict) -> str:
-    lines = [f"Question: {row['question']}", "", "Options:"]
+    lines = ([row["context"], ""] if row.get("context") else []) + [f"Question: {row['question']}", "", "Options:"]
     lines += [f"{LETTERS[i]}. {opt}" for i, opt in enumerate(row["options"])]
     lines += ["", 'Respond with JSON: {"answer": "<letter>"}.']
     return "\n".join(lines)
