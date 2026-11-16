@@ -12,7 +12,7 @@ the question's stitched video (baselines/common/evclips.py, encoded once for eve
 With ``media.frame_budget`` (the long-context baseline on the stitched videos, hours long) a [0, t_ask] input is at
 most frame_budget frames sampled uniformly from the video's frames on a ``media.sample_fps`` grid (decoded once per
 video into frames/), each from strictly before t_ask, encoded at frame_budget / t_ask fps so the file is t_ask long
-and its timestamps are video time; the backend reads them at that fps (run_eval.py), one request per frame.
+and its timestamps are video time; the backend reads it at that fps (run_eval.py), so each frame is seen once.
 
     python -m epic_eval.prep_media --run_dir <run> --video P09-20240621-093545
 """
@@ -221,7 +221,7 @@ def prep_sampled(cfg: dict, video: str, rows: list, src, full_s: float, force: b
             with tempfile.TemporaryDirectory(dir=dst.parent) as tmp:
                 for i, k in enumerate(idx):
                     os.symlink(frames / f"t{k:06d}.jpg", Path(tmp) / f"f{i:06d}.jpg")
-                # frame i at i * c / n: the file is c long, on video time (each frame up to one sample step late)
+                # frame i at i * c / n: the file is c long, on video time (a frame stamped up to one step before its source time)
                 run_to(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-threads", str(threads),
                         "-framerate", f"{len(idx) * 1000}/{round(c * 1000)}", "-start_number", "0",
                         "-i", str(Path(tmp) / "f%06d.jpg")] + output_args(media, threads), dst)
