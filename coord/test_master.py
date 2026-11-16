@@ -64,7 +64,15 @@ urgent = lambda t: (t["baseline"], t["arm"], t["stage"]) in {(b, arm, s) for b, 
 def test_experiments():
     """Every baseline on the board has build + qa of every bank per arm, qa on the build's pools; arm00 (aarch64)
     runs MERIT only."""
-    ex = {(b, arm, stage, bank): pools for b, arm, stage, pools, bank in BASE}
+    ex = {(b, arm, stage, bank): pools for b, arm, stage, pools, bank in BASE if not arm.endswith("-evclips")}
+    # the evidence-clips ablation: 12 rows, qa of every bank, no build; paid rows keyed, Qwen3.5-Flash also nexus/zaratan
+    ev = [(b, arm, stage, pools, bank) for b, arm, stage, pools, bank in BASE if arm.endswith("-evclips")]
+    assert len(ev) == 12 * len(M.BANKS) and {e[2] for e in ev} == {"qa"}
+    import worker
+    assert all(worker.VALID["arm"].fullmatch(arm) for _, arm, *_ in ev)
+    assert {(b, arm) for b, arm, *_ in ev if M.needs(b, arm, "qa")} == {("api", c) for b, c, _ in M.EVCLIPS if b == "api"}
+    assert M.key_pools(M.needs("api", "qwen3.5-flash-f384-evclips", "qa")) + M.ALSO_POOLS["api", "qwen3.5-flash-f384-evclips"] == \
+        M.KEY_POOLS + ["nexus", "zaratan"]
     # the api rows: three configs (gpt-5.5-f384 among them), every bank
     assert {(arm, stage, bank) for b, arm, stage, bank in ex if b == "api"} == {
         (c, "qa", bank) for bank in M.BANKS for c in ("gemini-3.1-flash-lite-high", "gemini-3.6-flash-high", "gpt-5.5-f384")}
@@ -152,6 +160,7 @@ PRIORITY, QA_FROZEN, HELD, FIRST = set(M.PRIORITY), set(M.QA_FROZEN), set(M.HELD
 # (test_stitched_builds and test_stitched_qa check that adding the stitched lines changes none of those tasks); BUILDS:
 # with the stitched builds, without their answers
 ALL = list(M.EXPERIMENTS)
+api = lambda t: t["baseline"] == "api" and t["arm"] in M.API_CONFIGS   # the API tasks that lead (not the evidence-clips configs)
 BASE = [e for e in ALL if e[4] not in ((M.STITCHED,), M.STITCHED_EOV)]
 BUILDS = [e for e in ALL if e[4] != M.STITCHED_EOV]
 
@@ -252,7 +261,7 @@ def test_memory_arm(monkeypatch, tmp_path):
     assert f"merit-g5m-g51-qa-batch10_agree2_end-{v}" not in by and f"merit-g5m-g51-qa-batch10_agree2_end-{w}" in by
     assert not any(t["bank"] == "t2_agree2_end" and t["video"] in B10 for t in tasks)
     # order: the API tasks, then the reported arms by video group (a batch10 answer before any tranche-2 build), then the rest
-    kind = [0 if t["baseline"] == "api" else 1 if urgent(t) else 2 if M.reported(t) else 3 for t in tasks]
+    kind = [0 if api(t) else 1 if urgent(t) else 2 if M.reported(t) else 3 for t in tasks]
     assert kind == sorted(kind) and [t["priority"] for t in tasks] == list(range(len(tasks)))
     rep = [t for t in tasks if g5m(t)]
     group = [0 if t["video"] in B10 else 1 if t["video"] in T2 else 2 if t["video"] in T3 else 3 if t["video"] in T4
@@ -333,7 +342,7 @@ def test_paid_rows(monkeypatch, tmp_path):
     assert "memory_arm" not in by[f"egorag-egogpt_gpt41-qa-batch10_agree2_end-{v}"]
     # order: api, the g5m arms, the paid rows, the local-model arms; the paid rows by video group (every row's batch10
     # memories and answers before any tranche-2 build), a second bank's questions with their video
-    kind = [0 if t["baseline"] == "api" else 1 if urgent(t) else 2 if t["arm"].startswith("g5m") else 3 if t in paid else 4 for t in tasks]
+    kind = [0 if api(t) else 1 if urgent(t) else 2 if t["arm"].startswith("g5m") else 3 if t in paid else 4 for t in tasks]
     assert kind == sorted(kind) and set(kind) == {0, 1, 2, 3, 4}
     group = [next(i for i, vs in enumerate(BANK_VIDEOS.values()) if t["video"] in vs) for t in paid]
     assert group == sorted(group) and set(group) == {0, 1, 2, 3, 4}
@@ -409,7 +418,7 @@ def test_first_and_rank(monkeypatch, tmp_path):
     have = {("merit", "m27", x) for x in B10 + T2 + T3 + T4 + T5 + REST if x != v}   # one MERIT 27B memory to build
     tasks = M.desired(have, set())
     by = {t["id"]: t for t in tasks}
-    kind = lambda t: 0 if t["baseline"] == "magic" else 1 if (t["baseline"], t["arm"]) == ("merit", "m27") else 2 if t["baseline"] == "api" else 3
+    kind = lambda t: 0 if t["baseline"] == "magic" else 1 if (t["baseline"], t["arm"]) == ("merit", "m27") else 2 if api(t) else 3
     assert [kind(t) for t in tasks] == sorted(kind(t) for t in tasks) and {kind(t) for t in tasks} == {0, 1, 2, 3}
     assert [t["priority"] for t in tasks] == list(range(len(tasks))) and M.lead(tasks[-1]) == len(FIRST) + 5
     # inside MAGIC-Video's group: its memory builds (8B, 27B), the GPT-OSS-120B row, then its 27B and 8B answers
@@ -489,7 +498,7 @@ def test_stitched_builds(monkeypatch, tmp_path):
     assert all(by[d]["priority"] < t["priority"] for t in tasks for d in t["deps"])
     # order (FIRST is empty here): the canary's builds lead, then the API tasks, the URGENT lines, the other stitched
     # builds, the rest
-    group = [-2 if t["video"] == M.CANARY else 1 if t["baseline"] == "api" else 2 if urgent(t) and not stitched(t)
+    group = [-2 if t["video"] == M.CANARY else 1 if api(t) else 2 if urgent(t) and not stitched(t)
              else 3 if stitched(t) else 5 for t in tasks]
     assert group == sorted(group) and set(group) == {-2, 1, 2, 3, 5} and [M.lead(t) for t in tasks] == group
     # the normal videos' tasks are those of the board without the stitched lines, in the same order, field for field
@@ -611,7 +620,7 @@ def test_existing_tasks_unchanged(monkeypatch, tmp_path):
     the merit / magic / worldmm / api tasks are the same ones in the same order."""
     have = {("merit", "m8", T2[0]), ("worldmm", "m27", REST[0])}
     files = {f"magic/m8/{T2[1]}/answers_t2_agree2_end.json.gz", f"api/gpt-5.5-f384/{B10[0]}/answers_batch10_agree2_end.json.gz"}
-    full = list(BASE)
+    full = [e for e in BASE if not e[1].endswith("-evclips")]   # the evidence-clips lines (EVCLIPS) came after main's
     board(monkeypatch, tmp_path, [e for e in full if e not in M.REPORTED + M.PAID])
     assert len(M.EXPERIMENTS) == len(full) - len(M.REPORTED) - len(M.PAID) == 6 * (1 + len(M.BANKS)) + 3 * len(M.BANKS) + len(M.DIRECT) * len(M.BANKS) + 2 * len(M.BANKS) + 1 + len(M.BANKS)   # 6 arms x (build + banks) + 3 api x banks + the direct arms x banks + rekv's and vst's banks + m3agent's build + banks
     old = desired_before(have, files)
@@ -624,7 +633,7 @@ def test_existing_tasks_unchanged(monkeypatch, tmp_path):
     direct = [t for t in M.desired(have, files | {f"direct/qwen3vl-8b-f768/{T2[0]}/answers_t2_agree2_end.json.gz"}) if t["baseline"] == "direct"]
     assert len(direct) == len(M.DIRECT) * sum(len(v) for v in BANK_VIDEOS.values()) - 1 and not any(t["deps"] or t.get("needs_env") for t in direct)
     assert f"direct-qwen3vl-8b-f768-qa-t2_agree2_end-{T2[0]}" not in {t["id"] for t in direct}
-    kind = [0 if t["baseline"] == "api" else 1 if urgent(t) else 2 if t["baseline"] == "direct" else 3 if t["baseline"] == "rekv"
+    kind = [0 if api(t) else 1 if urgent(t) else 2 if t["baseline"] == "direct" else 3 if t["baseline"] == "rekv"
             else 4 if t["baseline"] == "vst" else 6 if t["baseline"] == "m3agent" else 5 for t in new]
     assert kind == sorted(kind) and set(kind) == {0, 1, 2, 3, 4, 5, 6}
     # ReKV: as direct, a task per bank and video, waiting on nothing; M3-Agent: a build per video, and qa waits on it

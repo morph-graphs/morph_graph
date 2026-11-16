@@ -79,6 +79,18 @@ time stamps, the same messages, instruct mode (`enable_thinking=False`) as Qwen3
 6. it answers `A` then `REASONING: ...` without "ANSWER:", so a letter alone on the first line is also read as the answer
    (for every model; MERIT's scorer already scored it the same way).
 
+## The evidence-clips ablation (arms `<model>-evclips`)
+
+An upper bound of each reasoning model given the right evidence and no memory (Anubhav, 2026-11-15; rows in
+`coord/master.py` `EVCLIPS`, over the `_end` banks). The video is the question's evidence clips stitched into one short
+mp4 (`../common/evclips.py`: the union of the bank's `evidence.clips` ranges, merged, in time order, no padding, cut by
+`../common/evclips_stitch.py` at 448 px like the prep's clips), taken from `EVCLIPS_DIR` (a local copy) or else the
+dataset `EVCLIPS_HF_REPO` (default morph-graphs/epic-morph-evclips). Everything else is this baseline as above: the
+stitched video's 1 fps 448 px frames (cut as the prep cuts a video's), all of them (the stitched video is the evidence:
+no `t_ask` cut, no frame budget), each stamped with its time in the source video (the manifest's segments), the same
+prompt, decoding and scorer. `Query Time` is `floor(t_ask)` (no prep, so no skeleton). Rows add `evclips_file` and
+`evclips_segments`; `frame_seconds` holds the source times shown. No source prep, and no new dependency (same images).
+
 ## Running
 
 ```bash

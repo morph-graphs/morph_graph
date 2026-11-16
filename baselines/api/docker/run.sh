@@ -15,6 +15,10 @@
 #   API_HF_CACHE    Hugging Face cache on the host (default ~/.cache/huggingface)
 #   API_LIMIT       qa: ask at most this many questions (a smoke test)
 #   API_OUT, API_WORK   optional, paths inside the container (under /repo)
+#   passed on when set: OPENAI_BASE_URL (a gateway), OPENROUTER_API_KEY (configs that call OpenRouter),
+#                   EGAGENT_GPT_PREFIX (a gateway's prefix to GPT model ids, configs with name_prefix_env), EVCLIPS_HF_REPO
+#   EVCLIPS_DIR     optional, a local copy of the evidence-clips videos (the *-evclips configs; else they are fetched
+#                   from the dataset), mounted read-only at /evclips
 set -euo pipefail
 : "${3:?usage: run.sh <stage> <video> <config> [bank]}"
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
@@ -30,25 +34,24 @@ mkdir -p "$HF"
 VIDEOS=${HDEPIC_VIDEOS:-$EPIC/data/HD-EPIC/videos}
 [ -d "$VIDEOS" ] || { echo "no videos at $VIDEOS (set HDEPIC_VIDEOS; epic-morph v3/DATA.md)"; exit 1; }
 # a folder that is not a git checkout (a synced copy) records an empty commit instead of stopping the run
+BINDS="$REPO:/repo,$EPIC:/epic-morph,$HF:/hf,$(cd -P "$VIDEOS" && pwd):/videos:ro"
+EVC=(); if [ -n "${EVCLIPS_DIR:-}" ]; then BINDS+=",$(cd -P "$EVCLIPS_DIR" && pwd):/evclips:ro"; EVC=(-e EVCLIPS_DIR=/evclips); fi
+PASS=(GEMINI_API_KEY OPENAI_API_KEY OPENAI_BASE_URL OPENROUTER_API_KEY EGAGENT_GPT_PREFIX EVCLIPS_HF_REPO HF_TOKEN MERIT_HF_REPO
+      MERIT_OUTBOX API_LIMIT API_OUT API_WORK)
 COMMITS=(API_REPO_COMMIT="$(git -C "$REPO" rev-parse HEAD 2>/dev/null || true)" API_EPIC_COMMIT="$(git -C "$EPIC" rev-parse HEAD 2>/dev/null || true)")
 if [ "$RUNTIME" = apptainer ]; then
     case $IMAGE in *.sif) ;; *) IMAGE=docker://$IMAGE ;; esac
     # through APPTAINERENV_* (the environment), not --env: a command line, keys included, is visible in `ps`
     export APPTAINERENV_EPIC_MORPH_DIR=/epic-morph APPTAINERENV_HDEPIC_VIDEOS=/videos APPTAINERENV_HF_HOME=/hf
     export "${COMMITS[@]/#/APPTAINERENV_}"
-    for v in GEMINI_API_KEY OPENAI_API_KEY HF_TOKEN MERIT_HF_REPO MERIT_OUTBOX API_LIMIT API_OUT API_WORK; do
+    for v in "${PASS[@]}"; do
         [ -n "${!v:-}" ] && export "APPTAINERENV_$v=${!v}"
     done
-    exec apptainer exec --cleanenv --pwd /repo \
-        --bind "$REPO:/repo,$EPIC:/epic-morph,$HF:/hf,$(cd -P "$VIDEOS" && pwd):/videos:ro" \
-        "$IMAGE" bash baselines/api/run_api.sh "$@"
+    [ -z "${EVCLIPS_DIR:-}" ] || export APPTAINERENV_EVCLIPS_DIR=/evclips
+    exec apptainer exec --cleanenv --pwd /repo --bind "$BINDS" "$IMAGE" bash baselines/api/run_api.sh "$@"
 fi
 [ "$RUNTIME" = docker ] || { echo "API_RUNTIME must be docker or apptainer"; exit 1; }
-exec docker run --rm --user "$(id -u):$(id -g)" \
-    -v "$REPO:/repo" -v "$EPIC:/epic-morph" -v "$HF:/hf" -v "$(cd -P "$VIDEOS" && pwd):/videos:ro" -w /repo \
-    -e EPIC_MORPH_DIR=/epic-morph -e HDEPIC_VIDEOS=/videos \
-    -e "${COMMITS[0]}" -e "${COMMITS[1]}" \
-    ${GEMINI_API_KEY:+-e GEMINI_API_KEY} ${OPENAI_API_KEY:+-e OPENAI_API_KEY} ${HF_TOKEN:+-e HF_TOKEN} \
-    ${MERIT_HF_REPO:+-e MERIT_HF_REPO} ${MERIT_OUTBOX:+-e MERIT_OUTBOX} ${API_LIMIT:+-e API_LIMIT} \
-    ${API_OUT:+-e API_OUT="$API_OUT"} ${API_WORK:+-e API_WORK="$API_WORK"} \
-    "$IMAGE" bash baselines/api/run_api.sh "$@"
+ARGS=(); IFS=, read -ra B <<< "$BINDS"; for b in "${B[@]}"; do ARGS+=(-v "$b"); done
+for v in "${PASS[@]}"; do [ -n "${!v:-}" ] && ARGS+=(-e "$v"); done   # by name: the value stays out of `ps`
+exec docker run --rm --user "$(id -u):$(id -g)" "${ARGS[@]}" -w /repo -e EPIC_MORPH_DIR=/epic-morph -e HDEPIC_VIDEOS=/videos \
+    -e HF_HOME=/hf -e "${COMMITS[0]}" -e "${COMMITS[1]}" ${EVC[@]+"${EVC[@]}"} "$IMAGE" bash baselines/api/run_api.sh "$@"

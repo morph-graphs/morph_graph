@@ -14,6 +14,10 @@ and repeats its generate_until loop outside the harness, one cutoff at a time:
 The thoughts depend on the cutoff but not on the question: they are cached per cutoff in <out>/thoughts/ and
 shared by every question (of any bank) asked at that time.
 
+--evclips (the evidence-clips ablation, arm vst7b-evclips): each question's video is its stitched evidence clips
+(baselines/common/evclips.py) instead of the source, shown whole (asked at the stitched video's end): the same
+loader, budget, thoughts and answer, per stitched video instead of per cutoff (thoughts/evclips_<file id>.json).
+
 --blind: the class's text-only path (system prompt, empty thought memory, the question): the no-video floor.
 
 <out>/<video>_settings.json holds everything the thoughts and answers depend on; it is written on first use
@@ -38,7 +42,8 @@ import sys
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path[:0] = [os.path.join(HERE, "..", "VST", "eval", "lmms-eval"), os.path.join(HERE, "..", "..", "merit", "epic")]
+sys.path[:0] = [os.path.join(HERE, "..", "VST", "eval", "lmms-eval"), os.path.join(HERE, "..", "..", "merit", "epic"),
+                os.path.join(HERE, "..", "..", "common")]
 
 VERSION = "2"   # bump when a change alters answers (prompt, loop, parsing)
 POST_PROMPT = "Answer with the option's letter from the given choices directly."   # VST's OVO-Bench / StreamingBench tasks
@@ -48,7 +53,8 @@ FAILED = ("", "Error")
 
 def settings(a):
     return {"version": VERSION, "model": a.model_name, "think_times": a.think_times, "vid_tokens": a.vid_tokens,
-            "max_frames": a.max_frames, "attn": a.attn, "post_prompt": POST_PROMPT, "max_new_tokens": 16}
+            "max_frames": a.max_frames, "attn": a.attn, "post_prompt": POST_PROMPT, "max_new_tokens": 16,
+            **({"input": "evclips"} if a.evclips else {})}
 
 
 def check_settings(a):
@@ -154,6 +160,7 @@ def main():
     ap.add_argument("--max_frames", type=int, default=384)
     ap.add_argument("--attn", default="flash_attention_2")
     ap.add_argument("--blind", action="store_true")
+    ap.add_argument("--evclips", action="store_true", help="each question's stitched evidence clips as its video, whole")
     ap.add_argument("--settings_only", action="store_true")
     ap.add_argument("--limit", type=int, help="smoke test: only the first N cutoffs' questions; --answers then holds only those "
                                               "(run_vst.sh gives it its own file)")
@@ -165,7 +172,16 @@ def main():
     from prepare_epic import convert_questions
     rows = convert_questions(a.bank_file, a.video, 0)   # letters, key, qhash as for every baseline (its query time is unused)
     cut = lambda r: r["meta"]["t_ask"] if r["meta"].get("streaming") and r["meta"].get("t_ask") is not None else None   # None: whole video
-    cuts = sorted({cut(r) for r in rows}, key=lambda t: float("inf") if t is None else t)
+    ev = {}
+    if a.evclips:   # a group is a stitched video (its file id), shown whole
+        import evclips
+        from epic_eval.common import evidence_clips
+        ev = {q["key"]: evclips.lookup(a.video, q["key"], evidence_clips(q), float(q["t_ask"]))
+              for q in json.load(open(a.bank_file))["questions"]}
+        files = {e["id"]: e for e in ev.values()}
+        cut = lambda r: ev[r["key"]]["id"]
+    cuts = sorted({cut(r) for r in rows}, key=lambda t: float("inf") if t is None else t) if not a.evclips else \
+        list(dict.fromkeys(cut(r) for r in rows))   # stitched videos in bank order
     if a.limit:
         cuts = cuts[:a.limit]
         rows = [r for r in rows if cut(r) in cuts]
@@ -197,7 +213,7 @@ def main():
                                         stream_think_times=a.think_times, max_stream_vid_tokens=a.vid_tokens,
                                         max_num_frames=a.max_frames)
         system = {"role": "system", "content": m.system_prompt}
-        vr = None if a.blind else decord.VideoReader(a.video_file, num_threads=2)
+        vr = None if a.blind or a.evclips else decord.VideoReader(a.video_file, num_threads=2)
         os.makedirs(os.path.join(a.out, "thoughts"), exist_ok=True)
 
     segs = head = vids = None
@@ -213,9 +229,13 @@ def main():
                 head = [system, {"role": "previous text", "content": THINK_PROMPT}]
                 end, vids = "", None
             else:
-                segs, end, info = segments(m, mod, a.video_file, c, vr)
+                if a.evclips:   # the stitched video, whole: its end is the ask time
+                    f = files[c]["file"]
+                    segs, end, info = segments(m, mod, f, None, decord.VideoReader(f, num_threads=2))
+                else:
+                    segs, end, info = segments(m, mod, a.video_file, c, vr)
                 info["load_s"] = round(time.time() - t0, 1)
-                tf = os.path.join(a.out, "thoughts", f"{'end' if c is None else f'{c:.3f}'}.json")
+                tf = os.path.join(a.out, "thoughts", f"evclips_{c}.json" if a.evclips else f"{'end' if c is None else f'{c:.3f}'}.json")
                 old = json.load(open(tf)) if os.path.exists(tf) else {}
                 if old.get("settings") == mh:   # thoughts made with other settings are redone
                     memory = old["memory"]
@@ -247,7 +267,7 @@ def main():
             row = {"key": r["key"], "qhash": r["qhash"], "ID": r["ID"], "pos": r["pos"], "type": r["type"],
                    "question": r["question"], "choices": {k: r[f"choice_{k.lower()}"] for k in "ABCD" if f"choice_{k.lower()}" in r},
                    "answer": r["answer"], "response": resp, "pred": pred, "evaluate": pred == r["answer"],
-                   "t_ask": r["meta"]["t_ask"], "cutoff": c, "input_tokens": n_in, **{k: info[k] for k in ("frames", "segments", "last_pts") if k in info},
+                   "t_ask": r["meta"]["t_ask"], "cutoff": None if a.evclips else c, **({"evclips_file": c} if a.evclips else {}), "input_tokens": n_in, **{k: info[k] for k in ("frames", "segments", "last_pts") if k in info},
                    "sec": round(time.time() - t1, 1), "version": VERSION, "memory_hash": mh, "model": a.model_name}
             if resp not in FAILED:
                 done[r["key"]] = row

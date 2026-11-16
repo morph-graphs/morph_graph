@@ -95,6 +95,7 @@ def _rows(banks) -> list[dict]:
                 raise ValueError(f"streaming question without t_ask in {path}: {q['q']!r}")
             rows.append({
                 "qid": make_qid(q["video"], q["q"], t_ask),
+                "key": q.get("key"),
                 "video": q["video"],
                 "question": q["q"],
                 "options": [str(o) for o in mcq["options"]],

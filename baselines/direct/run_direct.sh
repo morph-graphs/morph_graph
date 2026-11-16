@@ -9,7 +9,7 @@
 #          qa     the model answers every question of <bank> for this video                GPU
 #          upload this video and arm's results folder to the Hugging Face dataset          (needs a write token)
 #          all    prep, then qa when a bank is given (no upload)
-#   arm    <model>-f<N>: the model and the frame budget N
+#   arm    <model>-f<N>: the model and the frame budget N; <model>-evclips: the evidence-clips ablation
 #          model  qwen3vl-8b   Qwen/Qwen3-VL-8B-Instruct   MERIT's m8 environment
 #                 qwen38-27b   Qwen/Qwen3.8-27B            MERIT's m27 environment
 #                 qwen35-9b    Qwen/Qwen3.5-9B             MERIT's m27 environment
@@ -17,7 +17,10 @@
 #                 molmo2-8b    allenai/Molmo2-8B           MERIT's m8 environment (context 36,864 tokens: N <= 384)
 #          N      at most N frames per question, evenly spaced over the video before t_ask, the last one
 #                 just before t_ask; all of them (1 fps) when the video so far has fewer than N seconds
-#          e.g. qwen3vl-8b-f32, qwen35-9b-f128, qwen38-27b-f768, molmo2-8b-f384
+#          evclips the question's stitched evidence clips instead of the video (baselines/common/evclips.py: from
+#                 EVCLIPS_DIR, else the dataset EVCLIPS_HF_REPO), all of its 1 fps frames, stamped with source times;
+#                 no prep of the source video
+#          e.g. qwen3vl-8b-f32, qwen35-9b-f128, qwen38-27b-f768, molmo2-8b-f384, qwen3vl-8b-evclips
 #   bank   a named bank of the epic-morph checkout, e.g. batch10_agree2 (generated there with
 #          v3/export_bank.py <bank> when missing)
 #
@@ -40,8 +43,8 @@ PY=${PY:?set PY to the python of the model\'s environment}
 EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && pwd)
 [ -f "$MERIT/MERIT/eval/evaluate_egolife.py" ] || { echo "MERIT submodule missing (its model loader, prompt and scorer are used): git submodule update --init baselines/merit/MERIT"; exit 1; }
 MODELS='qwen3vl-8b|qwen38-27b|qwen35-9b|qwen35-35b-a3b|molmo2-8b'
-[[ $ARM =~ ^($MODELS)-f([1-9][0-9]*)$ ]] || { echo "arm must be <$MODELS>-f<N>, got $ARM"; exit 1; }
-MODEL=${BASH_REMATCH[1]}; FRAMES=${BASH_REMATCH[2]}
+[[ $ARM =~ ^($MODELS)-(f([1-9][0-9]*)|evclips)$ ]] || { echo "arm must be <$MODELS>-f<N> or <model>-evclips, got $ARM"; exit 1; }
+MODEL=${BASH_REMATCH[1]}; FRAMES=${BASH_REMATCH[3]:-evclips}
 VIDEOS=${HDEPIC_VIDEOS:-$EPIC/data/HD-EPIC/videos}; WORK=${DIRECT_WORK:-${MERIT_WORK:-$MERIT/work}}; OUTROOT=${DIRECT_OUT:-$M/results}
 [ -n "${DIRECT_WORK:-${MERIT_WORK:-}}" ] && umask 002   # a shared work folder, as run_merit.sh
 OUT=$OUTROOT/$ARM/$V; SKEL=$WORK/prep/captions/$V/${V}_30sec_skeleton.json
@@ -66,7 +69,7 @@ print(json.dumps({"stage": sys.argv[1], "seconds": int(float(sys.argv[2])),
                   "dirty": bool(git("status", "--porcelain", "baselines/direct", "baselines/merit")),
                   "merit_commit": os.environ.get("DIRECT_MERIT_COMMIT") or git("rev-parse", "HEAD", cwd="baselines/merit/MERIT"),
                   "epic_morph_commit": os.environ.get("DIRECT_EPIC_COMMIT") or git("rev-parse", "HEAD", cwd=os.environ["EPIC"]),
-                  "model": os.environ["MODEL"], "frames": int(os.environ["FRAMES"]),
+                  "model": os.environ["MODEL"], "frames": int(os.environ["FRAMES"]) if os.environ["FRAMES"].isdigit() else os.environ["FRAMES"],
                   "torch": torch.__version__, "transformers": transformers.__version__,
                   "gpus": [torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())],
                   "host": platform.node(), "finished": time.strftime("%Y-%m-%dT%H:%M:%S%z")}))
@@ -95,9 +98,10 @@ qa() {
         ( flock 9; [ -s "$bf" ] || (cd "$EPIC" && "$PY" v3/export_bank.py "$bank") >&2 ) 9>"$EPIC/outputs/v3/banks/.$bank.lock"
     fi
     [ -s "$bf" ] || { echo "no $bank questions for $V in $EPIC"; exit 1; }
-    prep
+    local src=(--frame_root "$WORK/frames_448" --skeleton "$SKEL")
+    if [ "$FRAMES" = evclips ]; then src=(--evclips_frames "$WORK/evclips_frames"); else prep; fi
     "$PY" "$M/epic/direct_qa.py" --model "$MODEL" --frames "$FRAMES" --video "$V" --bank_file "$bf" \
-        --frame_root "$WORK/frames_448" --skeleton "$SKEL" --output "$OUT/answers_$bank.json.gz" ${DIRECT_LIMIT:+--limit "$DIRECT_LIMIT"} \
+        "${src[@]}" --output "$OUT/answers_$bank.json.gz" ${DIRECT_LIMIT:+--limit "$DIRECT_LIMIT"} \
         || { [ $? = 2 ] && echo "some questions ran out of GPU memory: rerun the same command to retry them"; exit 1; }
     record "qa $bank" $((SECONDS - t))
 }

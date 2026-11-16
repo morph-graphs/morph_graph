@@ -57,6 +57,12 @@ than the real one (320/384 of it).
 What we do not keep: on a loading or generation error upstream's harness fills in a random letter. Here the
 question stays unanswered and is retried.
 
+**The evidence-clips arm `vst7b-evclips`** (the ablation in `coord/master.py` `EVCLIPS`): the same model, settings and
+loop, with each question's stitched evidence clips (`../common/evclips.py`; `EVCLIPS_DIR` or the dataset) as its video,
+shown whole, so the question is asked at the stitched video's end; thoughts are made per stitched video
+(`thoughts/evclips_<file id>.json`) and the clock in the prompt is the stitched video's (VST's own times, as above).
+Same image as `vst7b`.
+
 ## Stages
 
 | stage | what it does for VST |

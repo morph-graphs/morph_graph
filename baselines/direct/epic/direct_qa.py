@@ -13,6 +13,10 @@ last (which is always included); when fewer than N exist it takes all, i.e. 1 fp
 frames" and "1 fps up to a cap of N". They go in as one video with their true time stamps (the model's own
 video input: 2 frames per token group, 196 tokens per 2 frames at 448 px).
 
+--frames evclips (the evidence-clips ablation, arms <model>-evclips): the video is the question's stitched evidence
+clips (baselines/common/evclips.py), cut into 1 fps 448 px frames as the prep cuts a video, all of them (the whole
+stitched video is the evidence: no t_ask cut), each stamped with its time in the source video.
+
     python epic/direct_qa.py --model qwen3vl-8b --frames 128 --bank_file <V>_questions.json --video <V> \
         --frame_root <work>/frames_448 --skeleton <work>/prep/captions/<V>/<V>_30sec_skeleton.json \
         --output answers_<bank>.json.gz
@@ -30,7 +34,8 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MERIT = os.path.join(HERE, "..", "..", "merit")
-sys.path[:0] = [os.path.join(MERIT, "epic"), os.path.join(MERIT, "MERIT", "src"), os.path.join(MERIT, "MERIT", "eval")]
+sys.path[:0] = [os.path.join(MERIT, "epic"), os.path.join(MERIT, "MERIT", "src"), os.path.join(MERIT, "MERIT", "eval"),
+                os.path.join(HERE, "..", "..", "common")]
 from prepare_epic import convert_questions, match_answers  # noqa: E402
 
 PX = 448   # the side of prepare_epic's frames, shown to the model as they are
@@ -135,20 +140,31 @@ def load(path):
 def main():
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     p.add_argument("--model", default="qwen3vl-8b", help="a name of MERIT's Qwen wrapper (qwen3vl-8b, qwen38-27b) or one of: " + ", ".join(HF))
-    p.add_argument("--frames", type=int, required=True, help="frame budget N per question")
+    p.add_argument("--frames", type=lambda x: x if x == "evclips" else int(x), required=True,
+                   help="frame budget N per question, or evclips: all 1 fps frames of the question's stitched evidence clips")
+    p.add_argument("--evclips_frames", help="evclips: folder for the stitched videos' 1 fps frames")
     p.add_argument("--video", required=True)
     p.add_argument("--bank_file", required=True, help="epic-morph outputs/v3/banks/<bank>/<video>_questions.json")
-    p.add_argument("--frame_root", required=True)
-    p.add_argument("--skeleton", required=True, help="prepare_epic's clip list (gives the video's end, as for MERIT)")
+    p.add_argument("--frame_root", help="prepare_epic's frames (not for evclips)")
+    p.add_argument("--skeleton", help="prepare_epic's clip list (gives the video's end, as for MERIT; evclips: none, the "
+                                      "query time is then floor(t_ask))")
     p.add_argument("--output", required=True)
     p.add_argument("--limit", type=int, default=0, help="answer only this many of the unanswered questions, spread over the bank (smoke test)")
     args = p.parse_args()
 
-    end = json.load(open(args.skeleton))[-1]["end_time"]            # HHMMSS00, as run_merit.sh's qa_file
+    end = json.load(open(args.skeleton))[-1]["end_time"] if args.skeleton else "00000000"   # HHMMSS00, as run_merit.sh's qa_file
     rows = convert_questions(args.bank_file, args.video, int(end[:2]) * 3600 + int(end[2:4]) * 60 + int(end[4:6]))
-    paths = frame_paths(args.frame_root, args.video)
+    paths = frame_paths(args.frame_root, args.video) if args.frames != "evclips" else {0: None}
     assert paths and sorted(paths) == list(range(len(paths))), f"frames of {args.video} missing or not 0..n-1 in {args.frame_root}"
     setting = {"model": args.model, "frames": args.frames, "frame_px": PX}
+    if args.frames == "evclips":   # each question's stitched video, by its bank entry (convert_questions' pos: 1-based)
+        import evclips
+        from epic_eval.common import evidence_clips
+        bank = json.load(open(args.bank_file))["questions"]
+        for r in rows:
+            q = bank[r["pos"] - 1]
+            assert q["key"] == r["key"], (r["ID"], r["pos"])
+            r["evclips"] = evclips.lookup(args.video, q["key"], evidence_clips(q), float(q["t_ask"]))
     # an earlier answer is reused only for the same question (key, wording, options, gold letter) and setting
     done = {}
     if os.path.exists(args.output):
@@ -185,12 +201,20 @@ def main():
         t0 = time.time()
         choices = {k: row[f"choice_{k.lower()}"] for k in "ABCD" if f"choice_{k.lower()}" in row}
         until = query_time_int(row)
-        secs = pick_frames(row["meta"]["t_ask"], len(paths), args.frames)
-        assert all(s + 0.5 <= row["meta"]["t_ask"] for s in secs), (row["ID"], row["meta"]["t_ask"], secs[-1])
+        if args.frames == "evclips":   # every frame of the stitched video; frame k is the picture at k + 0.5 s of it
+            ev = row["evclips"]
+            jpgs, ts = zip(*evclips.frames_1fps(ev, args.evclips_frames, PX))
+            stamps = secs = [evclips.to_source(ev, t) for t in ts]
+            # the last span may end up to half a source frame after t_ask (the stitcher snaps spans to frames)
+            assert stamps[-1] <= row["meta"]["t_ask"] + 0.05, (row["ID"], stamps[-1:])
+        else:
+            secs = pick_frames(row["meta"]["t_ask"], len(paths), args.frames)
+            assert all(s + 0.5 <= row["meta"]["t_ask"] for s in secs), (row["ID"], row["meta"]["t_ask"], secs[-1])
+            jpgs, stamps = [paths[s] for s in secs], [s + 0.5 for s in secs]
         query = (f"Query: {row['question']}\nQuery Time: {transform_timestamp(str(until))}"
                  f"\nChoices: " + " ".join(f"({k}) {v}" for k, v in sorted(choices.items())))
-        # frame k is the picture at k + 0.5 s: that is the time the model is told
-        inputs, n_video = build(llm, qa_prompt, query, [Image.open(paths[s]).convert("RGB") for s in secs], [s + 0.5 for s in secs])
+        # frame k is the picture at k + 0.5 s: that is the time the model is told (evclips: in the source video)
+        inputs, n_video = build(llm, qa_prompt, query, [Image.open(j).convert("RGB") for j in jpgs], stamps)
         n_in = inputs["input_ids"].shape[1]
         # the model's context (Molmo2: 36,864 tokens, i.e. at most 384 frames): the prompt must fit with room to answer
         cfg = llm.model.config
@@ -224,6 +248,7 @@ def main():
             # direct only: what the model was shown
             "t_ask": row["meta"]["t_ask"], "frame_seconds": secs, "n_frames": len(secs), "video_tokens": n_video,
             "prompt_tokens": n_in, "seconds": round(time.time() - t0, 1), "setting": setting,
+            **({"evclips_file": row["evclips"]["id"], "evclips_segments": row["evclips"]["segments"]} if args.frames == "evclips" else {}),
         }
         print(f"{row['ID']:>12} t_ask {row['meta']['t_ask']:7.1f} frames {len(secs):4d} (last {secs[-1] if secs else '-'} s) "
               f"tokens {n_in:6d} gold {row['answer']} pred {parsed or '?'} {'ok' if res['evaluate'] else '--'} "
@@ -234,7 +259,7 @@ def main():
     if llm is not None:
         print("peak GPU memory (GB per GPU):", [round(torch.cuda.max_memory_allocated(i) / 2 ** 30, 1) for i in range(torch.cuda.device_count())])
     k = sum(r["evaluate"] for r in out)
-    print(f"direct {args.model} f{args.frames}: accuracy {k}/{len(out)} = {k / max(1, len(out)):.4f}; "
+    print(f"direct {args.model} {args.frames if args.frames == 'evclips' else f'f{args.frames}'}: accuracy {k}/{len(out)} = {k / max(1, len(out)):.4f}; "
           f"{len(bad)} failed, {len(rows) - len(out)} of the bank's {len(rows)} not asked")
     sys.exit(2 if bad else 0)
 
