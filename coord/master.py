@@ -273,6 +273,9 @@ PRIORITY = {("api", c) for c in API_CONFIGS} | {
 # answers, video by video, then its 27B and 8B answers). It only orders: which rows are listed at all is PRIORITY's
 # and the gates' business.
 FIRST = [("magic",), ("merit", "m27"), ("merit", "m8", "qa")]   # MERIT m8 answers on every free A6000 (Anubhav, 2026-11-16)
+# ... on Nexus only (Anubhav, 2026-11-16): first in the order must not change what Max, Pulkit, wriva or Zaratan take,
+# so these lines name only Nexus, and no leftover pools are added to them
+ONLY_POOLS = {("merit", "m8", "qa"): ["nexus"]}
 EXPERIMENTS = [("api", c, "qa", KEY_POOLS, bank) for bank in BANKS for c in API_CONFIGS] + URGENT + REPORTED + PAID + [
     ("direct", arm, "qa", pools, bank) for bank in BANKS for arm, pools in DIRECT.items()] + [
     ("rekv", "m8", "qa", M8, bank) for bank in BANKS] + [
@@ -591,6 +594,7 @@ def desired(have, files, answers=None, busy=()):
                 videos.append(v)
     tasks, ids = [], set()
     for b, arm, stage, pools, bank in EXPERIMENTS:
+        pools = ONLY_POOLS.get((b, arm, stage), pools)
         env = {"needs_env": needs(b, arm, stage)} if needs(b, arm, stage) else {}
         pools = key_pools(env["needs_env"]) + ALSO_POOLS.get((b, arm), []) if env else pools
         if bank in ((STITCHED,), STITCHED_EOV, STITCHED):
@@ -669,7 +673,7 @@ def leftovers(tasks, old, now, claimed=()):
     for t in tasks:
         t["listed_t"] = now if t["id"] in claimed else since.get(t["id"]) or now
         if (t["pools"] and t["pools"] != KEY_POOLS and not t.get("needs_env") and t["video"] not in STITCHED_VIDEOS
-                and now - t["listed_t"] >= LEFTOVER_H * 3600):
+                and (t["baseline"], t["arm"], t["stage"]) not in ONLY_POOLS and now - t["listed_t"] >= LEFTOVER_H * 3600):
             t["pools"] = t["pools"] + [p for p in LEFTOVER_POOLS if p not in t["pools"]]
             n += 1
     return n
