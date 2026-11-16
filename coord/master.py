@@ -275,7 +275,10 @@ PRIORITY = {("api", c) for c in API_CONFIGS} | {
 FIRST = [("magic",), ("merit", "m27"), ("merit", "m8", "qa")]   # MERIT m8 answers on every free A6000 (Anubhav, 2026-11-16)
 # ... on Nexus only (Anubhav, 2026-11-16): first in the order must not change what Max, Pulkit, wriva or Zaratan take,
 # so these lines name only Nexus, and no leftover pools are added to them
-ONLY_POOLS = {("merit", "m8", "qa"): ["nexus"]}
+ONLY_POOLS = {("merit", "m8", "qa"): ["nexus"],
+              # GPT-4.1 on the evidence clips through our OpenRouter key (#122): Max's jobs cannot read the evidence-clips
+              # dataset (404, 39 failures on 2026-11-16) and Pulkit's route takes 50 images at most
+              ("api", "gpt-4.1-f384-evclips", "qa"): ["nexus"]}
 # ... and lines that Nexus takes besides their usual pools (Anubhav, 2026-11-16): MAGIC m27 answers on 2x A6000 at 24G
 # or an H200 at 16G, WorldMM m27 answers on an H200 (smoke tests: process memory under 10 GB, answers as before)
 EXTRA_POOLS = {("magic", "m27", "qa"): ["nexus"], ("worldmm", "m27", "qa"): ["nexus"], ("merit", "m27", "qa"): ["nexus"]}
@@ -609,6 +612,7 @@ def desired(have, files, answers=None, busy=()):
         pools = pools + [p for p in EXTRA_POOLS.get((b, arm, stage), []) if p not in pools]
         env = {"needs_env": needs(b, arm, stage)} if needs(b, arm, stage) else {}
         pools = key_pools(env["needs_env"]) + ALSO_POOLS.get((b, arm), []) if env else pools
+        pools = ONLY_POOLS.get((b, arm, stage), pools)   # also over a paid line's key pools
         if bank in ((STITCHED,), STITCHED_EOV, STITCHED):
             pools = [p for p in pools if p in STITCHED_POOLS + STITCHED_ALSO.get((b, arm), [])]
         if (b, arm, stage) in CPU_ROWS:
