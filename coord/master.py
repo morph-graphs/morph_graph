@@ -315,9 +315,9 @@ MEMORY_DONE = {"merit": "{v}_30sec_4_key.json", "magic": "graph.pkl", "worldmm":
 BUILD_ON = {"magic": "merit"}
 # The stitched videos (Anubhav, 2026-11-15): one per kitchen, its recording sessions in order with a 4 s date card
 # before each (epic-morph v3/stitched, Vatsal; 41.5 h in all), id <kitchen>-stitched, found like any other video at
-# <videos>/<kitchen>/<kitchen>-stitched.mp4. Their end-of-video bank (623 questions) is not on the board: only the
-# memories are built, a build line for each line of EXPERIMENTS that builds, built on the stitched video itself (not
-# put together from its sessions' memories). STITCHED is the bank a build line names for them: its videos are
+# <videos>/<kitchen>/<kitchen>-stitched.mp4. A build line for each line of EXPERIMENTS that builds, built on the
+# stitched video itself (not put together from its sessions' memories), and qa lines on their end-of-video bank
+# (STITCHED_EOV, below). STITCHED is the bank a build line names for them: its videos are
 # STITCHED_VIDEOS, not an epic-morph export. A pool runs them only once it has the files (worker.py: a stitched build
 # whose video is not there is left), so a task waits rather than fails.
 # Pools (Anubhav, 2026-11-15): a build is one job of 9 to 19 h on the longest video, so only the line's pools among
@@ -332,6 +332,20 @@ CANARY = "P05-stitched"   # the shortest, 3.48 h
 # MERIT's lines first: MAGIC-Video's builds wait for MERIT's of the same video, which must be listed before them
 EXPERIMENTS += sorted([(b, arm, "build", pools, (STITCHED,)) for b, arm, stage, pools, _ in EXPERIMENTS if stage == "build"],
                       key=lambda e: e[0] not in BUILD_ON.values())
+# The stitched videos' end-of-video bank (Anubhav, 2026-11-15; epic-morph v3/export_bank.py stitched_eov: 623 questions,
+# each asked at the end of the video with the "As of video time ..." clause naming the moment its answer is as of). A qa
+# line for every arm that answers the normal banks from a memory (MEMORY_DONE: not the plain video models, the API rows,
+# ReKV or VST, whose 7 h video is another question), on the stitched pools (as the builds), and like NEEDS_MEMORY never
+# listed without its stitched memory built or listed to wait on. The CANARY's answers right after its builds, the other
+# videos' after their builds (lead()). Not yet (STITCHED_QA_LATER): MAGIC-Video, whose searches that name a time read
+# seconds against HHMMSSff stamps (README: they return the video's first minutes), and every question here names a
+# time, and whose event-chain step puts every 3 min summary (~144 on the 7.2 h video) in one 4,000-token reply;
+# EgoRAG, whose memory and question time are on a clock that starts at 10:00:00, while the clause gives video time.
+STITCHED_EOV = "stitched_eov"
+STITCHED_QA_LATER = {"magic", "egorag"}
+EXPERIMENTS += [(b, arm, "qa", list(pools), STITCHED_EOV) for (b, arm), pools in dict.fromkeys(
+    ((b, arm), tuple(pools)) for b, arm, stage, pools, bank in EXPERIMENTS
+    if stage == "qa" and b in MEMORY_DONE and b not in STITCHED_QA_LATER)]
 
 
 def bank_questions(bank):
@@ -477,16 +491,17 @@ def built_from(files):
 
 
 def lead(t):
-    """Where a task's group stands in the list: the CANARY's builds (-1), the index of its FIRST entry, then the API
-    tasks (API_CONFIGS'), the URGENT lines, the other stitched videos' builds, the rest."""
+    """Where a task's group stands in the list: the CANARY's builds (-2) and answers (-1), the index of its FIRST entry,
+    then the API tasks (API_CONFIGS'), the URGENT lines, the other stitched videos' builds and their answers, the rest."""
     k = (t["baseline"], t["arm"], t["stage"])
     if t["video"] in STITCHED_VIDEOS:
-        return -1 if t["video"] == CANARY else len(FIRST) + 3
+        qa = t["stage"] == "qa"
+        return -2 + qa if t["video"] == CANARY else len(FIRST) + 3 + qa
     for i, f in enumerate(FIRST):
         if k[:len(f)] == f:
             return i
     api = k[0] == "api" and k[1] in API_CONFIGS   # the evidence-clips configs (EVCLIPS) stay last, with the rest
-    return len(FIRST) + (1 if api else 2 if k in {(b, arm, stage) for b, arm, stage, *_ in URGENT} else 4)
+    return len(FIRST) + (1 if api else 2 if k in {(b, arm, stage) for b, arm, stage, *_ in URGENT} else 5)
 
 
 def reported(t):
@@ -522,7 +537,7 @@ def desired(have, files, answers=None, busy=()):
     for b, arm, stage, pools, bank in EXPERIMENTS:
         env = {"needs_env": needs(b, arm, stage)} if needs(b, arm, stage) else {}
         pools = key_pools(env["needs_env"]) + ALSO_POOLS.get((b, arm), []) if env else pools
-        if bank == (STITCHED,):
+        if bank in ((STITCHED,), STITCHED_EOV):
             pools = [p for p in pools if p in STITCHED_POOLS]
         mem = MEMORY_ARM.get((b, arm), arm)
         if mem != arm:   # for the worker: the arm whose dataset folder holds this task's memory (worker.py --prefetch)
@@ -554,7 +569,7 @@ def desired(have, files, answers=None, busy=()):
             # wait for the video's build task (its memory arm's) while it is listed; a memory already built (on the
             # board or off it) needs no wait, and with neither, qa builds the memory itself first
             build = f"{b}-{mem}-build-{v}"
-            if b in NEEDS_MEMORY and (b, mem, v) not in have and build not in ids:
+            if (b in NEEDS_MEMORY or bank == STITCHED_EOV) and (b, mem, v) not in have and build not in ids:
                 continue                         # no memory and no build to wait on: not listed
             tasks.append(dict(id=tid, baseline=b, arm=arm, stage=stage, video=v, bank=bank,
                               pools=pools, deps=[build] if build in ids else [], **env, **stale))
