@@ -40,6 +40,7 @@ unset OPENAI_API_KEY GEMINI_API_KEY GOOGLE_API_KEY              # no other provi
 echo "OpenRouter key: $([ -n "${OPENROUTER_API_KEY:-}" ] && echo set || echo "not set (keyed tasks are left)")"
 export HF_HOME=$W/hf_home                           # the board's and results' downloads (this worker's own cache)
 export MERIT_HF_CACHE=$P/hf_cache                   # the models, shared, mounted into the container
+export APPTAINER_BIND=${APPTAINER_BIND:-$P/anubhav/hf_cache}   # Qwen3.8-27B in hf_cache is a link into it (else the m27 server cannot load)
 export MERIT_SIF_DIR=$P/envs/sif                    # <baseline>_<arm>.sif per task
 export MERIT_WORK=$P/merit_work                     # clips, frames, runs: one group-writable folder for every worker on Nexus
 export EPIC_MORPH_DIR=${EPIC_MORPH_DIR:-$P/morph_graphs/anubhav/epic-morph}   # the banks qa tasks answer

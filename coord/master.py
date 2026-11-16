@@ -276,6 +276,9 @@ FIRST = [("magic",), ("merit", "m27"), ("merit", "m8", "qa")]   # MERIT m8 answe
 # ... on Nexus only (Anubhav, 2026-11-16): first in the order must not change what Max, Pulkit, wriva or Zaratan take,
 # so these lines name only Nexus, and no leftover pools are added to them
 ONLY_POOLS = {("merit", "m8", "qa"): ["nexus"]}
+# ... and lines that Nexus takes besides their usual pools (Anubhav, 2026-11-16): MAGIC m27 answers on 2x A6000 at 24G
+# or an H200 at 16G, WorldMM m27 answers on an H200 (smoke tests: process memory under 10 GB, answers as before)
+EXTRA_POOLS = {("magic", "m27", "qa"): ["nexus"], ("worldmm", "m27", "qa"): ["nexus"]}
 EXPERIMENTS = [("api", c, "qa", KEY_POOLS, bank) for bank in BANKS for c in API_CONFIGS] + URGENT + REPORTED + PAID + [
     ("direct", arm, "qa", pools, bank) for bank in BANKS for arm, pools in DIRECT.items()] + [
     ("rekv", "m8", "qa", M8, bank) for bank in BANKS] + [
@@ -599,6 +602,7 @@ def desired(have, files, answers=None, busy=()):
     tasks, ids = [], set()
     for b, arm, stage, pools, bank in EXPERIMENTS:
         pools = ONLY_POOLS.get((b, arm, stage), pools)
+        pools = pools + [p for p in EXTRA_POOLS.get((b, arm, stage), []) if p not in pools]
         env = {"needs_env": needs(b, arm, stage)} if needs(b, arm, stage) else {}
         pools = key_pools(env["needs_env"]) + ALSO_POOLS.get((b, arm), []) if env else pools
         if bank in ((STITCHED,), STITCHED_EOV, STITCHED):
