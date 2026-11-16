@@ -201,7 +201,7 @@ NEEDS_ENV |= {
 # EGAgent's GPT-4.1 memory on Zaratan too, through OpenRouter to OpenAI on our key (Anubhav, 2026-11-15): Azure's
 # content filter, behind Max's gateway, refused frames of 37 of its builds (ContentPolicyViolationError)
 ALSO_POOLS = {("magic", "oss120"): ["nexus"], ("magic", "oss120-flash"): ["nexus", "zaratan"],
-              ("egagent", "gpt41"): ["zaratan"]}
+              ("egagent", "gpt41"): ["zaratan", "nexus"]}   # through OpenRouter (Nexus: Anubhav, 2026-11-16)
 # The arms behind the pilot gate: every arm of the REPORTED and PAID lines. A new paid baseline joins the gate by
 # being listed in one of them, not by its name.
 GATED = {(b, arm) for b, arm, *_ in REPORTED + PAID}
