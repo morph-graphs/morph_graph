@@ -334,7 +334,9 @@ CANARY = "P05-stitched"   # the shortest, 3.48 h
 # Only the systems Vatsal's stitched hand-off asks for (Anubhav, 2026-11-16): MERIT with Qwen3.8-27B, WorldMM with the
 # GPT-5-mini memory (answers: GPT-5.1 for GPT-5, as on the normal banks), MAGIC-Video's GPT-OSS-120B memory (its answers
 # wait, STITCHED_QA_LATER); the other methods' stitched builds and answers are off the board
-STITCHED_BUILDS = {("merit", "m27"), ("worldmm", "g5m"), ("magic", "oss120")}
+# MAGIC-Video's stitched memory is off too (Anubhav, 2026-11-16): it is to be built up to each card's anchor (its event
+# chains read the whole video), not once over the whole video
+STITCHED_BUILDS = {("merit", "m27"), ("worldmm", "g5m")}
 # Answering on the stitched videos is frozen (Anubhav, 2026-11-16) while their protocol changes to Vatsal's: each card at
 # its anchor time, from memory units that end before it; builds go on. Was {("merit", "m27"), ("worldmm", "g5m-g51")}
 STITCHED_ANSWERS = set()
