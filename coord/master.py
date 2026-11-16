@@ -33,7 +33,7 @@ gateway serves) follow the reported-configuration arms, for every bank of BANKS,
 behind the same PILOT gate (MAGIC-Video's OpenRouter arms also on `nexus`: ALSO_POOLS).
 While a task of a PRIORITY arm is listed, the tasks of every other arm are withheld (gate()).
 The lines of FIRST lead the list, ahead of the API tasks: MAGIC-Video's tasks, then MERIT's with Qwen3.8-27B.
-The stitched videos' memory builds (STITCHED): one video's (CANARY) right after them, the others after the URGENT lines.
+The stitched videos' memory builds (STITCHED): one video's (CANARY) ahead of everything, the others after the URGENT lines.
 """
 import argparse
 import functools
@@ -290,7 +290,8 @@ BUILD_ON = {"magic": "merit"}
 # Pools (Anubhav, 2026-11-15): a build is one job of 9 to 19 h on the longest video, so only the line's pools among
 # STITCHED_POOLS take it (Max's and Pulkit's machines have no time limit; Nexus only on its long queue, worker.py), not
 # Zaratan, wriva or arm00, and not the leftover pools.
-# Order: CANARY's builds right after the FIRST groups, so errors show early; the others after the URGENT lines (lead()).
+# Order: CANARY's builds first of all, ahead of the FIRST groups, so they are claimed at once and errors show early
+# (Anubhav, 2026-11-15: some picked up right now); the others after the URGENT lines (lead()).
 STITCHED = "stitched"
 STITCHED_VIDEOS = [f"P0{k}-stitched" for k in range(1, 10)]
 STITCHED_POOLS = ["max", "pulkit", "nexus"]
@@ -437,11 +438,11 @@ def built_from(files):
 
 
 def lead(t):
-    """Where a task's group stands in the list: the index of its FIRST entry, then the CANARY's builds, the API tasks,
-    the URGENT lines, the other stitched videos' builds, the rest."""
+    """Where a task's group stands in the list: the CANARY's builds (-1), the index of its FIRST entry, then the API
+    tasks, the URGENT lines, the other stitched videos' builds, the rest."""
     k = (t["baseline"], t["arm"], t["stage"])
     if t["video"] in STITCHED_VIDEOS:
-        return len(FIRST) + (0 if t["video"] == CANARY else 3)
+        return -1 if t["video"] == CANARY else len(FIRST) + 3
     for i, f in enumerate(FIRST):
         if k[:len(f)] == f:
             return i
