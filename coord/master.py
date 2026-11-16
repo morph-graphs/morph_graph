@@ -334,6 +334,10 @@ STITCHED_POOLS = ["max", "pulkit", "nexus"]
 # ... and per line (Anubhav, 2026-11-16): MAGIC-Video's stitched builds on Zaratan's H100s too, whichever pool starts first
 # (measured on the 156 normal videos: build wall time ~0.21x the video's length, so ~1.5 h on the 7.2 h video)
 STITCHED_ALSO = {("magic", "oss120"): ["zaratan"], ("magic", "oss120-flash"): ["zaratan"]}
+# Max's second worker, CPU only (pool max-cpu; Anubhav, 2026-11-16): the answers of the paid rows that need no GPU. Two
+# workers in one pool overwrite each other's pool file and fail each other's claims, so it is a pool of its own.
+CPU_ROWS = {("api", "gemini-3.6-flash-high-stitched-f2048", "qa"), ("api", "gemini-3.6-flash-high", "qa"),
+            ("api", "gemini-3.1-flash-lite-high", "qa"), ("egagent", "gemini36flash", "qa"), ("egorag", "egogpt_gpt41", "qa")}
 CANARY = "P05-stitched"   # the shortest, 3.48 h
 # MERIT's lines first: MAGIC-Video's builds wait for MERIT's of the same video, which must be listed before them
 # Only the systems Vatsal's stitched hand-off asks for (Anubhav, 2026-11-16): MERIT with Qwen3.8-27B, WorldMM with the
@@ -599,6 +603,8 @@ def desired(have, files, answers=None, busy=()):
         pools = key_pools(env["needs_env"]) + ALSO_POOLS.get((b, arm), []) if env else pools
         if bank in ((STITCHED,), STITCHED_EOV, STITCHED):
             pools = [p for p in pools if p in STITCHED_POOLS + STITCHED_ALSO.get((b, arm), [])]
+        if (b, arm, stage) in CPU_ROWS:
+            pools = pools + ["max-cpu"]
         mem = MEMORY_ARM.get((b, arm), arm)
         if mem != arm:   # for the worker: the arm whose dataset folder holds this task's memory (worker.py --prefetch)
             env["memory_arm"] = mem
