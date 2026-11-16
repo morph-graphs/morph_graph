@@ -5,6 +5,5 @@
 #   bash baselines/direct/docker/image_tag.sh qwen3vl-8b-f128      -> m8-<environment hash>
 set -euo pipefail
 ARM=${1:?arm (<model>-f<N>) or model}; D=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-# (the paid models of the evidence-clips ablation need only the openai client of the m8 environment)
-M=${ARM%-evclips}; case ${M%-f[0-9]*} in qwen3vl-8b|molmo2-8b|vst7b|gpt-4.1|gpt-5.1|gpt-5.5|gemini-3.6-flash|gemini-3.1-flash-lite|qwen35-flash) ENV=m8 ;; qwen38-27b|qwen35-9b|qwen35-35b-a3b) ENV=m27 ;; *) echo "unknown model in $ARM" >&2; exit 1 ;; esac
+M=${ARM%-evclips}; case ${M%-f[0-9]*} in qwen3vl-8b|molmo2-8b) ENV=m8 ;; qwen38-27b|qwen35-9b|qwen35-35b-a3b) ENV=m27 ;; *) echo "unknown model in $ARM" >&2; exit 1 ;; esac
 exec bash "$D/../../merit/docker/image_tag.sh" "$ENV"

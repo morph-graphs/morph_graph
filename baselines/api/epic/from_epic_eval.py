@@ -33,7 +33,7 @@ from epic_eval.common import make_qid   # noqa: E402  (the qid the run wrote; st
 
 LETTERS = "ABCD"
 KEEP = ("qid", "model", "time", "raw_text", "finish_reason", "usage", "cache_used", "media_file", "media_duration_s")
-FRAMES = ("model_returned", "n_frames", "last_frame_s", "frame_side", "detail", "frame_times_s")   # frame backends
+FRAMES = ("model_returned", "endpoint", "n_frames", "last_frame_s", "frame_side", "detail", "frame_times_s")   # frame backends
 # batch10_agree2 kept a question when 2+ of these 3 models answered it right, so their own scores on it are inflated
 VERIFIERS = ("gemini-3.8-flash", "gpt-5.6-sol", "qwen3.8-max")
 INFLATED = "inflated by selection: this model was one of the bank's three verifiers (questions kept when 2+ of 3 were right)"

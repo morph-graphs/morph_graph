@@ -282,23 +282,29 @@ EXPERIMENTS = [("api", c, "qa", KEY_POOLS, bank) for bank in BANKS for c in API_
     for bank in (BANKS if stage == "qa" else [None]) if (b, stage) != ("magic", "build")] + [
     ("m3agent", "m3", stage, pools, bank) for stage, pools in M3AGENT.items()
     for bank in (BANKS if stage == "qa" else [None])]
-# The evidence-clips ablation (Anubhav, 2026-11-15; baselines/direct, arms <model>-evclips): each reasoning model the
-# methods use answers every question from only its evidence clips (the bank's evidence.clips ranges, merged, at 1 fps;
-# no memory, nothing built), with the plain video model's one prompt and scorer: an upper bound of the model given the
-# right evidence. One row per model, not per method. Local models take the pools of their Direct arms (the 8B class
-# fits a 48 GB GPU, at most 177 frames a question; the 27B and 35B-A3B the 27B pools); the paid ones need their key
-# (NEEDS_ENV: Max's and Pulkit's pools), except Qwen3.5-Flash, which calls OpenRouter on our key as MAGIC-Video's
-# oss120-flash does (ALSO_POOLS). M3-Agent has no row: its control model (Qwen3-32B, Qwen3ForCausalLM) reads no
-# images. Listed last, after all the other work (and, as every non-PRIORITY arm, withheld while a PRIORITY arm has
-# tasks: gate()).
-EVCLIPS = {"qwen3vl-8b": M8, "qwen38-27b": M27, "qwen35-9b": M8, "molmo2-8b": M8, "qwen35-35b-a3b": M27, "vst7b": M8,
-           "gpt-4.1": KEY_POOLS, "gemini-3.6-flash": KEY_POOLS, "gpt-5.1": KEY_POOLS, "gemini-3.1-flash-lite": KEY_POOLS,
-           "gpt-5.5": KEY_POOLS, "qwen35-flash": KEY_POOLS}
-NEEDS_ENV |= {("direct", f"{m}-evclips"): [k] for m, k in (
-    ("gpt-4.1", "OPENAI_API_KEY"), ("gpt-5.1", "OPENAI_API_KEY"), ("gpt-5.5", "OPENAI_API_KEY"),
-    ("gemini-3.6-flash", "GEMINI_API_KEY"), ("gemini-3.1-flash-lite", "GEMINI_API_KEY"), ("qwen35-flash", "OPENROUTER_API_KEY"))}
-ALSO_POOLS |= {("direct", "qwen35-flash-evclips"): ["nexus", "zaratan"]}
-EXPERIMENTS += [("direct", f"{m}-evclips", "qa", pools, bank) for bank in BANKS for m, pools in EVCLIPS.items()]
+# The evidence-clips ablation (Anubhav, 2026-11-15): each reasoning model the methods use answers every question from
+# only its evidence clips, stitched into one short video per question (baselines/common/evclips.py; the union of the
+# bank's evidence.clips ranges, merged, no padding), shown whole: no memory, nothing built, an upper bound of the model
+# given the right evidence. One row per model, not per method; each model takes the video through its own usual path
+# and settings: the local models Direct's (<model>-evclips: the stitched video's 1 fps frames, stamped with source
+# times), VST its own streaming loop (vst7b-evclips), the paid ones epic_eval's evidence mode with the stitched video as
+# the media (baselines/api/configs/*-evclips.json: Gemini the video file, GPT and Qwen3.5-Flash frames of it). A task
+# fetches the videos it needs from the dataset (or EVCLIPS_DIR). Local rows take the pools of their Direct arms (the 8B
+# class one 48 GB GPU; the 27B and 35B-A3B the 27B pools; VST its m8 pools); the paid ones need their key (NEEDS_ENV:
+# Max's and Pulkit's pools), except Qwen3.5-Flash, which calls OpenRouter on our key as MAGIC-Video's oss120-flash does
+# (ALSO_POOLS). M3-Agent has no row: its control model (Qwen3-32B, Qwen3ForCausalLM) reads no images. Listed last,
+# after all the other work (and, as every non-PRIORITY arm, withheld while a PRIORITY arm has tasks: gate()).
+EVCLIPS = [("direct", f"{m}-evclips", pools) for m, pools in (
+    ("qwen3vl-8b", M8), ("qwen38-27b", M27), ("qwen35-9b", M8), ("molmo2-8b", M8), ("qwen35-35b-a3b", M27))] + [
+    ("vst", "vst7b-evclips", M8)] + [("api", c, KEY_POOLS) for c in (
+    "gpt-4.1-f384-evclips", "gemini-3.6-flash-high-evclips", "gpt-5.1-f384-evclips", "gemini-3.1-flash-lite-high-evclips",
+    "gpt-5.5-f384-evclips", "qwen3.5-flash-f384-evclips")]
+NEEDS_ENV |= {("api", c): [k] for c, k in (
+    ("gpt-4.1-f384-evclips", "OPENAI_API_KEY"), ("gpt-5.1-f384-evclips", "OPENAI_API_KEY"), ("gpt-5.5-f384-evclips", "OPENAI_API_KEY"),
+    ("gemini-3.6-flash-high-evclips", "GEMINI_API_KEY"), ("gemini-3.1-flash-lite-high-evclips", "GEMINI_API_KEY"),
+    ("qwen3.5-flash-f384-evclips", "OPENROUTER_API_KEY"))}
+ALSO_POOLS |= {("api", "qwen3.5-flash-f384-evclips"): ["nexus", "zaratan"]}
+EXPERIMENTS += [(b, arm, "qa", pools, bank) for bank in BANKS for b, arm, pools in EVCLIPS]
 # the file whose presence in <baseline>/<arm>/<video>/ (next to runs.jsonl) means the memory is built: the last
 # one each baseline writes ({v}: the video)
 MEMORY_DONE = {"merit": "{v}_30sec_4_key.json", "magic": "graph.pkl", "worldmm": "{v}_visual.pkl",
@@ -472,14 +478,15 @@ def built_from(files):
 
 def lead(t):
     """Where a task's group stands in the list: the CANARY's builds (-1), the index of its FIRST entry, then the API
-    tasks, the URGENT lines, the other stitched videos' builds, the rest."""
+    tasks (API_CONFIGS'), the URGENT lines, the other stitched videos' builds, the rest."""
     k = (t["baseline"], t["arm"], t["stage"])
     if t["video"] in STITCHED_VIDEOS:
         return -1 if t["video"] == CANARY else len(FIRST) + 3
     for i, f in enumerate(FIRST):
         if k[:len(f)] == f:
             return i
-    return len(FIRST) + (1 if k[0] == "api" else 2 if k in {(b, arm, stage) for b, arm, stage, *_ in URGENT} else 4)
+    api = k[0] == "api" and k[1] in API_CONFIGS   # the evidence-clips configs (EVCLIPS) stay last, with the rest
+    return len(FIRST) + (1 if api else 2 if k in {(b, arm, stage) for b, arm, stage, *_ in URGENT} else 4)
 
 
 def reported(t):

@@ -6,7 +6,10 @@ frame (what is in view when the question is asked), so no frame can come from af
 records the times used (``frame_times_s``, ``last_frame_s``). At most ``max_frames`` frames, never more than
 ``max_fps`` a second, scaled to ``frame_side`` px and sent with ``detail``. The frames come first in every
 request of a context, so the provider's automatic prompt cache can reuse them across its questions.
-The key is read from the environment only (``api_key_env``, default OPENAI_API_KEY).
+The key is read from the environment only (``api_key_env``, default OPENAI_API_KEY). Optional config fields:
+``base_url`` (another OpenAI-compatible endpoint, e.g. OpenRouter's; default OPENAI_BASE_URL, else OpenAI's),
+``name_prefix_env`` (a variable whose value goes before the model id: a gateway that names the model so, e.g.
+NVIDIA's azure/openai/gpt-4.1), ``temperature``.
 """
 
 from __future__ import annotations
@@ -30,7 +33,7 @@ def make_client(mcfg: dict):
     if not key:
         raise RuntimeError(f"no OpenAI key: set ${mcfg.get('api_key_env', 'OPENAI_API_KEY')}")
     # the SDK retries 408/409/429/5xx and connection errors itself, with backoff
-    return OpenAI(api_key=key.strip(), max_retries=int(mcfg.get("max_retries", 6)),
+    return OpenAI(api_key=key.strip(), base_url=mcfg.get("base_url"), max_retries=int(mcfg.get("max_retries", 6)),
                   timeout=float(mcfg.get("timeout_s", 1800)))
 
 
@@ -96,11 +99,14 @@ def _content(mcfg: dict, ctx: dict, prompt: str) -> list[dict]:
 
 def ask(client, mcfg: dict, ctx: dict, prompt: str, n_options: int) -> dict:
     letters = [chr(ord("A") + i) for i in range(n_options)]
-    kw = {"model": mcfg["name"], "instructions": ctx["system_instruction"], "store": False,
+    name = os.environ.get(mcfg["name_prefix_env"], "") + mcfg["name"] if mcfg.get("name_prefix_env") else mcfg["name"]
+    kw = {"model": name, "instructions": ctx["system_instruction"], "store": False,
           "input": [{"role": "user", "content": _content(mcfg, ctx, prompt)}],
           "text": {"format": {"type": "json_schema", "name": "answer", "strict": True, "schema": {
               "type": "object", "properties": {"answer": {"type": "string", "enum": letters}},
               "required": ["answer"], "additionalProperties": False}}}}
+    if mcfg.get("temperature") is not None:
+        kw["temperature"] = float(mcfg["temperature"])
     if mcfg.get("max_output_tokens"):
         kw["max_output_tokens"] = int(mcfg["max_output_tokens"])
     reasoning = {k: mcfg[f"reasoning_{k}"] for k in ("effort", "summary") if mcfg.get(f"reasoning_{k}")}
@@ -133,6 +139,7 @@ def ask(client, mcfg: dict, ctx: dict, prompt: str, n_options: int) -> dict:
         "latency_s": round(latency, 2),
         "cache_used": bool(usage.get("cached_content_token_count")),
         "model_returned": getattr(resp, "model", None),
+        "endpoint": str(client.base_url),
         "n_frames": len(ctx["frame_times"]),
         "frame_times_s": ctx["frame_times"],
         "last_frame_s": ctx["frame_times"][-1] if ctx["frame_times"] else None,

@@ -25,6 +25,16 @@ layout. Rows prepared: `gemini-3.1-flash-lite`, `gemini-3.6-flash`, `gpt-5`. Gem
 | `gpt-5-f1024` | `gpt-5` (deprecated, **shut down 2026-12-11**) | frames of the clip | up to 1,024 frames, at most 1 a second, 512 px, `detail: high`, reasoning effort high |
 | `gpt-5.5-f384` | `gpt-5.5` | frames of the clip | `gpt-5-f1024`'s settings with at most 384 frames: its stand-in on the board (Anubhav, 2026-11-15). No pool reaches `gpt-5`, and through NVIDIA's gateway GPT-5.1 and GPT-5.5 run out of context beyond 384 frames in a request, so nothing sends them more. Not run yet |
 
+**Evidence-clips configs (`*-evclips`, the ablation in `coord/master.py` `EVCLIPS`).** epic_eval's evidence mode with
+`media.source: "evclips"`: a question's media is its stitched evidence clips (`../common/evclips.py`: `EVCLIPS_DIR` or
+the dataset), copied as they are instead of encoded here, with epic_eval's evidence prompt (excerpts joined in order).
+`gemini-3.6-flash-high-evclips`, `gemini-3.1-flash-lite-high-evclips` and `gpt-5.5-f384-evclips` keep their base
+configs' model settings; `gpt-4.1-f384-evclips` (temperature 0, its id prefixed with `$EGAGENT_GPT_PREFIX`, NVIDIA's
+gateway's `azure/openai/`), `gpt-5.1-f384-evclips` (no reasoning setting, as MERIT's g5m-g51 calls it) and
+`qwen3.5-flash-f384-evclips` (`qwen/qwen3.5-flash-02-23` through OpenRouter, `OPENROUTER_API_KEY`) take GPT-5.5's frame
+settings (at most 384, 1 a second, 512 px, detail high). The backend's config fields `base_url`, `name_prefix_env` and
+`temperature` are for these.
+
 Both new Gemini models accept thinking `high` (their documented levels are minimal, low, medium, high), so
 the three Gemini configs differ in the model id only. Model ids, limits and prices were read from the
 providers' pages on 2026-11-13 ([Gemini models](https://aistudio.google.com/docs/models),

@@ -29,8 +29,8 @@ TAG=$(bash "$REPO/baselines/vst/docker/image_tag.sh" "$ARM") || exit 1   # stops
 IMAGE=${VST_IMAGE:-ghcr.io/morph-graphs/vst:$TAG}
 RUNTIME=${VST_RUNTIME:-${MERIT_RUNTIME:-docker}}
 SIFS=${VST_SIF_DIR:-${MERIT_SIF_DIR:-}}
-if [ "$RUNTIME" = apptainer ] && [ -z "${VST_IMAGE:-}" ] && [ -n "$SIFS" ] && [ -s "$SIFS/vst_$ARM.sif" ]; then
-    IMAGE=$SIFS/vst_$ARM.sif
+if [ "$RUNTIME" = apptainer ] && [ -z "${VST_IMAGE:-}" ] && [ -n "$SIFS" ] && [ -s "$SIFS/vst_${ARM%-evclips}.sif" ]; then
+    IMAGE=$SIFS/vst_${ARM%-evclips}.sif
 fi
 [ -f "$REPO/baselines/vst/VST/eval/lmms-eval/lmms_eval/models/simple/qwen2_5_vl_stream_think.py" ] || { echo "run: git submodule update --init baselines/vst/VST"; exit 1; }
 HF=${VST_HF_CACHE:-${MERIT_HF_CACHE:-$HOME/.cache/huggingface}}
@@ -45,7 +45,10 @@ ENVS=(EPIC_MORPH_DIR=/epic-morph HDEPIC_VIDEOS=/videos HF_HOME=/hf HF_HUB_OFFLIN
       VST_SUBMODULE_COMMIT="$(git -C "$REPO/baselines/vst/VST" rev-parse HEAD 2>/dev/null || true)"
       VST_EPIC_COMMIT="$(git -C "$EPIC" rev-parse HEAD 2>/dev/null || true)")
 if [ -n "${VST_MODEL_DIR:-}" ]; then BINDS+=("$(cd -P "$VST_MODEL_DIR" && pwd):/models:ro"); ENVS+=(VST_MODELS=/models); fi
-PASS=(HF_TOKEN MERIT_HF_REPO MERIT_OUTBOX VST_TAG VST_LIMIT VST_OUT VST_THINK_TIMES VST_VID_TOKENS VST_MAX_FRAMES)
+PASS=(HF_TOKEN MERIT_HF_REPO MERIT_OUTBOX VST_TAG VST_LIMIT VST_OUT VST_THINK_TIMES VST_VID_TOKENS VST_MAX_FRAMES EVCLIPS_HF_REPO)
+# the evidence-clips arms' stitched videos (baselines/common/evclips.py): a local copy when EVCLIPS_DIR is set, else
+# they are fetched from the dataset into the mounted cache
+if [ -n "${EVCLIPS_DIR:-}" ]; then BINDS+=("$(cd -P "$EVCLIPS_DIR" && pwd):/evclips:ro"); ENVS+=(EVCLIPS_DIR=/evclips); fi
 if [ "$RUNTIME" = apptainer ]; then
     case $IMAGE in *.sif) ;; *) IMAGE=docker://$IMAGE ;; esac
     # through APPTAINERENV_* (the environment), not --env: a command line, token included, is visible in `ps`

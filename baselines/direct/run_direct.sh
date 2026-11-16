@@ -9,21 +9,18 @@
 #          qa     the model answers every question of <bank> for this video                GPU
 #          upload this video and arm's results folder to the Hugging Face dataset          (needs a write token)
 #          all    prep, then qa when a bank is given (no upload)
-#   arm    <model>-f<N>: the model and the frame budget N; or <model>-evclips: the question's evidence clips only
+#   arm    <model>-f<N>: the model and the frame budget N; <model>-evclips: the evidence-clips ablation
 #          model  qwen3vl-8b   Qwen/Qwen3-VL-8B-Instruct   MERIT's m8 environment
 #                 qwen38-27b   Qwen/Qwen3.8-27B            MERIT's m27 environment
 #                 qwen35-9b    Qwen/Qwen3.5-9B             MERIT's m27 environment
 #                 qwen35-35b-a3b  Qwen/Qwen3.5-35B-A3B     MERIT's m27 environment
 #                 molmo2-8b    allenai/Molmo2-8B           MERIT's m8 environment (context 36,864 tokens: N <= 384)
-#                 vst7b        Catalan258/VST-7B           MERIT's m8 environment (as a plain Qwen2.5-VL-7B)
-#                 paid APIs (the evidence-clips ablation; MERIT's m8 environment, its openai client):
-#                 gpt-4.1 gpt-5.1 gpt-5.5 (OPENAI_API_KEY; OPENAI_BASE_URL a gateway), gemini-3.6-flash
-#                 gemini-3.1-flash-lite (GEMINI_API_KEY), qwen35-flash (OPENROUTER_API_KEY: qwen/qwen3.5-flash-02-23)
 #          N      at most N frames per question, evenly spaced over the video before t_ask, the last one
 #                 just before t_ask; all of them (1 fps) when the video so far has fewer than N seconds
-#          evclips the union of the question's evidence clips (bank field evidence.clips), merged where they overlap,
-#                 at 1 fps: ceil(length) frames per merged range; nothing else of the video (an upper bound of the model)
-#          e.g. qwen3vl-8b-f32, qwen35-9b-f128, qwen38-27b-f768, molmo2-8b-f384, qwen3vl-8b-evclips, gpt-5.5-evclips
+#          evclips the question's stitched evidence clips instead of the video (baselines/common/evclips.py: from
+#                 EVCLIPS_DIR, else the dataset EVCLIPS_HF_REPO), all of its 1 fps frames, stamped with source times;
+#                 no prep of the source video
+#          e.g. qwen3vl-8b-f32, qwen35-9b-f128, qwen38-27b-f768, molmo2-8b-f384, qwen3vl-8b-evclips
 #   bank   a named bank of the epic-morph checkout, e.g. batch10_agree2 (generated there with
 #          v3/export_bank.py <bank> when missing)
 #
@@ -34,8 +31,6 @@
 #   DIRECT_OUT     default baselines/direct/results: per <arm>/<video>, answers_<bank>.json.gz and runs.jsonl (not
 #                  committed; `upload` puts them in the dataset morph-graphs/epic-morph-results at direct/<arm>/<video>/)
 #   DIRECT_LIMIT   answer only this many questions, spread over the bank (smoke test)
-#   DIRECT_API_THREADS  paid models: calls in flight (default 8); DIRECT_GPT_PREFIX: put before GPT model ids (a gateway
-#                  that names them so, e.g. azure/openai/)
 #   DIRECT_REPO_COMMIT, DIRECT_MERIT_COMMIT, DIRECT_EPIC_COMMIT  commits for runs.jsonl when a checkout has no .git
 #                  (a synced copy); read with git otherwise
 # qa skips answered questions, so rerunning the same command resumes.
@@ -47,7 +42,7 @@ M=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); REPO=$(cd "$M/../.." && pwd); M
 PY=${PY:?set PY to the python of the model\'s environment}
 EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && pwd)
 [ -f "$MERIT/MERIT/eval/evaluate_egolife.py" ] || { echo "MERIT submodule missing (its model loader, prompt and scorer are used): git submodule update --init baselines/merit/MERIT"; exit 1; }
-MODELS='qwen3vl-8b|qwen38-27b|qwen35-9b|qwen35-35b-a3b|molmo2-8b|vst7b|gpt-4\.1|gpt-5\.1|gpt-5\.5|gemini-3\.6-flash|gemini-3\.1-flash-lite|qwen35-flash'
+MODELS='qwen3vl-8b|qwen38-27b|qwen35-9b|qwen35-35b-a3b|molmo2-8b'
 [[ $ARM =~ ^($MODELS)-(f([1-9][0-9]*)|evclips)$ ]] || { echo "arm must be <$MODELS>-f<N> or <model>-evclips, got $ARM"; exit 1; }
 MODEL=${BASH_REMATCH[1]}; FRAMES=${BASH_REMATCH[3]:-evclips}
 VIDEOS=${HDEPIC_VIDEOS:-$EPIC/data/HD-EPIC/videos}; WORK=${DIRECT_WORK:-${MERIT_WORK:-$MERIT/work}}; OUTROOT=${DIRECT_OUT:-$M/results}
@@ -103,10 +98,11 @@ qa() {
         ( flock 9; [ -s "$bf" ] || (cd "$EPIC" && "$PY" v3/export_bank.py "$bank") >&2 ) 9>"$EPIC/outputs/v3/banks/.$bank.lock"
     fi
     [ -s "$bf" ] || { echo "no $bank questions for $V in $EPIC"; exit 1; }
-    prep
+    local src=(--frame_root "$WORK/frames_448" --skeleton "$SKEL")
+    if [ "$FRAMES" = evclips ]; then src=(--evclips_frames "$WORK/evclips_frames"); else prep; fi
     "$PY" "$M/epic/direct_qa.py" --model "$MODEL" --frames "$FRAMES" --video "$V" --bank_file "$bf" \
-        --frame_root "$WORK/frames_448" --skeleton "$SKEL" --output "$OUT/answers_$bank.json.gz" ${DIRECT_LIMIT:+--limit "$DIRECT_LIMIT"} \
-        || { [ $? = 2 ] && echo "some questions failed (out of GPU memory, or a paid call's error): rerun the same command to retry them"; exit 1; }
+        "${src[@]}" --output "$OUT/answers_$bank.json.gz" ${DIRECT_LIMIT:+--limit "$DIRECT_LIMIT"} \
+        || { [ $? = 2 ] && echo "some questions ran out of GPU memory: rerun the same command to retry them"; exit 1; }
     record "qa $bank" $((SECONDS - t))
 }
 upload() {   # answers + runs.jsonl: there is no memory (hf_results.py --memory none)

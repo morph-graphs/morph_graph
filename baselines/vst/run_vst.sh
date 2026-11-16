@@ -12,6 +12,8 @@
 #          upload this video and arm's results folder to the Hugging Face dataset  (needs a write token)
 #          all    prep + build, then qa + blind when a bank is given (no upload)
 #   arm    vst7b  Catalan258/VST-7B (Qwen2.5-VL-7B weights), VST's OVO-Bench settings     one GPU with >= 24 GB, 64 GB RAM
+#          vst7b-evclips  the same on each question's stitched evidence clips, shown whole (the evidence-clips
+#                 ablation: baselines/common/evclips.py, EVCLIPS_DIR or the dataset EVCLIPS_HF_REPO)
 #   bank   a named bank of the epic-morph checkout, e.g. batch10_agree2 (generated there with
 #          v3/export_bank.py <bank> when missing)
 #
@@ -38,8 +40,8 @@ PY=${PY:?set PY to the python of the VST environment}
 EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && pwd)
 [ -f "$R/eval/lmms-eval/lmms_eval/models/simple/qwen2_5_vl_stream_think.py" ] || { echo "submodule missing: git submodule update --init baselines/vst/VST"; exit 1; }
 case $ARM in
-    vst7b) NAME=Catalan258/VST-7B ;;
-    *) echo "arm must be vst7b"; exit 1 ;;
+    vst7b|vst7b-evclips) NAME=Catalan258/VST-7B ;;
+    *) echo "arm must be vst7b or vst7b-evclips"; exit 1 ;;
 esac
 MODEL=$NAME; [ -z "${VST_MODELS:-}" ] || MODEL=$VST_MODELS/${NAME#*/}
 VIDEOS=${HDEPIC_VIDEOS:-$EPIC/data/HD-EPIC/videos}; VIDEO=$VIDEOS/${V%%-*}/$V.mp4
@@ -72,9 +74,10 @@ PYEOF
 export EPIC MODEL
 cd "$REPO"
 
+EVC=; [ "$ARM" = vst7b-evclips ] && EVC=1
 prep() {
     log prep
-    [ -s "$VIDEO" ] || { echo "missing $VIDEO (epic-morph v3/DATA.md)"; exit 1; }
+    [ -n "$EVC" ] || [ -s "$VIDEO" ] || { echo "missing $VIDEO (epic-morph v3/DATA.md)"; exit 1; }
 }
 build() {
     log build
@@ -93,7 +96,7 @@ bank_file() {   # this bank's questions for the video (banks are generated in ep
 answer() {   # answer <stage name> <answers file> [--blind]: up to three passes, each retrying what failed
     local name=$1 ans=$2 t=$SECONDS k rc=0; shift 2
     for k in 1 2 3; do
-        rc=0; run_qa --video_file "$VIDEO" --bank_file "$BF" --answers "$ans" ${VST_LIMIT:+--limit "$VST_LIMIT"} "$@" || rc=$?
+        rc=0; run_qa --video_file "$VIDEO" --bank_file "$BF" ${EVC:+--evclips} --answers "$ans" ${VST_LIMIT:+--limit "$VST_LIMIT"} "$@" || rc=$?
         [ $rc = 2 ] || break
     done
     [ $rc = 0 ] || { echo "$name did not finish (exit $rc); rerun the same command to retry"; exit 1; }

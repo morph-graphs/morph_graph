@@ -7,6 +7,8 @@ same clip can be reused by local models. An evidence file is the question's
 clips (sorted, merged, cut at t_ask; see ``common.evidence_spans``), each cut from
 the source with input-side ``-ss/-t`` and concatenated in one encode. Every output
 is validated by probing its duration; ``_done.json`` is written only when all of a video's files pass.
+With ``media.source: "evclips"`` (the evidence-clips ablation) an evidence file is not encoded here: it is a copy of
+the question's stitched video (baselines/common/evclips.py, encoded once for every baseline), validated the same way.
 
     python -m epic_eval.prep_media --run_dir <run> --video P09-20240621-093545
 """
@@ -16,6 +18,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
+import sys
 import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -167,20 +171,32 @@ def prep_evidence(cfg: dict, video: str, rows: list, src, full_s: float, force: 
     cpus = int(os.environ.get("SLURM_CPUS_PER_TASK", os.cpu_count() or 1))
     threads = max(1, cpus // max(1, workers))
 
+    ev = None
+    if media.get("source") == "evclips":
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "baselines" / "common"))
+        import evclips
+        ev = {r["qid"]: evclips.lookup(video, r["key"], r["evidence_clips"], r["t_ask"]) for r in rows}
+
     def one(r):
         spans = evidence_spans(r)  # raises on a question without evidence
-        target = sum(b - a for a, b in spans)
+        target = ev[r["qid"]]["duration"] if ev else sum(b - a for a, b in spans)
         dst = media_path(media_dir, video, r["qid"], "evidence")
         ok, why = expected_ok(dst, target, media)
         if ok and not force and old.get(dst.name, {}).get("clips") == spans:
             print(f"  keep {dst.name} ({why})")
         else:
-            encode_evidence(src, dst, spans, media, threads)
+            if ev:   # the stitched video as it is
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(ev[r["qid"]]["file"], str(dst) + ".tmp.mp4")
+                os.replace(str(dst) + ".tmp.mp4", dst)
+            else:
+                encode_evidence(src, dst, spans, media, threads)
             ok, why = expected_ok(dst, target, media)
             print(f"  wrote {dst.name}: {len(spans)} clips, {target:.1f}s ({why})")
             if not ok:
                 raise RuntimeError(f"{dst} failed validation: {why}")
         return dst.name, {"qid": r["qid"], "t_ask": r["t_ask"], "clips": spans, "clips_s": round(target, 3),
+                          **({"evclips_file": ev[r["qid"]]["id"], "segments": ev[r["qid"]]["segments"]} if ev else {}),
                           "duration_s": probe_duration(dst), "bytes": dst.stat().st_size}
 
     print(f"  {len(rows)} evidence files, {workers} parallel encodes x {threads} threads")
