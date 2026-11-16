@@ -4,17 +4,20 @@ mp4, for the "evidence clips only" ablation (Anubhav, 2026-11-15).
 A question's spans are the union of its bank evidence.clips ranges, merged where they overlap, in time order, no
 padding (epic_eval.common.evidence_spans; for an end question the cut at t_ask is the video's end). Questions of a
 video with the same spans (rounded to 0.01 s) share one file, named by a hash of (video, spans). Each span is snapped
-to the source's frame grid (frames round(t0 * fps) .. round(t1 * fps) - 1) and cut frame-exactly (input seek, then
+to the source's frame grid (frame k is shown at v0 + k / fps, v0 the video stream's start time: frames
+round((t0 - v0) * fps) .. round((t1 - v0) * fps) - 1) and cut frame-exactly (input seek, then
 re-encoded); the cut segments are concatenated at the source's constant frame rate and encoded as MERIT's prep
 encodes its 448 px videos (prepare_epic.make_clips: scale=448:448, no audio, libx264 veryfast crf 23).
 
-    python baselines/common/evclips_stitch.py plan --bank_root <epic-morph>/outputs/v3/banks --out OUT   # host python
-    python baselines/common/evclips_stitch.py stitch --out OUT --video_dir <HD-EPIC>/videos --shard i --n_shards N
-    python baselines/common/evclips_stitch.py check --out OUT --video_dir ... [--ids <id> ...] [--pixels]
+    python baselines/common/evclips_stitch.py plan --bank_root <epic-morph>/outputs/v3/banks --video_dir <HD-EPIC>/videos \
+        [--extra_bank stitched_eov <bank root> <stitched videos dir> <epic-morph commit>] --out OUT   # host python
+    python baselines/common/evclips_stitch.py stitch --out OUT --shard i --n_shards N
+    python baselines/common/evclips_stitch.py check --out OUT [--ids <id> ...] [--pixels]
     python baselines/common/evclips_stitch.py manifest --out OUT                 # OUT/manifest.json, all files done
 
 stitch, check and manifest need ffmpeg/ffprobe (and numpy for check): run them inside MERIT's image
-(run_evclips_stitch.sbatch). Outputs: OUT/videos/<video>/<id>.mp4 plus OUT/segments/<video>/<id>.json (what was cut),
+(run_evclips_stitch.sbatch). A bank's source videos are <video_dir>/<P>/<video>.mp4 (HD-EPIC; the stitched videos'
+folder has the same layout); plan resolves each file's source. Outputs: OUT/videos/<video>/<id>.mp4 plus OUT/segments/<video>/<id>.json (what was cut),
 skipped when present, so a preempted shard resumes.
 """
 import argparse
@@ -55,10 +58,13 @@ def run(cmd):
 
 
 def plan(a):
-    """OUT/plan.json: every question -> file id, every file -> (video, spans). Reads the bank files only."""
-    questions, files = [], {}
-    for bank in a.banks:
-        for f in sorted(glob.glob(os.path.join(a.bank_root, bank, "*_questions.json"))):
+    """OUT/plan.json: every question -> file id, every file -> (video, source, spans). Reads the bank files only."""
+    banks = [(b, a.bank_root, a.video_dir, a.epic_morph_commit) for b in a.banks] + [tuple(x) for x in a.extra_bank]
+    questions, files, src = [], {}, {}
+    for bank, root, video_dir, commit in banks:
+        bank_files = sorted(glob.glob(os.path.join(root, bank, "*_questions.json")))
+        assert bank_files, f"no bank files in {root}/{bank}"
+        for f in bank_files:
             for q in json.load(open(f))["questions"]:
                 if q.get("ask_at") != "end" or (a.videos and q["video"] not in a.videos):
                     continue
@@ -67,14 +73,18 @@ def plan(a):
                 spans = evidence_spans({"qid": qid, "t_ask": t_ask, "evidence_clips": evidence_clips(q)})
                 spans = [[round(s, 2), round(e, 2)] for s, e in spans]
                 fid = file_id(q["video"], spans)
-                assert files.setdefault(fid, {"video": q["video"], "spans": spans})["spans"] == spans, fid
+                rec = {"video": q["video"], "src": os.path.join(os.path.abspath(video_dir), q["video"].split("-")[0],
+                                                                 q["video"] + ".mp4"), "spans": spans}
+                assert files.setdefault(fid, rec) == rec, fid
                 questions.append({"bank": bank, "video": q["video"], "key": q["key"], "qid": qid, "file": fid})
-    git = lambda *c: subprocess.run(["git", "-C", a.bank_root, *c], capture_output=True, text=True).stdout.strip()
-    bank_files = sorted(glob.glob(os.path.join(a.bank_root, "*_end", "*_questions.json")))
-    src = {"bank_root": os.path.abspath(a.bank_root), "banks": a.banks, "epic_morph_head": git("rev-parse", "HEAD"),
-           "epic_morph_dirty": git("status", "--porcelain", "--", ":(top)v3/export_bank.py"), "epic_morph_commit": a.epic_morph_commit,
-           "bank_sha1": {os.path.relpath(f, a.bank_root): hashlib.sha1(open(f, "rb").read()).hexdigest()
-                         for f in bank_files if f.split(os.sep)[-2] in a.banks}}
+        git = lambda *c: subprocess.run(["git", "-C", root, *c], capture_output=True, text=True).stdout.strip()
+        src[bank] = {"bank_root": os.path.abspath(root), "video_dir": os.path.abspath(video_dir), "epic_morph_commit": commit,
+                     "epic_morph_head": git("rev-parse", "HEAD") or None,
+                     "epic_morph_dirty": git("status", "--porcelain", "--", ":(top)v3/export_bank.py") or None,
+                     "bank_sha1": {os.path.relpath(f, root): hashlib.sha1(open(f, "rb").read()).hexdigest()
+                                   for f in bank_files}}
+    missing = sorted({f["src"] for f in files.values() if not os.path.exists(f["src"])})
+    assert not missing, f"{len(missing)} source videos missing, e.g. {missing[:3]}"
     os.makedirs(a.out, exist_ok=True)
     json.dump({"source": src, "questions": questions, "files": files}, open(os.path.join(a.out, "plan.json"), "w"),
               indent=1)
@@ -82,31 +92,39 @@ def plan(a):
     secs = sum(e - s for f in files.values() for s, e in f["spans"])
     print(f"{len(questions)} questions, {n_vid} videos -> {len(files)} files ({len(questions) / len(files):.2f} "
           f"questions per file), {secs / 3600:.2f} h of stitched video")
+    for bank, *_ in banks:
+        qs = [q for q in questions if q["bank"] == bank]
+        print(f"  {bank}: {len(qs)} questions, {len({q['video'] for q in qs})} videos, {len({q['file'] for q in qs})} files")
 
 
 def probe(src):
-    s = json.loads(run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
-                        "stream=r_frame_rate,avg_frame_rate,nb_frames,start_time", "-of", "json", src]))["streams"][0]
+    """(fps, frames, v0, seek base): the video stream's start time v0 (frame k is at v0 + k / fps) and the
+    container's start time, which ffmpeg's input -ss counts from."""
+    d = json.loads(run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                        "stream=r_frame_rate,avg_frame_rate,nb_frames,start_time:format=start_time", "-of", "json", src]))
+    s = d["streams"][0]
     assert s["r_frame_rate"] == s["avg_frame_rate"], f"{src}: not constant frame rate ({s})"
-    assert abs(float(s.get("start_time", 0))) < 1e-6, f"{src}: start_time {s['start_time']}"
-    return Fraction(s["r_frame_rate"]), int(s["nb_frames"])
+    return Fraction(s["r_frame_rate"]), int(s["nb_frames"]), float(s.get("start_time", 0)), \
+        float(d["format"].get("start_time", 0))
 
 
-def stitch_one(fid, f, out, video_dir, threads):
+def stitch_one(fid, f, out, threads):
     mp4, meta = paths(out, f["video"], fid)
     if os.path.exists(mp4) and os.path.exists(meta):
         return None
-    src = os.path.join(video_dir, f["video"].split("-")[0], f["video"] + ".mp4")
-    fps, n_src = probe(src)
+    src = f["src"]
+    fps, n_src, v0, base = probe(src)
     t0 = time.time()
     # frame-grid spans: frames k0 .. k1 - 1 (never a frame of the previous span); the input window runs from half a
-    # frame before k0 to half a frame before k1, so accurate seek keeps exactly those frames
+    # frame before k0 to half a frame before k1 (counted from the container start), so accurate seek keeps exactly
+    # those frames
+    off = Fraction(v0 - base).limit_denominator(1000000)
     segs, args, chains = [], [], []
     for i, (s, e) in enumerate(f["spans"]):
-        k0 = max(min(round(s * fps), n_src - 1), segs[-1][1] if segs else 0)
-        k1 = max(min(round(e * fps), n_src), k0 + 1)
-        ss = max(Fraction(0), (k0 - Fraction(1, 2)) / fps)
-        args += ["-ss", f"{float(ss):.6f}", "-t", f"{float((k1 - Fraction(1, 2)) / fps - ss):.6f}", "-i", src]
+        k0 = max(min(round((s - v0) * fps), n_src - 1), segs[-1][1] if segs else 0)
+        k1 = max(min(round((e - v0) * fps), n_src), k0 + 1)
+        ss = max(Fraction(0), off + (k0 - Fraction(1, 2)) / fps)
+        args += ["-ss", f"{float(ss):.6f}", "-t", f"{float(off + (k1 - Fraction(1, 2)) / fps - ss):.6f}", "-i", src]
         chains.append(f"[{i}:v]setpts=PTS-STARTPTS[v{i}]")
         segs.append((k0, k1))
     n = sum(k1 - k0 for k0, k1 in segs)
@@ -123,12 +141,13 @@ def stitch_one(fid, f, out, video_dir, threads):
     assert got == n, f"{fid}: {got} frames written, {n} cut ({segs})"
     rows, at = [], 0
     for (s, e), (k0, k1) in zip(f["spans"], segs):
-        rows.append({"src_start": round(float(k0 / fps), 6), "src_end": round(float(k1 / fps), 6),
+        rows.append({"src_start": round(v0 + float(k0 / fps), 6), "src_end": round(v0 + float(k1 / fps), 6),
                      "stitched_start": round(float(at / fps), 6), "stitched_end": round(float((at + k1 - k0) / fps), 6),
                      "src_frames": [k0, k1], "span": [s, e]})
         at += k1 - k0
     os.replace(tmp, mp4)
-    rec = {"id": fid, "video": f["video"], "path": os.path.relpath(mp4, out), "fps": f"{fps.numerator}/{fps.denominator}",
+    rec = {"id": fid, "video": f["video"], "path": os.path.relpath(mp4, out), "src": src, "src_start_time": v0,
+           "fps": f"{fps.numerator}/{fps.denominator}",
            "frames": n, "duration": round(float(n / fps), 6), "bytes": os.path.getsize(mp4), "segments": rows,
            "encode_s": round(time.time() - t0, 2)}
     json.dump(rec, open(f"{meta}.{tag}.part", "w"), indent=1)
@@ -143,7 +162,7 @@ def stitch(a):
         ids = ids[:a.limit]
     t0 = time.time()
     with ThreadPoolExecutor(a.jobs) as ex:
-        done = [r for r in ex.map(lambda i: stitch_one(i, files[i], a.out, a.video_dir, a.threads), ids) if r]
+        done = [r for r in ex.map(lambda i: stitch_one(i, files[i], a.out, a.threads), ids) if r]
     wall = time.time() - t0
     secs = sum(r["duration"] for r in done)
     print(f"shard {a.shard}/{a.n_shards}: {len(ids)} files, {len(done)} stitched ({len(ids) - len(done)} existed), "
@@ -218,8 +237,7 @@ def check(a):
         worst = max(worst, abs(dur - seg_s))
         if a.pixels:
             print(f"{meta['id']} ({meta['video']}, {len(meta['segments'])} segments, {dur:.3f} s):")
-            src = os.path.join(a.video_dir, meta["video"].split("-")[0], meta["video"] + ".mp4")
-            if not check_pixels(src, path, meta):
+            if not check_pixels(meta["src"], path, meta):
                 bad.append("not frame-exact")
         if bad:
             n_bad += 1
@@ -240,7 +258,7 @@ def manifest(a):
     if missing and not a.partial:
         sys.exit(f"{len(missing)} of {len(p['files'])} files not stitched yet, e.g. {missing[:3]}")
     settings = {"spans": "epic_eval.common.evidence_spans (union of evidence.clips, merged, cut at t_ask), no padding, "
-                         "rounded to 0.01 s; snapped to frames round(t * fps)",
+                         "rounded to 0.01 s; snapped to frames round((t - v0) * fps), v0 = the video stream start time",
                 "filter": f"per span input seek + concat, setpts=N/fps, scale={SIZE}:{SIZE}", "encode": ENCODE,
                 "fps": "source (constant)", "audio": None}
     out = {"encoder": run(["ffmpeg", "-version"]).splitlines()[0], "settings": settings, "source": p["source"],
@@ -259,11 +277,12 @@ def main():
         s.add_argument("--out", required=True)
         if name == "plan":
             s.add_argument("--bank_root", required=True, help="epic-morph outputs/v3/banks")
+            s.add_argument("--video_dir", required=True, help="the banks' videos: <video_dir>/<P>/<video>.mp4 (HD-EPIC)")
+            s.add_argument("--extra_bank", nargs=4, action="append", default=[], metavar=("NAME", "ROOT", "VIDEO_DIR", "COMMIT"),
+                           help="another bank with its own bank root, video folder and epic-morph commit (stitched_eov)")
             s.add_argument("--banks", nargs="+", default=BANKS)
             s.add_argument("--videos", nargs="+", help="only these videos (a smoke test)")
             s.add_argument("--epic_morph_commit", help="the epic-morph commit whose export_bank.py wrote the banks")
-        if name in ("stitch", "check"):
-            s.add_argument("--video_dir", required=True, help="HD-EPIC videos/<P>/<video>.mp4")
         if name == "stitch":
             s.add_argument("--shard", type=int, default=0)
             s.add_argument("--n_shards", type=int, default=1)

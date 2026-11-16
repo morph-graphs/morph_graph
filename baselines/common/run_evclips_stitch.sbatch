@@ -18,11 +18,11 @@
 set -euo pipefail
 : "${OUT:?}" "${REPO:?}"
 SIF=${SIF:-/fs/cfar-projects/mem_open_vocab/envs/sif/merit_m8.sif}
-VIDEOS=${VIDEOS:-/fs/cfar-projects/mem_open_vocab/datasets/HD-EPIC/videos}
 N_SHARDS=${N_SHARDS:-${SLURM_ARRAY_TASK_COUNT:-1}}
 JOBS=${JOBS:-$SLURM_CPUS_PER_TASK}
 THREADS=${THREADS:-1}
 echo "$(date -Is) $(hostname) task ${SLURM_ARRAY_TASK_ID:-0}/$N_SHARDS jobs $JOBS threads $THREADS"
-apptainer exec --bind /fs/cfar-projects --bind "$REPO" --bind "$OUT" "$SIF" \
-    python3 "$REPO/baselines/common/evclips_stitch.py" stitch --out "$OUT" --video_dir "$VIDEOS" \
+# /fs/nexus-scratch: a stitched video (P07) links there
+apptainer exec --bind /fs/cfar-projects --bind /fs/nexus-scratch --bind "$REPO" --bind "$OUT" "$SIF" \
+    python3 "$REPO/baselines/common/evclips_stitch.py" stitch --out "$OUT" \
     --shard "${SLURM_ARRAY_TASK_ID:-0}" --n_shards "$N_SHARDS" --jobs "$JOBS" --threads "$THREADS"
