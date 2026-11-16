@@ -34,7 +34,7 @@ gateway serves) follow the reported-configuration arms, for every bank of BANKS,
 behind the same PILOT gate (MAGIC-Video's OpenRouter arms also on `nexus`: ALSO_POOLS).
 While a task of a PRIORITY arm is listed, the tasks of every other arm are withheld (gate()).
 The lines of FIRST lead the list, ahead of the API tasks: MAGIC-Video's tasks, then MERIT's with Qwen3.8-27B.
-The stitched videos' memory builds (STITCHED): one video's (CANARY) right after them, the others after the URGENT lines.
+The stitched videos' memory builds (STITCHED): one video's (CANARY) ahead of everything, the others after the URGENT lines.
 """
 import argparse
 import functools
@@ -189,7 +189,8 @@ MEMORY_ARM |= {(b, arm): mem for b, mem, answer in PAID_ROWS for arm in answer i
 NEEDS_ENV |= {
     ("egor1", "gemini36flash"): ["GEMINI_API_KEY", "OPENAI_API_KEY"],
     ("egor1", "gemini36flash-gpt41"): ["GEMINI_API_KEY", "OPENAI_API_KEY"],
-    ("egagent", "gpt41"): ["OPENAI_API_KEY"], ("egagent", "gemini36flash"): ["GEMINI_API_KEY"],
+    # EGAgent's memory: OpenAI's key, a gateway's, or OpenRouter's (run_egagent.sh "Through OpenRouter")
+    ("egagent", "gpt41"): ["OPENAI_API_KEY|OPENROUTER_API_KEY"], ("egagent", "gemini36flash"): ["GEMINI_API_KEY"],
     ("egorag", "egogpt_gpt41", "build"): ["OPENAI_API_KEY", "DEEPSEEK_API_KEY"], ("egorag", "egogpt_gpt41", "qa"): ["OPENAI_API_KEY"],
     ("hippomm", "q25vl7b-gpt41"): ["OPENAI_API_KEY"],
     ("magic", "oss120"): ["OPENROUTER_API_KEY"], ("magic", "oss120-flash"): ["OPENROUTER_API_KEY"],
@@ -197,7 +198,10 @@ NEEDS_ENV |= {
 # Pools added to an arm's key pools: MAGIC-Video's Qwen3.5-Flash row calls OpenRouter only, a key that Max's and
 # Pulkit's gateway does not have and our Nexus worker does (Anubhav, 2026-11-14). Zaratan answers it too (Anubhav,
 # 2026-11-15: Nexus GPUs were full, Zaratan idle); its compute nodes reach OpenRouter over IPv6
-ALSO_POOLS = {("magic", "oss120"): ["nexus"], ("magic", "oss120-flash"): ["nexus", "zaratan"]}
+# EGAgent's GPT-4.1 memory on Zaratan too, through OpenRouter to OpenAI on our key (Anubhav, 2026-11-15): Azure's
+# content filter, behind Max's gateway, refused frames of 37 of its builds (ContentPolicyViolationError)
+ALSO_POOLS = {("magic", "oss120"): ["nexus"], ("magic", "oss120-flash"): ["nexus", "zaratan"],
+              ("egagent", "gpt41"): ["zaratan"]}
 # The arms behind the pilot gate: every arm of the REPORTED and PAID lines. A new paid baseline joins the gate by
 # being listed in one of them, not by its name.
 GATED = {(b, arm) for b, arm, *_ in REPORTED + PAID}
@@ -296,7 +300,8 @@ BUILD_ON = {"magic": "merit"}
 # Pools (Anubhav, 2026-11-15): a build is one job of 9 to 19 h on the longest video, so only the line's pools among
 # STITCHED_POOLS take it (Max's and Pulkit's machines have no time limit; Nexus only on its long queue, worker.py), not
 # Zaratan, wriva or arm00, and not the leftover pools.
-# Order: CANARY's builds right after the FIRST groups, so errors show early; the others after the URGENT lines (lead()).
+# Order: CANARY's builds first of all, ahead of the FIRST groups, so they are claimed at once and errors show early
+# (Anubhav, 2026-11-15: some picked up right now); the others after the URGENT lines (lead()).
 STITCHED = "stitched"
 STITCHED_VIDEOS = [f"P0{k}-stitched" for k in range(1, 10)]
 STITCHED_POOLS = ["max", "pulkit", "nexus"]
@@ -449,11 +454,11 @@ def built_from(files):
 
 
 def lead(t):
-    """Where a task's group stands in the list: the index of its FIRST entry, then the CANARY's builds, the API tasks,
-    the URGENT lines, the other stitched videos' builds, the rest."""
+    """Where a task's group stands in the list: the CANARY's builds (-1), the index of its FIRST entry, then the API
+    tasks, the URGENT lines, the other stitched videos' builds, the rest."""
     k = (t["baseline"], t["arm"], t["stage"])
     if t["video"] in STITCHED_VIDEOS:
-        return len(FIRST) + (0 if t["video"] == CANARY else 3)
+        return -1 if t["video"] == CANARY else len(FIRST) + 3
     for i, f in enumerate(FIRST):
         if k[:len(f)] == f:
             return i

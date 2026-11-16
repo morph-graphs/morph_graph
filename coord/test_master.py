@@ -461,7 +461,7 @@ def test_first_and_rank(monkeypatch, tmp_path):
 
 def test_stitched_builds(monkeypatch, tmp_path):
     """The stitched videos: a build of each, for every line that builds, on that line's pools among STITCHED_POOLS and
-    with its keys; no qa; the canary's (P05) right after the FIRST groups, the others after the URGENT lines; MAGIC-Video's
+    with its keys; no qa; the canary's (P05) ahead of everything, the others after the URGENT lines; MAGIC-Video's
     waits for MERIT's; a memory already in the dataset is not built again; not offered to the leftover pools. The normal
     videos' tasks are the same, in the same order, with or without them."""
     board(monkeypatch, tmp_path, ALL)
@@ -487,9 +487,9 @@ def test_stitched_builds(monkeypatch, tmp_path):
     assert all(by[d]["priority"] < t["priority"] for t in tasks for d in t["deps"])
     # order (FIRST is empty here): the canary's builds lead, then the API tasks, the URGENT lines, the other stitched
     # builds, the rest
-    group = [0 if t["video"] == M.CANARY else 1 if t["baseline"] == "api" else 2 if urgent(t) and not stitched(t)
+    group = [-1 if t["video"] == M.CANARY else 1 if t["baseline"] == "api" else 2 if urgent(t) and not stitched(t)
              else 3 if stitched(t) else 4 for t in tasks]
-    assert group == sorted(group) and set(group) == {0, 1, 2, 3, 4} and [M.lead(t) for t in tasks] == group
+    assert group == sorted(group) and set(group) == {-1, 1, 2, 3, 4} and [M.lead(t) for t in tasks] == group
     # the normal videos' tasks are those of the board without the stitched lines, in the same order, field for field
     # (only the priority numbers move)
     strip = lambda ts: [{k: v for k, v in t.items() if k != "priority"} for t in ts]
@@ -511,7 +511,10 @@ def test_stitched_builds(monkeypatch, tmp_path):
     assert {(t["baseline"], t["arm"]) for t in listed if stitched(t)} == {
         k for k in lines if k in PRIORITY or k + ("build",) in PRIORITY}
     canary = [i for i, t in enumerate(listed) if t["video"] == M.CANARY]
-    assert canary and all(M.lead(t) < len(FIRST) for t in listed[:canary[0]])               # right after the FIRST groups
+    assert canary == list(range(len(canary)))                                                  # ahead of the FIRST groups
+    for p in ("max", "pulkit"):   # the next a pool claims: its canary builds (those not waiting on another), 1, 2, ...
+        r = [t["rank"][p] for t in listed[:len(canary)] if p in t["rank"]]
+        assert r == list(range(1, len(r) + 1)) and r
     # a pool that says it lacks a video does not rank its tasks; with every pool so, they wait for "no video"
     lack = {p: {"claims": {}, "no_video": list(M.STITCHED_VIDEOS)} for p in ("max", "pulkit")}
     M.rank(listed, lack)
