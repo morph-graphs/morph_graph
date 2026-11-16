@@ -355,7 +355,7 @@ STITCHED_EOV_ANSWERS = set()
 COMMITTED_BANKS = {STITCHED}
 STITCHED_API = "gemini-3.6-flash-high-stitched-f2048"
 STITCHED_ANSWER_LINES = [("merit", "m27"), ("worldmm", "g5m-g51"), ("api", STITCHED_API)]
-STITCHED_ANSWERS = set()   # switch on: set(STITCHED_ANSWER_LINES)
+STITCHED_ANSWERS = set(STITCHED_ANSWER_LINES)   # on (Anubhav, 2026-11-16); off: set()
 NEEDS_ENV[("api", STITCHED_API)] = ["GEMINI_API_KEY"]
 EXPERIMENTS += sorted([(b, arm, "build", pools, (STITCHED,)) for b, arm, stage, pools, _ in EXPERIMENTS
                        if stage == "build" and (b, arm) in STITCHED_BUILDS],
