@@ -506,6 +506,37 @@ def test_evidence_mode_instruction_and_media_folder():
     assert media_hash(ev) != media_hash(CFG)  # evidence files never land in the cutoff media folder
 
 
+def test_openai_route_through_openrouter():
+    """Only an OpenRouter key: openai/<name>, OpenRouter's endpoint and the OpenAI-only pin. With OpenAI's key set
+    (also with both set) the request is what it was: the config's name with its prefix, no extra field."""
+    from .backends import openai as ob
+    mcfg = {"name": "gpt-4.1", "api_key_env": "OPENAI_API_KEY", "name_prefix_env": "EGAGENT_GPT_PREFIX", "temperature": 0.0}
+    ctx = {"system_instruction": "x", "frame_times": [], "images": []}
+    reply = types.SimpleNamespace(output_text='{"answer": "B"}', output=[], status="completed", incomplete_details=None,
+                                  model="m", id="gen-1", usage=types.SimpleNamespace(input_tokens=10, total_tokens=12, cost=0.01))
+
+    def send(env):
+        sent = {}
+        client = types.SimpleNamespace(base_url="u", responses=types.SimpleNamespace(create=lambda **kw: sent.update(kw) or reply))
+        old = {k: os.environ.pop(k, None) for k in ("OPENAI_API_KEY", "OPENROUTER_API_KEY", "EGAGENT_GPT_PREFIX")}
+        os.environ.update(env)
+        try:
+            return sent, ob.ask(client, mcfg, ctx, "q", 4), str(ob.make_client(mcfg).base_url)
+        finally:
+            for k, v in old.items():
+                os.environ.pop(k, None) if v is None else os.environ.__setitem__(k, v)
+
+    sent, row, url = send({"OPENROUTER_API_KEY": "r", "EGAGENT_GPT_PREFIX": "azure/openai/"})
+    assert sent["model"] == "openai/gpt-4.1" and url.startswith("https://openrouter.ai/api/v1")
+    assert sent["extra_body"] == {"provider": {"only": ["openai"], "allow_fallbacks": False}}
+    assert row["provider_pin"] == ob.OPENROUTER_PIN and row["generation_id"] == "gen-1" and row["cost_usd"] == 0.01
+    for env in ({"OPENAI_API_KEY": "o", "EGAGENT_GPT_PREFIX": "azure/openai/"},
+                {"OPENAI_API_KEY": "o", "OPENROUTER_API_KEY": "r", "EGAGENT_GPT_PREFIX": "azure/openai/"}):
+        sent, row, url = send(env)
+        assert sent["model"] == "azure/openai/gpt-4.1" and "extra_body" not in sent and "provider_pin" not in row
+        assert "openrouter" not in url
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):
