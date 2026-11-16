@@ -330,7 +330,7 @@ STITCHED_VIDEOS = [f"P0{k}-stitched" for k in range(1, 10)]
 STITCHED_POOLS = ["max", "pulkit", "nexus"]
 # ... and per line (Anubhav, 2026-11-16): MAGIC-Video's stitched builds on Zaratan's H100s too, whichever pool starts first
 # (measured on the 156 normal videos: build wall time ~0.21x the video's length, so ~1.5 h on the 7.2 h video)
-STITCHED_ALSO = {("magic", "oss120"): ["zaratan"]}
+STITCHED_ALSO = {("magic", "oss120"): ["zaratan"], ("magic", "oss120-flash"): ["zaratan"]}
 CANARY = "P05-stitched"   # the shortest, 3.48 h
 # MERIT's lines first: MAGIC-Video's builds wait for MERIT's of the same video, which must be listed before them
 # Only the systems Vatsal's stitched hand-off asks for (Anubhav, 2026-11-16): MERIT with Qwen3.8-27B, WorldMM with the
@@ -357,7 +357,8 @@ STITCHED_EOV_ANSWERS = set()
 # export_bank.py entry: exported() reads them without generating (COMMITTED_BANKS)
 COMMITTED_BANKS = {STITCHED}
 STITCHED_API = "gemini-3.6-flash-high-stitched-f2048"
-STITCHED_ANSWER_LINES = [("merit", "m27"), ("worldmm", "g5m-g51"), ("api", STITCHED_API)]
+STITCHED_ANSWER_LINES = [("merit", "m27"), ("worldmm", "g5m-g51"), ("api", STITCHED_API),
+                         ("magic", "oss120-flash")]   # MAGIC (Anubhav, 2026-11-16): chains per t_ask (#110), from the oss120 memory
 STITCHED_ANSWERS = set(STITCHED_ANSWER_LINES)   # on (Anubhav, 2026-11-16); off: set()
 NEEDS_ENV[("api", STITCHED_API)] = ["GEMINI_API_KEY"]
 EXPERIMENTS += sorted([(b, arm, "build", pools, (STITCHED,)) for b, arm, stage, pools, _ in EXPERIMENTS
