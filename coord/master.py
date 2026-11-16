@@ -272,7 +272,7 @@ PRIORITY = {("api", c) for c in API_CONFIGS} | {
 # group the tasks keep the order they had (MAGIC: its 8B and 27B memory builds, then the GPT-OSS-120B memory with its
 # answers, video by video, then its 27B and 8B answers). It only orders: which rows are listed at all is PRIORITY's
 # and the gates' business.
-FIRST = [("magic",), ("merit", "m27")]
+FIRST = [("magic",), ("merit", "m27"), ("merit", "m8", "qa")]   # MERIT m8 answers on every free A6000 (Anubhav, 2026-11-16)
 EXPERIMENTS = [("api", c, "qa", KEY_POOLS, bank) for bank in BANKS for c in API_CONFIGS] + URGENT + REPORTED + PAID + [
     ("direct", arm, "qa", pools, bank) for bank in BANKS for arm, pools in DIRECT.items()] + [
     ("rekv", "m8", "qa", M8, bank) for bank in BANKS] + [
