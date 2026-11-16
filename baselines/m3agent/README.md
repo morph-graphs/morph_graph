@@ -45,7 +45,7 @@ link), and `insightface/` (insightface downloads `buffalo_l` there on first use)
 | stage | needs | measured (P05-20240425-201444, 27 min) |
 |---|---|---|
 | build | one GPU with >= 40 GB: the memorization model (~18 GB in bf16) with a 30 s clip of video and audio (~10k tokens), the embedding model (8 GB, a helper process), Whisper and ERes2NetV2; faces run on the CPU (8 cores). A 24 GB card runs out of memory in the first clip's prefill even with the embedding model on the CPU (measured on an A5000) | see "Checked" below |
-| qa, blind | the 32.8B control model on vLLM: 2x 48 GB with tensor parallel 2 (upstream's setting), or one 80 GB GPU (`M3AGENT_TP=1`), plus the embedding model on the first GPU | see "Checked" below |
+| qa, blind | the 32.8B control model on vLLM: 2x 48 GB with tensor parallel 2 (upstream's setting), or one 80 GB GPU, plus the embedding model on the first GPU. On one GPU under 100 GB, `run_m3agent.sh` raises vLLM's `gpu_memory_utilization` to 0.9 and puts the embedding model on the CPU: at 0.8 the 61 GiB of weights leave no KV cache and vLLM stops at start-up (every board task on Max's H100s failed this way, 2026-11-15) | see "Checked" below |
 
 ## Running
 
