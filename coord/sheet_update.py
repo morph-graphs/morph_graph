@@ -108,7 +108,7 @@ COLS = ["row_key", "method", "memory_model", "reasoning_model", "n_frames", "bas
         "chance_pct", "answers_dropped", "note", "gpus", "last_updated_utc",
         "asked", "provisional"]   # then one leaf_<code>_pct per leaf; new columns go last, so none before them moves
 KEEP = ("ID", "key", "question", "choices", "choice_a", "choice_b", "choice_c", "choice_d", "answer", "evaluate",
-        "pred", "parsed_answer")   # what scoring reads of an answer row (the rest, ~2 MB a video, is not cached)
+        "pred", "parsed_answer", "chosen")   # what scoring reads of an answer row (the rest, ~2 MB a video, is not cached)
 
 
 # ---------------------------------------------------------------------------------------------- dataset and banks
@@ -125,6 +125,16 @@ def parse(fname):
     return None
 
 
+OPTION_ROWS = {"m3agent", "egagent"}   # baselines whose answer rows carry the options as a list ("options")
+
+
+def as_choices(r):
+    """{"choices": {A: .., B: ..}} of a row that carries its options as a list (M3-Agent, EGAgent), which is what
+    the question matching reads (row_qhash); {} for a row with choices already."""
+    o = r.get("options")
+    return {"choices": dict(zip("ABCDEFGH", o))} if isinstance(o, list) and not r.get("choices") else {}
+
+
 def fetch(info, cache):
     """{path: content} of the dataset's answers / blind files (slim rows) and runs.jsonl (lines), one cache file
     per blob hash: only files that are new or changed since the last run are downloaded."""
@@ -136,10 +146,11 @@ def fetch(info, cache):
         if len(p) != 4 or not (p[3] == "runs.jsonl" or parse(p[3])):
             continue
         assert s.blob_id, f"no blob id for {s.rfilename}"
-        c = os.path.join(cache, f"v2_{s.blob_id}.json")
+        # v3: rows with an options list (M3-Agent, EGAgent) keep it as choices, which v2 dropped (so none matched)
+        c = os.path.join(cache, f"v{3 if p[0] in OPTION_ROWS else 2}_{s.blob_id}.json")
         keep.add(os.path.basename(c))
         if not os.path.exists(c):
-            with tempfile.TemporaryDirectory(dir=cache) as tmp:
+            with tempfile.TemporaryDirectory(dir=cache, ignore_cleanup_errors=True) as tmp:   # NFS: .nfs leftovers
                 f = hf_hub_download(RESULTS, s.rfilename, repo_type="dataset", revision=info.sha, local_dir=tmp)
                 if p[3] == "runs.jsonl":
                     data = []
@@ -152,7 +163,8 @@ def fetch(info, cache):
                 else:
                     rows = json.load(gzip.open(f, "rt") if f.endswith(".gz") else open(f))
                     rows = rows if isinstance(rows, list) else list(rows.values())
-                    data = [{**{k: r[k] for k in KEEP if k in r}, "response": str(r.get("response") or r.get("pred") or r.get("parsed_answer") or "").strip()[:8]}
+                    data = [{**{k: r[k] for k in KEEP if k in r}, **as_choices(r),
+                             "response": str(r.get("response") or r.get("pred") or r.get("parsed_answer") or r.get("chosen") or "").strip()[:8]}
                             for r in rows if isinstance(r, dict)]
                 json.dump(data, open(os.path.join(tmp, "x"), "w"))
                 os.replace(os.path.join(tmp, "x"), c)
@@ -193,7 +205,7 @@ def score(qa_by_video, rows_by_video):
         rows = [{**r, "ID": r.get("key") or r.get("ID", "")} for r in rows if r.get("question")]
         got = match_answers(qa_by_video[v], rows) if v in qa_by_video else {}
         per[v] = {i: (str(r["evaluate"]) == "True" if "evaluate" in r
-                      else (r.get("pred") or r.get("parsed_answer")) == r.get("answer")) for i, r in got.items()}
+                      else (r.get("pred") or r.get("parsed_answer") or r.get("chosen")) == r.get("answer")) for i, r in got.items()}
         dropped += len(rows_by_video[v]) - len(got)
     return {v: ok for v, ok in per.items() if v in qa_by_video}, dropped
 
