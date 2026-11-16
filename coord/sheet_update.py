@@ -93,6 +93,13 @@ METHODS = {
     ("api", "gpt-5.5-f384"): ("GPT-5.5 (in GPT-5's place)", "--", "GPT-5.5", 384),
     ("vst", "vst7b"): ("VST", "Qwen2.5-VL-7B", "Qwen2.5-VL-7B", "2 fps (max 384 frames)"),
 }
+# the evidence-clips ablation (coord/master.py EVCLIPS): a reasoning model given only each question's evidence clips
+METHODS |= {("direct", f"{m}-evclips"): ("Evidence clips only (upper bound)", "--", name, "evidence clips, 1 fps")
+            for m, name in (("qwen3vl-8b", "Qwen3-VL-8B"), ("qwen38-27b", "Qwen3.8-27B"), ("qwen35-9b", "Qwen3.5-9B"),
+                            ("molmo2-8b", "Molmo2-8B"), ("qwen35-35b-a3b", "Qwen3.5-35B-A3B"), ("vst7b", "VST-7B"),
+                            ("gpt-4.1", "GPT-4.1"), ("gemini-3.6-flash", "Gemini 3.6-Flash"), ("gpt-5.1", "GPT-5.1"),
+                            ("gemini-3.1-flash-lite", "Gemini 3.1-Flash-Lite"), ("gpt-5.5", "GPT-5.5"),
+                            ("qwen35-flash", "Qwen3.5-Flash"))}
 COLS = ["row_key", "method", "memory_model", "reasoning_model", "n_frames", "baseline", "arm", "bank", "tag",
         "videos_done", "videos_started", "videos_in_bank", "q_answered", "q_in_bank", "n_right",
         "acc_all_pct", "acc_answered_pct", "ci95_lo_pct", "ci95_hi_pct", "ci_method",

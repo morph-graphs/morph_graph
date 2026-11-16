@@ -79,6 +79,35 @@ time stamps, the same messages, instruct mode (`enable_thinking=False`) as Qwen3
 6. it answers `A` then `REASONING: ...` without "ANSWER:", so a letter alone on the first line is also read as the answer
    (for every model; MERIT's scorer already scored it the same way).
 
+## The evidence-clips ablation (arms `<model>-evclips`)
+
+An upper bound of each reasoning model the memory methods use, given the right evidence and no memory (Anubhav,
+2026-11-15): one row per model, all with this baseline's one prompt and scorer, over the `_end` banks.
+
+**Frames.** Only the question's evidence clips: the bank's `evidence.clips` time ranges (a dict, or its str repr), merged
+where they overlap and cut at `t_ask` (`epic_eval.common.evidence_spans`, shared with epic_eval's evidence mode), at
+1 fps: `ceil(length)` consecutive 1 fps frames per merged range (at least 1), centred on the range, nothing in between
+and no padding; a frame two ranges share is shown once. Over the 3,805 end questions: 2.8 clips a question, median 15
+frames, mean 18.3, p90 33, max 177 (69,450 in all). Each answer row adds `evidence_spans`.
+
+**Models.** The local ones as their `-f<N>` arms (`qwen3vl-8b`, `qwen38-27b`, `qwen35-9b`, `molmo2-8b`, `qwen35-35b-a3b`),
+plus `vst7b`: VST's released weights (Catalan258/VST-7B) as a plain Qwen2.5-VL-7B through `load_hf`, not VST's streaming
+loop, so it reads the same prompt as the others. Qwen2.5-VL's video input has one frame rate and no time stamps, so each
+run of consecutive frames (an evidence range) is its own video, after its span as text (`<1537.5 - 1542.5 seconds>`).
+The paid models (`gpt-4.1`, `gpt-5.1`, `gpt-5.5`, `gemini-3.6-flash`, `gemini-3.1-flash-lite`, `qwen35-flash`) get the
+same 448 px frames as JPEG images, each after its time stamp (`<1537.5 seconds>`), between the same query text and final
+line, through an OpenAI-compatible chat endpoint (the `openai` client of MERIT's m8 image: no new dependency, same image
+tag): OpenAI's (`OPENAI_API_KEY`; `OPENAI_BASE_URL` a gateway; `DIRECT_GPT_PREFIX`, default `EGAGENT_GPT_PREFIX`, before
+the GPT ids), Google's OpenAI-compatible endpoint (`GEMINI_API_KEY`) and OpenRouter (`OPENROUTER_API_KEY`,
+`qwen/qwen3.5-flash-02-23`). Request settings are those of the board's other rows of the model (`API` in
+`epic/direct_qa.py`). Each row keeps `api`: the model id and endpoint that answered, finish reason, tokens, and
+OpenRouter's cost. Calls run 8 at a time (`DIRECT_API_THREADS`); a failed call or an empty reply is "Error", retried next run, except an empty one cut off at the output cap or refused by a content filter (`finish_reason` length / content_filter), which is final and wrong.
+
+```bash
+bash baselines/direct/run_direct.sh qa P01-20240203-123350 qwen3vl-8b-evclips batch10_agree2_end
+GEMINI_API_KEY=... bash baselines/direct/run_direct.sh qa P01-20240203-123350 gemini-3.6-flash-evclips batch10_agree2_end
+```
+
 ## Running
 
 ```bash

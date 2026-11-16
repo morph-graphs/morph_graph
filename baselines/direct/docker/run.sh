@@ -21,7 +21,8 @@
 #   DIRECT_OUT      optional, a path inside the container (e.g. /repo/baselines/direct/work/check)
 #   DIRECT_REPO_COMMIT, DIRECT_MERIT_COMMIT, DIRECT_EPIC_COMMIT  for runs.jsonl when a checkout has no .git (a synced
 #                   copy); read with git otherwise
-#   passed through when set: HF_TOKEN MERIT_HF_REPO MERIT_OUTBOX DIRECT_LIMIT THREADS
+#   passed through when set: HF_TOKEN MERIT_HF_REPO MERIT_OUTBOX DIRECT_LIMIT THREADS, and for the paid models of the
+#                   evidence-clips arms DIRECT_API_THREADS DIRECT_GPT_PREFIX and the keys and endpoints (run_direct.sh)
 set -euo pipefail
 ARM=${3:?usage: run.sh <stage> <video> <arm> [bank]}
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
@@ -48,7 +49,11 @@ ENVS=(EPIC_MORPH_DIR=/epic-morph HDEPIC_VIDEOS=/videos HF_HOME=/hf HF_HUB_OFFLIN
 if [ -n "${MERIT_WORK:-}" ]; then   # the shared work folder, group-writable as MERIT's run.sh makes it
     umask 002; mkdir -p "$MERIT_WORK"; BINDS+=("$(cd -P "$MERIT_WORK" && pwd):/work"); ENVS+=(MERIT_WORK=/work)
 fi
-PASS=(HF_TOKEN MERIT_HF_REPO MERIT_OUTBOX DIRECT_LIMIT DIRECT_OUT THREADS)
+# the paid models' keys and endpoints (evidence-clips arms), by name only. DIRECT_GPT_PREFIX defaults to EGAgent's
+# EGAGENT_GPT_PREFIX, a gateway's name for the GPT models (NVIDIA's: azure/openai/)
+export DIRECT_GPT_PREFIX=${DIRECT_GPT_PREFIX:-${EGAGENT_GPT_PREFIX:-}}
+PASS=(HF_TOKEN MERIT_HF_REPO MERIT_OUTBOX DIRECT_LIMIT DIRECT_OUT THREADS DIRECT_API_THREADS DIRECT_GPT_PREFIX
+      OPENAI_API_KEY OPENAI_BASE_URL GEMINI_API_KEY GEMINI_OPENAI_BASE_URL OPENROUTER_API_KEY OPENROUTER_BASE_URL)
 if [ "$RUNTIME" = apptainer ]; then
     case $IMAGE in *.sif) ;; *) IMAGE=docker://$IMAGE ;; esac
     # through APPTAINERENV_* (the environment), not --env: a command line, token included, is visible in `ps`

@@ -110,9 +110,7 @@ def _rows(banks) -> list[dict]:
                 "guessable": q.get("guessable"),
                 "majority_baseline": q.get("majority_baseline"),
                 "source_file": path.name,
-                # V2 banks: evidence = {events, clips: [{event_id, clip: [t0, t1]}]}; V1 evidence is a list
-                "evidence_clips": [[float(t) for t in c["clip"]] for c in q["evidence"]["clips"]]
-                                  if isinstance(q.get("evidence"), dict) else [],
+                "evidence_clips": evidence_clips(q),
             })
     qids = [r["qid"] for r in rows]
     if len(qids) != len(set(qids)):
@@ -122,6 +120,16 @@ def _rows(banks) -> list[dict]:
         if not 0 <= r["answer_index"] < len(r["options"]):
             raise ValueError(f"{r['qid']}: answer_index {r['answer_index']} out of range")
     return rows
+
+
+def evidence_clips(q: dict) -> list[list[float]]:
+    """[[t0, t1], ...] of a bank question's evidence clips. V2 banks: evidence = {events, clips: [{event_id,
+    clip: [t0, t1]}]}, or that dict's str repr; V1 evidence is a list (no clips)."""
+    ev = q.get("evidence")
+    if isinstance(ev, str) and ev.lstrip().startswith("{"):
+        import ast
+        ev = ast.literal_eval(ev)
+    return [[float(t) for t in c["clip"]] for c in ev["clips"]] if isinstance(ev, dict) else []
 
 
 def questions_for_run(cfg: dict) -> list[dict]:
