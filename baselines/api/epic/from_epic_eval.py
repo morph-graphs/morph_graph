@@ -32,7 +32,8 @@ sys.path.insert(0, REPO)
 from epic_eval.common import make_qid   # noqa: E402  (the qid the run wrote; standard library only)
 
 LETTERS = "ABCD"
-KEEP = ("qid", "model", "time", "raw_text", "finish_reason", "usage", "cache_used", "media_file", "media_duration_s")
+KEEP = ("qid", "model", "time", "raw_text", "finish_reason", "usage", "cache_used", "media_file", "media_duration_s",
+        "fps_used", "video_tokens")   # Gemini: the fps a long video was sampled at to fit the context
 FRAMES = ("model_returned", "endpoint", "n_frames", "last_frame_s", "frame_side", "detail", "frame_times_s",   # frame backends
           "frame_budget", "video_fps",   # and sampled inputs (prep_media.prep_sampled)
           "provider_pin", "generation_id", "cost_usd")   # an OpenAI config sent through OpenRouter (backends/openai.py)
