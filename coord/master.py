@@ -440,6 +440,11 @@ EXPERIMENTS += [(b, arm, "qa", list(pools), PROBES) for (b, arm), pools in dict.
 NOT_IN_ALL = {PROBES, STITCHED_EOV}
 
 
+# Paused (Anubhav, 2026-11-17): WorldMM m27, its builds and answers (probes too), so the main benchmark and the evidence clips
+# go first. Taken off every line here, after all of them are made; delete the entry to turn it back on.
+PAUSED = {("worldmm", "m27")}
+EXPERIMENTS = [e for e in EXPERIMENTS if (e[0], e[1]) not in PAUSED]
+
 def bank_questions(bank):
     """{video: its questions} of the epic-morph bank, for the videos with at least one."""
     epic = os.environ.get("EPIC_MORPH_DIR")
