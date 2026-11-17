@@ -277,6 +277,8 @@ def build(a, now):
     based = {}   # the same, of an _end bank's base-bank files
     for path, data in files.items():
         b, arm, v, f = path.split("/")
+        if master.dropped(b, arm):   # rows taken off the board (master.DROPPED_ARMS): kept in the dataset, not shown
+            continue
         if f == "runs.jsonl":
             runs[b, arm, v] = data
         else:
