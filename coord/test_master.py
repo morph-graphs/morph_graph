@@ -652,10 +652,11 @@ def test_probes(monkeypatch, tmp_path):
     assert {t["video"] for t in M.desired(have, set()) if t["bank"] == M.PROBES} == set(B10)
     # order: every memory build and the evidence-clips rows, then the probes, then the other answers; normal tasks as before
     lead = [M.lead(t) for t in tasks]
-    assert lead == sorted(lead) and all(len(M.FIRST) + 6 <= M.lead(t) < len(M.FIRST) + 7 for t in pr)
+    assert lead == sorted(lead) and all(len(M.FIRST) + 6 <= M.lead(t) < len(M.FIRST) + 7 or M.lead(t) == -3 for t in pr)
     # PROBES_FIRST's arms lead the probes, in their order, then the others
     rank = lambda t: M.PROBES_FIRST.index((t["baseline"], t["arm"])) if (t["baseline"], t["arm"]) in M.PROBES_FIRST else len(M.PROBES_FIRST)
-    assert [rank(t) for t in pr] == sorted(rank(t) for t in pr) and {rank(t) for t in pr} == set(range(len(M.PROBES_FIRST) + 1))
+    order = lambda t: (M.lead(t) != -3, rank(t))   # PROBES_NOW's free tasks first, then PROBES_FIRST's order
+    assert [order(t) for t in pr] == sorted(order(t) for t in pr) and {rank(t) for t in pr} == set(range(len(M.PROBES_FIRST) + 1))
     assert max(M.lead(t) for t in tasks if t["stage"] == "build") < len(M.FIRST) + 6   # after every memory build and the
     assert all(M.lead(t) < len(M.FIRST) + 6 for t in tasks if t["arm"].endswith("-evclips"))   # evidence-clips rows, ahead of
     assert {M.lead(t) for t in tasks if t["stage"] == "qa" and t not in pr and not api(t)  # the other answers
@@ -673,6 +674,10 @@ def test_probes(monkeypatch, tmp_path):
         k for k in arms if k in PRIORITY or k + ("qa",) in PRIORITY or not M.needs(*k, "qa")}   # (the gate lets every keyless task by)
     assert [M.lead(t) for t in listed] == sorted(M.lead(t) for t in listed)
 
+    # PROBES_NOW: those arms' probe tasks lead every other task, the stitched ones included
+    now = dict(baseline="worldmm", arm="g5m-g51", stage="qa", video="P01-20240202-110250", bank=M.PROBES)
+    assert ("worldmm", "g5m-g51") in M.PROBES_NOW and M.lead(now) < M.lead(dict(now, video=M.CANARY, bank=None, stage="build"))
+    assert M.lead(dict(now, bank="t3_agree2_end")) > M.lead(now) and M.lead(dict(now, arm="g5m-q8")) > M.lead(now)
 
 def test_existing_tasks_unchanged(monkeypatch, tmp_path):
     """Without the reported arms the board is main's, field for field (api tasks gain needs_env only); with them,
