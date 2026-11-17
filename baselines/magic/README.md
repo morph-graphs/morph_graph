@@ -144,6 +144,11 @@ Every stage of these arms calls a paid API (row B too: its search loop), so they
   WorldMM stores a failed call as an empty result and answers on after a failed loop call, so here a memory step
   or a cutoff's chains are not kept when a prompt ended without an answer (an error, or an empty reply, that no
   retry of the same prompt fixed), and a question during which any call failed is redone on the next pass.
+- **Chain prompts that run out of tokens**: GPT-OSS-120B can spend a prompt's whole cap on reasoning and return no
+  content (`finish_reason` "length"). Upstream's 4,096 for the topic prompts did this on one cutoff each of P03, P06
+  and P09, identically on every retry and provider (2026-11-17), so those videos' qa never finished. Such a prompt is
+  asked once more at 16,000 tokens (`chains.LENGTH_RETRY_TOKENS`, the budget STEP1 and the merges already have);
+  every prompt answered within its cap is unchanged.
 - `docker/run.sh` passes a role's `MAGIC_<R>_KEY_ENV` only when it is not empty: a keyless endpoint must be on
   127.0.0.1 / localhost (keyless by default) when run through the image.
 

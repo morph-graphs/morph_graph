@@ -80,6 +80,12 @@ def thread_errors():
     return getattr(THREAD, "n", 0)
 
 
+def hit_length():
+    """Did this thread's last call come back empty because it reached max_tokens (a reasoning model spent every token
+    on reasoning: finish_reason "length", no content)? chains.call retries such a prompt with a larger budget."""
+    return getattr(THREAD, "length", False)
+
+
 def _failed(u, prompt):
     THREAD.n = thread_errors() + 1
     with LOCK:
@@ -124,6 +130,7 @@ class Client:
         from openai import APIStatusError, OpenAI
         with LOCK:
             u = USAGE.setdefault(self.role, {"model": self.model, "returned": [], **{c: 0 for c in COUNTS}})
+        THREAD.length = False
         prompt = hashlib.sha1(json.dumps([self.role, messages], sort_keys=True, default=str).encode()).hexdigest()
         try:
             if FATAL:
@@ -152,6 +159,7 @@ class Client:
             with LOCK:
                 UNANSWERED.discard(prompt)
         else:
+            THREAD.length = bool(res.choices) and getattr(res.choices[0], "finish_reason", None) == "length"
             _failed(u, prompt)
         us = getattr(res, "usage", None)
         with LOCK:
