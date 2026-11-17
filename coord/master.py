@@ -446,6 +446,13 @@ EXPERIMENTS += [(b, arm, "qa", list(pools), PROBES) for (b, arm), pools in dict.
 NOT_IN_ALL = {PROBES, STITCHED_EOV}
 
 
+# Paused (Anubhav, 2026-11-17): HippoMM, its memory builds (q25vl7b-gpt4o) and answers (q25vl7b-gpt41), not wanted for
+# this round. Taken off every line here, after all of them are made; tasks already running finish, answers already in
+# the dataset stay. Delete an entry to turn it back on.
+PAUSED = {("hippomm", "q25vl7b-gpt4o"), ("hippomm", "q25vl7b-gpt41")}
+EXPERIMENTS = [e for e in EXPERIMENTS if (e[0], e[1]) not in PAUSED]
+
+
 def bank_questions(bank):
     """{video: its questions} of the epic-morph bank, for the videos with at least one."""
     epic = os.environ.get("EPIC_MORPH_DIR")
