@@ -11,6 +11,7 @@ system instruction and video part; only where they live differs.
 from __future__ import annotations
 
 import os
+import subprocess
 import time
 from pathlib import Path
 
@@ -67,6 +68,41 @@ def _video_part(mcfg: dict, file) -> types.Part:
     return part
 
 
+# The most video tokens one request may carry: the model's 1,048,576-token input less room for the prompt and question.
+# A video over it (Gemini 3.6 Flash at 1 fps, ~250 tokens a second: longer than ~67 min) is sampled at a lower fps that
+# fits, uniformly over the same span (Anubhav, 2026-11-17: P03-20240216-185832, 74.7 min); every other video is as before.
+MAX_VIDEO_TOKENS = int(os.environ.get("GEMINI_MAX_VIDEO_TOKENS", "1000000"))
+
+
+def _duration(path) -> float | None:
+    try:
+        out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
+                             capture_output=True, text=True, timeout=60).stdout.strip()
+        return float(out) if out else None
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return None
+
+
+def _fit_video(client, mcfg: dict, file, path):
+    """(the video part, the fps it uses, its token count or None): the configured fps, unless the video would carry more
+    than MAX_VIDEO_TOKENS tokens at it (counted, free); then the fps scaled down to fit, recounted to check. A video
+    whose length puts it far below the budget is not counted (no extra call)."""
+    fps = float(mcfg["fps"])
+    d = _duration(path)
+    if d is not None and d * fps * 300 < 0.8 * MAX_VIDEO_TOKENS:   # well under even at 300 tokens a second
+        return _video_part(mcfg, file), fps, None
+    n = count_video_tokens(client, mcfg, file)
+    for _ in range(3):
+        if n <= MAX_VIDEO_TOKENS:
+            break
+        fps = round(fps * MAX_VIDEO_TOKENS / n * 0.97, 4)
+        print(f"    {Path(str(path)).name}: {n} video tokens over {MAX_VIDEO_TOKENS}; sampling at {fps} fps")
+        n = count_video_tokens(client, dict(mcfg, fps=fps), file)
+    if n > MAX_VIDEO_TOKENS:
+        raise RuntimeError(f"{path}: still {n} video tokens at {fps} fps (budget {MAX_VIDEO_TOKENS})")
+    return _video_part(dict(mcfg, fps=fps), file), fps, n
+
+
 def upload(client, mcfg: dict, path) -> object:
     f = _retry(lambda: client.files.upload(file=str(path), config=types.UploadFileConfig(
         mime_type="video/mp4", display_name=Path(path).name)), mcfg, "upload")
@@ -86,7 +122,7 @@ def open_context(client, mcfg: dict, video_path, system_instruction: str, n_ques
            "cache": None, "cache_tokens": None, "cache_error": None, "video_tokens": None}
     if video_path is not None:
         ctx["file"] = upload(client, mcfg, video_path)
-        ctx["part"] = _video_part(mcfg, ctx["file"])
+        ctx["part"], ctx["fps_used"], ctx["video_tokens"] = _fit_video(client, mcfg, ctx["file"], video_path)
     try:
         _maybe_cache(client, mcfg, ctx, video_path, n_questions)
     except BaseException:
@@ -161,6 +197,8 @@ def ask(client, mcfg: dict, ctx: dict, prompt: str, n_options: int) -> dict:
         "usage": usage,
         "latency_s": round(latency, 2),
         "cache_used": ctx["cache"] is not None,
+        "fps_used": ctx.get("fps_used"),   # lower than the config's when the video had to fit (_fit_video)
+        "video_tokens": ctx.get("video_tokens"),
     }
 
 
