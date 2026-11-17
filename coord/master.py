@@ -393,7 +393,10 @@ COMMITTED_BANKS = {STITCHED}
 STITCHED_API = "gemini-3.6-flash-high-stitched-f2048"
 STITCHED_ANSWER_LINES = [("merit", "m27"), ("worldmm", "g5m-g51"), ("api", STITCHED_API),
                          ("magic", "oss120-flash")]   # MAGIC (Anubhav, 2026-11-16): chains per t_ask (#110), from the oss120 memory
-STITCHED_ANSWERS = set()   # frozen 2026-11-17 (see STITCHED_BUILDS); on: set(STITCHED_ANSWER_LINES)
+# On again for three lines (Anubhav, 2026-11-17): MERIT m27, WorldMM g5m-g51 and Gemini 3.6 Flash, whose memories are
+# built (MERIT's and WorldMM's) or need none. MAGIC-Video waits for its chain-length fix (empty topic replies at 4,096
+# tokens) and its three missing stitched builds. All on: set(STITCHED_ANSWER_LINES)
+STITCHED_ANSWERS = {("merit", "m27"), ("worldmm", "g5m-g51"), ("api", STITCHED_API)}
 NEEDS_ENV[("api", STITCHED_API)] = ["GEMINI_API_KEY"]
 EXPERIMENTS += sorted([(b, arm, "build", pools, (STITCHED,)) for b, arm, stage, pools, _ in EXPERIMENTS
                        if stage == "build" and (b, arm) in STITCHED_BUILDS],
