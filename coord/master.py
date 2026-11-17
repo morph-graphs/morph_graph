@@ -215,7 +215,9 @@ GATED = {(b, arm) for b, arm, *_ in REPORTED + PAID}
 DIRECT = {"qwen3vl-8b-f768": M8, "qwen38-27b-f768": M27,
           # Qwen3.5-9B and Molmo2-8B fit a 48 GB GPU like the 8B (the 9B runs in the m27 image); Qwen3.5-35B-A3B needs
           # the 27B pools' GPUs, and its N = 768 is not sized, so it is not listed
-          "molmo2-8b-f384": M8, "qwen35-35b-a3b-f128": M27}
+          "qwen35-35b-a3b-f128": M27}
+# Paused (Anubhav, 2026-11-17): Molmo2-8B at 384 frames, so the main benchmark and the evidence clips go first; its answers so
+# far stay in the dataset and the sheet (unlike DROPPED_ARMS). Back on: add "molmo2-8b-f384": M8 above.
 # Dropped (Anubhav, 2026-11-16): Qwen3.5-9B everywhere, and every 32- and 128-frame row, except Qwen3.5-35B-A3B at
 # 128 for now (its 768 is not sized). Their answers stay in the dataset; the results sheet leaves them out (dropped()).
 DROPPED_ARMS = {"qwen35-9b-f32", "qwen35-9b-f128", "qwen35-9b-f768", "qwen35-9b-evclips", "molmo2-8b-f32", "molmo2-8b-f128",
@@ -369,7 +371,9 @@ CANARY = "P05-stitched"   # the shortest, 3.48 h
 # MAGIC-Video's stitched memory is built once over the whole video too (Anubhav, 2026-11-16): everything its build writes
 # is filtered at a question's t_ask (graph filter_by_time); only its event chains read across time, and run_qa builds
 # those per cutoff (prototype on P05-stitched: no time after either anchor in its chains or filtered graph)
-STITCHED_BUILDS = {("merit", "m27"), ("worldmm", "g5m"), ("magic", "oss120")}
+# Frozen (Anubhav, 2026-11-17): every stitched build and answer, so the main benchmark and the evidence clips go
+# first. Was: {("merit", "m27"), ("worldmm", "g5m"), ("magic", "oss120")}
+STITCHED_BUILDS = set()
 # Answering on the stitched videos is frozen (Anubhav, 2026-11-16) while their protocol changes to Vatsal's: each card at
 # its anchor time, from memory units that end before it; builds go on. The end-of-video lines (STITCHED_EOV, below) were
 # {("merit", "m27"), ("worldmm", "g5m-g51")}; they stay off.
@@ -389,7 +393,7 @@ COMMITTED_BANKS = {STITCHED}
 STITCHED_API = "gemini-3.6-flash-high-stitched-f2048"
 STITCHED_ANSWER_LINES = [("merit", "m27"), ("worldmm", "g5m-g51"), ("api", STITCHED_API),
                          ("magic", "oss120-flash")]   # MAGIC (Anubhav, 2026-11-16): chains per t_ask (#110), from the oss120 memory
-STITCHED_ANSWERS = set(STITCHED_ANSWER_LINES)   # on (Anubhav, 2026-11-16); off: set()
+STITCHED_ANSWERS = set()   # frozen 2026-11-17 (see STITCHED_BUILDS); on: set(STITCHED_ANSWER_LINES)
 NEEDS_ENV[("api", STITCHED_API)] = ["GEMINI_API_KEY"]
 EXPERIMENTS += sorted([(b, arm, "build", pools, (STITCHED,)) for b, arm, stage, pools, _ in EXPERIMENTS
                        if stage == "build" and (b, arm) in STITCHED_BUILDS],
