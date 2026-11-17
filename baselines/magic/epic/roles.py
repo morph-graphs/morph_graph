@@ -81,8 +81,8 @@ def thread_errors():
 
 
 def hit_length():
-    """Did this thread's last call come back empty because it reached max_tokens (a reasoning model spent every token
-    on reasoning: finish_reason "length", no content)? chains.call retries such a prompt with a larger budget."""
+    """Did this thread's last call stop at max_tokens (finish_reason "length": a reasoning model spent the cap on
+    reasoning, so the reply is empty or cut off)? chains.call asks such a prompt again with a larger budget."""
     return getattr(THREAD, "length", False)
 
 
@@ -155,11 +155,12 @@ class Client:
             raise
         # an empty reply with HTTP 200 (e.g. every token spent on reasoning) is no answer either; upstream would
         # store it as an empty result
+        # cut off at the cap (empty, or JSON truncated mid-way, which chains' strict parsing rejects): chains.call asks again
+        THREAD.length = bool(res.choices) and getattr(res.choices[0], "finish_reason", None) == "length"
         if res.choices and (res.choices[0].message.content or "").strip():
             with LOCK:
                 UNANSWERED.discard(prompt)
         else:
-            THREAD.length = bool(res.choices) and getattr(res.choices[0], "finish_reason", None) == "length"
             _failed(u, prompt)
         us = getattr(res, "usage", None)
         with LOCK:
