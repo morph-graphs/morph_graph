@@ -418,9 +418,17 @@ PRIORITY |= {(b, arm) for b, arm in STITCHED_ANSWER_LINES if (b, arm) in STITCHE
 # follow its own PRIORITY gate. Listed after every memory build and the evidence-clips rows, ahead of the other answers
 # (lead()). Not benchmark accuracy: the sheet keeps them out of its "all" rows (NOT_IN_ALL).
 PROBES = "probes_v2"
+# Which arms answer them, and in what order (Anubhav, 2026-11-16): PROBES_FIRST lead the probe tasks, in this order, then
+# the other probe arms (MAGIC-Video's GPT-OSS-120B + Qwen3.5-Flash row); PROBES_FROZEN have no probe line at all (a claim
+# already running finishes, and answers already in the dataset stay; their normal and stitched lines are untouched)
+PROBES_FIRST = [("merit", "m8"), ("merit", "m27"), ("merit", "g5m-q8"), ("merit", "g5m-q27"), ("worldmm", "g5m-q8"),
+                ("worldmm", "g5m-g51"), ("egagent", "gemini36flash"), ("egor1", "gemini36flash-gpt41"),
+                ("egorag", "egogpt_gpt41"), ("m3agent", "m3")]
+PROBES_FROZEN = {("magic", "m8"), ("magic", "m27"), ("magic", "oss120-q27"), ("worldmm", "m8"), ("worldmm", "m27"),
+                 ("hippomm", "q25vl7b-gpt41")}
 EXPERIMENTS += [(b, arm, "qa", list(pools), PROBES) for (b, arm), pools in dict.fromkeys(
     ((b, arm), tuple(pools)) for b, arm, stage, pools, bank in EXPERIMENTS
-    if stage == "qa" and bank in BANKS and b in MEMORY_DONE)]
+    if stage == "qa" and bank in BANKS and b in MEMORY_DONE and (b, arm) not in PROBES_FROZEN)]
 # banks the sheet scores on their own rows but never folds into its "all" rows (sheet_update.py)
 NOT_IN_ALL = {PROBES, STITCHED_EOV}
 
@@ -576,8 +584,9 @@ def lead(t):
     if t["video"] in STITCHED_VIDEOS:
         qa = t["stage"] == "qa"
         return -2 + qa   # every stitched video's builds, then their answers, ahead of all else (Anubhav, 2026-11-16)
-    if t.get("bank") == PROBES:
-        return len(FIRST) + 6
+    if t.get("bank") == PROBES:   # PROBES_FIRST's in their order, then the other probe arms
+        i = PROBES_FIRST.index((t["baseline"], t["arm"])) if (t["baseline"], t["arm"]) in PROBES_FIRST else len(PROBES_FIRST)
+        return len(FIRST) + 6 + i / 100
     for i, f in enumerate(FIRST):
         if k[:len(f)] == f:
             return i

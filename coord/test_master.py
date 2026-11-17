@@ -626,9 +626,14 @@ def test_probes(monkeypatch, tmp_path):
     board(monkeypatch, tmp_path, base + probe_lines)
     monkeypatch.setattr(M, "bank_videos", lambda bank: B10 + T2 if bank == M.PROBES else BANK_VIDEOS[bank])
     arms = {(b, arm) for b, arm, stage, _, bank in base if stage == "qa" and bank in M.BANKS and b in M.MEMORY_DONE}
-    assert {(b, arm) for b, arm, *_ in probe_lines} == arms and len(probe_lines) == len(arms)
-    assert not {b for b, *_ in probe_lines} & {"direct", "api", "rekv", "vst"}
-    assert {b for b, *_ in probe_lines} == {"merit", "magic", "worldmm", "egagent", "egorag", "egor1", "m3agent", "hippomm"}
+    # every memory arm but the frozen ones (none of their probes listed: hippomm's only arm, MAGIC's m8, m27, oss120-q27,
+    # WorldMM's m8, m27), each PROBES_FIRST arm among them
+    assert M.PROBES_FROZEN <= arms and set(M.PROBES_FIRST) <= arms - M.PROBES_FROZEN
+    assert {(b, arm) for b, arm, *_ in probe_lines} == arms - M.PROBES_FROZEN and len(probe_lines) == len(arms - M.PROBES_FROZEN)
+    assert not {b for b, *_ in probe_lines} & {"direct", "api", "rekv", "vst", "hippomm"}
+    assert {b for b, *_ in probe_lines} == {"merit", "magic", "worldmm", "egagent", "egorag", "egor1", "m3agent"}
+    assert {(b, arm) for b, arm, *_ in probe_lines} - set(M.PROBES_FIRST) == {("magic", "oss120-flash"), ("merit", "g5m-g51")}
+    arms -= M.PROBES_FROZEN
     assert M.PROBES in M.NOT_IN_ALL and M.STITCHED_EOV in M.NOT_IN_ALL
     have = {(b, M.MEMORY_ARM.get((b, arm), arm), v) for b, arm in arms for v in B10}   # batch10's memories are built
     tasks = M.desired(have, set())
@@ -647,7 +652,10 @@ def test_probes(monkeypatch, tmp_path):
     assert {t["video"] for t in M.desired(have, set()) if t["bank"] == M.PROBES} == set(B10)
     # order: every memory build and the evidence-clips rows, then the probes, then the other answers; normal tasks as before
     lead = [M.lead(t) for t in tasks]
-    assert lead == sorted(lead) and {M.lead(t) for t in pr} == {len(M.FIRST) + 6}
+    assert lead == sorted(lead) and all(len(M.FIRST) + 6 <= M.lead(t) < len(M.FIRST) + 7 for t in pr)
+    # PROBES_FIRST's arms lead the probes, in their order, then the others
+    rank = lambda t: M.PROBES_FIRST.index((t["baseline"], t["arm"])) if (t["baseline"], t["arm"]) in M.PROBES_FIRST else len(M.PROBES_FIRST)
+    assert [rank(t) for t in pr] == sorted(rank(t) for t in pr) and {rank(t) for t in pr} == set(range(len(M.PROBES_FIRST) + 1))
     assert max(M.lead(t) for t in tasks if t["stage"] == "build") < len(M.FIRST) + 6   # after every memory build and the
     assert all(M.lead(t) < len(M.FIRST) + 6 for t in tasks if t["arm"].endswith("-evclips"))   # evidence-clips rows, ahead of
     assert {M.lead(t) for t in tasks if t["stage"] == "qa" and t not in pr and not api(t)  # the other answers
