@@ -215,9 +215,12 @@ GATED = {(b, arm) for b, arm, *_ in REPORTED + PAID}
 DIRECT = {"qwen3vl-8b-f768": M8, "qwen38-27b-f768": M27,
           # Qwen3.5-9B and Molmo2-8B fit a 48 GB GPU like the 8B (the 9B runs in the m27 image); Qwen3.5-35B-A3B needs
           # the 27B pools' GPUs, and its N = 768 is not sized, so it is not listed
-          "qwen35-9b-f32": M8, "qwen35-9b-f128": M8, "qwen35-9b-f768": M8,
-          "molmo2-8b-f32": M8, "molmo2-8b-f128": M8, "molmo2-8b-f384": M8,
-          "qwen35-35b-a3b-f32": M27, "qwen35-35b-a3b-f128": M27}
+          "molmo2-8b-f384": M8, "qwen35-35b-a3b-f128": M27}
+# Dropped (Anubhav, 2026-11-16): Qwen3.5-9B everywhere, and every 32- and 128-frame row, except Qwen3.5-35B-A3B at
+# 128 for now (its 768 is not sized). Their answers stay in the dataset; the results sheet leaves them out (dropped()).
+DROPPED_ARMS = {"qwen35-9b-f32", "qwen35-9b-f128", "qwen35-9b-f768", "qwen35-9b-evclips", "molmo2-8b-f32", "molmo2-8b-f128",
+                "qwen35-35b-a3b-f32", "qwen3vl-8b-f32", "qwen3vl-8b-f128", "qwen38-27b-f32", "qwen38-27b-f128"}
+dropped = lambda b, arm: b == "direct" and arm in DROPPED_ARMS
 # ReKV (baselines/rekv, arm m8: Qwen3-VL-8B through the vendored port; it has no m27 arm): qa lines only, every bank.
 # Its memory is the video's KV-cache, held in host RAM while qa runs and never stored, so nothing is built: as with the
 # plain video model, a task waits on nothing and is done when its answers_<bank>.json.gz is in the dataset. No key.
@@ -306,7 +309,7 @@ EXPERIMENTS = [("api", c, "qa", KEY_POOLS, bank) for bank in BANKS for c in API_
 # Azure's content filter behind Max's gateway refused EGAgent's frames), and is a PRIORITY row; the other paid
 # evidence-clips rows stay behind the gate.
 EVCLIPS = [("direct", f"{m}-evclips", pools) for m, pools in (
-    ("qwen3vl-8b", M8), ("qwen38-27b", M27), ("qwen35-9b", M8), ("molmo2-8b", M8), ("qwen35-35b-a3b", M27))] + [
+    ("qwen3vl-8b", M8), ("qwen38-27b", M27), ("molmo2-8b", M8), ("qwen35-35b-a3b", M27))] + [
     ("vst", "vst7b-evclips", M8)] + [("api", c, KEY_POOLS) for c in (
     "gpt-4.1-f384-evclips", "gemini-3.6-flash-high-evclips", "gpt-5.1-f384-evclips", "gemini-3.1-flash-lite-high-evclips",
     "gpt-5.5-f384-evclips", "qwen3.5-flash-f384-evclips")]
