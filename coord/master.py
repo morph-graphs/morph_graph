@@ -434,6 +434,9 @@ PROBES = "probes_v2"
 PROBES_FIRST = [("merit", "m8"), ("merit", "m27"), ("merit", "g5m-q8"), ("merit", "g5m-q27"), ("worldmm", "g5m-q8"),
                 ("worldmm", "g5m-g51"), ("egagent", "gemini36flash"), ("egor1", "gemini36flash-gpt41"),
                 ("egorag", "egogpt_gpt41"), ("m3agent", "m3")]
+# PROBES_NOW (Anubhav, 2026-11-17): these arms' probe tasks lead the whole list, ahead of the stitched tasks, on every
+# pool that takes them: WorldMM's GPT-5.1 row had its last videos free with pulkit's worker quiet and max busy elsewhere
+PROBES_NOW = {("worldmm", "g5m-g51")}
 PROBES_FROZEN = {("magic", "m8"), ("magic", "m27"), ("magic", "oss120-q27"), ("worldmm", "m8"), ("worldmm", "m27"),
                  ("hippomm", "q25vl7b-gpt41")}
 EXPERIMENTS += [(b, arm, "qa", list(pools), PROBES) for (b, arm), pools in dict.fromkeys(
@@ -589,8 +592,11 @@ def built_from(files):
 def lead(t):
     """Where a task's group stands in the list: the CANARY's builds (-2) and answers (-1), the index of its FIRST entry,
     then the API tasks (API_CONFIGS'), the URGENT lines, the other stitched videos' builds and their answers, every
-    other memory build, the evidence-clips rows (EVCLIPS), the M2 probes (PROBES), the rest."""
+    other memory build, the evidence-clips rows (EVCLIPS), the M2 probes (PROBES), the rest. PROBES_NOW's probe tasks lead all
+    of these (-3)."""
     k = (t["baseline"], t["arm"], t["stage"])
+    if t.get("bank") == PROBES and k[:2] in PROBES_NOW and not t.get("deps"):
+        return -3   # ahead of everything (PROBES_NOW); one that waits on a listed build keeps its place after it
     if t["video"] in STITCHED_VIDEOS:
         qa = t["stage"] == "qa"
         return -2 + qa   # every stitched video's builds, then their answers, ahead of all else (Anubhav, 2026-11-16)
