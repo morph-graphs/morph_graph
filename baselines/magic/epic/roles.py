@@ -80,6 +80,12 @@ def thread_errors():
     return getattr(THREAD, "n", 0)
 
 
+def hit_length():
+    """Did this thread's last call stop at max_tokens (finish_reason "length": a reasoning model spent the cap on
+    reasoning, so the reply is empty or cut off)? chains.call asks such a prompt again with a larger budget."""
+    return getattr(THREAD, "length", False)
+
+
 def _failed(u, prompt):
     THREAD.n = thread_errors() + 1
     with LOCK:
@@ -124,6 +130,7 @@ class Client:
         from openai import APIStatusError, OpenAI
         with LOCK:
             u = USAGE.setdefault(self.role, {"model": self.model, "returned": [], **{c: 0 for c in COUNTS}})
+        THREAD.length = False
         prompt = hashlib.sha1(json.dumps([self.role, messages], sort_keys=True, default=str).encode()).hexdigest()
         try:
             if FATAL:
@@ -148,6 +155,8 @@ class Client:
             raise
         # an empty reply with HTTP 200 (e.g. every token spent on reasoning) is no answer either; upstream would
         # store it as an empty result
+        # cut off at the cap (empty, or JSON truncated mid-way, which chains' strict parsing rejects): chains.call asks again
+        THREAD.length = bool(res.choices) and getattr(res.choices[0], "finish_reason", None) == "length"
         if res.choices and (res.choices[0].message.content or "").strip():
             with LOCK:
                 UNANSWERED.discard(prompt)

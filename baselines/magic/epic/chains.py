@@ -161,8 +161,14 @@ def parse_json(raw):
     return None
 
 
+LENGTH_RETRY_TOKENS = 16000   # the budget for a prompt whose reply came back empty at its cap (below)
+
+
 def call(model, prompt, system=None, max_tokens=4096, tries=3, cache=None):
-    """One chain prompt at temperature 0; a parsed reply is kept in cache (the prompt cache) and reused."""
+    """One chain prompt at temperature 0; a parsed reply is kept in cache (the prompt cache) and reused. A reply that
+    stopped at its cap with no parsable JSON (empty, or cut off) because the model spent the cap on reasoning (roles.hit_length: GPT-OSS-120B on a few topic
+    prompts at 4,096, the same on every retry, 2026-11-17) is asked again with LENGTH_RETRY_TOKENS, as STEP1_TOKENS
+    and MERGE_TOKENS already are for every call; a prompt answered within its cap is asked and cached as before."""
     key = json.dumps([system, prompt, max_tokens])
     if cache is not None and key in cache:
         return copy.deepcopy(cache[key])   # a caller that edits its reply never edits the cache
@@ -176,6 +182,9 @@ def call(model, prompt, system=None, max_tokens=4096, tries=3, cache=None):
                 return r
         except Exception as e:
             log.warning(f"chain LLM error: {e}")
+        if roles.hit_length() and max_tokens < LENGTH_RETRY_TOKENS:
+            log.warning(f"chain reply stopped at max_tokens={max_tokens} (finish_reason length): again at {LENGTH_RETRY_TOKENS}")
+            max_tokens = LENGTH_RETRY_TOKENS
     return None
 
 
