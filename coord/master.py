@@ -281,7 +281,11 @@ FIRST = [("magic",), ("merit", "m27"), ("merit", "m8", "qa")]   # MERIT m8 answe
 ONLY_POOLS = {("merit", "m8", "qa"): ["nexus"],
               # GPT-4.1 on the evidence clips through our OpenRouter key (#122): Max's jobs cannot read the evidence-clips
               # dataset (404, 39 failures on 2026-11-16) and Pulkit's route takes 50 images at most
-              ("api", "gpt-4.1-f384-evclips", "qa"): ["nexus"]}
+              ("api", "gpt-4.1-f384-evclips", "qa"): ["nexus"],
+              # Gemini 3.6 Flash and 3.1 Flash-Lite, the benchmark rows and their evidence clips, on our own Gemini key on
+              # Nexus's high-memory CPU nodes (Anubhav, 2026-11-17): reserved for us
+              ("api", "gemini-3.6-flash-high", "qa"): ["nexus"], ("api", "gemini-3.1-flash-lite-high", "qa"): ["nexus"],
+              ("api", "gemini-3.6-flash-high-evclips", "qa"): ["nexus"], ("api", "gemini-3.1-flash-lite-high-evclips", "qa"): ["nexus"]}
 # ... and lines that Nexus takes besides their usual pools (Anubhav, 2026-11-16): MAGIC m27 answers on 2x A6000 at 24G
 # or an H200 at 16G, WorldMM m27 answers on an H200 (smoke tests: process memory under 10 GB, answers as before)
 EXTRA_POOLS = {("magic", "m27", "qa"): ["nexus"], ("worldmm", "m27", "qa"): ["nexus"], ("merit", "m27", "qa"): ["nexus"]}
