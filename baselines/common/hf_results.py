@@ -40,8 +40,8 @@ import sys
 import tempfile
 import time
 
-from huggingface_hub import HfApi, hf_hub_download, snapshot_download
-from huggingface_hub.utils import EntryNotFoundError
+from huggingface_hub import HfApi, constants, hf_hub_download, snapshot_download
+from huggingface_hub.utils import EntryNotFoundError, LocalEntryNotFoundError
 
 REPO = os.environ.get("MERIT_HF_REPO", "morph-graphs/epic-morph-results")
 OUTBOX = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "outbox")
@@ -57,11 +57,27 @@ def memory_files(video):
 def remote_memory(path, video, dest):
     """Download the dataset's memory files for the video into dest; False when it has none. Any other failure
     (network, token, offline mode) raises: taking "unreachable" for "absent" would rebuild a memory for nothing,
-    or upload a rebuilt one without removing the answers made from the old one."""
-    try:
+    or upload a rebuilt one without removing the answers made from the old one. A job without the Hub
+    (HF_HUB_OFFLINE=1) only sees its cache, and there only the commit the cache's "main" names: the last one any
+    prefetch saw, where this video's files are missing when another task was prefetched after the dataset moved. So a
+    file missing there (LocalEntryNotFoundError, a kind of EntryNotFoundError) goes by what the worker's prefetch of
+    this video saw (worker.py prefetch: <cache>/prefetched/<video>__<arm>.json, the commit and its files): a memory
+    file not among them is "absent"; else the files are taken at that commit; with no listing the job stops.
+    On Zaratan on 2026-11-17 such misses were read as "no memory": 16 WorldMM m27 memories were built again there, and
+    their uploads replaced the dataset's and removed the answers other pools had made from those."""
+    def take(revision=None):
         for f in memory_files(video):
-            shutil.copy(hf_hub_download(REPO, f"{path}/{f}", repo_type="dataset"), os.path.join(dest, f))
+            shutil.copy(hf_hub_download(REPO, f"{path}/{f}", repo_type="dataset", revision=revision), os.path.join(dest, f))
         return True
+
+    try:
+        return take()
+    except LocalEntryNotFoundError:
+        seen = os.path.join(constants.HF_HUB_CACHE, "prefetched", f"{video}__{path.split('/')[1]}.json")
+        if not os.path.isfile(seen):
+            raise
+        seen = json.load(open(seen))
+        return {f"{path}/{f}" for f in memory_files(video)} <= set(seen["files"]) and take(seen["commit"])
     except EntryNotFoundError:
         return False
 
