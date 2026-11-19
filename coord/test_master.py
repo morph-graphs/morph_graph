@@ -1047,3 +1047,14 @@ def test_read_answers_downloads_changed_only(tmp_path, monkeypatch):
 if __name__ == "__main__":
     import pytest
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+
+def test_now_arms_lead_the_list():
+    """NOW's arms (MERIT's GPT-5.1 re-runs) come before the stitched tasks, PROBES_NOW and the other arms' probes."""
+    mk = lambda b, arm, stage, bank, video="P01-20240202-110250", **kw: dict(baseline=b, arm=arm, stage=stage, bank=bank, video=video, **kw)
+    g51_bench, g51_probe = mk("merit", "g5m-g51", "qa", M.BANKS[0]), mk("merit", "g5m-g51", "qa", M.PROBES)
+    others = [mk("egagent", "gpt41", "build", None, "P05-stitched"), mk("worldmm", "g5m-g51", "qa", M.PROBES),
+              mk("merit", "g5m-q8", "qa", M.PROBES), mk("merit", "g5m-q27", "qa", M.BANKS[0]), mk("magic", "m8", "build", None)]
+    assert M.lead(g51_bench) < M.lead(g51_probe) < min(map(M.lead, others))
+    assert M.lead(dict(g51_bench, deps=["merit-g5m-build-x"])) > M.lead(g51_probe)   # one waiting on a build keeps its place
