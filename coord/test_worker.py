@@ -563,6 +563,36 @@ def test_auto_slots_in_the_loop(tmp):
     assert len(commits) == 3 and commits[2]["auto"]["pending"] == 1                # then nothing claimed, nothing to commit
 
 
+def test_prefetch_lists_what_the_dataset_has(tmp):
+    """prefetch writes, per arm, the dataset's commit and its files of the video: a job without the Hub reads it
+    (hf_results.py remote_memory) to take them at that commit and to tell an absent memory from one missing in its
+    cache. A failed prefetch leaves no listing, also not an earlier one; a video with nothing in the dataset gets an
+    empty one."""
+    import huggingface_hub
+    v, snap = "P01-20240101-000001", os.path.join(tmp, "snap")
+    for f in (f"worldmm/g5m/{v}/{v}_visual.pkl", f"worldmm/g5m/{v}/runs.jsonl", f"merit/g5m-q8/{v}/runs.jsonl",
+              "magic/g5m/P01-20240101-000002/graph.pkl"):
+        os.makedirs(os.path.dirname(os.path.join(snap, f)), exist_ok=True)
+        open(os.path.join(snap, f), "w").close()
+    seen = lambda arm: os.path.join(tmp, "hub", "prefetched", f"{v}__{arm}.json")
+    saved = (huggingface_hub.snapshot_download, os.environ.get("MERIT_HF_CACHE"))
+    os.environ["MERIT_HF_CACHE"] = tmp
+    try:
+        huggingface_hub.snapshot_download = lambda *a, **k: snap
+        W.prefetch(dict(id="t", video=v, arm="g5m-q8", memory_arm="g5m"))
+        assert json.load(open(seen("g5m"))) == dict(commit="snap", files=[f"worldmm/g5m/{v}/{v}_visual.pkl", f"worldmm/g5m/{v}/runs.jsonl"])
+        assert json.load(open(seen("g5m-q8"))) == dict(commit="snap", files=[f"merit/g5m-q8/{v}/runs.jsonl"])
+        huggingface_hub.snapshot_download = lambda *a, **k: (_ for _ in ()).throw(OSError("429"))
+        W.prefetch(dict(id="t", video=v, arm="g5m-q8", memory_arm="g5m"))
+        assert not os.path.exists(seen("g5m")) and not os.path.exists(seen("g5m-q8"))
+        huggingface_hub.snapshot_download = lambda *a, **k: os.path.join(tmp, "no-such-snapshot")
+        W.prefetch(dict(id="t", video=v, arm="m8"))
+        assert json.load(open(seen("m8"))) == dict(commit="no-such-snapshot", files=[])
+    finally:
+        huggingface_hub.snapshot_download = saved[0]
+        os.environ.pop("MERIT_HF_CACHE") if saved[1] is None else os.environ.update(MERIT_HF_CACHE=saved[1])
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_")]
     for n, f in tests:

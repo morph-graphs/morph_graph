@@ -174,12 +174,7 @@ build() {
             0) # anything made from an earlier local memory is stale: embeddings, answering runs, answers
                # (an answer arm compares the memory with the one its answers were made from: memory_ref, below)
                [ "$ARM" != "$MEM" ] || { rm -rf "$WORK/cache/${ARM}_$V" "$WORK/runs/$ARM/$V"; rm -f "$OUT"/answers_*.json.gz; } ;;
-            3) # (offline, "none" also means "not in this node's cache": an answer arm then cannot tell whether the copy
-               # it has is still the dataset's, and stops rather than answer from it)
-               if [ "$ARM" != "$MEM" ] && [ -s "$KEYS" ] && [ "${HF_HUB_OFFLINE:-0}" = 1 ]; then
-                   echo "could not reach the dataset to check the $MEM memory of $V (offline, and not in the cache)"; exit 1
-               fi
-               echo "no memory in the dataset yet: building it here" ;;
+            3) echo "no memory in the dataset yet: building it here" ;;
             *) echo "could not reach the dataset; MERIT_FETCH=0 builds the memory here instead"; exit 1 ;;
         esac
     fi

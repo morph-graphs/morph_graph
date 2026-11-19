@@ -19,6 +19,8 @@ FILES = [f"{V}_30sec.json", f"{V}_30sec_4_key.json"]
 HUB = '''import hashlib, os
 from .utils import EntryNotFoundError, LocalEntryNotFoundError
 ROOT = os.environ["FAKE_HUB"]
+class constants:
+    HF_HUB_CACHE = os.path.join(ROOT, "cache")
 class Info:
     def __init__(self, path):
         d = open(os.path.join(ROOT, path), "rb").read()
@@ -28,8 +30,10 @@ class HfApi:
         if os.environ.get("HF_HUB_OFFLINE") == "1":
             raise OSError("offline")
         return [Info(p) for p in paths if os.path.isfile(os.path.join(ROOT, p))]
-def hf_hub_download(repo, path, repo_type=None, **kw):
-    if os.environ.get("HF_HUB_OFFLINE") == "1":   # a job node without the Hub, and nothing prefetched into its cache
+def hf_hub_download(repo, path, repo_type=None, revision=None, **kw):
+    # a job node without the Hub: its cache has the files only at the commit they were prefetched at ("C1"), and the
+    # cache's "main" has moved on since
+    if os.environ.get("HF_HUB_OFFLINE") == "1" and revision != "C1":
         raise LocalEntryNotFoundError(path)
     if not os.path.isfile(os.path.join(ROOT, path)):
         raise EntryNotFoundError(path)
@@ -96,6 +100,21 @@ def test_answer_arm_takes_a_rebuilt_memory():
         # a node that cannot reach the Hub and has no prefetched copy cannot tell: the task stops, nothing is touched
         assert "could not reach the dataset" in build(ok=False, HF_HUB_OFFLINE="1")
         assert "frameless" in state()[0] and state()[1] == [True] * 3
+        # ... also when the worker's prefetch listed the folder (it is in the dataset, only not in this cache)
+        seen = os.path.join(tmp, "hub/cache/prefetched", f"{V}__g5m.json")
+        os.makedirs(os.path.dirname(seen))
+        json.dump(dict(commit="C0", files=[f"merit/g5m/{V}/{f}" for f in FILES]), open(seen, "w"))
+        build(ok=False, HF_HUB_OFFLINE="1")
+        # ... and goes on with the local memory when the prefetch saw no such memory in the dataset (a folder with
+        # run records only is not one)
+        json.dump(dict(commit="C1", files=[f"merit/g5m/{V}/runs.jsonl", f"magic/g5m/{V}/graph.pkl"]), open(seen, "w"))
+        assert "no memory in the dataset yet" in build(HF_HUB_OFFLINE="1") and "frameless" in state()[0]
+        # ... and takes the dataset's memory at the commit its prefetch saw, where the cache has it
+        json.dump(dict(commit="C1", files=[f"merit/g5m/{V}/{f}" for f in FILES]), open(seen, "w"))
+        assert "taking it again" in build(HF_HUB_OFFLINE="1") and "rebuilt" in state()[0] and state()[1:] == ([False] * 3, True)
+        os.remove(seen)
+        write(mem, "frameless")   # back to the stale copy, for the same without the offline detour
+        open(os.path.join(mine, f"{V}_memory_ref.json"), "w").write(ref(mem))
         # ... otherwise the arm takes the dataset's, and its answers, embeddings and answering runs of the old one go
         assert "taking it again" in build()
         assert state() == (open(os.path.join(hub, FILES[0])).read(), [False] * 3, True) and "rebuilt" in state()[0]

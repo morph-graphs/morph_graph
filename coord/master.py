@@ -20,7 +20,8 @@ has no `trace`. The banks are the _end variants (BANKS: only the questions asked
 in the base bank's answers_<base>.json.gz count for them too: a video they already cover is not listed. A stale file's task gets the id
 <task>-redo-<hash of the video's questions>, since the plain id may already be done on a pool (held for good): it is
 listed once per state of the bank, so an answer that fails again is not retried every cycle, and not while the task
-or a redo of it still runs or waits for its relay (what it uploads may be current). After a memory was rebuilt
+or a redo of it still runs or waits for its relay (what it uploads may be current), nor once a pool has marked that
+redo done (not_again). After a memory was rebuilt
 (REBUILT) the answers made from the old one do not count and the video's qa tasks get ids ending +mem<tag>. The master reads the
 answers files to check, through a cache of their summaries by content hash (only files that changed download).
 The bank is generated afresh each cycle (v3/export_bank.py <bank>, deterministic per commit) in the epic-morph
@@ -319,6 +320,12 @@ EXTRA_POOLS = {("magic", "m27", "qa"): ["nexus"], ("worldmm", "m27", "qa"): ["ne
                # MERIT's Qwen answers from the gpt-5-mini memory (no key) on Nexus at once too, with Zaratan (already in
                # their pools) and Max (Anubhav, 2026-11-19: both clusters are fairly free); the nexus queues name them
                ("merit", "g5m-q8", "qa"): ["nexus"], ("merit", "g5m-q27", "qa"): ["nexus"]}
+# ... and pools taken off a line. WorldMM m27's answers not on Zaratan (Anubhav, 2026-11-19): on 2026-11-17 its jobs,
+# which run without the Hub, read "not in my cache" as "no memory in the dataset", built 16 WorldMM m27 memories again
+# and uploaded them over the dataset's, which removed the answers other pools had made from those (22 files). That
+# reading is fixed (hf_results.py remote_memory), but Zaratan's work folder still holds memories of its own: delete this
+# entry once its worldmm results folders of arm m27 are cleared (they are then fetched again).
+NOT_POOLS = {("worldmm", "m27", "qa"): ["zaratan"]}
 EXPERIMENTS = [("api", c, "qa", KEY_POOLS, bank) for bank in BANKS for c in API_CONFIGS] + URGENT + REPORTED + PAID + [
     ("direct", arm, "qa", pools, bank) for bank in BANKS for arm, pools in DIRECT.items()] + [
     ("rekv", "m8", "qa", M8, bank) for bank in BANKS] + [
@@ -556,21 +563,44 @@ def summary(rows):
     return out
 
 
+CLIP_S = 30   # the clip length of the baselines that cut the video into clips (prepare_epic.py --clip_sec)
+
+
 def unanswered(questions, rows, trace=False):
     """Keys of the bank questions that no answer (summary() rows; None: the file did not parse) answers as the bank asks
     them now, by the reuse rule (hf_results.py earlier-answers, prepare_epic.match_answers): the same key (a row from
     before keys: the same wording, options and gold letter), wording and options, gold letter, and query time. A
     baseline asks at a whole second, floor(t_ask) since #16 and ceil(t_ask) before (MERIT's batch10), or at the video's
     end, ceil(duration), for a t_ask in its last second: a row within a second of t_ask counts. A field the row does
-    not record is not compared. trace=True (a TRACED baseline): a row without a trace does not count."""
+    not record is not compared. trace=True (a TRACED baseline): a row without a trace does not count.
+    A question asked at the video's end (ask_at "end") also counts as answered by a row asked at the baseline's own end
+    of the video. The bank's end is the file's duration, which can run a few seconds past the last video frame (the
+    audio is longer), and the clips then stop at the last whole clip before it (prepare_epic.make_clips; MERIT asks
+    there, convert_questions): the row's ask time is a whole number of clips, less than one clip before t_ask, and no
+    row of these files was asked later. An answer from before the question moved to the end, asked at its old t_ask
+    (the bank's t_ask_orig), still does not count: a row within a second of that is taken for one."""
     out = []
+    last = max((rt for _, _, _, rt, *_ in rows or [] if rt is not None), default=None)   # the latest any row was asked
     for q in questions:
         k, h, gold, t = asked(q)
+        end, was = q.get("ask_at") == "end" and t is not None, q.get("t_ask_orig")
+        at = lambda rt: rt is None or t is None or abs(rt - t) < 1 or (
+            end and rt == last and rt % CLIP_S == 0 and 0 < t - rt < CLIP_S and (was is None or abs(rt - was) >= 1))
         if not any((rk == k or (rk is None and rh == h)) and rh in (h, None) and rg in (gold, None)
-                   and (rt is None or t is None or abs(rt - t) < 1) and (not trace or bool(tr and tr[0]))
+                   and at(rt) and (not trace or bool(tr and tr[0]))
                    for rk, rh, rg, rt, *tr in rows or []):
             out.append(k)
     return out
+
+
+def not_again(tasks, held):
+    """(the tasks to list, the ids left out): a redo task (stale answers, id <task>-redo-<hash of the bank's questions>)
+    that a pool has marked done is not listed again. It ran with this state of the bank, its answers are still stale
+    (the model failed on the same questions again, or the baseline counts them answered where the master does not), and
+    no pool can take a done id anyway: listed, it only looks like open work. When the bank changes, the hash and so
+    the id change, and the task is listed again. A redo that never ran has no done claim under its id and stays."""
+    out = [t["id"] for t in tasks if "stale" in t and held.get(t["id"], (None, {}))[1].get("status") == "done"]
+    return [t for t in tasks if t["id"] not in out], out
 
 
 def redo_id(tid, questions):
@@ -693,6 +723,7 @@ def desired(have, files, answers=None, busy=()):
             pools = [p for p in pools if p in STITCHED_POOLS + STITCHED_ALSO.get((b, arm), [])]
         if (b, arm, stage) in CPU_ROWS:
             pools = pools + ["max-cpu"]
+        pools = [p for p in pools if p not in NOT_POOLS.get((b, arm, stage), [])]
         mem = MEMORY_ARM.get((b, arm), arm)
         if mem != arm:   # for the worker: the arm whose dataset folder holds this task's memory (worker.py --prefetch)
             env["memory_arm"] = mem
@@ -854,7 +885,8 @@ def main():
         held = jobs.taken(pools)
         # running or waiting for the relay, by plain id: a task's first run or a redo of it
         busy = {tid.split("-redo-")[0] for tid, (_, c) in held.items() if c["status"] != "done"}
-        tasks, withheld = gate(desired(have, files, read_answers(commit, files), busy))
+        tasks, redone = not_again(desired(have, files, read_answers(commit, files), busy), held)
+        tasks, withheld = gate(tasks)
         if a.first:
             # the FIRST groups stay on top, in their own order, then the API tasks (few, short, and only the key pools
             # can take them), then the URGENT lines, then the reported arms in their own order (batch10 first), then
@@ -877,8 +909,7 @@ def main():
                 print(f"{' '.join(k):30} {c:4} tasks ({wait[k]} waiting on a build"
                       + (f"; {redo[k]} listed again for stale answers, {qs[k]} questions to ask again)" if redo[k] else ")"))
             print(f"stale answers: {sum(redo.values())} tasks listed again, {sum(qs.values())} questions to ask again; "
-                  f"{sum(held.get(t['id'], (0, {}))[1].get('status') == 'done' for t in tasks if 'stale' in t)} of them "
-                  "done already and still stale (the worker's bank is older than the master's, or the questions failed again)")
+                  f"{len(redone)} more not listed: done on a pool and still stale (the questions failed again): {redone}")
             print(f"gate: {withheld} tasks withheld (PRIORITY: every arm but the {len(PRIORITY)} priority ones while they have tasks; "
                   f"PILOT: the reported-configuration and paid-row arms; HELD: {sorted(HELD)}; qa frozen: {sorted(QA_FROZEN)})"
                   + (f"; listed of them: {[t['id'] for t in tasks if reported(t)]}" if PILOT else " (PILOT is empty)"))

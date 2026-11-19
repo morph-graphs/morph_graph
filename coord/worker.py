@@ -403,15 +403,31 @@ def alive(pidfile):
 
 
 def prefetch(task):
-    """Download <baseline>/<arm>/<video>/ of every baseline from the results dataset into the jobs' model cache."""
+    """Download <baseline>/<arm>/<video>/ of every baseline from the results dataset into the jobs' model cache, and
+    say what was there: <cache>/prefetched/<video>__<arm>.json holds the dataset's commit and its files of that arm and
+    video. A job without the Hub reads it (hf_results.py remote_memory): to take the files at that commit, since the
+    cache's "main" is the last commit any prefetch saw and has only that task's files; and to tell "the dataset has no
+    such memory" (it builds one) from "not in my cache" (it stops). A prefetch that fails leaves no listing, also not an
+    earlier one (a task of the same video and arm that still waits for its job then stops too)."""
     from huggingface_hub import snapshot_download
     mem = str(task.get("memory_arm") or "")   # an answer arm reads another arm's memory (master.MEMORY_ARM)
     arms = [task["arm"]] + ([mem] if VALID["arm"].match(mem) else [])
     cache = os.path.join(os.environ.get("MERIT_HF_CACHE") or os.path.expanduser("~/.cache/huggingface"), "hub")
+    seen = {arm: os.path.join(cache, "prefetched", f"{task['video']}__{arm}.json") for arm in arms}
     try:
-        snapshot_download(os.environ.get("MERIT_HF_REPO", "morph-graphs/epic-morph-results"), repo_type="dataset",
-                          cache_dir=cache, allow_patterns=[f"*/{arm}/{task['video']}/*" for arm in arms])
-    except Exception as e:   # the job then fetches (or builds) by itself
+        snap = snapshot_download(os.environ.get("MERIT_HF_REPO", "morph-graphs/epic-morph-results"), repo_type="dataset",
+                                 cache_dir=cache, allow_patterns=[f"*/{arm}/{task['video']}/*" for arm in arms])
+        os.makedirs(os.path.join(cache, "prefetched"), exist_ok=True)
+        for arm, f in seen.items():   # (a snapshot with no file for the video is no folder at all)
+            there = [f"{b}/{arm}/{task['video']}/{x}" for b in (os.listdir(snap) if os.path.isdir(snap) else [])
+                     if os.path.isdir(os.path.join(snap, b, arm, task["video"]))
+                     for x in os.listdir(os.path.join(snap, b, arm, task["video"]))]
+            json.dump(dict(commit=os.path.basename(snap), files=sorted(there)), open(f + ".tmp", "w"))
+            os.replace(f + ".tmp", f)   # whole or not there for a job reading it now
+    except Exception as e:   # the job then finds no listing and stops rather than build a memory the dataset may have
+        for f in seen.values():
+            if os.path.exists(f):
+                os.remove(f)
         print(f"{jobs.iso()} prefetch for {task['id']} failed: {type(e).__name__}: {str(e)[:200]}", flush=True)
 
 

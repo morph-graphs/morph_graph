@@ -947,6 +947,53 @@ def test_pools_of_the_lines_listed_2026_11_19(monkeypatch, tmp_path):
     assert all(t["pools"] == before[t["id"]] for t in st)
 
 
+def test_end_of_video_ask_time(tmp_path):
+    """A question asked at the video's end counts as answered by a row asked at the baseline's own end: the last whole
+    clip before the bank's end, when the file runs a few seconds past its last frame (P01-20240202-171220: clips to
+    510 s, the bank asks at 512.5). Not by an answer from before the question moved to the end, nor for a question
+    asked mid-video, nor when another row of the file was asked later."""
+    end = lambda k: bank_q(k, 512.5) | {"ask_at": "end"}
+    qs = [end("k1"), end("k2")]
+    merit = M.summary(merit_rows(tmp_path, "P01-20240101-000401", qs, 510))        # MERIT asks at its clip list's end
+    assert [r[3] for r in merit] == [510, 510] and M.unanswered(qs, merit) == []
+    row = lambda q, t: [q["key"], *M.asked(q)[1:3], t, False]
+    assert M.unanswered(qs, [row(qs[0], 507), row(qs[1], 510)]) == ["k1"]            # 507: its t_ask before the move
+    assert M.unanswered(qs, [row(qs[0], 510), row(qs[1], 513)]) == ["k1"]            # the baseline's end here is 513
+    assert M.unanswered(qs, [row(qs[0], 480), row(qs[1], 480)]) == ["k1", "k2"]      # a clip or more before the end
+    moved = [q | {"t_ask_orig": 510.4} for q in qs]                                  # the old t_ask fell on the boundary:
+    assert M.unanswered(moved, [row(qs[0], 510), row(qs[1], 510)]) == ["k1", "k2"]   # such a row may be from before the move
+    assert M.unanswered([q | {"t_ask_orig": 507.5} for q in qs], merit) == []
+    assert M.unanswered(qs, [row(qs[0], 512), row(qs[1], 513)]) == []                # within a second, as before
+    mid = [bank_q("k1", 512.5) | {"ask_at": "t"}, bank_q("k2", 512.5)]               # asked at t_ask, not "the end"
+    assert M.unanswered(mid, [row(mid[0], 510), row(mid[1], 510)]) == ["k1", "k2"]
+    assert M.redo_id("x", qs) == M.redo_id("x", [bank_q("k1", 512.5), bank_q("k2", 512.5)])   # ids do not move
+
+
+def test_done_redo_is_not_listed_again():
+    """A redo task a pool has marked done leaves the list (it ran with this state of the bank; no pool can take a done
+    id); one that never ran, one that runs or failed, and a plain task with a done claim stay."""
+    t = lambda i, **k: dict(id=i, **k)
+    tasks = [t("a-redo-1", stale=2), t("b-redo-1", stale=1), t("c-redo-1", stale=1), t("d-redo-1", stale=1), t("e"), t("f-redo-2", stale=1)]
+    held = {"a-redo-1": ("p", {"status": "done"}), "b-redo-1": ("p", {"status": "running"}), "e": ("p", {"status": "done"}),
+            "f-redo-1": ("p", {"status": "done"}), "f": ("p", {"status": "done"})}   # f: the bank changed since (another hash)
+    keep, out = M.not_again(tasks, held)
+    assert out == ["a-redo-1"] and [x["id"] for x in keep] == ["b-redo-1", "c-redo-1", "d-redo-1", "e", "f-redo-2"]
+
+
+def test_worldmm_m27_answers_not_on_zaratan(monkeypatch, tmp_path):
+    """NOT_POOLS: WorldMM m27's answers are not for Zaratan (its own copies of those memories); its other lines are."""
+    (tmp_path / "order.txt").write_text("")
+    monkeypatch.setattr(M, "BUILD_ORDER", str(tmp_path / "order.txt"))
+    monkeypatch.setattr(M, "REPORTED_BANKS", [])
+    monkeypatch.setattr(M, "bank_videos", lambda bank: ["P01-20240101-000001"])
+    monkeypatch.setattr(M, "EXPERIMENTS", [e for e in M.EXPERIMENTS if e[0] in ("worldmm", "merit") and e[1] in ("m8", "m27")
+                                           and e[4] in (None, M.BANKS[0])])
+    pools = {(t["baseline"], t["arm"], t["stage"]): t["pools"] for t in M.desired(set(), {})}
+    assert pools["worldmm", "m27", "qa"] == ["wriva", "max", "pulkit", "nexus"]
+    assert all("zaratan" in p for k, p in pools.items() if k != ("worldmm", "m27", "qa") and k != ("merit", "m8", "qa"))
+    assert M.NOT_POOLS == {("worldmm", "m27", "qa"): ["zaratan"]}
+
+
 def test_trace_stale():
     """For a TRACED baseline an answer row without a trace leaves its question unanswered (listed again); other
     baselines, and summaries from before the trace flag, compare as before."""
