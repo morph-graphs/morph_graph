@@ -71,6 +71,12 @@ as the agent) stands in for the Gemini 2.5 Pro arm, which Google no longer serve
     `t_ask` and the frames of seconds up to `floor(t_ask)`. For each cutoff `epic/run_qa.py` writes upstream's
     two SQLite tables with only those rows, under a video name unique to the cutoff, and upstream's tools read
     those: no tool can return anything later. So the graph lags `t_ask` by up to 300 s; the frame search does not.
+  - *Stitched videos.* A kitchen's stitched video (`<kitchen>-stitched`, bank `stitched`) is one video on one clock,
+    and its questions are asked mid-video like any streaming one. As for MERIT and WorldMM, the kitchen's sessions
+    started by the cutoff (`../common/stitched_sessions.py`: each session's date, time and where it starts in the
+    video) are put before the question the agent gets; the answer row keeps the bank's wording in `question` and
+    the table in `context`. Checked against the fake APIs (`epic/stub_check.py --video <kitchen>-stitched`); no
+    stitched video has been answered for real yet.
   - *No transcript.* HD-EPIC has none and the method has no speech recogniser: captions are not fused with a
     transcript and the transcript tool gets upstream's "NO TRANSCRIPTS AVAILABLE", as upstream does for a
     Video-MME video without subtitles.

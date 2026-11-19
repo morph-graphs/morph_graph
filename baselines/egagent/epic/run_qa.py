@@ -14,6 +14,10 @@ each cutoff floor(t_ask) (the video's end for a non-streaming question) the fram
 and the graph chunks that end <= cutoff are written to upstream's two tables under a video name unique to the
 cutoff, so no tool can return anything later; the tables are deleted after the cutoff's questions. HD-EPIC
 has no transcript: the transcript tool gets upstream's "NO TRANSCRIPTS AVAILABLE".
+A stitched video's question (<K>-stitched, bank `stitched`) is asked with the kitchen's sessions started by its cutoff
+put before it (baselines/common/stitched_sessions.py, as MERIT and WorldMM do; plain video time, the agent's clock):
+the agent reads only the question text, so the table goes in there. The row keeps the bank's own wording in
+`question` (what the board's master hashes) and the table in `context`.
 Rows are appended to --rows as they finish (resume); --out is written when every question has an answer
 (exit 2 otherwise, so the run script retries), in bank order. EGAGENT_QA_WORKERS=n answers n questions at a time
 (threads; default 1, one at a time): each question's agent is independent of the others' (per_question_state), and
@@ -30,6 +34,7 @@ import math
 import os
 import shutil
 import sqlite3
+import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -39,20 +44,24 @@ import numpy as np
 import eg_paths
 from eg_paths import clock, hhmmss
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "common"))
+from stitched_sessions import context  # noqa: E402
+
 LETTERS = "ABCD"
 EG_CONFIG = "dtonly_concatwith_fused_dt_and_llava-video-7bcaptions"   # the folder upstream's graph tool reads
 
 
-def load_questions(bank_file, n_frames):
+def load_questions(bank_file, n_frames, video):
     rows = []
     for i, q in enumerate(json.load(open(bank_file))["questions"], 1):
         opts = [str(o) for o in q["gemini_mcq"]["options"]]
         assert 2 <= len(opts) <= 4, (i, opts)
         streaming = q.get("streaming") and "t_ask" in q
+        cutoff = min(math.floor(q["t_ask"]), n_frames) if streaming else n_frames
         rows.append({"ID": str(i), "key": q.get("key"), "question": q["q"], "options": opts,
                      "candidates": ", ".join(f"{l}. {o}" for l, o in zip(LETTERS, opts)),   # Video-MME's option strings
-                     "answer": LETTERS[q["gemini_mcq"]["answer_index"]], "t_ask": q.get("t_ask"),
-                     "cutoff": min(math.floor(q["t_ask"]), n_frames) if streaming else n_frames,
+                     "answer": LETTERS[q["gemini_mcq"]["answer_index"]], "t_ask": q.get("t_ask"), "cutoff": cutoff,
+                     "context": context(video, cutoff),   # a stitched video's sessions started by the cutoff; else ""
                      "meta": {k: q.get(k) for k in ("form", "hops", "streaming", "origin")}})
     return rows
 
@@ -189,7 +198,7 @@ def main():
     a = ap.parse_args()
 
     files = eg_paths.frame_files(a.frames_dir)
-    qs = load_questions(a.bank_file, len(files))
+    qs = load_questions(a.bank_file, len(files), a.video)
     os.environ.update(EGAGENT_DATASET="videomme", EGAGENT_BACKBONE=a.backbone, EGAGENT_DB_ROOT=os.path.abspath(a.db_root))
     os.environ.setdefault("EGAGENT_MODEL_ROOT", os.path.dirname(eg_paths.EMBEDDER))
     order = sorted(qs, key=lambda r: (r["cutoff"], int(r["ID"])))
@@ -247,16 +256,19 @@ def main():
         t0 = time.time()
         cut = hhmmss(r["cutoff"])
         row = {k: r[k] for k in ("ID", "key", "question", "options", "answer", "t_ask", "cutoff", "meta")}
+        asked = r["question"]
+        if r["context"]:   # a stitched video's question: its session table first, as MERIT and WorldMM ask it
+            row["context"], asked = r["context"], f"{r['context']}\n\nQuestion: {r['question']}"
         try:
             if a.blind:
-                ans = generate_finalanswer.invoke({"context": "", "question": r["question"], "candidates": r["candidates"],
+                ans = generate_finalanswer.invoke({"context": "", "question": asked, "candidates": r["candidates"],
                                                    "query_time": f"Query Time: {clock(r['cutoff'])} on DAY0"})
             else:
                 name, row["indexed"] = tables(r)
                 TRACE.clear()
                 # upstream's prepare_videomme_example, with the question's cutoff as the video's end; the time is
                 # HHMMSScc (EgoLife's form), which upstream's time formatter prints whole
-                value = run_agentic_inference(app, r["question"], r["candidates"], "000001", cut, "NO TRANSCRIPTS AVAILABLE ",
+                value = run_agentic_inference(app, asked, r["candidates"], "000001", cut, "NO TRANSCRIPTS AVAILABLE ",
                                               {"date": "DAY0", "time": cut + "00"}, {"DAY0": {"start": "000001", "end": cut}},
                                               name, "")
                 ans = value["answer"]

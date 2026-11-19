@@ -148,7 +148,22 @@ def main():
     out = run("build", v, "g5m", env={k: x for k, x in env.items() if not k.endswith("_API_KEY")}, ok=False)
     assert "set OPENAI_API_KEY" in out and not LOG
     print("no key: build g5m stops before any request")
+    # a skeleton made under another work folder (the 2026-11-14 g5m builds: frame folders under /repo/baselines/merit/work,
+    # absent where the build ran): the captioner refuses it before any request, and build makes it again before captioning
+    run("prep", v, "g5m")
+    skel = os.path.join(work, "work/prep/captions", v, f"{v}_30sec_skeleton.json")
+    stale = json.load(open(skel))
+    for c in stale:
+        c["frame_dir"] = c["frame_dir"].replace(os.path.join(work, "work"), "/repo/baselines/merit/work")
+    json.dump(stale, open(skel, "w"))
+    from prepare_epic import skeleton_ok
+    assert not skeleton_ok(skel)
+    p = subprocess.run([env["PY"], os.path.join(HERE, "caption_clips_qwen.py"), "--model", "gpt-5-mini", "--skeleton", skel,
+                        "--output", os.path.join(work, "stale_captions.json")], env=env, capture_output=True, text=True)
+    assert p.returncode != 0 and "have no frames" in p.stderr and not LOG, (p.returncode, p.stderr[-800:])
+    print(f"stale skeleton: rejected by skeleton_ok; captioner exits before any request: {p.stderr.strip().splitlines()[-1]}")
     run("build", v, "g5m")
+    assert skeleton_ok(skel), "build did not make the stale skeleton again"
     mem = json.load(open(os.path.join(work, "results/g5m", v, f"{v}_30sec_4_key.json")))
     n = len(mem)
     assert calls() == {"captions": n, "keys": n}, calls()

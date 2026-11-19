@@ -109,6 +109,8 @@ reasoning model makes no API call when answering.
   in its own folder (`merit/g5m-q8/<video>/answers_<bank>.json.gz`, `runs.jsonl`) with `<video>_memory_ref.json`,
   the hashes of the memory they were made from: when the memory changes, `qa` drops the old answers and `upload`
   removes them from the dataset. An answer arm never builds: without a `g5m` memory (here or in the dataset) it stops.
+  Its local memory is a copy of the dataset's: `qa` compares the two by hash first and takes the dataset's again when
+  they differ (a memory rebuilt since; `MERIT_FETCH=0` keeps the local one, for a memory built here and not uploaded).
 - Everything else is as for `m8` / `m27`: our first-person caption prompt, 448 px clips, 1 fps frames (30 a
   caption), keys event + object + summary, 5 rounds at most, questions asked at `t_ask` (MERIT only retrieves,
   expands to and shows clips that end by then). Differences from the paper's own runs: top-k follows the paper per

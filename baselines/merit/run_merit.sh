@@ -137,6 +137,12 @@ EOF
 export MODEL RESPOND MEM TOPK EPIC
 cd "$REPO"
 
+# the clip list, usable here: its frame folders exist in this work folder (a skeleton made under another one, e.g.
+# /repo/baselines/merit/work before the work folder was /work, is made again; prep cuts nothing already there)
+skel_ok() {
+    "$PY" -c "import sys; sys.path.insert(0, sys.argv[1]); from prepare_epic import skeleton_ok; sys.exit(not skeleton_ok(sys.argv[2]))" \
+        "$M/epic" "$PREP/captions/$V/${V}_30sec_skeleton.json"
+}
 prep() {
     log prep; local t=$SECONDS P=${V%%-*}
     [ -s "$VIDEOS/$P/$V.mp4" ] || { echo "missing $VIDEOS/$P/$V.mp4 (v3/DATA.md)"; exit 1; }
@@ -145,7 +151,7 @@ prep() {
     mkdir -p "$WORK/locks"
     (
         flock 9
-        [ -s "$PREP/captions/$V/${V}_30sec_skeleton.json" ] && exit 0   # the other task made it
+        skel_ok && exit 0   # the other task made it, for this work folder
         "$PY" "$M/epic/prepare_epic.py" --video "$VIDEOS/$P/$V.mp4" --subject "$V" --clip_root "$WORK/clips_448" \
             --frame_root "$WORK/frames_448" --data_dir "$PREP" --clip_size 448 --frame_size 448 --threads "${THREADS:-8}"
     ) 9>"$WORK/locks/prep_$V.lock"
@@ -154,22 +160,34 @@ prep() {
 build() {
     log build; local t=$SECONDS
     # the memory depends only on the video and the model: take it from the dataset when it is there and no
-    # local one is started (a half-built local memory is resumed, never overwritten)
-    if [ ! -s "$CAP" ] && [ ! -s "$KEYS" ] && [ "${MERIT_FETCH:-1}" != 0 ]; then
+    # local one is started (a half-built local memory is resumed, never overwritten). An answer arm's local memory is
+    # only a copy of the dataset's: it is taken again when the dataset holds another one (rebuilt since), or the arm
+    # would answer from the stale copy and upload that as done
+    local take=; { [ -s "$CAP" ] || [ -s "$KEYS" ]; } || take=1
+    if [ -z "$take" ] && [ "$ARM" != "$MEM" ] && [ "${MERIT_FETCH:-1}" != 0 ] \
+        && ! "$PY" "$M/../common/hf_results.py" same-memory --arm "$MEM" --video "$V" --dir "$MOUT"; then
+        echo "the dataset's $MEM memory of $V is not the one here: taking it again"; take=1
+    fi
+    if [ -n "$take" ] && [ "${MERIT_FETCH:-1}" != 0 ]; then
         local rc=0; "$PY" "$M/../common/hf_results.py" fetch-memory --arm "$MEM" --video "$V" --dir "$MOUT" || rc=$?
         case $rc in
             0) # anything made from an earlier local memory is stale: embeddings, answering runs, answers
-               # (an answer arm compares the memory with the one its answers were made from: memory_ref)
+               # (an answer arm compares the memory with the one its answers were made from: memory_ref, below)
                [ "$ARM" != "$MEM" ] || { rm -rf "$WORK/cache/${ARM}_$V" "$WORK/runs/$ARM/$V"; rm -f "$OUT"/answers_*.json.gz; } ;;
-            3) echo "no memory in the dataset yet: building it here" ;;
+            3) # (offline, "none" also means "not in this node's cache": an answer arm then cannot tell whether the copy
+               # it has is still the dataset's, and stops rather than answer from it)
+               if [ "$ARM" != "$MEM" ] && [ -s "$KEYS" ] && [ "${HF_HUB_OFFLINE:-0}" = 1 ]; then
+                   echo "could not reach the dataset to check the $MEM memory of $V (offline, and not in the cache)"; exit 1
+               fi
+               echo "no memory in the dataset yet: building it here" ;;
             *) echo "could not reach the dataset; MERIT_FETCH=0 builds the memory here instead"; exit 1 ;;
         esac
     fi
     if [ "$ARM" != "$MEM" ]; then   # an answer arm never writes the memory: that is the memory arm's build (and its key)
-        [ -s "$KEYS" ] && return 0
-        echo "no finished $MEM memory of $V here or in the dataset: build it first (run_merit.sh build $V $MEM)"; exit 1
+        [ -s "$KEYS" ] || { echo "no finished $MEM memory of $V here or in the dataset: build it first (run_merit.sh build $V $MEM)"; exit 1; }
+        memory_ref; return 0
     fi
-    [ -s "$PREP/captions/$V/${V}_30sec_skeleton.json" ] || prep
+    skel_ok || prep
     local api=; case $MODEL in gpt-*) api=1 ;; esac
     "$PY" "$M/epic/caption_clips_qwen.py" --model "$MODEL" --skeleton "$PREP/captions/$V/${V}_30sec_skeleton.json" --output "$CAP" \
         ${api:+--concurrency "${MERIT_API_CONCURRENCY:-8}"}
@@ -198,7 +216,7 @@ qa_file() {   # this bank's questions for the video, in MERIT's format (asked at
         ) 9>"$EPIC/outputs/v3/banks/.$bank.lock" || { echo "cannot generate bank $bank in $EPIC"; exit 1; }
     fi
     [ -s "$EPIC/outputs/v3/banks/$bank/${V}_questions.json" ] || { echo "no $bank questions for $V in $EPIC"; exit 1; }
-    [ -s "$PREP/captions/$V/${V}_30sec_skeleton.json" ] || prep
+    skel_ok || prep
     mkdir -p "$(dirname "$QA")"
     "$PY" - "$EPIC/outputs/v3/banks/$bank/${V}_questions.json" "$V" "$PREP/captions/$V/${V}_30sec_skeleton.json" "$QA" <<'EOF'
 import json, os, sys
@@ -218,16 +236,18 @@ memory_ref() {   # an answer arm's folder names the memory its answers were made
     new=$("$PY" -c 'import hashlib, json, os, sys
 print(json.dumps({"memory_arm": sys.argv[1], "sha256": {os.path.basename(f): hashlib.sha256(open(f, "rb").read()).hexdigest()
                                                          for f in sys.argv[2:]}}, sort_keys=True))' "$MEM" "$CAP" "$KEYS")
-    if [ -f "$ref" ] && [ "$(cat "$ref")" != "$new" ]; then
+    # unchanged: left alone (another bank's task of this arm and video may be reading it, and an empty read would look
+    # like a changed memory and remove that task's answers)
+    [ ! -f "$ref" ] || [ "$(cat "$ref")" != "$new" ] || return 0
+    if [ -f "$ref" ]; then
         echo "the $MEM memory of $V changed: removing this arm's answers made from the old one"
         rm -rf "$WORK/cache/${ARM}_$V" "$WORK/runs/$ARM/$V"; rm -f "$OUT"/answers_*.json.gz
     fi
-    echo "$new" > "$ref"
+    echo "$new" > "$ref.$$.partial" && mv "$ref.$$.partial" "$ref"
 }
 qa() {
     log "qa $BANK$SUF"; local t=$SECONDS runs=$WORK/runs/$ARM/$V/$BANK$SUF sel
-    [ -s "$KEYS" ] || build
-    memory_ref
+    { [ "$ARM" = "$MEM" ] && [ -s "$KEYS" ]; } || build   # an answer arm: always, to check its copy of the memory
     qa_file; mkdir -p "$runs"
     # a gpt-* reasoning model: MERIT's evaluation started through epic/openai_usage.py, which counts its calls
     local merit=(bash "$R/script/eval_egolife.sh")

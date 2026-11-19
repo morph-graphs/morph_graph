@@ -20,7 +20,8 @@ has no `trace`. The banks are the _end variants (BANKS: only the questions asked
 in the base bank's answers_<base>.json.gz count for them too: a video they already cover is not listed. A stale file's task gets the id
 <task>-redo-<hash of the video's questions>, since the plain id may already be done on a pool (held for good): it is
 listed once per state of the bank, so an answer that fails again is not retried every cycle, and not while the task
-or a redo of it still runs or waits for its relay (what it uploads may be current). The master reads the
+or a redo of it still runs or waits for its relay (what it uploads may be current). After a memory was rebuilt
+(REBUILT) the answers made from the old one do not count and the video's qa tasks get ids ending +mem<tag>. The master reads the
 answers files to check, through a cache of their summaries by content hash (only files that changed download).
 The bank is generated afresh each cycle (v3/export_bank.py <bank>, deterministic per commit) in the epic-morph
 checkout EPIC_MORPH_DIR, the master's own (not a worker's, which may be reading its bank files). publish stops
@@ -118,6 +119,27 @@ API_CONFIGS = ["gemini-3.1-flash-lite-high", "gemini-3.6-flash-high", "gpt-5.5-f
 # (<video>_memory_ref.json) in their own folders. MEMORY_ARM: the arm whose build an arm's qa waits for (default itself).
 MEMORY_ARM = {("worldmm", "g5m-q8"): "g5m", ("worldmm", "g5m-g51"): "g5m",
               ("merit", "g5m-q8"): "g5m", ("merit", "g5m-q27"): "g5m", ("merit", "g5m-g51"): "g5m"}
+# Memories rebuilt after answers were made from them (Anubhav, 2026-11-19): MERIT's gpt-5-mini memory of 82 videos was
+# captioned without frames (59 of them have questions); the memory rebuilt with frames replaces it in the dataset
+# (hf_results.py upload mirrors the folder). {(baseline, memory arm): (tag, {video: [content hash of the OLD memory's
+# MEMORY_DONE file, of the answer arms' OLD <video>_memory_ref.json]})}, the hashes as the dataset's listing gives them
+# (coord/rebuilt_<baseline>_<arm>.txt: video, the two hashes; "-" where no answer arm had a folder). For such a video
+# (desired()):
+# - no qa task while the dataset still holds the old memory, or while a task of the video and arm from before the
+#   rebuild still runs (its upload would put the old answers back);
+# - then every qa task of it, on every bank, has the id <plain id>+mem<tag>: the plain id is done on a pool, which holds
+#   it for good. The `+` keeps the task from a worker whose checkout is older than this change (its worker.VALID refuses
+#   the id), whose run_merit.sh would answer from the stale local copy of the memory;
+# - while an answer arm's folder still names the old memory (its memory_ref is the old one), its answers files count as
+#   absent, the base bank's and the probes' too. The first upload made from the new memory mirrors the folder (new
+#   memory_ref, the old answers gone), and from then on the files are read as any other's.
+# Nothing is deleted by hand, and the tasks appear when the rebuilt memory is uploaded, whenever this is merged.
+def rebuilt(name):
+    rows = [l.split() for l in open(os.path.join(os.path.dirname(os.path.abspath(__file__)), name)) if l.strip() and l[0] != "#"]
+    return {r[0]: r[1:] for r in rows}
+
+
+REBUILT = {("merit", "g5m"): ("1119", rebuilt("rebuilt_merit_g5m.txt"))}
 # Arms that call a paid API: every task of one carries needs_env (a worker with any of them unset leaves the task) and
 # is listed for KEY_POOLS only, whatever its EXPERIMENTS line or --only-pools says: nobody but Max has the keys.
 # WorldMM's answer arms both call gpt-5-mini (its retriever); MERIT's Qwen answer arms (g5m-q8, g5m-q27) call nothing
@@ -293,7 +315,10 @@ ONLY_POOLS = {("merit", "m8", "qa"): ["nexus"],
               ("api", "gemini-3.1-flash-lite-high-evclips", "qa"): ["nexus", "max", "max-cpu"]}
 # ... and lines that Nexus takes besides their usual pools (Anubhav, 2026-11-16): MAGIC m27 answers on 2x A6000 at 24G
 # or an H200 at 16G, WorldMM m27 answers on an H200 (smoke tests: process memory under 10 GB, answers as before)
-EXTRA_POOLS = {("magic", "m27", "qa"): ["nexus"], ("worldmm", "m27", "qa"): ["nexus"], ("merit", "m27", "qa"): ["nexus"]}
+EXTRA_POOLS = {("magic", "m27", "qa"): ["nexus"], ("worldmm", "m27", "qa"): ["nexus"], ("merit", "m27", "qa"): ["nexus"],
+               # MERIT's Qwen answers from the gpt-5-mini memory (no key) on Nexus at once too, with Zaratan (already in
+               # their pools) and Max (Anubhav, 2026-11-19: both clusters are fairly free); the nexus queues name them
+               ("merit", "g5m-q8", "qa"): ["nexus"], ("merit", "g5m-q27", "qa"): ["nexus"]}
 EXPERIMENTS = [("api", c, "qa", KEY_POOLS, bank) for bank in BANKS for c in API_CONFIGS] + URGENT + REPORTED + PAID + [
     ("direct", arm, "qa", pools, bank) for bank in BANKS for arm, pools in DIRECT.items()] + [
     ("rekv", "m8", "qa", M8, bank) for bank in BANKS] + [
@@ -358,7 +383,10 @@ STITCHED_VIDEOS = [f"P0{k}-stitched" for k in range(1, 10)]
 STITCHED_POOLS = ["max", "pulkit", "nexus"]
 # ... and per line (Anubhav, 2026-11-16): MAGIC-Video's stitched builds on Zaratan's H100s too, whichever pool starts first
 # (measured on the 156 normal videos: build wall time ~0.21x the video's length, so ~1.5 h on the 7.2 h video)
-STITCHED_ALSO = {("magic", "oss120"): ["zaratan"], ("magic", "oss120-flash"): ["zaratan"]}
+STITCHED_ALSO = {("magic", "oss120"): ["zaratan"], ("magic", "oss120-flash"): ["zaratan"],
+                 # MERIT m27's stitched answers (no key; 2 to 5 h a video on Max's H100s) on Zaratan too (Anubhav,
+                 # 2026-11-19); its worker takes them once a `long` queue of its queues file names merit/m27
+                 ("merit", "m27"): ["zaratan"]}
 # Max's second worker, CPU only (pool max-cpu; Anubhav, 2026-11-16): the answers of the paid rows that need no GPU. Two
 # workers in one pool overwrite each other's pool file and fail each other's claims, so it is a pool of its own.
 CPU_ROWS = {("api", "gemini-3.6-flash-high-stitched-f2048", "qa"), ("api", "gemini-3.6-flash-high", "qa"),
@@ -373,7 +401,10 @@ CANARY = "P05-stitched"   # the shortest, 3.48 h
 # those per cutoff (prototype on P05-stitched: no time after either anchor in its chains or filtered graph)
 # Frozen (Anubhav, 2026-11-17): every stitched build and answer, so the main benchmark and the evidence clips go
 # first. Was: {("merit", "m27"), ("worldmm", "g5m"), ("magic", "oss120")}
-STITCHED_BUILDS = set()
+# On again (Anubhav, 2026-11-19): MAGIC-Video's three missing builds (P03, P04, P06: one caption or one chain call failed
+# on Nexus and on Zaratan, so each waits for `master.py reset`), and EGAgent's GPT-4.1 memory of all nine (each refused
+# once by Azure's content filter behind Max's gateway, as 37 of its normal builds were). MERIT's and WorldMM's are built.
+STITCHED_BUILDS = {("magic", "oss120"), ("egagent", "gpt41")}
 # Answering on the stitched videos is frozen (Anubhav, 2026-11-16) while their protocol changes to Vatsal's: each card at
 # its anchor time, from memory units that end before it; builds go on. The end-of-video lines (STITCHED_EOV, below) were
 # {("merit", "m27"), ("worldmm", "g5m-g51")}; they stay off.
@@ -392,11 +423,14 @@ STITCHED_EOV_ANSWERS = set()
 COMMITTED_BANKS = {STITCHED}
 STITCHED_API = "gemini-3.6-flash-high-stitched-f2048"
 STITCHED_ANSWER_LINES = [("merit", "m27"), ("worldmm", "g5m-g51"), ("api", STITCHED_API),
-                         ("magic", "oss120-flash")]   # MAGIC (Anubhav, 2026-11-16): chains per t_ask (#110), from the oss120 memory
+                         ("magic", "oss120-flash"),   # MAGIC (Anubhav, 2026-11-16): chains per t_ask (#110), from the oss120 memory
+                         ("egagent", "gemini36flash")]   # EGAgent's Gemini 3.6 Flash agent, from the gpt41 memory
 # On again for three lines (Anubhav, 2026-11-17): MERIT m27, WorldMM g5m-g51 and Gemini 3.6 Flash, whose memories are
-# built (MERIT's and WorldMM's) or need none. MAGIC-Video waits for its chain-length fix (empty topic replies at 4,096
-# tokens) and its three missing stitched builds. All on: set(STITCHED_ANSWER_LINES)
-STITCHED_ANSWERS = {("merit", "m27"), ("worldmm", "g5m-g51"), ("api", STITCHED_API)}
+# built (MERIT's and WorldMM's) or need none. MAGIC-Video too (Anubhav, 2026-11-19): its chain-length fix is in (#134),
+# and the three videos without a memory wait on their builds. And EGAgent (Anubhav, 2026-11-19, for Max's pools): its qa
+# cuts the memory at t_ask and now puts the kitchen's sessions before the question (run_qa.py), each video waiting
+# on its gpt41 build; a CPU row, so max-cpu takes it too (CPU_ROWS).
+STITCHED_ANSWERS = set(STITCHED_ANSWER_LINES)
 NEEDS_ENV[("api", STITCHED_API)] = ["GEMINI_API_KEY"]
 EXPERIMENTS += sorted([(b, arm, "build", pools, (STITCHED,)) for b, arm, stage, pools, _ in EXPERIMENTS
                        if stage == "build" and (b, arm) in STITCHED_BUILDS],
@@ -671,20 +705,29 @@ def desired(have, files, answers=None, busy=()):
                                       pools=pools, deps=[base] if base in ids else [], **env))
                     ids.add(tasks[-1]["id"])
             continue
+        tag, old = REBUILT.get((b, mem), ("", {}))   # videos whose memory was rebuilt, with the old one's hashes
         for v in bank_videos(bank):
             tid, f, stale = f"{b}-{arm}-{stage}-{bank}-{v}", f"{b}/{arm}/{v}/answers_{bank}.json.gz", {}
             # an _end bank's questions are its base bank's: the answers there count, with the _end file's or alone (a
             # video whose base answers cover every question is not listed; one they do not cover, listed while no
             # _end file exists, is a plain task: the baseline reuses them, hf_results.py earlier-answers)
             base = f"{b}/{arm}/{v}/answers_{base_bank(bank)}.json.gz" if base_bank(bank) else None
-            if f in files and (f not in answers or tid in busy):
+            got = files   # the files that count for this video
+            if v in old:
+                if files.get(f"{b}/{mem}/{v}/{MEMORY_DONE[b].format(v=v)}") == old[v][0] or any(
+                        x.startswith(f"{b}-{arm}-{stage}-") and x.endswith(v) for x in busy):
+                    continue   # the old memory is still in the dataset, or a run from before the rebuild still uploads
+                tid += f"+mem{tag}"
+                if files.get(f"{b}/{arm}/{v}/{v}_memory_ref.json") in old[v][1:]:
+                    got = {}   # the folder's answers were made from the old memory
+            if f in got and (f not in answers or tid in busy):
                 continue
-            if f in files or (base in files and base in answers and tid not in busy):
-                todo = unanswered(bank_questions(bank)[v], [r for p in (f, base) if p in files for r in answers.get(p) or []],
+            if f in got or (base in got and base in answers and tid not in busy):
+                todo = unanswered(bank_questions(bank)[v], [r for p in (f, base) if p in got for r in answers.get(p) or []],
                                   trace=b in TRACED)
                 if not todo:
                     continue
-                if f in files:
+                if f in got:
                     tid, stale = redo_id(tid, bank_questions(bank)[v]), {"stale": len(todo)}   # questions to ask again
             # wait for the video's build task (its memory arm's) while it is listed; a memory already built (on the
             # board or off it) needs no wait, and with neither, qa builds the memory itself first
