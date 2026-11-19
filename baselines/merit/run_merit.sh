@@ -137,6 +137,12 @@ EOF
 export MODEL RESPOND MEM TOPK EPIC
 cd "$REPO"
 
+# the clip list, usable here: its frame folders exist in this work folder (a skeleton made under another one, e.g.
+# /repo/baselines/merit/work before the work folder was /work, is made again; prep cuts nothing already there)
+skel_ok() {
+    "$PY" -c "import sys; sys.path.insert(0, sys.argv[1]); from prepare_epic import skeleton_ok; sys.exit(not skeleton_ok(sys.argv[2]))" \
+        "$M/epic" "$PREP/captions/$V/${V}_30sec_skeleton.json"
+}
 prep() {
     log prep; local t=$SECONDS P=${V%%-*}
     [ -s "$VIDEOS/$P/$V.mp4" ] || { echo "missing $VIDEOS/$P/$V.mp4 (v3/DATA.md)"; exit 1; }
@@ -145,7 +151,7 @@ prep() {
     mkdir -p "$WORK/locks"
     (
         flock 9
-        [ -s "$PREP/captions/$V/${V}_30sec_skeleton.json" ] && exit 0   # the other task made it
+        skel_ok && exit 0   # the other task made it, for this work folder
         "$PY" "$M/epic/prepare_epic.py" --video "$VIDEOS/$P/$V.mp4" --subject "$V" --clip_root "$WORK/clips_448" \
             --frame_root "$WORK/frames_448" --data_dir "$PREP" --clip_size 448 --frame_size 448 --threads "${THREADS:-8}"
     ) 9>"$WORK/locks/prep_$V.lock"
@@ -169,7 +175,7 @@ build() {
         [ -s "$KEYS" ] && return 0
         echo "no finished $MEM memory of $V here or in the dataset: build it first (run_merit.sh build $V $MEM)"; exit 1
     fi
-    [ -s "$PREP/captions/$V/${V}_30sec_skeleton.json" ] || prep
+    skel_ok || prep
     local api=; case $MODEL in gpt-*) api=1 ;; esac
     "$PY" "$M/epic/caption_clips_qwen.py" --model "$MODEL" --skeleton "$PREP/captions/$V/${V}_30sec_skeleton.json" --output "$CAP" \
         ${api:+--concurrency "${MERIT_API_CONCURRENCY:-8}"}
@@ -198,7 +204,7 @@ qa_file() {   # this bank's questions for the video, in MERIT's format (asked at
         ) 9>"$EPIC/outputs/v3/banks/.$bank.lock" || { echo "cannot generate bank $bank in $EPIC"; exit 1; }
     fi
     [ -s "$EPIC/outputs/v3/banks/$bank/${V}_questions.json" ] || { echo "no $bank questions for $V in $EPIC"; exit 1; }
-    [ -s "$PREP/captions/$V/${V}_30sec_skeleton.json" ] || prep
+    skel_ok || prep
     mkdir -p "$(dirname "$QA")"
     "$PY" - "$EPIC/outputs/v3/banks/$bank/${V}_questions.json" "$V" "$PREP/captions/$V/${V}_30sec_skeleton.json" "$QA" <<'EOF'
 import json, os, sys

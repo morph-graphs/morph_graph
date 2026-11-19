@@ -97,6 +97,18 @@ def make_frames(video, frame_root, clip_names, clip_sec, size, threads):
     shutil.rmtree(tmp)
 
 
+def skeleton_ok(path):
+    """A skeleton that can be used where this runs: every clip's frame folder exists and holds frames. One made under
+    another work folder names folders that do not exist here (2026-11-14: skeletons made at /repo/baselines/merit/work,
+    read in builds that had the work folder at /work, so 82 g5m memories were captioned with no frames); rerunning
+    prep then rewrites it for this work folder, cutting nothing that is already there."""
+    try:
+        clips = json.load(open(path))
+    except (OSError, ValueError):
+        return False
+    return bool(clips) and all(glob.glob(os.path.join(c["frame_dir"], "*.jpg")) for c in clips)
+
+
 def qhash(question, options):
     """Short hash of a question's wording and options (as in baselines/magic): an edit under the same key changes it."""
     return hashlib.sha1(json.dumps([question, [str(o) for o in options]]).encode()).hexdigest()[:12]

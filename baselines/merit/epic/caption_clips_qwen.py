@@ -58,6 +58,15 @@ def main():
     print(f"{len(clips)} clips, {len(todo)} to caption", flush=True)
     if not todo:
         return
+    # a clip with no frames would be captioned from the prompt alone (refusals or invented captions, 2026-11-14):
+    # stop before any request instead
+    frames = {}
+    for c in todo:
+        f = sorted(glob.glob(os.path.join(c["frame_dir"], "*.jpg")))
+        frames[c["start_time"]] = f[::max(1, len(f) // args.max_frames)][: args.max_frames]
+    empty = [c["frame_dir"] for c in todo if not frames[c["start_time"]]]
+    if empty:
+        sys.exit(f"{len(empty)} of {len(todo)} clips have no frames (rerun prep for this work folder), e.g. {empty[0]}")
 
     api = args.model.startswith("gpt")
     if api:   # no output cap: a GPT-5 model's reasoning tokens count against it, and a capped reply can come back empty
@@ -67,13 +76,11 @@ def main():
         llm = LLMModel(model_name=args.model, max_new_tokens=512)
 
     def caption(c):
-        frames = sorted(glob.glob(os.path.join(c["frame_dir"], "*.jpg")))
-        step = max(1, len(frames) // args.max_frames)
-        frames = frames[::step][: args.max_frames]
-        msg = [{"role": "user", "content": [{"type": "image", "image": f} for f in frames]
+        f = frames[c["start_time"]]
+        msg = [{"role": "user", "content": [{"type": "image", "image": x} for x in f]
                 + [{"type": "text", "text": PROMPT}]}]
         t0 = time.time()
-        return (llm.generate(msg) or "").strip(), len(frames), time.time() - t0
+        return (llm.generate(msg) or "").strip(), len(f), time.time() - t0
 
     failed = 0
     with ThreadPoolExecutor(max_workers=args.concurrency if api else 1) as pool:
