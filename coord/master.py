@@ -427,10 +427,10 @@ STITCHED_ANSWER_LINES = [("merit", "m27"), ("worldmm", "g5m-g51"), ("api", STITC
                          ("egagent", "gemini36flash")]   # EGAgent's Gemini 3.6 Flash agent, from the gpt41 memory
 # On again for three lines (Anubhav, 2026-11-17): MERIT m27, WorldMM g5m-g51 and Gemini 3.6 Flash, whose memories are
 # built (MERIT's and WorldMM's) or need none. MAGIC-Video too (Anubhav, 2026-11-19): its chain-length fix is in (#134),
-# and the three videos without a memory wait on their builds. Not EGAgent yet: its qa cuts the memory at t_ask
-# (run_qa.py) but does not put the kitchen's sessions in the prompt (stitched_sessions.context), which this bank's
-# protocol asks for; add it here once it does.
-STITCHED_ANSWERS = {("merit", "m27"), ("worldmm", "g5m-g51"), ("api", STITCHED_API), ("magic", "oss120-flash")}
+# and the three videos without a memory wait on their builds. And EGAgent (Anubhav, 2026-11-19, for Max's pools): its qa
+# cuts the memory at t_ask and now puts the kitchen's sessions before the question (run_qa.py), each video waiting
+# on its gpt41 build; a CPU row, so max-cpu takes it too (CPU_ROWS).
+STITCHED_ANSWERS = set(STITCHED_ANSWER_LINES)
 NEEDS_ENV[("api", STITCHED_API)] = ["GEMINI_API_KEY"]
 EXPERIMENTS += sorted([(b, arm, "build", pools, (STITCHED,)) for b, arm, stage, pools, _ in EXPERIMENTS
                        if stage == "build" and (b, arm) in STITCHED_BUILDS],

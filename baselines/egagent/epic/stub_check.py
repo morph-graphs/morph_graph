@@ -11,7 +11,10 @@ OpenAI client's HTTP layer (httpx) and the Gemini client's generate_content repl
 every request with a reply that fits the schema it asks for. The fakes log each request's text and frames
 (recognised by their bytes) and plant markers: a caption names the seconds of its frames, a graph node names
 the end of the captions it came from. Afterwards, for every question: no frame after its cutoff was sent, and
-no marker from a caption or graph chunk ending after it reached any prompt. Last, the fake answers as another
+no marker from a caption or graph chunk ending after it reached any prompt. A stitched video's question
+(--video <K>-stitched; any frames will do) must reach the planner and the blind prompt with the kitchen's sessions
+started by its cutoff before it and no later session, while its row keeps the bank's wording; any other video's with
+none. Last, the fake answers as another
 model and the run must stop (exit 4). Everything is written under --tmp; nothing here is a result.
 
 The route of the GPT-4.1 calls is checked on every request: to api.openai.com as gpt-4.1 with OpenAI's key (also
@@ -258,8 +261,25 @@ def main():
             groups.append([])
         groups[-1].append(c)
     assert len(groups) == len(qrows), (len(groups), len(qrows))
+    sys.path.insert(0, os.path.join(HERE, "..", "..", "common"))
+    import stitched_sessions
+    bank = [q["q"] for q in json.load(open(a.bank_file))["questions"]]   # a row's ID is its 1-based place in it
+    blind_text = "\n".join(c["text"] for c in CALLS if c["phase"] == "blind")
     for r, calls in zip(qrows, groups):
         cut = r["cutoff"]
+        # the sessions: those started by the cutoff before the question the planner gets, no later one anywhere; the
+        # row keeps the bank's own wording
+        ctx = stitched_sessions.context(a.video, cut)
+        assert r["question"] == bank[int(r["ID"]) - 1] and r.get("context", "") == ctx, (r["ID"], r.get("context"))
+        if ctx:
+            later = [f"S{i}:" for i, s in enumerate(stitched_sessions.sessions(a.video), 1) if s["video_at_s"] >= cut]
+            asked = f"{ctx}\n\nQuestion: {r['question']}"
+            assert asked in calls[0]["text"] and asked in blind_text, r["ID"]
+            assert later and not any(x in c["text"] for x in later for c in calls), (r["ID"], later)
+            print(f"  Q{r['ID']} cutoff {cut} s: sessions in the prompt {[l.split(':')[0] for l in ctx.splitlines() if l[:1] == 'S']}, "
+                  f"not {[x[:-1] for x in later]}")
+        else:
+            assert not any("recording sessions" in c["text"] for c in calls) and "recording sessions" not in blind_text
         frames = [s for c in calls for s in c["seconds"]]
         text = "\n".join(c["text"] for c in calls)
         ents = sorted({int(m) for m in re.findall(r"ENT_(\d{6})", text, flags=re.I)})

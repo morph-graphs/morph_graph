@@ -897,7 +897,8 @@ def test_pools_of_the_lines_listed_2026_11_19(monkeypatch, tmp_path):
     """MERIT's answers from the gpt-5-mini memory: the Qwen arms (no key) on Max's, Pulkit's, wriva's pools, Zaratan and
     Nexus; GPT-5.1's on the key pools. The stitched lines: MAGIC-Video's and EGAgent's builds and MAGIC-Video's answers
     with their keys on the key pools and ours that have an OpenRouter key; MERIT m27's answers on Zaratan too; EGAgent's
-    answers not listed; the end-of-video bank frozen; never the leftover pools."""
+    answers on the key pools and Max's CPU pool, each waiting on its build; the end-of-video bank frozen; never the
+    leftover pools."""
     (tmp_path / "order.txt").write_text("")
     monkeypatch.setattr(M, "BUILD_ORDER", str(tmp_path / "order.txt"))
     monkeypatch.setattr(M, "REPORTED_BANKS", [])
@@ -917,6 +918,7 @@ def test_pools_of_the_lines_listed_2026_11_19(monkeypatch, tmp_path):
         ("merit", "g5m-g51", "qa", M.BANKS[0]): key, ("merit", "g5m-g51", "qa", M.PROBES): key,
         ("magic", "oss120", "build", None): key + own, ("magic", "oss120-flash", "qa", M.STITCHED): key + own,
         ("egagent", "gpt41", "build", None): key + ["nexus"],
+        ("egagent", "gemini36flash", "qa", M.STITCHED): key + ["max-cpu"],
         ("merit", "m27", "qa", M.STITCHED): ["zaratan", "max", "pulkit", "nexus"],
         ("worldmm", "g5m-g51", "qa", M.STITCHED): key, ("api", M.STITCHED_API, "qa", M.STITCHED): key + ["max-cpu"]}
     assert all({"nexus", "zaratan"} <= set(p) for (b, arm, *_), p in pools.items() if not M.needs(b, arm, "qa") and b == "merit")
@@ -928,9 +930,15 @@ def test_pools_of_the_lines_listed_2026_11_19(monkeypatch, tmp_path):
     assert by["magic-oss120-flash-qa-stitched-P01-stitched"]["deps"] == []
     assert by["magic-oss120-build-P03-stitched"]["needs_env"] == ["OPENROUTER_API_KEY"]
     assert by["egagent-gpt41-build-P01-stitched"]["needs_env"] == ["OPENAI_API_KEY|OPENROUTER_API_KEY"]
-    # EGAgent's stitched answers: a line of the bank, not on yet (its qa lacks the sessions in the prompt)
-    assert ("egagent", "gemini36flash") in M.STITCHED_ANSWER_LINES and ("egagent", "gemini36flash") not in M.STITCHED_ANSWERS
-    assert not [t for t in st if (t["baseline"], t["stage"]) == ("egagent", "qa")]
+    # EGAgent's stitched answers: nine, with Gemini's key, each waiting on its video's GPT-4.1 memory build
+    eg = [t for t in st if (t["baseline"], t["arm"], t["stage"]) == ("egagent", "gemini36flash", "qa")]
+    assert M.STITCHED_ANSWERS == set(M.STITCHED_ANSWER_LINES) and sorted(t["video"] for t in eg) == M.STITCHED_VIDEOS
+    assert all(t["bank"] == M.STITCHED and t["needs_env"] == ["GEMINI_API_KEY"] and t["memory_arm"] == "gpt41"
+               and t["deps"] == [f"egagent-gpt41-build-{t['video']}"] and {"max", "max-cpu"} <= set(t["pools"]) for t in eg)
+    assert all(by[t["deps"][0]]["priority"] < t["priority"] for t in eg)
+    # with the memories in the dataset no build is listed and the answers wait on nothing
+    assert not [t for t in M.desired(have | {("egagent", "gpt41", v) for v in M.STITCHED_VIDEOS}, {})
+                if t["baseline"] == "egagent" and (t["stage"] == "build" or t["deps"])]
     listed, withheld = M.gate(tasks)   # every stitched line is a priority row; they lead the list, builds first
     assert [t for t in st if t not in listed] == [] and [M.lead(t) for t in listed] == sorted(M.lead(t) for t in listed)
     assert {M.lead(t) for t in st} == {-2, -1}
