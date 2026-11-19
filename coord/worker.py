@@ -102,11 +102,12 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # of baselines/api/configs/ (gpt-5-f1024): lower-case letters and digits in runs joined by one `.`, `-` or `_`, none
 # of which the shell, a Slurm job name or a file pattern reads as anything but itself (no space, quote, `$`, `/`, `*`,
 # and never a leading `-`, so it cannot become an option). A video is an HD-EPIC recording, or a kitchen's stitched
-# video (master.STITCHED_VIDEOS).
+# video (master.STITCHED_VIDEOS). An id may hold a `+` (master.REBUILT: <task>+mem<tag>, the video's memory was rebuilt):
+# a checkout from before that refuses such an id, so only one whose run_merit.sh takes the rebuilt memory runs the task.
 VALID = dict(baseline=re.compile(r"^(merit|worldmm|magic|m3agent|api|egor1|egagent|egorag|hippomm|direct|rekv|vst)$"),
              arm=re.compile(r"^(m(8|27|3)|[a-z0-9]+([._-][a-z0-9]+)*)$"),
              stage=re.compile(r"^(prep|build|qa|blind)$"), video=re.compile(r"^P\d\d-(\d{8}-\d{6}|stitched)$"),
-             bank=re.compile(r"^[A-Za-z0-9_]*$"), id=re.compile(r"^[A-Za-z0-9_.-]+$"))
+             bank=re.compile(r"^[A-Za-z0-9_]*$"), id=re.compile(r"^[A-Za-z0-9_.+-]+$"))
 
 
 # What a failed task's log may carry: the value of any key or token in this worker's environment, or a key by shape
@@ -377,7 +378,7 @@ def slurm_job_state(submit_log, run=subprocess.run):
 
 
 def kind(tid):
-    """<baseline>-<arm>-<stage> of a task id (master.py: <baseline>-<arm>-<stage>-[<bank>-]<video>[-redo-<hash>])."""
+    """<baseline>-<arm>-<stage> of a task id (master.py: <baseline>-<arm>-<stage>-[<bank>-]<video>[+mem<tag>][-redo-<hash>])."""
     m = re.match(r"^(.+?-(?:build|qa|prep|blind))-", tid)
     return m.group(1) if m else tid
 

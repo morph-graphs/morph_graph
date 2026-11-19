@@ -832,6 +832,113 @@ def test_end_bank_reuses_base(tmp_path, monkeypatch):
     assert set(M.read_answers("c", {p: p.replace("/", "_") for p in files})) == files
 
 
+def test_rebuilt_memory(tmp_path, monkeypatch):
+    """A video whose memory was rebuilt (REBUILT): no qa task while the dataset holds the old memory or a task from
+    before the rebuild still runs; then its tasks carry +mem<tag>, on every bank, and the answers in a folder that
+    still names the old memory do not count (base bank's included). Once a pool uploaded answers made from the new
+    memory (another memory_ref) the files are read as any other's. A worker from before this change refuses the ids."""
+    V = [f"P01-20240101-00030{i}" for i in range(6)]
+    qs = [bank_q("k1", 1734.9), bank_q("k2", 1734.9)]
+    for bank in ("tb_end", "pb"):
+        d = tmp_path / "outputs/v3/banks" / bank
+        d.mkdir(parents=True)
+        for v in V:
+            (d / f"{v}_questions.json").write_text(json.dumps({"questions": qs}))
+    (tmp_path / "v3").mkdir()
+    (tmp_path / "v3/export_bank.py").write_text("")
+    (tmp_path / "order.txt").write_text("")
+    monkeypatch.setenv("EPIC_MORPH_DIR", str(tmp_path))
+    monkeypatch.setattr(M, "BUILD_ORDER", str(tmp_path / "order.txt"))
+    monkeypatch.setattr(M, "EXPERIMENTS", [("merit", "g5m-q8", "qa", ["p"], "tb_end"), ("merit", "g5m-q8", "qa", ["p"], "pb")])
+    monkeypatch.setattr(M, "REPORTED_BANKS", [])
+    monkeypatch.setattr(M, "REBUILT", {("merit", "g5m"): ("t1", {v: ["oldmem", "oldref"] for v in V if v != V[4]})})
+    M.exported.cache_clear()
+    row = lambda q: [q["key"], *M.asked(q)[1:], False]
+    d = lambda v, f: f"merit/g5m-q8/{v}/{f}"
+    files, answers = {}, {}
+    for i, v in enumerate(V):   # V[0]: the old memory still in the dataset; the others: the rebuilt one (V[4]: never rebuilt)
+        files[f"merit/g5m/{v}/{v}_30sec_4_key.json"] = "oldmem" if i == 0 else "newmem"
+        files[d(v, f"{v}_memory_ref.json")] = "newref" if i in (2, 3) else "oldref"   # V[2], V[3]: answered again already
+        answers[d(v, "answers_tb.json.gz")] = [row(q) for q in qs]                  # the base bank's file covers both
+    answers[d(V[3], "answers_tb.json.gz")] = [row(qs[0])]
+    answers[d(V[3], "answers_tb_end.json.gz")] = []                                 # V[3]: k2 unanswered in both
+    answers[d(V[1], "answers_pb.json.gz")] = [row(q) for q in qs]                   # V[1]: pb answered, from the old memory
+    files |= {p: "h" for p in answers}
+    have = {("merit", "g5m", v) for v in V}
+    ids = lambda **k: sorted(t["id"] for t in M.desired(have, files, answers, **k))
+    plain = lambda bank, v: f"merit-g5m-q8-qa-{bank}-{v}"
+    listed = ids()
+    redo = [t for t in listed if "-redo-" in t]
+    assert listed == sorted([plain("pb", V[1]) + "+memt1", plain("tb_end", V[1]) + "+memt1",       # old answers ignored
+                             plain("pb", V[2]) + "+memt1",                                         # tb_end current, pb missing
+                             plain("pb", V[3]) + "+memt1", *redo,                                  # a redo of the +mem task
+                             plain("pb", V[4]),                                                    # not rebuilt: as ever
+                             plain("pb", V[5]) + "+memt1", plain("tb_end", V[5]) + "+memt1"])
+    assert redo == [M.redo_id(plain("tb_end", V[3]) + "+memt1", qs)]
+    tasks = {t["id"]: t for t in M.desired(have, files, answers)}
+    assert tasks[redo[0]]["stale"] == 1 and "stale" not in tasks[plain("tb_end", V[1]) + "+memt1"]
+    # a task of the video and arm from before the rebuild still runs (any bank): nothing of it is listed meanwhile
+    assert not [t for t in ids(busy={plain("pb", V[5])}) if V[5] in t]
+    # a running +mem task stays listed (claimed), as a plain one does; its redo is not listed beside a running one
+    assert plain("tb_end", V[1]) + "+memt1" in ids(busy={plain("tb_end", V[1]) + "+memt1"})
+    assert not [t for t in ids(busy={plain("tb_end", V[3]) + "+memt1"}) if "-redo-" in t]
+    import re
+    import worker
+    assert all(worker.valid(t) for t in tasks.values())
+    before = re.compile(r"^[A-Za-z0-9_.-]+$")   # worker.VALID["id"] before this change: such a checkout leaves the tasks
+    assert [t for t in tasks if not before.fullmatch(t)] == [t for t in tasks if "+mem" in t]
+    # the real setting: MERIT's gpt-5-mini memory, 82 videos, each with the old memory's hash and its answer arms' old reference
+    real = M.rebuilt("rebuilt_merit_g5m.txt")
+    assert len(real) == 82 and all(len(x) == 2 and len(x[0]) == 40 for x in real.values())
+    assert sum(x[1] != "-" for x in real.values()) == 59
+
+
+def test_pools_of_the_lines_listed_2026_11_19(monkeypatch, tmp_path):
+    """MERIT's answers from the gpt-5-mini memory: the Qwen arms (no key) on Max's, Pulkit's, wriva's pools, Zaratan and
+    Nexus; GPT-5.1's on the key pools. The stitched lines: MAGIC-Video's and EGAgent's builds and MAGIC-Video's answers
+    with their keys on the key pools and ours that have an OpenRouter key; MERIT m27's answers on Zaratan too; EGAgent's
+    answers not listed; the end-of-video bank frozen; never the leftover pools."""
+    (tmp_path / "order.txt").write_text("")
+    monkeypatch.setattr(M, "BUILD_ORDER", str(tmp_path / "order.txt"))
+    monkeypatch.setattr(M, "REPORTED_BANKS", [])
+    monkeypatch.setattr(M, "bank_videos", lambda bank: M.STITCHED_VIDEOS if bank == M.STITCHED else ["P01-20240101-000001"])
+    monkeypatch.setattr(M, "EXPERIMENTS", [e for e in M.EXPERIMENTS if e[4] in ((M.STITCHED,), M.STITCHED, M.STITCHED_EOV)
+                                           or (e[:2] in M.MEMORY_ARM and e[0] == "merit" and e[4] in (M.BANKS[0], M.PROBES))])
+    have = {(b, arm, v) for b, arm in (("merit", "m27"), ("worldmm", "g5m"), ("merit", "g5m")) for v in M.STITCHED_VIDEOS + ["P01-20240101-000001"]}
+    have |= {("magic", "oss120", v) for v in M.STITCHED_VIDEOS if v[:3] not in ("P03", "P04", "P06")}
+    tasks = M.desired(have, {})
+    pools = {}
+    for t in tasks:
+        assert pools.setdefault((t["baseline"], t["arm"], t["stage"], t["bank"]), t["pools"]) == t["pools"]
+    key, own = ["max", "pulkit"], ["nexus", "zaratan"]
+    assert pools == {
+        ("merit", "g5m-q8", "qa", M.BANKS[0]): M.M8 + ["nexus"], ("merit", "g5m-q8", "qa", M.PROBES): M.M8 + ["nexus"],
+        ("merit", "g5m-q27", "qa", M.BANKS[0]): M.M27 + ["arm00", "nexus"], ("merit", "g5m-q27", "qa", M.PROBES): M.M27 + ["arm00", "nexus"],
+        ("merit", "g5m-g51", "qa", M.BANKS[0]): key, ("merit", "g5m-g51", "qa", M.PROBES): key,
+        ("magic", "oss120", "build", None): key + own, ("magic", "oss120-flash", "qa", M.STITCHED): key + own,
+        ("egagent", "gpt41", "build", None): key + ["nexus"],
+        ("merit", "m27", "qa", M.STITCHED): ["zaratan", "max", "pulkit", "nexus"],
+        ("worldmm", "g5m-g51", "qa", M.STITCHED): key, ("api", M.STITCHED_API, "qa", M.STITCHED): key + ["max-cpu"]}
+    assert all({"nexus", "zaratan"} <= set(p) for (b, arm, *_), p in pools.items() if not M.needs(b, arm, "qa") and b == "merit")
+    by = {t["id"]: t for t in tasks}
+    st = [t for t in tasks if t["video"] in M.STITCHED_VIDEOS]
+    assert sorted(t["video"][:3] for t in st if (t["baseline"], t["stage"]) == ("magic", "build")) == ["P03", "P04", "P06"]
+    assert sum((t["baseline"], t["stage"]) == ("egagent", "build") for t in st) == 9 and not [t for t in st if t["bank"] == M.STITCHED_EOV]
+    assert by["magic-oss120-flash-qa-stitched-P03-stitched"]["deps"] == ["magic-oss120-build-P03-stitched"]
+    assert by["magic-oss120-flash-qa-stitched-P01-stitched"]["deps"] == []
+    assert by["magic-oss120-build-P03-stitched"]["needs_env"] == ["OPENROUTER_API_KEY"]
+    assert by["egagent-gpt41-build-P01-stitched"]["needs_env"] == ["OPENAI_API_KEY|OPENROUTER_API_KEY"]
+    # EGAgent's stitched answers: a line of the bank, not on yet (its qa lacks the sessions in the prompt)
+    assert ("egagent", "gemini36flash") in M.STITCHED_ANSWER_LINES and ("egagent", "gemini36flash") not in M.STITCHED_ANSWERS
+    assert not [t for t in st if (t["baseline"], t["stage"]) == ("egagent", "qa")]
+    listed, withheld = M.gate(tasks)   # every stitched line is a priority row; they lead the list, builds first
+    assert [t for t in st if t not in listed] == [] and [M.lead(t) for t in listed] == sorted(M.lead(t) for t in listed)
+    assert {M.lead(t) for t in st} == {-2, -1}
+    before = {t["id"]: list(t["pools"]) for t in st}
+    M.leftovers(listed, [dict(id=t["id"], listed_t=1) for t in listed], 10 ** 6)
+    assert all(t["pools"] == before[t["id"]] for t in st)
+
+
 def test_trace_stale():
     """For a TRACED baseline an answer row without a trace leaves its question unanswered (listed again); other
     baselines, and summaries from before the trace flag, compare as before."""

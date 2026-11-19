@@ -172,6 +172,22 @@ regenerated (run_merit.sh reuses an exported bank folder), or it answers the old
 every answers file of the board's banks, keeping a summary of each by its content hash (`$HF_HOME/coord/answers/`),
 so a cycle downloads only new or changed files.
 
+Rebuilt memories (added 2026-11-19, after MERIT's gpt-5-mini memory of 82 videos turned out to be captioned without
+frames): `master.REBUILT` names, per (baseline, memory arm), a tag and the videos whose memory was rebuilt, each with
+the content hash of the old memory and of the answer arms' old `<video>_memory_ref.json`
+(`coord/rebuilt_merit_g5m.txt`, from the dataset's listing). Nothing is deleted by hand. For such a video:
+- no qa task is listed while the dataset still holds the old memory, so the tasks appear when the rebuilt memory is
+  uploaded (`hf_results.py upload` on the memory arm's folder, which replaces the old one), whenever the change is merged;
+  nor while a task of that video and arm from before the rebuild still runs or waits for its relay;
+- every qa task of it, on every bank, has the id `<task>+mem<tag>`: the plain id is done on a pool. A worker whose
+  checkout is older refuses an id with `+` (`worker.VALID`), which keeps the task from a `run_merit.sh` that would
+  answer from its stale local copy of the memory; the current one compares its copy with the dataset's first
+  (`hf_results.py same-memory`) and takes the dataset's when they differ;
+- while an answer arm's folder still holds the old `memory_ref`, its answers files count as absent (the base bank's
+  and the probes' too). The first upload made from the new memory mirrors the folder, and from then on its files are
+  read as any other's: the video's other banks are then plain missing files, listed under their `+mem` ids.
+Another rebuild is another entry (a new tag) with the hashes read before the new memory is uploaded.
+
 What the master needs: `EPIC_MORPH_DIR` set to its own epic-morph checkout that has the bank; it regenerates
 `outputs/v3/banks/<bank>/` there each cycle. Without it `publish` stops (a tasks.json without the qa tasks
 would drop them from the board), so set it in the cron's script before this reaches main.

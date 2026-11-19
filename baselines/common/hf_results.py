@@ -9,7 +9,8 @@ set and variant answered from it.
   (a rebuild), the folder is mirrored instead: remote files it lacks are removed, so no answers made from the
   old memory remain. Run it after the video's stages have finished.
 - `fetch-memory` copies the dataset's memory into a local folder (exit 3 when there is none), so `build` does
-  not redo it on another machine.
+  not redo it on another machine. `same-memory` says whether the folder already holds it (exit 0; 1: another memory,
+  none, or the dataset could not be read), by hash: an answer arm takes the memory again after a rebuild.
 - With MERIT_OUTBOX=<name> set, `upload` touches nothing remote: it copies the folder to <checkout>/outbox/<name>/
   with an `.upload.json` (written last: the folder is complete), for machines whose jobs cannot reach the dataset
   (Zaratan); `relay --dir <that folder>` uploads it later from a machine that can, exactly as `upload` would.
@@ -108,12 +109,12 @@ def earlier_answers(path, a):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("action", choices=["upload", "fetch-memory", "download", "relay", "earlier-answers"])
+    ap.add_argument("action", choices=["upload", "fetch-memory", "same-memory", "download", "relay", "earlier-answers"])
     ap.add_argument("--baseline", default="merit", help="top-level folder in the dataset (merit, worldmm, ...)")
     ap.add_argument("--memory", nargs="+", help="the memory's file names, with {video}; default MERIT's; `none` for a baseline without one")
     ap.add_argument("--arm")
     ap.add_argument("--video")
-    ap.add_argument("--dir", help="upload / fetch-memory: the local results folder of this video and arm; relay: an outbox folder")
+    ap.add_argument("--dir", help="upload / fetch-memory / same-memory: the local results folder of this video and arm; relay: an outbox folder")
     ap.add_argument("--dest", help="download: local root; files land in <dest>/merit/<arm>/<video>/")
     ap.add_argument("--epic", help="earlier-answers: the epic-morph checkout whose v3/export_bank.py BANKS names the banks")
     ap.add_argument("--suffix", default="", help="earlier-answers: the variant suffix of the answers files (_<tag>, or empty)")
@@ -133,7 +134,9 @@ def main():
         print("\n".join(earlier_answers(path, a)))
     elif a.action == "fetch-memory":
         os.makedirs(a.dir, exist_ok=True)
-        with tempfile.TemporaryDirectory() as tmp:
+        # downloaded next to the files, then renamed over them: each file is whole or not there for another task of the
+        # video that reads it, and two tasks fetching at once (the arms share the memory's folder) do not mix their copies
+        with tempfile.TemporaryDirectory(dir=a.dir, prefix=".fetch-") as tmp:
             try:
                 found = remote_memory(path, a.video, tmp)
             except Exception as e:
@@ -143,8 +146,15 @@ def main():
                 print(f"no memory at {REPO}/{path}")
                 sys.exit(3)
             for f in memory_files(a.video):
-                shutil.copy(os.path.join(tmp, f), os.path.join(a.dir, f))
+                os.replace(os.path.join(tmp, f), os.path.join(a.dir, f))
         print(f"fetched the memory from {REPO}/{path} into {a.dir}")
+    elif a.action == "same-memory":
+        try:
+            same = same_memory(path, a.video, a.dir)
+        except Exception as e:   # offline, no token: not known to be the same
+            print(f"cannot compare with {REPO}/{path} ({type(e).__name__}: {str(e)[:160]})", file=sys.stderr)
+            same = False
+        sys.exit(0 if same else 1)
     elif a.action == "upload":
         files = sorted(f for f in os.listdir(a.dir) if not f.startswith(".") and not f.endswith(".partial"))
         if not all(f in files for f in memory_files(a.video)):   # answers mean nothing without their memory
