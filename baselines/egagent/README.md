@@ -92,6 +92,29 @@ as the agent) stands in for the Gemini 2.5 Pro arm, which Google no longer serve
   time stamps as text, so the last second of a window the agent chooses is left out (it can only hide a
   frame, never show a later one).
 
+## Two arms that are not the paper's (2026-11-23)
+
+Azure's content filter, behind the collaborators' gateway, refuses frames of the stitched videos when GPT-4.1 captions
+them, so two arms build a memory of their own with another model (`run_egagent.sh` sets `EGAGENT_MEMORY_LLM`; the
+GPT-4.1 memory stays shared by `gpt41`, `gemini25pro` and `gemini36flash` only). Prompts, tools and settings are the
+same as the other arms'.
+
+| arm | memory (captions, graph, time stamps) | agent | frames | keys |
+|---|---|---|---|---|
+| `g5m-g51` | GPT-5-mini | GPT-5.1 | the video's own 1408 px | `OPENAI_API_KEY` (or `OPENROUTER_API_KEY`), as `gpt41` |
+| `q27` | Qwen3.8-27B, local | Qwen3.8-27B, local | 448 px (`EGAGENT_FRAME_PX`, its frames in `frames_448/`) | none |
+
+- GPT-5 family calls are sent with the API's default temperature (the only one it takes) and no reasoning effort.
+- `q27` calls MAGIC-Video's local server (`../magic/epic/hf_server.py`, from MAGIC's m27 image), which `docker/run.sh`
+  starts on the job's GPUs: instruct mode (thinking off), a 16k-token reply limit, structured outputs by a JSON
+  schema in the prompt (not constrained decoding). The memory's calls go 8 at a time and the server batches them. A
+  graph chunk whose reply does not parse is retried with sampling (seeded), since at temperature 0 the reply repeats.
+  The Docker route for this arm is written and has not been run; the Apptainer route is the one used.
+- Measured (2026-11-23). `g5m-g51` on P05-20240425-201444 (27 min, 59 questions of `batch10_agree2`, through
+  OpenRouter): memory $1.29 in 25.6 min, answers $7.76 ($0.13 a question, 10.5 calls each), 28 of 59 correct. The nine
+  stitched memories (41.5 h of video): $51.91 in all, 2.9 to 5.7 h each on an A5000, no refusal. `q27`: about 9 to 16 s
+  a caption and 3 to 6 min a graph chunk on an H200 or two H100s.
+
 ## Layout
 
 | path | what |
