@@ -56,7 +56,7 @@ ENVS=(EPIC_MORPH_DIR=/epic-morph HDEPIC_VIDEOS=/videos HF_HOME=/hf HF_HUB_OFFLIN
 if [ -n "${MERIT_WORK:-}" ]; then   # the shared work folder: EGAgent's own subfolder in it
     umask 002; mkdir -p "$MERIT_WORK"; BINDS+=("$(cd -P "$MERIT_WORK" && pwd):/work"); export EGAGENT_WORK=${EGAGENT_WORK:-/work/egagent}
 fi
-PASS=(OPENAI_API_KEY OPENROUTER_API_KEY OPENROUTER_BASE_URL OPENAI_BASE_URL OPENAI_PROVIDER_NOTE OPENAI_MODEL_ALIASES EGAGENT_GPT_PREFIX EGAGENT_LOCAL_URL GEMINI_API_KEY GOOGLE_GEMINI_BASE_URL HF_TOKEN MERIT_HF_REPO EGAGENT_TAG EGAGENT_FETCH EGAGENT_FRAME_PX EGAGENT_CHUNK_S
+PASS=(OPENAI_API_KEY OPENROUTER_API_KEY OPENROUTER_BASE_URL OPENAI_BASE_URL OPENAI_PROVIDER_NOTE OPENAI_MODEL_ALIASES EGAGENT_GPT_PREFIX EGAGENT_LOCAL_URL GEMINI_API_KEY GOOGLE_GEMINI_BASE_URL HF_TOKEN MERIT_HF_REPO EGAGENT_TAG EGAGENT_FETCH EGAGENT_FRAME_PX EGAGENT_CHUNK_S EGAGENT_MEM_WORKERS
       THREADS LIMIT EGAGENT_OUT EGAGENT_WORK EGAGENT_QA_WORKERS)
 if [ "$RUNTIME" = apptainer ]; then
     case $IMAGE in *.sif) ;; *) IMAGE=docker://$IMAGE ;; esac
@@ -70,8 +70,9 @@ if [ "$RUNTIME" = apptainer ]; then
         SIMG=${EGAGENT_SERVER_IMAGE:-$SIFS/magic_m27.sif}; PORT=${EGAGENT_PORT:-$((20000 + ${SLURM_JOB_ID:-$$} % 20000))}
         [ -s "$SIMG" ] || { echo "arm q27 needs MAGIC-Video's m27 image for its server: $SIMG (or EGAGENT_SERVER_IMAGE)"; exit 1; }
         SLOG=$(mktemp "${TMPDIR:-/tmp}/egagent_server_$2_XXXX.log")
-        APPTAINERENV_PORT=$PORT apptainer exec --nv --cleanenv --pwd /repo --bind "$(IFS=,; echo "${BINDS[*]}")" "$SIMG" bash -c \
-            'exec "$MAGIC_SERVER_PY" baselines/magic/epic/hf_server.py --model Qwen/Qwen3.8-27B --name Qwen/Qwen3.8-27B --port "$PORT" --max_tokens 8192 --token_budget 64000' > "$SLOG" 2>&1 &
+        DMAP=cuda:0; [ "$(nvidia-smi -L | wc -l)" -le 1 ] || DMAP=auto   # several GPUs: the model spread over all of them
+        APPTAINERENV_PORT=$PORT APPTAINERENV_DMAP=$DMAP apptainer exec --nv --cleanenv --pwd /repo --bind "$(IFS=,; echo "${BINDS[*]}")" "$SIMG" bash -c \
+            'exec "$MAGIC_SERVER_PY" baselines/magic/epic/hf_server.py --model Qwen/Qwen3.8-27B --name Qwen/Qwen3.8-27B --port "$PORT" --max_tokens 8192 --token_budget 96000 --solo_images 50 --device_map "$DMAP"' > "$SLOG" 2>&1 &
         SPID=$!; trap 'kill $SPID 2>/dev/null || true' EXIT
         for i in $(seq 1 240); do
             curl -sf "http://127.0.0.1:$PORT/v1/models" >/dev/null && break
@@ -107,7 +108,7 @@ if [ -n "$SERVE" ] && [ -z "${EGAGENT_LOCAL_URL:-}" ]; then
     PORT=${EGAGENT_PORT:-$((20000 + $$ % 20000))}; SNAME=egagent-qwen-$$
     docker run -d --rm --name "$SNAME" --network host --gpus "\"device=$GPU\"" --shm-size 32g --user "$(id -u):$(id -g)" -w /repo \
         -v "$REPO:/repo" -v "$HF:/hf" -e HF_HOME=/hf -e HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-0}" ${HF_TOKEN:+-e HF_TOKEN} "$SIMG" bash -c \
-        'exec "$MAGIC_SERVER_PY" baselines/magic/epic/hf_server.py --model Qwen/Qwen3.8-27B --name Qwen/Qwen3.8-27B --port '"$PORT"' --max_tokens 8192 --token_budget 64000' >/dev/null
+        'exec "$MAGIC_SERVER_PY" baselines/magic/epic/hf_server.py --model Qwen/Qwen3.8-27B --name Qwen/Qwen3.8-27B --port '"$PORT"' --max_tokens 8192 --token_budget 96000 --solo_images 50 --device_map '"$( [ "${GPU/,/}" = "$GPU" ] && echo cuda:0 || echo auto)" >/dev/null
     trap 'docker stop "$SNAME" >/dev/null 2>&1 || true' EXIT
     for i in $(seq 1 360); do
         curl -sf "http://127.0.0.1:$PORT/v1/models" >/dev/null && break

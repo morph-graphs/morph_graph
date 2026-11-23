@@ -40,6 +40,7 @@
 #   EGAGENT_FRAME_PX frame width sent to the APIs and the embedder; default 0 = the video's own (1408 px), as
 #                    published. Another value is another memory: give it its own EGAGENT_WORK and EGAGENT_OUT
 #   EGAGENT_CHUNK_S  seconds of captions per graph extraction, default 300 (README: Read first)
+#   EGAGENT_MEM_WORKERS  build: the memory's calls made at once (captions default 4, graph chunks default 1; q27: 6)
 #   EGAGENT_TAG      a variant name for the answers (answers_<bank>_<tag>.json.gz)
 #   EGAGENT_FETCH    0 to never take the memory from the dataset (build normally reuses it when it is there)
 #   EGAGENT_QA_WORKERS  qa: questions answered at once (threads), default 1 = one at a time (README: Parallel answering)
@@ -60,15 +61,19 @@ case $ARM in
     gemini36flash) BACKBONE=gemini-3.6-flash; KEY=GEMINI_API_KEY; END=9999-12-31 ;;   # no shutdown date announced
     # not the paper's, memory included: each has a memory of its own, built by MEMLLM
     g5m-g51) BACKBONE=gpt-5.1; KEY=OPENAI_API_KEY; END=9999-12-31; MEMLLM=gpt-5-mini; MEM_END=2026-12-11; MEMARMS=(g5m-g51) ;;
-    q27) BACKBONE=Qwen/Qwen3.8-27B; KEY=LOCAL; END=9999-12-31; MEMLLM=$BACKBONE; MEM_END=$END; MEMARMS=(q27) ;;
+    # q27 sends 448 px frames (as MERIT's Qwen arms; at the video's own 1408 px a 30-frame caption call is 57k
+    # tokens: 33 s a call and 74 GB on an H200) and makes its memory's calls 6 at a time (the local server batches them)
+    q27) BACKBONE=Qwen/Qwen3.8-27B; KEY=LOCAL; END=9999-12-31; MEMLLM=$BACKBONE; MEM_END=$END; MEMARMS=(q27)
+         EGAGENT_FRAME_PX=${EGAGENT_FRAME_PX:-448}; EGAGENT_MEM_WORKERS=${EGAGENT_MEM_WORKERS:-6} ;;
     *) echo "arm must be gpt41, gemini25pro, gemini36flash, g5m-g51 or q27"; exit 1 ;;
 esac
 # the memory's model, its shutdown date, and the arms whose folders hold that same memory (the paper's arms: GPT-4.1)
 MEMLLM=${MEMLLM:-gpt-4.1}; MEM_END=${MEM_END:-$GPT_END}; [ -n "${MEMARMS+x}" ] || MEMARMS=(gpt41 gemini25pro gemini36flash)
 MEM_KEY=OPENAI_API_KEY; [ "$KEY" != LOCAL ] || MEM_KEY=LOCAL
 VIDEOS=${HDEPIC_VIDEOS:-$EPIC/data/HD-EPIC/videos}; WORK=${EGAGENT_WORK:-$M/work}; OUTROOT=${EGAGENT_OUT:-$M/results}
-OUT=$OUTROOT/$ARM/$V; FRAMES=$WORK/frames/$V; TAG=${EGAGENT_TAG:-}; SUF=${TAG:+_$TAG}
-PX=${EGAGENT_FRAME_PX:-0}; CHUNK=${EGAGENT_CHUNK_S:-300}
+OUT=$OUTROOT/$ARM/$V; TAG=${EGAGENT_TAG:-}; SUF=${TAG:+_$TAG}
+PX=${EGAGENT_FRAME_PX:-0}; CHUNK=${EGAGENT_CHUNK_S:-300}; MEMW=${EGAGENT_MEM_WORKERS:-}
+FRAMES=$WORK/frames/$V; [ "$PX" = 0 ] || FRAMES=$WORK/frames_$PX/$V   # resized frames in a folder of their own
 MEMORY=("{video}_frames.npy" "{video}_captions.json" "{video}_graph.json")   # as epic/eg_paths.memory_files
 mkdir -p "$OUT" "$WORK/logs"
 [ -z "${OPENAI_API_KEY:-}" ] || unset OPENROUTER_API_KEY   # one gateway per run: OpenAI's key wins
@@ -188,8 +193,8 @@ build() {
     export EGAGENT_USAGE_STAGE=build
     local gpt_only=(env -u GEMINI_API_KEY -u GOOGLE_API_KEY)   # the memory's calls are its model's alone
     [ "$MEM_KEY" != LOCAL ] || gpt_only=("${agent_only[@]}")
-    [ -s "$OUT/${V}_captions.json" ] || "${gpt_only[@]}" "$PY" "$M/epic/caption_epic.py" --frames_dir "$FRAMES" --out "$OUT/${V}_captions.json"
-    [ -s "$OUT/${V}_graph.json" ] || "${gpt_only[@]}" "$PY" "$M/epic/build_graph.py" --captions "$OUT/${V}_captions.json" --out "$OUT/${V}_graph.json" --chunk_s "$CHUNK"
+    [ -s "$OUT/${V}_captions.json" ] || "${gpt_only[@]}" "$PY" "$M/epic/caption_epic.py" --frames_dir "$FRAMES" --out "$OUT/${V}_captions.json" ${MEMW:+--workers "$MEMW"}
+    [ -s "$OUT/${V}_graph.json" ] || "${gpt_only[@]}" "$PY" "$M/epic/build_graph.py" --captions "$OUT/${V}_captions.json" --out "$OUT/${V}_graph.json" --chunk_s "$CHUNK" ${MEMW:+--workers "$MEMW"}
     have_memory || { echo "memory for $V is incomplete in $OUT"; exit 1; }
     record build $((SECONDS - t))
 }
