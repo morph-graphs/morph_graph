@@ -33,11 +33,12 @@ import sys
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path[:0] = [HERE, os.path.join(HERE, "..", "..", "merit", "epic")]
+sys.path[:0] = [HERE, os.path.join(HERE, "..", "..", "merit", "epic"), os.path.join(HERE, "..", "..", "common")]
 import apis                                                    # noqa: E402
 import tools as T                                              # noqa: E402
 from build_memory import MEMORY, jload, secs                   # noqa: E402
 from prepare_epic import convert_questions, duration           # noqa: E402  (MERIT's)
+from stitched_sessions import context                          # noqa: E402
 
 VERSION = "1"   # bump when a change alters answers (prompts, settings, the cutoff view)
 MAX_TURNS, TEMPERATURE, TOP_P, MAX_NEW = 7, 0.6, 0.95, 1024
@@ -162,7 +163,9 @@ def main():
         cut = secs(r["query_time"]["time"])
         apis.QUESTION = r["key"]               # in every api_usage.jsonl line of this question, its cutoff view included
         choices = {L: r[f"choice_{L.lower()}"] for L in "ABCD" if r.get(f"choice_{L.lower()}")}
-        question = (f"{r['question']} <timestamp>DAY1_{r['query_time']['time']}</timestamp>\n"
+        # a stitched video's question: its session table first (as MERIT, WorldMM and EGAgent ask it), on the agent's clock
+        ctx = context(V, cut, day=True)
+        question = ((f"{ctx}\n\nQuestion: " if ctx else "") + f"{r['question']} <timestamp>DAY1_{r['query_time']['time']}</timestamp>\n"
                     + "\n".join(f"{L}. {c}" for L, c in choices.items()))
         logs = None if a.first_turn else T.cutoff_logs(a.memory, V, cut, end)
         tools = None if a.first_turn else T.Tools(a.arm, a.clips, logs, cut, a.cache_dir)
@@ -198,7 +201,7 @@ def main():
         if T.API_ERRORS or not kept(resp, choices):
             print(f"{r['key']}: not answered ({T.API_ERRORS or repr(out)})", flush=True)
             continue
-        done[r["key"]] = {"key": r["key"], "qhash": r["qhash"], "ID": r["ID"], "type": r["type"], "question": r["question"],
+        done[r["key"]] = {**({"context": ctx} if ctx else {}), "key": r["key"], "qhash": r["qhash"], "ID": r["ID"], "type": r["type"], "question": r["question"],
                           "choices": choices, "answer": r["answer"], "response": resp, "evaluate": resp == r["answer"],
                           **({} if resp in choices else {"not_an_option": True}),
                           "t_ask": r["meta"]["t_ask"], "cutoff": cut, "turns": turns, "final": out,

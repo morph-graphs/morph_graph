@@ -398,7 +398,7 @@ STITCHED_ALSO = {("magic", "oss120"): ["zaratan"], ("magic", "oss120-flash"): ["
 # workers in one pool overwrite each other's pool file and fail each other's claims, so it is a pool of its own.
 CPU_ROWS = {("api", "gemini-3.6-flash-high-stitched-f2048", "qa"), ("api", "gemini-3.6-flash-high", "qa"),
             ("api", "gemini-3.1-flash-lite-high", "qa"), ("egagent", "gemini36flash", "qa"), ("egorag", "egogpt_gpt41", "qa"),
-            ("egagent", "g5m-g51", "qa")}
+            ("egagent", "g5m-g51", "qa"), ("egagent", "g5m-gemini36flash", "qa")}
 CANARY = "P05-stitched"   # the shortest, 3.48 h
 # MERIT's lines first: MAGIC-Video's builds wait for MERIT's of the same video, which must be listed before them
 # Only the systems Vatsal's stitched hand-off asks for (Anubhav, 2026-11-16): MERIT with Qwen3.8-27B, WorldMM with the
@@ -412,7 +412,9 @@ CANARY = "P05-stitched"   # the shortest, 3.48 h
 # On again (Anubhav, 2026-11-19): MAGIC-Video's three missing builds (P03, P04, P06: one caption or one chain call failed
 # on Nexus and on Zaratan, so each waits for `master.py reset`), and EGAgent's GPT-4.1 memory of all nine (each refused
 # once by Azure's content filter behind Max's gateway, as 37 of its normal builds were). MERIT's and WorldMM's are built.
-STITCHED_BUILDS = {("magic", "oss120"), ("egagent", "gpt41")}
+# Off again (Anubhav, 2026-11-23): EGAgent's GPT-4.1 memory of the nine, which Azure's filter refuses; its stitched rows now
+# answer from a GPT-5-mini memory (STITCHED_ANSWER_LINES below). Was: {("magic", "oss120"), ("egagent", "gpt41")}
+STITCHED_BUILDS = {("magic", "oss120")}
 # Answering on the stitched videos is frozen (Anubhav, 2026-11-16) while their protocol changes to Vatsal's: each card at
 # its anchor time, from memory units that end before it; builds go on. The end-of-video lines (STITCHED_EOV, below) were
 # {("merit", "m27"), ("worldmm", "g5m-g51")}; they stay off.
@@ -432,12 +434,16 @@ COMMITTED_BANKS = {STITCHED}
 STITCHED_API = "gemini-3.6-flash-high-stitched-f2048"
 STITCHED_ANSWER_LINES = [("merit", "m27"), ("worldmm", "g5m-g51"), ("api", STITCHED_API),
                          ("magic", "oss120-flash"),   # MAGIC (Anubhav, 2026-11-16): chains per t_ask (#110), from the oss120 memory
-                         ("egagent", "gemini36flash"),   # EGAgent's Gemini 3.6 Flash agent, from the gpt41 memory
-                         # EGAgent's GPT-5.1 agent from its own GPT-5-mini memory (Anubhav, 2026-11-23: Azure's filter, behind
-                         # the gateway's GPT-4.1, refused the stitched videos' frames). The nine memories were built by hand
-                         # on Nexus through OpenRouter and are in the dataset (egagent/g5m-g51/), so no build line; the
-                         # answers go to the key pools' gateway only, never to OpenRouter (NEEDS_ENV below)
-                         ("egagent", "g5m-g51")]
+                         # EGAgent from its own GPT-5-mini memory (Anubhav, 2026-11-23: Azure's filter, behind the gateway's
+                         # GPT-4.1, refused the stitched videos' frames, so the gpt41 memory and its gemini36flash line are off).
+                         # The nine memories were built by hand on Nexus through OpenRouter and are in the dataset
+                         # (egagent/g5m-g51/), so no build line; the GPT-5.1 answers go to the key pools' gateway only,
+                         # never to OpenRouter (NEEDS_ENV below). g5m-gemini36flash: the Gemini 3.6 Flash agent on that memory
+                         ("egagent", "g5m-g51"), ("egagent", "g5m-gemini36flash"),
+                         # ... and the other rows with a stitched memory in the dataset (Anubhav, 2026-11-23): MERIT's GPT-5-mini
+                         # memory answered by GPT-5.1 (memories built by hand on Nexus, merit/g5m/), Ego-R1 and EgoRAG (each
+                         # asks with the session table, on its own clock)
+                         ("merit", "g5m-g51"), ("egor1", "gemini36flash-gpt41"), ("egorag", "egogpt_gpt41")]
 # On again for three lines (Anubhav, 2026-11-17): MERIT m27, WorldMM g5m-g51 and Gemini 3.6 Flash, whose memories are
 # built (MERIT's and WorldMM's) or need none. MAGIC-Video too (Anubhav, 2026-11-19): its chain-length fix is in (#134),
 # and the three videos without a memory wait on their builds. And EGAgent (Anubhav, 2026-11-19, for Max's pools): its qa
@@ -446,6 +452,8 @@ STITCHED_ANSWER_LINES = [("merit", "m27"), ("worldmm", "g5m-g51"), ("api", STITC
 STITCHED_ANSWERS = set(STITCHED_ANSWER_LINES)
 NEEDS_ENV[("api", STITCHED_API)] = ["GEMINI_API_KEY"]
 NEEDS_ENV[("egagent", "g5m-g51")] = ["OPENAI_API_KEY"]
+NEEDS_ENV[("egagent", "g5m-gemini36flash")] = ["GEMINI_API_KEY"]
+MEMORY_ARM["egagent", "g5m-gemini36flash"] = "g5m-g51"
 EXPERIMENTS += sorted([(b, arm, "build", pools, (STITCHED,)) for b, arm, stage, pools, _ in EXPERIMENTS
                        if stage == "build" and (b, arm) in STITCHED_BUILDS],
                       key=lambda e: e[0] not in BUILD_ON.values())

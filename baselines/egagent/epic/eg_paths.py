@@ -23,7 +23,7 @@ for p in ("prepare_datasources", "egagent", ""):
 # Two arms are not the paper's at all and have a memory of their own, built by another model (run_egagent.sh sets
 # EGAGENT_MEMORY_LLM): g5m-g51 (GPT-5-mini memory, GPT-5.1 agent) and q27 (Qwen3.8-27B for both, served locally)
 BACKBONES = {"gpt41": "gpt-4.1", "gemini25pro": "gemini-2.5-pro", "gemini36flash": "gemini-3.6-flash",
-             "g5m-g51": "gpt-5.1", "q27": "Qwen/Qwen3.8-27B"}
+             "g5m-g51": "gpt-5.1", "g5m-gemini36flash": "gemini-3.6-flash", "q27": "Qwen/Qwen3.8-27B"}
 MEMORY_LLM = os.environ.get("EGAGENT_MEMORY_LLM") or "gpt-4.1"   # captions, graph extraction, relationship time stamps
 EMBEDDER = "google/siglip2-giant-opt-patch16-384"    # frame / text-query embeddings (open weights, local)
 CLIP_S = 30                                          # caption window (paper: 30 s clips at 1 fps)
