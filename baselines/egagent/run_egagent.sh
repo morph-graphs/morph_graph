@@ -49,8 +49,8 @@
 # Every step skips finished work, so rerunning the same command resumes.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/../common/single_process_env.sh"   # never a torch.distributed job: drop torchrun's variables
-STAGE=${1:?usage: run_egagent.sh <prep|build|qa|blind|upload|all|check> <video> <gpt41|gemini25pro|gemini36flash|g5m-g51|q27> [bank]}
-V=${2:?video id}; ARM=${3:?arm gpt41, gemini25pro, gemini36flash, g5m-g51 or q27}; BANK=${4:-}
+STAGE=${1:?usage: run_egagent.sh <prep|build|qa|blind|upload|all|check> <video> <gpt41|gemini25pro|gemini36flash|g5m-g51|g5m-gemini36flash|q27> [bank]}
+V=${2:?video id}; ARM=${3:?arm gpt41, gemini25pro, gemini36flash, g5m-g51, g5m-gemini36flash or q27}; BANK=${4:-}
 M=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); REPO=$(cd "$M/../.." && pwd); R=$M/egagent   # R: the submodule
 PY=${PY:?set PY to the python of the EGAgent client environment}
 EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && pwd)
@@ -60,12 +60,14 @@ case $ARM in
     gemini25pro) BACKBONE=gemini-2.5-pro; KEY=GEMINI_API_KEY; END=$GEMINI_END ;;
     gemini36flash) BACKBONE=gemini-3.6-flash; KEY=GEMINI_API_KEY; END=9999-12-31 ;;   # no shutdown date announced
     # not the paper's, memory included: each has a memory of its own, built by MEMLLM
-    g5m-g51) BACKBONE=gpt-5.1; KEY=OPENAI_API_KEY; END=9999-12-31; MEMLLM=gpt-5-mini; MEM_END=2026-12-11; MEMARMS=(g5m-g51) ;;
+    g5m-g51) BACKBONE=gpt-5.1; KEY=OPENAI_API_KEY; END=9999-12-31; MEMLLM=gpt-5-mini; MEM_END=2026-12-11; MEMARMS=(g5m-g51 g5m-gemini36flash) ;;
+    # the Gemini 3.6 Flash agent (the gemini36flash arm's) on that GPT-5-mini memory
+    g5m-gemini36flash) BACKBONE=gemini-3.6-flash; KEY=GEMINI_API_KEY; END=9999-12-31; MEMLLM=gpt-5-mini; MEM_END=2026-12-11; MEMARMS=(g5m-g51 g5m-gemini36flash) ;;
     # q27 sends 448 px frames (as MERIT's Qwen arms; at the video's own 1408 px a 30-frame caption call is 57k
     # tokens: 33 s a call and 74 GB on an H200) and makes its memory's calls 8 at a time (the local server batches them)
     q27) BACKBONE=Qwen/Qwen3.8-27B; KEY=LOCAL; END=9999-12-31; MEMLLM=$BACKBONE; MEM_END=$END; MEMARMS=(q27)
          EGAGENT_FRAME_PX=${EGAGENT_FRAME_PX:-448}; EGAGENT_MEM_WORKERS=${EGAGENT_MEM_WORKERS:-8} ;;
-    *) echo "arm must be gpt41, gemini25pro, gemini36flash, g5m-g51 or q27"; exit 1 ;;
+    *) echo "arm must be gpt41, gemini25pro, gemini36flash, g5m-g51, g5m-gemini36flash or q27"; exit 1 ;;
 esac
 # the memory's model, its shutdown date, and the arms whose folders hold that same memory (the paper's arms: GPT-4.1)
 MEMLLM=${MEMLLM:-gpt-4.1}; MEM_END=${MEM_END:-$GPT_END}; [ -n "${MEMARMS+x}" ] || MEMARMS=(gpt41 gemini25pro gemini36flash)
