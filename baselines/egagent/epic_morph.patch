@@ -194,13 +194,16 @@ index 0c26c89..03f30d2 100644
      props_defined = LLMGraphTransformer(
          llm=llm,
 diff --git a/utils.py b/utils.py
-index be92d88..b577e63 100644
+index be92d88..add7b57 100644
 --- a/utils.py
 +++ b/utils.py
-@@ -59,17 +59,31 @@ def get_base64imagelist_from_filepathlist(retrieved_image_paths):
+@@ -59,17 +59,37 @@ def get_base64imagelist_from_filepathlist(retrieved_image_paths):
              })
      return image_contents
      
++import threading
++LOCAL_RETRY = threading.local()   # EPIC-Morph port: see get_vision_llm
++
 +def is_chat_llm(llm_name: str) -> bool:
 +    """EPIC-Morph port: the backbones get_vision_llm serves. Upstream's gpt-4.1 and gpt-4o; a GPT-5 family model
 +    other than upstream's own 'gpt-5' (gpt-5-mini, gpt-5.1; 'gpt-5' keeps upstream's high-effort path,
@@ -210,8 +213,11 @@ index be92d88..b577e63 100644
  def get_vision_llm(llm_name: str) -> ChatOpenAI:
      """Get a vision-capable LLM using Langchain's ChatOpenAI."""
 +    if '/' in llm_name:   # EPIC-Morph port: a local model behind an OpenAI-compatible server (EGAGENT_LOCAL_URL), as get_vLLM
++        # at temperature 0 it repeats a reply that did not parse, so a retry (LOCAL_RETRY.t, set by epic/build_graph.py
++        # in its thread) samples instead, with the retry number as the seed
++        t = getattr(LOCAL_RETRY, "t", 0)
 +        return ChatOpenAI(model=llm_name, api_key="EMPTY", base_url=os.environ["EGAGENT_LOCAL_URL"], max_retries=3,
-+                          temperature=0, stream_usage=True, streaming=False, timeout=3600,
++                          temperature=0.3 * t, seed=t, stream_usage=True, streaming=False, timeout=3600,
 +                          extra_body={"chat_template_kwargs": {"enable_thinking": False}})   # instruct mode, as our other Qwen3.8 arms
 +    if llm_name.startswith('gpt-5'):   # EPIC-Morph port: the GPT-5 family takes only its default temperature; no reasoning effort is set
 +        return ChatOpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL, max_retries=3, model=OPENAI_MODEL_PREFIX + llm_name,
@@ -231,7 +237,7 @@ index be92d88..b577e63 100644
      )
      return vision_llm
  
-@@ -77,18 +91,23 @@ def get_reasoning_llm(llm_name: str):
+@@ -77,18 +97,23 @@ def get_reasoning_llm(llm_name: str):
      """Get a reasoning LLM using Langchain's ChatOpenAI with high reasoning effort, e.g. o3 or gpt-5."""
      vision_llm = ChatOpenAI(
          api_key=OPENAI_API_KEY,
@@ -258,7 +264,7 @@ index be92d88..b577e63 100644
      gemini_llm = ChatGoogleGenerativeAI(
          api_key=GOOGLE_GENAI_API_KEY,
          model=llm_name,
-@@ -96,9 +115,17 @@ def get_external_gemini_llm(llm_name: str):
+@@ -96,9 +121,17 @@ def get_external_gemini_llm(llm_name: str):
          max_tokens=None,
          timeout=None,
          max_retries=3,
@@ -276,7 +282,7 @@ index be92d88..b577e63 100644
  def get_vLLM(ip_address: str, llm_name: str):
      """Get a local LLM using Langchain's ChatOpenAI, e.g. Qwen 2.5 VL 7B."""
      qwen_vl_local = ChatOpenAI(
-@@ -180,8 +207,32 @@ def get_file_contents(filename):
+@@ -180,8 +213,32 @@ def get_file_contents(filename):
      except FileNotFoundError:
          raise FileNotFoundError(f"'{filename}' file not found")
  

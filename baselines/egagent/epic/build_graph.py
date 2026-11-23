@@ -47,6 +47,7 @@ def main():
     part = a.out + ".partial"
     done = {r["start"]: r for r in map(json.loads, open(part))} if os.path.exists(part) else {}
     from create_entity_graph import generate_graph_for_hour, get_rel_timestamper_llm, parse_relationships
+    import utils
     eg_paths.watch_api("graph", eg_paths.MEMORY_LLM)
     stamper = get_rel_timestamper_llm(model=eg_paths.MEMORY_LLM, config="fused_dt_and_captions")
 
@@ -56,9 +57,11 @@ def main():
         # upstream's EgoLife caption format (add_start_and_end_times_to_egolife_captions)
         context = [{f"clip_{c['start']:06d}": f"{clock(c['start'], True)} --> {clock(c['end'], True)} : {c['caption']}"} for c in cs]
         for t in range(a.tries):
+            utils.LOCAL_RETRY.t = t   # a local model's retry samples (utils.get_vision_llm); its clients are made per try
             try:
                 parsed = parse_relationships(asyncio.run(generate_graph_for_hour(context)))
-                stamped = stamper.invoke({"relationships": parsed, "transcripts": "", "captions": context})
+                st = stamper if t == 0 else get_rel_timestamper_llm(model=eg_paths.MEMORY_LLM, config="fused_dt_and_captions")
+                stamped = st.invoke({"relationships": parsed, "transcripts": "", "captions": context})
                 lookup = {r["rel_id"]: r for r in parsed}
                 rels = []
                 for e in (x.model_dump() for x in stamped.relationships):   # as upstream merges them
