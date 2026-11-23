@@ -37,9 +37,10 @@ def clock(sec, day=False):
     return f"DAY1 {s // 3600:02d}:{s % 3600 // 60:02d}:{s % 60:02d}" if day else f"{s // 3600}:{s % 3600 // 60:02d}:{s % 60:02d}"
 
 
-def context(video, t, day=False, epic=None):
+def context(video, t, day=False, epic=None, offset=0):
     """The prompt text: the sessions started before t (video seconds) and the question's video time t (floored,
-    as the memory methods ask it); "" for a video that is not stitched."""
+    as the memory methods ask it); "" for a video that is not stitched. offset: seconds added to every time printed,
+    for a memory whose clock does not start at 0 (EgoRAG's starts at 10:00:00)."""
     if not is_stitched(video):
         return ""
     ss = [(i, s) for i, s in enumerate(sessions(video, epic), 1) if s["video_at_s"] < t]
@@ -47,8 +48,8 @@ def context(video, t, day=False, epic=None):
              f"The sessions recorded up to the question (session, when it was recorded, where it starts in the video):"]
     for i, s in ss:
         w = datetime.datetime.strptime(s["start"], "%Y-%m-%d %H:%M:%S")
-        lines.append(f"S{i}: {w:%A %d %B %Y, %H:%M:%S}, starts at video time {clock(s['video_at_s'], day)}")
-    lines.append(f"The question is asked at video time {clock(t, day)}, during session S{ss[-1][0]}; "
+        lines.append(f"S{i}: {w:%A %d %B %Y, %H:%M:%S}, starts at video time {clock(s['video_at_s'] + offset, day)}")
+    lines.append(f"The question is asked at video time {clock(t + offset, day)}, during session S{ss[-1][0]}; "
                  f"nothing after that moment has happened yet.")
     return "\n".join(lines)
 

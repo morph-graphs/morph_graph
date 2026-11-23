@@ -102,6 +102,7 @@ same as the other arms'.
 | arm | memory (captions, graph, time stamps) | agent | frames | keys |
 |---|---|---|---|---|
 | `g5m-g51` | GPT-5-mini | GPT-5.1 | the video's own 1408 px | `OPENAI_API_KEY` (or `OPENROUTER_API_KEY`), as `gpt41` |
+| `g5m-gemini36flash` | GPT-5-mini (the `g5m-g51` memory, taken from the dataset) | Gemini 3.6 Flash | as `g5m-g51` | `GEMINI_API_KEY` |
 | `q27` | Qwen3.8-27B, local | Qwen3.8-27B, local | 448 px (`EGAGENT_FRAME_PX`, its frames in `frames_448/`) | none |
 
 - GPT-5 family calls are sent with the API's default temperature (the only one it takes) and no reasoning effort.

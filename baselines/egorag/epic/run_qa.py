@@ -37,10 +37,11 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path[:0] = [HERE, os.path.join(HERE, "..", "..", "merit", "epic")]
+sys.path[:0] = [HERE, os.path.join(HERE, "..", "..", "merit", "epic"), os.path.join(HERE, "..", "..", "common")]
 from build_memory import MEMORY, open_agent, paid_api   # noqa: E402
 from prepare_clips import CLOCK0, clock, video_sec       # noqa: E402
 from prepare_epic import convert_questions               # noqa: E402
+from stitched_sessions import context                    # noqa: E402
 
 VERSION = "1"   # bump when a change alters answers
 
@@ -48,7 +49,10 @@ VERSION = "1"   # bump when a change alters answers
 def answer(agent, r, hour_docs, date_docs):
     qt = r["query_time"]
     agent.database_t.cutoff = int(qt["time"])
-    result, question, options = agent.query(r, hour_docs, date_docs)
+    # a stitched video's question is asked with its session table first (as MERIT, WorldMM and EGAgent ask it); the
+    # retrieval query (r["keywords"]) and the saved row keep the bank's wording
+    asked = dict(r, question=f"{r['context']}\n\nQuestion: {r['question']}") if r.get("context") else r
+    result, question, options = agent.query(asked, hour_docs, date_docs)
     docs = result[0]["docs"]
     got = [{"id": i, "t_start": video_sec(m["start_time"]), "t_end": video_sec(m["end_time"])}
            for i, m in zip(docs["ids"], docs["metadatas"])]
@@ -78,8 +82,10 @@ def main():
     mh = hashlib.sha1(b"".join(open(p, "rb").read() for p in mem)).hexdigest()[:16]
     rows = convert_questions(a.bank_file, V, video_sec(caps[-1]["end_time"]))
     for r in rows:   # into the clock of the memory; the retrieval query is the question (no EgoLifeQA keywords)
-        r["query_time"]["time"] = clock(video_sec(r["query_time"]["time"]) + CLOCK0)
+        t = video_sec(r["query_time"]["time"])
+        r["query_time"]["time"] = clock(t + CLOCK0)
         r["keywords"] = r["question"]
+        r["context"] = context(V, t, day=True, offset=CLOCK0)   # a stitched video's sessions, on the memory's clock; else ""
     done = {}
     if os.path.exists(a.answers):
         qh = {r["key"]: r["qhash"] for r in rows}
@@ -116,7 +122,7 @@ def main():
             return
         choices = {L: r[f"choice_{L.lower()}"] for L in "ABCD" if f"choice_{L.lower()}" in r}
         done[r["key"]] = {"key": r["key"], "qhash": r["qhash"], "ID": r["ID"], "type": r["type"], "question": r["question"],
-                          "choices": choices, "answer": r["answer"], **res, "evaluate": res["response"] == r["answer"],
+                          **({"context": r["context"]} if r["context"] else {}), "choices": choices, "answer": r["answer"], **res, "evaluate": res["response"] == r["answer"],
                           "t_ask": r["meta"]["t_ask"], "cutoff": video_sec(r["query_time"]["time"]),
                           "seconds": seconds, "version": VERSION, "memory_hash": mh}
         print(f"[{n}/{len(todo)}] {r['key']} @ {done[r['key']]['cutoff']}s: {res['response']!r} gold {r['answer']} "
