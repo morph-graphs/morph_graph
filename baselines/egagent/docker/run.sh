@@ -71,8 +71,10 @@ if [ "$RUNTIME" = apptainer ]; then
         [ -s "$SIMG" ] || { echo "arm q27 needs MAGIC-Video's m27 image for its server: $SIMG (or EGAGENT_SERVER_IMAGE)"; exit 1; }
         SLOG=$(mktemp "${TMPDIR:-/tmp}/egagent_server_$2_XXXX.log")
         DMAP=cuda:0; [ "$(nvidia-smi -L | wc -l)" -le 1 ] || DMAP=auto   # several GPUs: the model spread over all of them
-        APPTAINERENV_PORT=$PORT APPTAINERENV_DMAP=$DMAP apptainer exec --nv --cleanenv --pwd /repo --bind "$(IFS=,; echo "${BINDS[*]}")" "$SIMG" bash -c \
-            'exec "$MAGIC_SERVER_PY" baselines/magic/epic/hf_server.py --model Qwen/Qwen3.8-27B --name Qwen/Qwen3.8-27B --port "$PORT" --max_tokens 8192 --token_budget 96000 --solo_images 50 --device_map "$DMAP"' > "$SLOG" 2>&1 &
+        # tokens per server batch from the first GPU's memory (the model takes 54 GB, SigLIP 2 another 9): an H200 96k, an 80 GB GPU 48k
+        BUDGET=${EGAGENT_TOKEN_BUDGET:-$( [ "$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | head -1)" -ge 120000 ] && echo 96000 || echo 48000)}
+        APPTAINERENV_PORT=$PORT APPTAINERENV_DMAP=$DMAP APPTAINERENV_BUDGET=$BUDGET apptainer exec --nv --cleanenv --pwd /repo --bind "$(IFS=,; echo "${BINDS[*]}")" "$SIMG" bash -c \
+            'exec "$MAGIC_SERVER_PY" baselines/magic/epic/hf_server.py --model Qwen/Qwen3.8-27B --name Qwen/Qwen3.8-27B --port "$PORT" --max_tokens 8192 --token_budget "$BUDGET" --solo_images 50 --device_map "$DMAP"' > "$SLOG" 2>&1 &
         SPID=$!; trap 'kill $SPID 2>/dev/null || true' EXIT
         for i in $(seq 1 240); do
             curl -sf "http://127.0.0.1:$PORT/v1/models" >/dev/null && break
