@@ -10,6 +10,10 @@ Requests from MAGIC's thread pools are batched (left padding) when they share sa
 requests with many images run alone. Supported fields: messages (text, image_url data URLs),
 max_tokens, temperature, top_p, top_k, min_p, repetition_penalty, seed, chat_template_kwargs.
 presence_penalty has no HF generate equivalent and is ignored.
+Structured output (EGAgent's arm q27, through LangChain's with_structured_output): response_format json_schema /
+json_object, or tools with a forced tool_choice. The schema is appended to the prompt and the JSON object in the
+reply is returned (as the content, or as the forced function's arguments); generation is not constrained, so a reply
+that is not valid JSON goes back as it is and the client's parser fails on it.
 
     python hf_server.py --model Qwen/Qwen3-VL-8B-Instruct --port 23456
 """
@@ -53,6 +57,32 @@ def to_hf_messages(messages):
                 raise ValueError(f"unsupported content type {it.get('type')}")
         out.append({"role": m["role"], "content": parts})
     return out, images
+
+
+def structured(req):
+    """A structured-output request -> (its JSON schema, the function to call or None); (None, None) for a plain one."""
+    rf = req.get("response_format") or {}
+    if rf.get("type") == "json_schema":
+        return rf["json_schema"].get("schema") or {}, None
+    if rf.get("type") == "json_object":
+        return {}, None
+    tools, choice = req.get("tools") or [], req.get("tool_choice")
+    if tools and choice not in (None, "none", "auto"):   # a forced call: the named function, or the only kind there is
+        name = choice["function"]["name"] if isinstance(choice, dict) else tools[0]["function"]["name"]
+        return next(t["function"] for t in tools if t["function"]["name"] == name).get("parameters") or {}, name
+    return None, None
+
+
+def json_only(txt):
+    """The JSON object in a reply (a model may wrap it in a code fence or a sentence); the reply when none parses."""
+    i, j = txt.find("{"), txt.rfind("}")
+    if 0 <= i < j:
+        try:
+            json.loads(txt[i:j + 1])
+            return txt[i:j + 1]
+        except ValueError:
+            pass
+    return txt
 
 
 def worker(model, proc, a):
@@ -144,6 +174,10 @@ def make_handler(proc, a):
             try:
                 req = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
                 msgs, images = to_hf_messages(req["messages"])
+                schema, tool = structured(req)
+                if schema is not None:
+                    msgs[-1]["content"].append({"type": "text", "text": "\n\nAnswer with one JSON object only, no other text"
+                                                + (f", that conforms to this JSON schema:\n{json.dumps(schema)}" if schema else ".")})
                 ctk = req.get("chat_template_kwargs") or {}
                 text = proc.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True, **ctk)
                 params = {k: req.get(k) for k in ("temperature", "top_p", "top_k", "min_p", "repetition_penalty", "seed")
@@ -157,9 +191,13 @@ def make_handler(proc, a):
                 if "error" in r:
                     return self._send(500, {"error": {"message": r["error"]}})
                 res = r["result"]
+                msg = {"role": "assistant", "content": res["text"] if schema is None else json_only(res["text"])}
+                if tool:
+                    msg = {"role": "assistant", "content": None, "tool_calls": [
+                        {"id": f"call_{STATS['requests']}", "type": "function", "function": {"name": tool, "arguments": msg["content"]}}]}
                 self._send(200, {"id": f"chatcmpl-{STATS['requests']}", "object": "chat.completion", "created": int(time.time()),
-                                 "model": a.name, "choices": [{"index": 0, "message": {"role": "assistant", "content": res["text"]},
-                                                               "finish_reason": res["finish"]}],
+                                 "model": a.name, "choices": [{"index": 0, "message": msg,
+                                                               "finish_reason": "tool_calls" if tool else res["finish"]}],
                                  "usage": {"prompt_tokens": res["prompt_tokens"], "completion_tokens": res["completion_tokens"],
                                            "total_tokens": res["prompt_tokens"] + res["completion_tokens"]}})
             except Exception as e:

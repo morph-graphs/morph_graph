@@ -15,6 +15,9 @@
 #   EGAGENT_RUNTIME  docker (default) or apptainer (clusters without Docker: the same image with `apptainer exec`)
 #   EGAGENT_GPU      docker: GPU index for this job, e.g. 0 (the SigLIP 2 embedder; about 8 GB). Unset: CPU,
 #                    fine for qa and blind, slow for build
+#   EGAGENT_SERVER_IMAGE  arm q27 only: the image its Qwen3.8-27B server runs in (default MAGIC-Video's m27 image:
+#                    ghcr.io/morph-graphs/magic:m27-<env hash>, or <EGAGENT_SIF_DIR>/magic_m27.sif with apptainer); needs
+#                    one 141 GB GPU (H200) at the video's own resolution: 74 GB at a 30-frame caption call
 #   EGAGENT_IMAGE    image (default ghcr.io/morph-graphs/egagent:gpu-<env hash>, from image_tag.sh); for
 #                    apptainer, a .sif built once with `apptainer pull egagent_gpu.sif docker://<that image>`
 #   EGAGENT_SIF_DIR  apptainer: a folder of such files (default MERIT_SIF_DIR); uses <dir>/egagent_gpu.sif when
@@ -53,22 +56,68 @@ ENVS=(EPIC_MORPH_DIR=/epic-morph HDEPIC_VIDEOS=/videos HF_HOME=/hf HF_HUB_OFFLIN
 if [ -n "${MERIT_WORK:-}" ]; then   # the shared work folder: EGAgent's own subfolder in it
     umask 002; mkdir -p "$MERIT_WORK"; BINDS+=("$(cd -P "$MERIT_WORK" && pwd):/work"); export EGAGENT_WORK=${EGAGENT_WORK:-/work/egagent}
 fi
-PASS=(OPENAI_API_KEY OPENROUTER_API_KEY OPENROUTER_BASE_URL OPENAI_BASE_URL OPENAI_PROVIDER_NOTE OPENAI_MODEL_ALIASES EGAGENT_GPT_PREFIX GEMINI_API_KEY GOOGLE_GEMINI_BASE_URL HF_TOKEN MERIT_HF_REPO EGAGENT_TAG EGAGENT_FETCH EGAGENT_FRAME_PX EGAGENT_CHUNK_S
+PASS=(OPENAI_API_KEY OPENROUTER_API_KEY OPENROUTER_BASE_URL OPENAI_BASE_URL OPENAI_PROVIDER_NOTE OPENAI_MODEL_ALIASES EGAGENT_GPT_PREFIX EGAGENT_LOCAL_URL GEMINI_API_KEY GOOGLE_GEMINI_BASE_URL HF_TOKEN MERIT_HF_REPO EGAGENT_TAG EGAGENT_FETCH EGAGENT_FRAME_PX EGAGENT_CHUNK_S
       THREADS LIMIT EGAGENT_OUT EGAGENT_WORK EGAGENT_QA_WORKERS)
 if [ "$RUNTIME" = apptainer ]; then
     case $IMAGE in *.sif) ;; *) IMAGE=docker://$IMAGE ;; esac
     # through APPTAINERENV_* (the environment), not --env: a command line, keys included, is visible in `ps`
     export "${ENVS[@]/#/APPTAINERENV_}"
     for v in "${PASS[@]}" CUDA_VISIBLE_DEVICES; do [ -n "${!v:-}" ] && export "APPTAINERENV_$v=${!v}"; done
+    case "$3 $1" in "q27 build"|"q27 qa"|"q27 blind"|"q27 all") SERVE=1 ;; *) SERVE= ;; esac
+    if [ -n "$SERVE" ] && [ -z "${EGAGENT_LOCAL_URL:-}" ]; then
+        # arm q27: Qwen3.8-27B behind MAGIC-Video's server (../magic/epic/hf_server.py), from MAGIC's m27 image (its
+        # transformers 5.8 environment), on this job's GPUs and the host's network; EGAgent's container calls it
+        SIMG=${EGAGENT_SERVER_IMAGE:-$SIFS/magic_m27.sif}; PORT=${EGAGENT_PORT:-$((20000 + ${SLURM_JOB_ID:-$$} % 20000))}
+        [ -s "$SIMG" ] || { echo "arm q27 needs MAGIC-Video's m27 image for its server: $SIMG (or EGAGENT_SERVER_IMAGE)"; exit 1; }
+        SLOG=$(mktemp "${TMPDIR:-/tmp}/egagent_server_$2_XXXX.log")
+        APPTAINERENV_PORT=$PORT apptainer exec --nv --cleanenv --pwd /repo --bind "$(IFS=,; echo "${BINDS[*]}")" "$SIMG" bash -c \
+            'exec "$MAGIC_SERVER_PY" baselines/magic/epic/hf_server.py --model Qwen/Qwen3.8-27B --name Qwen/Qwen3.8-27B --port "$PORT" --max_tokens 8192 --token_budget 64000' > "$SLOG" 2>&1 &
+        SPID=$!; trap 'kill $SPID 2>/dev/null || true' EXIT
+        for i in $(seq 1 240); do
+            curl -sf "http://127.0.0.1:$PORT/v1/models" >/dev/null && break
+            kill -0 $SPID 2>/dev/null || { echo "Qwen server died:"; tail -30 "$SLOG"; exit 1; }
+            sleep 5
+        done
+        curl -sf "http://127.0.0.1:$PORT/v1/models" >/dev/null || { echo "Qwen server not up after 20 min"; tail -30 "$SLOG"; exit 1; }
+        echo "Qwen server up after $((i * 5)) s on port $PORT (log $SLOG): $(grep -m1 loaded "$SLOG")"
+        export APPTAINERENV_EGAGENT_LOCAL_URL=http://127.0.0.1:$PORT/v1
+        rc=0; apptainer exec --nv --cleanenv --pwd /repo --bind "$(IFS=,; echo "${BINDS[*]}")" \
+            "$IMAGE" bash baselines/egagent/run_egagent.sh "$@" || rc=$?
+        echo "Qwen server: $(curl -sf "http://127.0.0.1:$PORT/v1/models" | head -c 400)"
+        exit $rc
+    fi
     exec apptainer exec --nv --cleanenv --pwd /repo --bind "$(IFS=,; echo "${BINDS[*]}")" \
         "$IMAGE" bash baselines/egagent/run_egagent.sh "$@"
 fi
 [ "$RUNTIME" = docker ] || { echo "EGAGENT_RUNTIME must be docker or apptainer"; exit 1; }
+
 ARGS=(); for b in "${BINDS[@]}"; do ARGS+=(-v "$b"); done
 for e in "${ENVS[@]}"; do ARGS+=(-e "$e"); done
 for v in "${PASS[@]}"; do [ -n "${!v:-}" ] && ARGS+=(-e "$v"); done   # by name: the value stays out of `ps`
 GPU=${EGAGENT_GPU:-${MERIT_GPU:-}}
 if [ -n "$GPU" ]; then   # the container sees only the chosen GPU(s), renumbered from 0
     N=$(echo "$GPU" | tr ',' '\n' | grep -c .); ARGS+=(--gpus "\"device=$GPU\"" -e CUDA_VISIBLE_DEVICES="$(seq -s, 0 $((N - 1)))")
+fi
+case "$3 $1" in "q27 build"|"q27 qa"|"q27 blind"|"q27 all") SERVE=1 ;; *) SERVE= ;; esac
+if [ -n "$SERVE" ] && [ -z "${EGAGENT_LOCAL_URL:-}" ]; then
+    # arm q27, as on the apptainer route above: Qwen3.8-27B behind MAGIC-Video's server in MAGIC's m27 image, on this
+    # job's GPUs; both containers on the host's network, so EGAgent's reaches it at 127.0.0.1
+    [ -n "$GPU" ] || { echo "arm q27 needs a GPU: set EGAGENT_GPU"; exit 1; }
+    SIMG=${EGAGENT_SERVER_IMAGE:-ghcr.io/morph-graphs/magic:$(bash "$REPO/baselines/magic/docker/image_tag.sh" m27)}
+    PORT=${EGAGENT_PORT:-$((20000 + $$ % 20000))}; SNAME=egagent-qwen-$$
+    docker run -d --rm --name "$SNAME" --network host --gpus "\"device=$GPU\"" --shm-size 32g --user "$(id -u):$(id -g)" -w /repo \
+        -v "$REPO:/repo" -v "$HF:/hf" -e HF_HOME=/hf -e HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-0}" ${HF_TOKEN:+-e HF_TOKEN} "$SIMG" bash -c \
+        'exec "$MAGIC_SERVER_PY" baselines/magic/epic/hf_server.py --model Qwen/Qwen3.8-27B --name Qwen/Qwen3.8-27B --port '"$PORT"' --max_tokens 8192 --token_budget 64000' >/dev/null
+    trap 'docker stop "$SNAME" >/dev/null 2>&1 || true' EXIT
+    for i in $(seq 1 360); do
+        curl -sf "http://127.0.0.1:$PORT/v1/models" >/dev/null && break
+        docker inspect "$SNAME" >/dev/null 2>&1 || { echo "Qwen server died (docker logs are gone with it: rerun its command by hand to see why)"; exit 1; }
+        sleep 5
+    done
+    curl -sf "http://127.0.0.1:$PORT/v1/models" >/dev/null || { echo "Qwen server not up after 30 min:"; docker logs --tail 30 "$SNAME"; exit 1; }
+    echo "Qwen server up after $((i * 5)) s on port $PORT (container $SNAME)"
+    rc=0; docker run --rm --network host --shm-size 8g --user "$(id -u):$(id -g)" -w /repo "${ARGS[@]}" \
+        -e EGAGENT_LOCAL_URL="http://127.0.0.1:$PORT/v1" "$IMAGE" bash baselines/egagent/run_egagent.sh "$@" || rc=$?
+    exit $rc
 fi
 exec docker run --rm --shm-size 8g --user "$(id -u):$(id -g)" -w /repo "${ARGS[@]}" "$IMAGE" bash baselines/egagent/run_egagent.sh "$@"

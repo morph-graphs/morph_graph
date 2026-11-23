@@ -48,8 +48,8 @@
 # Every step skips finished work, so rerunning the same command resumes.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/../common/single_process_env.sh"   # never a torch.distributed job: drop torchrun's variables
-STAGE=${1:?usage: run_egagent.sh <prep|build|qa|blind|upload|all|check> <video> <gpt41|gemini25pro|gemini36flash> [bank]}
-V=${2:?video id}; ARM=${3:?arm gpt41, gemini25pro or gemini36flash}; BANK=${4:-}
+STAGE=${1:?usage: run_egagent.sh <prep|build|qa|blind|upload|all|check> <video> <gpt41|gemini25pro|gemini36flash|g5m-g51|q27> [bank]}
+V=${2:?video id}; ARM=${3:?arm gpt41, gemini25pro, gemini36flash, g5m-g51 or q27}; BANK=${4:-}
 M=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); REPO=$(cd "$M/../.." && pwd); R=$M/egagent   # R: the submodule
 PY=${PY:?set PY to the python of the EGAgent client environment}
 EPIC=$(cd "${EPIC_MORPH_DIR:?set EPIC_MORPH_DIR to an epic-morph checkout}" && pwd)
@@ -58,15 +58,21 @@ case $ARM in
     gpt41) BACKBONE=gpt-4.1; KEY=OPENAI_API_KEY; END=$GPT_END ;;
     gemini25pro) BACKBONE=gemini-2.5-pro; KEY=GEMINI_API_KEY; END=$GEMINI_END ;;
     gemini36flash) BACKBONE=gemini-3.6-flash; KEY=GEMINI_API_KEY; END=9999-12-31 ;;   # no shutdown date announced
-    *) echo "arm must be gpt41, gemini25pro or gemini36flash"; exit 1 ;;
+    # not the paper's, memory included: each has a memory of its own, built by MEMLLM
+    g5m-g51) BACKBONE=gpt-5.1; KEY=OPENAI_API_KEY; END=9999-12-31; MEMLLM=gpt-5-mini; MEM_END=2026-12-11; MEMARMS=(g5m-g51) ;;
+    q27) BACKBONE=Qwen/Qwen3.8-27B; KEY=LOCAL; END=9999-12-31; MEMLLM=$BACKBONE; MEM_END=$END; MEMARMS=(q27) ;;
+    *) echo "arm must be gpt41, gemini25pro, gemini36flash, g5m-g51 or q27"; exit 1 ;;
 esac
+# the memory's model, its shutdown date, and the arms whose folders hold that same memory (the paper's arms: GPT-4.1)
+MEMLLM=${MEMLLM:-gpt-4.1}; MEM_END=${MEM_END:-$GPT_END}; [ -n "${MEMARMS+x}" ] || MEMARMS=(gpt41 gemini25pro gemini36flash)
+MEM_KEY=OPENAI_API_KEY; [ "$KEY" != LOCAL ] || MEM_KEY=LOCAL
 VIDEOS=${HDEPIC_VIDEOS:-$EPIC/data/HD-EPIC/videos}; WORK=${EGAGENT_WORK:-$M/work}; OUTROOT=${EGAGENT_OUT:-$M/results}
 OUT=$OUTROOT/$ARM/$V; FRAMES=$WORK/frames/$V; TAG=${EGAGENT_TAG:-}; SUF=${TAG:+_$TAG}
 PX=${EGAGENT_FRAME_PX:-0}; CHUNK=${EGAGENT_CHUNK_S:-300}
 MEMORY=("{video}_frames.npy" "{video}_captions.json" "{video}_graph.json")   # as epic/eg_paths.memory_files
 mkdir -p "$OUT" "$WORK/logs"
 [ -z "${OPENAI_API_KEY:-}" ] || unset OPENROUTER_API_KEY   # one gateway per run: OpenAI's key wins
-export TOKENIZERS_PARALLELISM=false EPIC BACKBONE PX CHUNK EGAGENT_USAGE=$OUT/api_usage.jsonl
+export TOKENIZERS_PARALLELISM=false EPIC BACKBONE PX CHUNK EGAGENT_USAGE=$OUT/api_usage.jsonl EGAGENT_MEMORY_LLM=$MEMLLM
 log() { echo "=== $V $ARM $1 ($(date '+%F %H:%M'))"; }
 have_memory() { local m; for m in "${MEMORY[@]}"; do [ -s "$OUT/${m//\{video\}/$V}" ] || return 1; done; }
 
@@ -75,7 +81,7 @@ have_memory() { local m; for m in "${MEMORY[@]}"; do [ -s "$OUT/${m//\{video\}/$
 patched() { grep -q "def build_app" "$R/egagent/run_egagent_on_videomme.py" && grep -q EGAGENT_BACKBONE "$R/egagent/langgraph_agent.py" \
             && grep -q "startswith('gemini-')" "$R/egagent/langgraph_agent.py" \
             && grep -q EGAGENT_DB_ROOT "$R/paths.py" && grep -q "def get_api_key" "$R/utils.py" && grep -q EGAGENT_GPT_PREFIX "$R/utils.py" \
-            && grep -q GEMINI_CLIENT_OPTIONS "$R/utils.py" && grep -q GEMINI_OPENROUTER "$R/utils.py"; }
+            && grep -q GEMINI_CLIENT_OPTIONS "$R/utils.py" && grep -q GEMINI_OPENROUTER "$R/utils.py" && grep -q "def is_chat_llm" "$R/utils.py"; }
 if ! patched; then
     ( if command -v flock >/dev/null; then flock 9; fi
       if ! patched && grep -q OPENROUTER "$R/utils.py"; then   # an earlier epic_morph.patch: upstream's files back first
@@ -99,7 +105,8 @@ if ! traced; then
     echo "applied epic_morph_trace.patch to $R"
 fi
 
-paid() {   # $1: the model, $2: its key's name, $3: its shutdown date, $4: what would be called
+paid() {   # $1: the model, $2: its key's name (LOCAL: served here, no key), $3: its shutdown date, $4: what would be called
+    [ "$2" != LOCAL ] || { [ -n "${EGAGENT_LOCAL_URL:-}" ] || { echo "STOP: $1 is served locally: set EGAGENT_LOCAL_URL to its OpenAI-compatible endpoint (docker/run.sh starts one)"; exit 3; }; return 0; }
     if [ "$(date -u +%F)" \> "$3" ] || [ "$(date -u +%F)" = "$3" ]; then
         echo "STOP: $1 is shut down from $3 (README: Read first); this stage cannot run as published any more."; exit 3
     fi
@@ -131,7 +138,7 @@ if os.path.exists(os.environ["EGAGENT_USAGE"]):
                             else round(a.get(k, 0) + v, 6))
 print(json.dumps({"stage": sys.argv[1], "seconds": int(float(sys.argv[2])), "commit": commit,
                   "egagent_commit": up, "epic_morph_commit": bank, "agent_model": os.environ.get("BACKBONE"),
-                  "memory_models": ["gpt-4.1", "google/siglip2-giant-opt-patch16-384"], "api": api,
+                  "memory_models": [os.environ["EGAGENT_MEMORY_LLM"], "google/siglip2-giant-opt-patch16-384"], "api": api,
                   "frame_px": int(os.environ["PX"]), "chunk_s": int(os.environ["CHUNK"]), "torch": torch.__version__,
                   "transformers": transformers.__version__, "gpus": gpus, "host": platform.node(),
                   "finished": time.strftime("%Y-%m-%dT%H:%M:%S%z")}))
@@ -154,16 +161,17 @@ embed() {   # the free, local part of the memory
 build() {
     log build; local t=$SECONDS rc other f
     have_memory && { echo "memory complete in $OUT"; return 0; }
-    # the memory depends only on the video (the same models for both arms): take a finished one from the other
-    # arm's folder, then from the dataset (unless paid captions were started here), before building
-    for other in "$OUTROOT"/*/"$V"; do
+    # the memory depends only on the video and the model that builds it (MEMARMS: the arms that share it): take a
+    # finished one from another such arm's folder, then from the dataset (unless paid captions were started here)
+    for other in "${MEMARMS[@]}"; do
+        other=$OUTROOT/$other/$V
         [ "$other" != "$OUT" ] && [ -s "$other/${V}_frames.npy" ] && [ -s "$other/${V}_captions.json" ] \
             && [ -s "$other/${V}_graph.json" ] || continue
         for f in "${MEMORY[@]}"; do cp "$other/${f//\{video\}/$V}" "$OUT/"; done
         echo "memory copied from $other"; record "build (copied)" $((SECONDS - t)); return 0
     done
     if [ ! -s "$OUT/${V}_captions.json" ] && [ ! -e "$OUT/${V}_captions.json.partial" ] && [ "${EGAGENT_FETCH:-1}" != 0 ]; then
-        for other in gpt41 gemini25pro gemini36flash; do   # any arm's folder in the dataset holds the same memory
+        for other in "${MEMARMS[@]}"; do   # any of these arms' folders in the dataset holds the same memory
             rc=0; "$PY" "$M/../common/hf_results.py" fetch-memory --baseline egagent --memory "${MEMORY[@]}" \
                 --arm "$other" --video "$V" --dir "$OUT" || rc=$?
             case $rc in
@@ -175,10 +183,11 @@ build() {
         echo "no memory in the dataset yet: building it here"
     fi
     embed; need_frames
-    [ -n "${OPENAI_API_KEY:-}${OPENROUTER_API_KEY:-}" ] || "$PY" "$M/epic/caption_epic.py" --frames_dir "$FRAMES" --out "$OUT/${V}_captions.json" --dry
-    paid gpt-4.1 OPENAI_API_KEY "$GPT_END" "GPT-4.1 captions (one call per 30 s, 30 frames each) and graph extraction (2 calls per $CHUNK s)"
+    [ -n "${OPENAI_API_KEY:-}${OPENROUTER_API_KEY:-}" ] || [ "$MEM_KEY" = LOCAL ] || "$PY" "$M/epic/caption_epic.py" --frames_dir "$FRAMES" --out "$OUT/${V}_captions.json" --dry
+    paid "$MEMLLM" "$MEM_KEY" "$MEM_END" "$MEMLLM captions (one call per 30 s, 30 frames each) and graph extraction (2 calls per $CHUNK s)"
     export EGAGENT_USAGE_STAGE=build
-    local gpt_only=(env -u GEMINI_API_KEY -u GOOGLE_API_KEY)   # the memory's calls are GPT-4.1's alone
+    local gpt_only=(env -u GEMINI_API_KEY -u GOOGLE_API_KEY)   # the memory's calls are its model's alone
+    [ "$MEM_KEY" != LOCAL ] || gpt_only=("${agent_only[@]}")
     [ -s "$OUT/${V}_captions.json" ] || "${gpt_only[@]}" "$PY" "$M/epic/caption_epic.py" --frames_dir "$FRAMES" --out "$OUT/${V}_captions.json"
     [ -s "$OUT/${V}_graph.json" ] || "${gpt_only[@]}" "$PY" "$M/epic/build_graph.py" --captions "$OUT/${V}_captions.json" --out "$OUT/${V}_graph.json" --chunk_s "$CHUNK"
     have_memory || { echo "memory for $V is incomplete in $OUT"; exit 1; }
@@ -194,8 +203,9 @@ bank_file() {   # this bank's questions for the video (banks are generated in ep
     fi
     [ -s "$BF" ] || { echo "no $bank questions for $V in $EPIC"; exit 1; }
 }
-agent_only=(env -u OPENAI_API_KEY -u OPENROUTER_API_KEY); [ "$ARM" != gpt41 ] || agent_only=(env -u GEMINI_API_KEY -u GOOGLE_API_KEY)
-[ "$ARM" = gpt41 ] || [ -n "${GEMINI_API_KEY:-}${GOOGLE_API_KEY:-}" ] || agent_only=(env -u OPENAI_API_KEY)   # Gemini through OpenRouter
+agent_only=(env -u OPENAI_API_KEY -u OPENROUTER_API_KEY); [ "$KEY" != OPENAI_API_KEY ] || agent_only=(env -u GEMINI_API_KEY -u GOOGLE_API_KEY)
+[ "$KEY" != GEMINI_API_KEY ] || [ -n "${GEMINI_API_KEY:-}${GOOGLE_API_KEY:-}" ] || agent_only=(env -u OPENAI_API_KEY)   # Gemini through OpenRouter
+[ "$KEY" != LOCAL ] || agent_only=(env -u OPENAI_API_KEY -u OPENROUTER_API_KEY -u GEMINI_API_KEY -u GOOGLE_API_KEY)   # no API at all
 run_qa() { "${agent_only[@]}" "$PY" -u "$M/epic/run_qa.py" --video "$V" --bank_file "$BF" --frames_dir "$FRAMES" --backbone "$BACKBONE" \
                --db_root "$WORK/dbs/${ARM}_${V}_$$" "$@"; }
 qa() {

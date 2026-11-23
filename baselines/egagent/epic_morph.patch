@@ -1,5 +1,5 @@
 diff --git a/egagent/langgraph_agent.py b/egagent/langgraph_agent.py
-index 2b6eb05..0230cca 100644
+index 2b6eb05..087df19 100644
 --- a/egagent/langgraph_agent.py
 +++ b/egagent/langgraph_agent.py
 @@ -31,8 +31,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -13,7 +13,12 @@ index 2b6eb05..0230cca 100644
  
  logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
  logger = logging.getLogger(__name__)
-@@ -77,7 +77,7 @@ def get_llm_worker(system_prompt, human_prompt, structured_llm_class, model):
+@@ -73,11 +73,11 @@ def get_llm_worker(system_prompt, human_prompt, structured_llm_class, model):
+     Pass in custom llm BaseModel with structured output along with system and human prompts.
+     Returns llm for use in graph nodes / edges.
+     """
+-    if model in ['gpt-4.1', 'gpt-4o']:
++    if is_chat_llm(model): # EPIC-Morph port: was in ['gpt-4.1', 'gpt-4o']
          llm = get_vision_llm(model) # All workers currently use GPT 4.1
      elif model in ['gpt-5', 'o3']:
          llm = get_reasoning_llm(model)
@@ -22,7 +27,7 @@ index 2b6eb05..0230cca 100644
          llm = get_external_gemini_llm(model)
      elif model == 'qwen-2.5-vl-7b':
          llm = get_vLLM("localhost", "Qwen/Qwen2.5-VL-7B-Instruct")
-@@ -120,7 +120,7 @@ def get_llm_msg_with_imglist(system: str, human:str, image_contents: List[str]):
+@@ -120,11 +120,11 @@ def get_llm_msg_with_imglist(system: str, human:str, image_contents: List[str]):
  ****************   Define LLM workers   ****************
  ********************************************************
  """
@@ -31,6 +36,11 @@ index 2b6eb05..0230cca 100644
      llm = get_external_gemini_llm(agent_backbone)
  elif agent_backbone == 'qwen-2.5-vl-7b':
      llm = get_vLLM("localhost", "Qwen/Qwen2.5-VL-7B-Instruct")
+-elif agent_backbone in ['gpt-4.1', 'gpt-4o']:
++elif is_chat_llm(agent_backbone): # EPIC-Morph port: was in ['gpt-4.1', 'gpt-4o']
+     llm = get_vision_llm(agent_backbone)
+ elif agent_backbone in ['gpt-5', 'o3']:
+     llm = get_reasoning_llm(agent_backbone)
 @@ -401,7 +401,7 @@ timestamp_dict =
  
  If you only need one text query, only use one text query. Only use additional text queries if they are semantically distinct from one another."""
@@ -153,12 +163,59 @@ index 30223c9..d21a6ae 100644
  ENTITYGRAPH_DB_ROOT = EGAGENT_ROOT / "entitygraph_db"
  TIMESTAMP_EPISODES_ROOT = EGAGENT_ROOT / "timestamp_episodes"
 \ No newline at end of file
+diff --git a/prepare_datasources/create_entity_graph.py b/prepare_datasources/create_entity_graph.py
+index 0c26c89..03f30d2 100644
+--- a/prepare_datasources/create_entity_graph.py
++++ b/prepare_datasources/create_entity_graph.py
+@@ -36,14 +36,14 @@ from typing import Literal, List, Dict, Any, Optional
+ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+ 
+ from paths import CAPTION_ROOT, TIMESTAMP_EPISODES_ROOT, VMME_ASR_DIR, VIDEO_MME_ROOT
+-from utils import get_egolife_diarized_transcripts, load_srt_hhmmss, load_srt_only_text, clean_html_tags, seconds_to_hhmmss, get_vision_llm, get_vLLM, get_reasoning_llm, get_external_gemini_llm
++from utils import get_egolife_diarized_transcripts, load_srt_hhmmss, load_srt_only_text, clean_html_tags, seconds_to_hhmmss, get_vision_llm, get_vLLM, get_reasoning_llm, get_external_gemini_llm, is_chat_llm
+ 
+ def get_llm_worker(system_prompt, human_prompt, structured_llm_class, model):
+     """
+     Pass in custom llm BaseModel with structured output along with system and human prompts.
+     Returns llm for use in graph nodes / edges.
+     """
+-    if model in ['gpt-4.1', 'gpt-4o']:
++    if is_chat_llm(model): # EPIC-Morph port: was in ['gpt-4.1', 'gpt-4o']
+         llm = get_vision_llm(model) # All workers use GPT 4.1 by default
+     elif model in ['gpt-5', 'o3']:
+         llm = get_reasoning_llm(model)
+@@ -123,7 +123,7 @@ async def generate_graph_for_hour(text:str):
+     """Generate the entity graph for one hour of EgoLife or entire VideoMME video."""
+     allowed_nodes = ["Person", "Location", "Object"]
+     allowed_relationships = ["TALKS_TO", "INTERACTS_WITH", "MENTIONS", "USES"]
+-    llm = get_vision_llm('gpt-4.1')
++    llm = get_vision_llm(os.environ.get('EGAGENT_MEMORY_LLM', 'gpt-4.1')) # EPIC-Morph port: the memory's model per arm
+     documents = [Document(page_content=str(text))]
+     props_defined = LLMGraphTransformer(
+         llm=llm,
 diff --git a/utils.py b/utils.py
-index be92d88..bae78bd 100644
+index be92d88..b577e63 100644
 --- a/utils.py
 +++ b/utils.py
-@@ -63,13 +63,14 @@ def get_vision_llm(llm_name: str) -> ChatOpenAI:
+@@ -59,17 +59,31 @@ def get_base64imagelist_from_filepathlist(retrieved_image_paths):
+             })
+     return image_contents
+     
++def is_chat_llm(llm_name: str) -> bool:
++    """EPIC-Morph port: the backbones get_vision_llm serves. Upstream's gpt-4.1 and gpt-4o; a GPT-5 family model
++    other than upstream's own 'gpt-5' (gpt-5-mini, gpt-5.1; 'gpt-5' keeps upstream's high-effort path,
++    get_reasoning_llm); and a model named as a Hugging Face repository (Qwen/Qwen3.8-27B), served locally."""
++    return llm_name in ['gpt-4.1', 'gpt-4o'] or (llm_name.startswith('gpt-5') and llm_name != 'gpt-5') or '/' in llm_name
++
+ def get_vision_llm(llm_name: str) -> ChatOpenAI:
      """Get a vision-capable LLM using Langchain's ChatOpenAI."""
++    if '/' in llm_name:   # EPIC-Morph port: a local model behind an OpenAI-compatible server (EGAGENT_LOCAL_URL), as get_vLLM
++        return ChatOpenAI(model=llm_name, api_key="EMPTY", base_url=os.environ["EGAGENT_LOCAL_URL"], max_retries=3,
++                          temperature=0, stream_usage=True, streaming=False, timeout=3600,
++                          extra_body={"chat_template_kwargs": {"enable_thinking": False}})   # instruct mode, as our other Qwen3.8 arms
++    if llm_name.startswith('gpt-5'):   # EPIC-Morph port: the GPT-5 family takes only its default temperature; no reasoning effort is set
++        return ChatOpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL, max_retries=3, model=OPENAI_MODEL_PREFIX + llm_name,
++                          stream_usage=True, streaming=False, callbacks=None, extra_body=OPENAI_EXTRA_BODY)
      vision_llm = ChatOpenAI(
          api_key=OPENAI_API_KEY,
 -        base_url="https://api.openai.com/v1",
@@ -174,7 +231,7 @@ index be92d88..bae78bd 100644
      )
      return vision_llm
  
-@@ -77,18 +78,23 @@ def get_reasoning_llm(llm_name: str):
+@@ -77,18 +91,23 @@ def get_reasoning_llm(llm_name: str):
      """Get a reasoning LLM using Langchain's ChatOpenAI with high reasoning effort, e.g. o3 or gpt-5."""
      vision_llm = ChatOpenAI(
          api_key=OPENAI_API_KEY,
@@ -201,7 +258,7 @@ index be92d88..bae78bd 100644
      gemini_llm = ChatGoogleGenerativeAI(
          api_key=GOOGLE_GENAI_API_KEY,
          model=llm_name,
-@@ -96,9 +102,17 @@ def get_external_gemini_llm(llm_name: str):
+@@ -96,9 +115,17 @@ def get_external_gemini_llm(llm_name: str):
          max_tokens=None,
          timeout=None,
          max_retries=3,
@@ -219,7 +276,7 @@ index be92d88..bae78bd 100644
  def get_vLLM(ip_address: str, llm_name: str):
      """Get a local LLM using Langchain's ChatOpenAI, e.g. Qwen 2.5 VL 7B."""
      qwen_vl_local = ChatOpenAI(
-@@ -180,8 +194,32 @@ def get_file_contents(filename):
+@@ -180,8 +207,32 @@ def get_file_contents(filename):
      except FileNotFoundError:
          raise FileNotFoundError(f"'{filename}' file not found")
  

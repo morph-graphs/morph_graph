@@ -20,8 +20,11 @@ for p in ("prepare_datasources", "egagent", ""):
 
 # arm -> the agent's backbone; the memory is the same for every arm. gpt41 and gemini25pro are the paper's;
 # gemini36flash stands in for gemini25pro, which Google no longer serves to our key (README: Read first)
-BACKBONES = {"gpt41": "gpt-4.1", "gemini25pro": "gemini-2.5-pro", "gemini36flash": "gemini-3.6-flash"}
-MEMORY_LLM = "gpt-4.1"                               # captions, graph extraction, relationship time stamps
+# Two arms are not the paper's at all and have a memory of their own, built by another model (run_egagent.sh sets
+# EGAGENT_MEMORY_LLM): g5m-g51 (GPT-5-mini memory, GPT-5.1 agent) and q27 (Qwen3.8-27B for both, served locally)
+BACKBONES = {"gpt41": "gpt-4.1", "gemini25pro": "gemini-2.5-pro", "gemini36flash": "gemini-3.6-flash",
+             "g5m-g51": "gpt-5.1", "q27": "Qwen/Qwen3.8-27B"}
+MEMORY_LLM = os.environ.get("EGAGENT_MEMORY_LLM") or "gpt-4.1"   # captions, graph extraction, relationship time stamps
 EMBEDDER = "google/siglip2-giant-opt-patch16-384"    # frame / text-query embeddings (open weights, local)
 CLIP_S = 30                                          # caption window (paper: 30 s clips at 1 fps)
 
@@ -30,7 +33,9 @@ CLIP_S = 30                                          # caption window (paper: 30
 # (OpenRouter returns GPT-4.1's as openai/gpt-4.1... and Gemini's as google/..., an OpenAI-compatible gateway serving it from Azure OpenAI
 # as azure/openai/gpt-4.1; the endpoint is recorded with each call)
 SAME_MODEL = {"gpt-4.1": r"(azure/)?(openai/)?gpt-4\.1(-\d{4}-\d{2}-\d{2})?", "gemini-2.5-pro": r"(models/|google/)?gemini-2\.5-pro(-\d[\w.-]*)?",
-              "gemini-3.6-flash": r"(models/|google/)?gemini-3\.6-flash(-\d[\w.-]*)?"}
+              "gemini-3.6-flash": r"(models/|google/)?gemini-3\.6-flash(-\d[\w.-]*)?",
+              "gpt-5-mini": r"(azure/|openai/)*gpt-5-mini(-\d{4}-\d{2}-\d{2})?", "gpt-5.1": r"(azure/|openai/)*gpt-5\.1(-\d{4}-\d{2}-\d{2})?",
+              "Qwen/Qwen3.8-27B": r"Qwen/Qwen3\.8-27B"}
 FIELDS = ("calls", "input_tokens", "cached_tokens", "output_tokens", "reasoning_tokens")
 
 
