@@ -71,11 +71,12 @@ if [ "$RUNTIME" = apptainer ]; then
         [ -s "$SIMG" ] || { echo "arm q27 needs MAGIC-Video's m27 image for its server: $SIMG (or EGAGENT_SERVER_IMAGE)"; exit 1; }
         SLOG=$(mktemp "${TMPDIR:-/tmp}/egagent_server_$2_XXXX.log")
         DMAP=cuda:0; [ "$(nvidia-smi -L | wc -l)" -le 1 ] || DMAP=auto   # several GPUs: the model spread over all of them
-        # tokens per server batch from the first GPU's memory (the model takes 54 GB, SigLIP 2 another 9): an H200 96k, an 80 GB GPU 48k
-        BUDGET=${EGAGENT_TOKEN_BUDGET:-$( [ "$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | head -1)" -ge 120000 ] && echo 96000 || echo 48000)}
+        # tokens per server batch (prompt + the 16k reply limit, per request) from the first GPU's memory: the model takes
+        # 54 GB and a batch about 0.35 MB a token (measured), so an H200 holds 8 graph calls at once and an 80 GB GPU 3
+        BUDGET=${EGAGENT_TOKEN_BUDGET:-$( [ "$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | head -1)" -ge 120000 ] && echo 220000 || echo 80000)}
         # MAGIC's image caches Triton kernels in /tmp/triton, the node's shared /tmp here: another user's folder there stops the server
         APPTAINERENV_TRITON_CACHE_DIR=/tmp/triton-$(id -un) APPTAINERENV_PORT=$PORT APPTAINERENV_DMAP=$DMAP APPTAINERENV_BUDGET=$BUDGET apptainer exec --nv --cleanenv --pwd /repo --bind "$(IFS=,; echo "${BINDS[*]}")" "$SIMG" bash -c \
-            'exec "$MAGIC_SERVER_PY" baselines/magic/epic/hf_server.py --model Qwen/Qwen3.8-27B --name Qwen/Qwen3.8-27B --port "$PORT" --max_tokens 8192 --token_budget "$BUDGET" --solo_images 50 --device_map "$DMAP"' > "$SLOG" 2>&1 &
+            'exec "$MAGIC_SERVER_PY" baselines/magic/epic/hf_server.py --model Qwen/Qwen3.8-27B --name Qwen/Qwen3.8-27B --port "$PORT" --max_tokens 16384 --token_budget "$BUDGET" --solo_images 50 --device_map "$DMAP"' > "$SLOG" 2>&1 &
         SPID=$!; trap 'kill $SPID 2>/dev/null || true' EXIT
         for i in $(seq 1 240); do
             curl -sf "http://127.0.0.1:$PORT/v1/models" >/dev/null && break
@@ -111,7 +112,7 @@ if [ -n "$SERVE" ] && [ -z "${EGAGENT_LOCAL_URL:-}" ]; then
     PORT=${EGAGENT_PORT:-$((20000 + $$ % 20000))}; SNAME=egagent-qwen-$$
     docker run -d --rm --name "$SNAME" --network host --gpus "\"device=$GPU\"" --shm-size 32g --user "$(id -u):$(id -g)" -w /repo \
         -v "$REPO:/repo" -v "$HF:/hf" -e HF_HOME=/hf -e HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-0}" ${HF_TOKEN:+-e HF_TOKEN} "$SIMG" bash -c \
-        'exec "$MAGIC_SERVER_PY" baselines/magic/epic/hf_server.py --model Qwen/Qwen3.8-27B --name Qwen/Qwen3.8-27B --port '"$PORT"' --max_tokens 8192 --token_budget 96000 --solo_images 50 --device_map '"$( [ "${GPU/,/}" = "$GPU" ] && echo cuda:0 || echo auto)" >/dev/null
+        'exec "$MAGIC_SERVER_PY" baselines/magic/epic/hf_server.py --model Qwen/Qwen3.8-27B --name Qwen/Qwen3.8-27B --port '"$PORT"' --max_tokens 16384 --token_budget 80000 --solo_images 50 --device_map '"$( [ "${GPU/,/}" = "$GPU" ] && echo cuda:0 || echo auto)" >/dev/null
     trap 'docker stop "$SNAME" >/dev/null 2>&1 || true' EXIT
     for i in $(seq 1 360); do
         curl -sf "http://127.0.0.1:$PORT/v1/models" >/dev/null && break

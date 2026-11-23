@@ -40,7 +40,7 @@
 #   EGAGENT_FRAME_PX frame width sent to the APIs and the embedder; default 0 = the video's own (1408 px), as
 #                    published. Another value is another memory: give it its own EGAGENT_WORK and EGAGENT_OUT
 #   EGAGENT_CHUNK_S  seconds of captions per graph extraction, default 300 (README: Read first)
-#   EGAGENT_MEM_WORKERS  build: the memory's calls made at once (captions default 4, graph chunks default 1; q27: 6)
+#   EGAGENT_MEM_WORKERS  build: the memory's calls made at once (captions default 4, graph chunks default 1; q27: 8)
 #   EGAGENT_TAG      a variant name for the answers (answers_<bank>_<tag>.json.gz)
 #   EGAGENT_FETCH    0 to never take the memory from the dataset (build normally reuses it when it is there)
 #   EGAGENT_QA_WORKERS  qa: questions answered at once (threads), default 1 = one at a time (README: Parallel answering)
@@ -62,9 +62,9 @@ case $ARM in
     # not the paper's, memory included: each has a memory of its own, built by MEMLLM
     g5m-g51) BACKBONE=gpt-5.1; KEY=OPENAI_API_KEY; END=9999-12-31; MEMLLM=gpt-5-mini; MEM_END=2026-12-11; MEMARMS=(g5m-g51) ;;
     # q27 sends 448 px frames (as MERIT's Qwen arms; at the video's own 1408 px a 30-frame caption call is 57k
-    # tokens: 33 s a call and 74 GB on an H200) and makes its memory's calls 6 at a time (the local server batches them)
+    # tokens: 33 s a call and 74 GB on an H200) and makes its memory's calls 8 at a time (the local server batches them)
     q27) BACKBONE=Qwen/Qwen3.8-27B; KEY=LOCAL; END=9999-12-31; MEMLLM=$BACKBONE; MEM_END=$END; MEMARMS=(q27)
-         EGAGENT_FRAME_PX=${EGAGENT_FRAME_PX:-448}; EGAGENT_MEM_WORKERS=${EGAGENT_MEM_WORKERS:-6} ;;
+         EGAGENT_FRAME_PX=${EGAGENT_FRAME_PX:-448}; EGAGENT_MEM_WORKERS=${EGAGENT_MEM_WORKERS:-8} ;;
     *) echo "arm must be gpt41, gemini25pro, gemini36flash, g5m-g51 or q27"; exit 1 ;;
 esac
 # the memory's model, its shutdown date, and the arms whose folders hold that same memory (the paper's arms: GPT-4.1)
