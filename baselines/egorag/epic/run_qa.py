@@ -82,8 +82,8 @@ def main():
     mh = hashlib.sha1(b"".join(open(p, "rb").read() for p in mem)).hexdigest()[:16]
     rows = convert_questions(a.bank_file, V, video_sec(caps[-1]["end_time"]))
     for r in rows:   # into the clock of the memory; the retrieval query is the question (no EgoLifeQA keywords)
-        t = video_sec(r["query_time"]["time"])
-        r["query_time"]["time"] = clock(t + CLOCK0)
+        t = video_sec(r["query_time"]["time"]) + CLOCK0   # the bank's time is on the video's clock: video_sec() takes CLOCK0 off
+        r["query_time"]["time"] = clock(t)
         r["keywords"] = r["question"]
         r["context"] = context(V, t, day=True, offset=CLOCK0)   # a stitched video's sessions, on the memory's clock; else ""
     done = {}
